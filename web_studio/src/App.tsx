@@ -197,9 +197,9 @@ export default function App() {
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
 
-  // Cloud Live Data URLs
-  const CLOUD_STORAGE_NEWS_URL = 'https://firebasestorage.googleapis.com/v0/b/ainewsmakerapp.firebasestorage.app/o/news_database.json?alt=media';
-  const CLOUD_STORAGE_UPLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/ainewsmakerapp.firebasestorage.app/o?name=news_database.json';
+  // Cloud Live Data URLs (Firebase Storage for ai-news-maker-app)
+  const CLOUD_STORAGE_NEWS_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o/news_database.json?alt=media';
+  const CLOUD_STORAGE_UPLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o?name=news_database.json';
 
   // Sync news posts with cloud database (Firebase Storage + Backend API + Static fallback)
   const fetchLiveNews = async () => {
