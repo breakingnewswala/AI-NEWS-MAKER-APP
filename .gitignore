@@ -1,0 +1,42 @@
+# Built application files
+*.apk
+*.aar
+*.aab
+*.dex
+*.so
+
+# Build directories
+build/
+**/build/
+app/build/
+.build-outputs/
+dist/
+**/dist/
+captures/
+.externalNativeBuild
+.cxx
+
+# Node dependencies
+node_modules/
+**/node_modules/
+
+# Gradle files
+.gradle/
+
+# IDE & OS
+*.iml
+.idea/
+.DS_Store
+Thumbs.db
+.kotlin/
+
+# Secrets & Environment
+local.properties
+.env
+.env.local
+debug.keystore
+debug.keystore.base64
+*.log
+
+# Keep important config templates
+!.env.example

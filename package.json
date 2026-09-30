@@ -1,0 +1,15 @@
+{
+  "name": "ai-news-maker-app",
+  "private": true,
+  "version": "1.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "PORT=3000 NODE_PATH=./web_studio/node_modules:./node_modules node server.cjs",
+    "start": "PORT=3000 NODE_PATH=./web_studio/node_modules:./node_modules node server.cjs",
+    "build": "PATH=./web_studio/node_modules/.bin:$PATH npm --prefix web_studio run build && mkdir -p public app/src/main/assets/news_studio dist && cp -rf web_studio/dist/* public/ && cp -rf web_studio/dist/* app/src/main/assets/news_studio/ && cp -rf web_studio/dist/* dist/ && cp -f web_studio/dist/server.cjs server.cjs",
+    "lint": "npm --prefix web_studio run lint"
+  },
+  "dependencies": {
+    "express": "^4.22.3"
+  }
+}

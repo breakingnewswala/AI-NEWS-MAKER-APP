@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "न्यूज ग्राफिक स्टूडियो",
+  "short_name": "न्यूज ग्राफिक",
+  "description": "ब्रेकिंग न्यूजवाला - डिजिटल न्यूज ग्राफिक कार्ड और ब्रेकिंग न्यूज जैकेट स्टूडियो।",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#FFCC00",
+  "background_color": "#0a0a0a",
+  "categories": ["news", "productivity", "graphics"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

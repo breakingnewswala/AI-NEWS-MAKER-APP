@@ -1,0 +1,8 @@
+{
+  "name": "AI News Maker App",
+  "description": "Professional AI newsroom studio with advanced graphic design, typography, filters, video trimming, transitions, and audio mixer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

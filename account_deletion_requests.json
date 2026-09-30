@@ -1,0 +1,12 @@
+[
+  {
+    "id": "DEL-1790338992663-5248",
+    "email": "testuser@example.com",
+    "mobile": "9876543210",
+    "channelName": "test channel",
+    "reason": "Testing deletion",
+    "requestedAt": 1790338992663,
+    "status": "COMPLETED",
+    "clearedPostsCount": 0
+  }
+]

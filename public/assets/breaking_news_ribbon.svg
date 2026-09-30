@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="100%" height="100%">
+  <!-- Top Speed Accent Lines -->
+  <!-- Top Red Horizontal Bar -->
+  <rect x="240" y="12" width="560" height="7" rx="1.5" fill="#E50914" />
+  <!-- Top Blue Horizontal Bar -->
+  <rect x="20" y="28" width="430" height="6" rx="1.5" fill="#2244E8" />
+
+  <!-- Main Slanted Ribbons Group -->
+  <!-- Skewing by -16 degrees with origin near center Y -->
+  <g transform="translate(45, 0) skewX(-16)">
+    <!-- Left Blue Parallelogram: BREAKING -->
+    <rect x="80" y="42" width="365" height="96" rx="2" fill="#2244E8" />
+    
+    <!-- Right Red Parallelogram: NEWS -->
+    <rect x="448" y="38" width="395" height="104" rx="2" fill="#E50914" />
+
+    <!-- Text: BREAKING -->
+    <text
+      x="262"
+      y="113"
+      fill="#FFFFFF"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Arial Black', Impact, sans-serif"
+      font-size="64"
+      font-weight="900"
+      letter-spacing="2"
+      text-anchor="middle"
+    >BREAKING</text>
+
+    <!-- Text: NEWS -->
+    <text
+      x="645"
+      y="114"
+      fill="#FFFFFF"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Arial Black', Impact, sans-serif"
+      font-size="70"
+      font-weight="900"
+      letter-spacing="3"
+      text-anchor="middle"
+    >NEWS</text>
+  </g>
+
+  <!-- Bottom Speed Accent Lines -->
+  <!-- Bottom Red Horizontal Bar -->
+  <rect x="150" y="146" width="310" height="6" rx="1.5" fill="#E50914" />
+  <!-- Bottom Blue Horizontal Bar -->
+  <rect x="290" y="159" width="490" height="7" rx="1.5" fill="#2244E8" />
+</svg>

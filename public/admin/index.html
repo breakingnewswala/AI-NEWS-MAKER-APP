@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI NEWS MAKER - वेब एडमिन डैशबोर्ड (Chief Admin Studio)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: #131b2e;
+      --bg-card-hover: #1c2640;
+      --bg-sidebar: #0b1120;
+      --border-color: #263352;
+      --news-red: #c62828;
+      --news-red-hover: #e53935;
+      --news-gold: #d4af37;
+      --news-gold-light: #fef3c7;
+      --news-gold-dark: #b45309;
+      --text-white: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --accent-blue: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-white);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 270px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .brand-box {
+      padding: 22px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--news-red), #7f1d1d);
+      border: 2px solid var(--news-gold);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 15px rgba(198, 40, 40, 0.4);
+    }
+
+    .brand-text h2 {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    .brand-text p {
+      font-size: 11px;
+      color: var(--news-gold);
+      font-weight: 600;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item button {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    .nav-item button:hover {
+      background: var(--bg-card);
+      color: #fff;
+    }
+
+    .nav-item.active button {
+      background: linear-gradient(90deg, rgba(198, 40, 40, 0.25), rgba(198, 40, 40, 0.05));
+      border-left: 3px solid var(--news-red);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: var(--news-red);
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    .sync-status-box {
+      padding: 16px;
+      border-top: 1px solid var(--border-color);
+      background: rgba(15, 23, 42, 0.6);
+    }
+
+    .sync-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* MAIN CONTENT */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-dark);
+    }
+
+    /* TOP HEADER */
+    .top-header {
+      height: 68px;
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .live-badge {
+      background: var(--news-red);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .header-ticker-preview {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      max-width: 580px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .user-profile-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-card);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border-color);
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      background: linear-gradient(135deg, var(--news-gold), var(--news-gold-dark));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #000;
+      font-size: 13px;
+    }
+
+    /* CONTENT BODY */
+    .content-body {
+      flex: 1;
+      padding: 24px 28px;
+      overflow-y: auto;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* STATS CARDS */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 18px 20px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--news-gold);
+    }
+
+    .stat-info h4 {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-info .stat-num {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .stat-info .stat-sub {
+      font-size: 11px;
+      color: var(--success);
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    .stat-icon {
+      width: 44px;
+      height: 44px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: var(--news-gold);
+    }
+
+    /* SECTION CARDS & PANELS */
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .panel-header h3 {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-body {
+      padding: 20px;
+    }
+
+    /* TABLES */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .data-table th {
+      padding: 12px 14px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .data-table td {
+      padding: 14px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .data-table tr:hover {
+      background: var(--bg-card-hover);
+    }
+
+    /* STATUS PILLS */
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+
+    .badge-review { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; }
+    .badge-approved { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981; }
+    .badge-published { background: rgba(37, 99, 235, 0.2); color: #60a5fa; border: 1px solid #3b82f6; }
+    .badge-draft { background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid #64748b; }
+
+    /* BUTTONS & FORMS */
+    .btn {
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-red {
+      background: var(--news-red);
+      color: #fff;
+    }
+
+    .btn-red:hover {
+      background: var(--news-red-hover);
+      box-shadow: 0 0 12px rgba(198, 40, 40, 0.5);
+    }
+
+    .btn-gold {
+      background: var(--news-gold);
+      color: #000;
+    }
+
+    .btn-gold:hover {
+      background: #eab308;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-white);
+    }
+
+    .btn-outline:hover {
+      background: var(--bg-card-hover);
+      border-color: #fff;
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 11px;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-textarea, .form-select {
+      width: 100%;
+      background: #0b1120;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus, .form-textarea:focus {
+      border-color: var(--news-gold);
+    }
+
+    /* JACKET VISUAL PREVIEW STUDIO */
+    .jacket-studio-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+    }
+
+    .canvas-preview-wrapper {
+      background: #070a11;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 1080x1350 aspect ratio preview */
+    .news-jacket-frame {
+      width: 340px;
+      height: 425px;
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      border: 2px solid var(--news-gold);
+      color: #000;
+      position: relative;
+    }
+
+    .jacket-header {
+      background: linear-gradient(90deg, #c62828, #8e0000);
+      color: #fff;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--news-gold);
+    }
+
+    .jacket-header-logo {
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+    }
+
+    .jacket-header-tag {
+      background: #fff;
+      color: #c62828;
+      font-size: 9px;
+      font-weight: 900;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .jacket-body {
+      flex: 1;
+      background: #f8fafc;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .jacket-body-channel {
+      font-size: 11px;
+      font-weight: 800;
+      color: #c62828;
+      text-transform: uppercase;
+    }
+
+    .jacket-body-headline {
+      font-size: 16px;
+      font-weight: 900;
+      line-height: 1.35;
+      color: #0f172a;
+      margin: 8px 0;
+    }
+
+    .jacket-body-sub {
+      font-size: 11px;
+      color: #475569;
+      line-height: 1.4;
+    }
+
+    .jacket-body-img-mock {
+      height: 140px;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      margin: 10px 0;
+    }
+
+    .jacket-footer {
+      background: #18181b;
+      color: #fff;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 2px solid var(--news-gold);
+      font-size: 10px;
+    }
+
+    .jacket-footer-reporter {
+      font-weight: 700;
+      color: var(--news-gold);
+    }
+
+    .jacket-footer-loc {
+      color: #a1a1aa;
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-box {
+      width: 520px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand-box">
+      <div class="brand-icon">🔴</div>
+      <div class="brand-text">
+        <h2>AI NEWS MAKER</h2>
+        <p>CHIEF ADMIN STUDIO</p>
+      </div>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item active" data-tab="tab-overview">
+        <button><span class="icon">📊</span> डैशबोर्ड अवलोकन (Overview)</button>
+      </li>
+      <li class="nav-item" data-tab="tab-users">
+        <button><span class="icon">👥</span> यूज़र्स एवं कमांड्स (Users & Directives) <span class="nav-badge" id="badge-users">4</span></button>
+      </li>
+      <li class="nav-item" data-tab="tab-projects">
+        <button><span class="icon">📁</span> प्रोजेक्ट्स एवं जैकेट्स (Projects) <span class="nav-badge" id="badge-projects">4</span></button>
+      </li>
+      <li class="nav-item" data-tab="tab-feeds">
+        <button><span class="icon">📡</span> RSS व वेब लिंक्स (Feed Dispatcher)</button>
+      </li>
+      <li class="nav-item" data-tab="tab-jacket-studio">
+        <button><span class="icon">🎨</span> मास्टर जैकेट स्टूडियो (Live Canvas)</button>
+      </li>
+      <li class="nav-item" data-tab="tab-ticker">
+        <button><span class="icon">🔴</span> लाइव ब्रेकिंग टिकर (Live Ticker)</button>
+      </li>
+    </ul>
+
+    <div class="sync-status-box">
+      <div class="sync-pill">
+        <div class="pulse-dot"></div>
+        <span>क्लाउड सिंक सक्रिय (Mobile App Connected)</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <main class="main-area">
+    <!-- TOP HEADER -->
+    <header class="top-header">
+      <div class="header-left">
+        <div class="live-badge"><span>●</span> LIVE BROADCAST</div>
+        <div class="header-ticker-preview" id="top-ticker-display">
+          🔴 LIVE: भारत का नया AI सुपरकंप्यूटिंग नेटवर्क सक्रिय • संसद में डिजिटल मीडिया रेगुलेशन बिल पेश
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button class="btn btn-red btn-sm" onclick="openCommandModal()">+ नया कमांड / निर्देश</button>
+        <div class="user-profile-badge">
+          <div class="avatar">A</div>
+          <div>
+            <div style="font-size: 12.5px; font-weight: 700;">सुपर एडमिन (Admin Desk)</div>
+            <div style="font-size: 10px; color: var(--news-gold);">breakingnewswala.com</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTENT BODY -->
+    <div class="content-body">
+
+      <!-- TAB 1: OVERVIEW -->
+      <div class="tab-content active" id="tab-overview">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-info">
+              <h4>कुल यूज़र्स (Reporters/Desk)</h4>
+              <div class="stat-num" id="stat-total-users">4</div>
+              <div class="stat-sub">● सभी सक्रिय</div>
+            </div>
+            <div class="stat-icon">👥</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-info">
+              <h4>सक्रिय प्रोजेक्ट्स (Active Projects)</h4>
+              <div class="stat-num" id="stat-active-projects">4</div>
+              <div class="stat-sub">1 रिव्यू में लंबित</div>
+            </div>
+            <div class="stat-icon">📑</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-info">
+              <h4>सक्रिय RSS/वेब चैनल्स</h4>
+              <div class="stat-num" id="stat-rss-count">5</div>
+              <div class="stat-sub">75+ आज की खबरें</div>
+            </div>
+            <div class="stat-icon">📡</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-info">
+              <h4>जनरेटेड न्यूज़ जैकेट्स</h4>
+              <div class="stat-num">142</div>
+              <div class="stat-sub">HD एक्सपोर्टेड</div>
+            </div>
+            <div class="stat-icon">✨</div>
+          </div>
+        </div>
+
+        <!-- Recent Projects Queue -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>📂</span> यूज़र्स के हालिया प्रोजेक्ट्स एवं जैकेट्स</h3>
+            <button class="btn btn-outline btn-sm" onclick="switchTab('tab-projects')">सभी देखें →</button>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>प्रोजेक्ट ID</th>
+                  <th>यूज़र (User)</th>
+                  <th>प्रकार</th>
+                  <th>हेडलाइन (Title)</th>
+                  <th>स्टेटस</th>
+                  <th>समय</th>
+                  <th>कार्रवाई</th>
+                </tr>
+              </thead>
+              <tbody id="overview-projects-table">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Commands Sent -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>⚡</span> एडमिन निर्देश एवं कमांड्स लॉग (Admin Directives)</h3>
+            <button class="btn btn-red btn-sm" onclick="openCommandModal()">+ नई कमांड भेजें</button>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>कमांड ID</th>
+                  <th>लक्षित यूज़र</th>
+                  <th>निर्देश (Message / Directive)</th>
+                  <th>जारी समय</th>
+                  <th>स्थिति</th>
+                </tr>
+              </thead>
+              <tbody id="commands-table">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: USERS & COMMANDS -->
+      <div class="tab-content" id="tab-users">
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>👥</span> यूज़र डायरेक्टरी एवं रोल्स (User Directory & Roles)</h3>
+            <button class="btn btn-gold btn-sm" onclick="openCommandModal()">+ यूज़र को कमांड भेजें</button>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>यूज़र का नाम</th>
+                  <th>पद (Role Title)</th>
+                  <th>ईमेल ID</th>
+                  <th>सक्रिय प्रोजेक्ट्स</th>
+                  <th>स्थिति</th>
+                  <th>कमांड</th>
+                </tr>
+              </thead>
+              <tbody id="users-directory-table">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: PROJECTS -->
+      <div class="tab-content" id="tab-projects">
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>📁</span> सभी यूज़र्स के प्रोजेक्ट्स एवं जैकेट्स की सूची</h3>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-outline btn-sm" onclick="filterProjects('ALL')">सभी</button>
+              <button class="btn btn-outline btn-sm" onclick="filterProjects('GRAPHIC_JACKET')">ग्राफिक जैकेट्स</button>
+              <button class="btn btn-outline btn-sm" onclick="filterProjects('VIDEO_NEWS')">वीडियो न्यूज़</button>
+            </div>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>प्रोजेक्ट ID</th>
+                  <th>यूज़र</th>
+                  <th>प्रकार</th>
+                  <th>हेडलाइन</th>
+                  <th>थीम</th>
+                  <th>स्टेटस</th>
+                  <th>एडमिन समीक्षा</th>
+                </tr>
+              </thead>
+              <tbody id="all-projects-table">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: FEEDS -->
+      <div class="tab-content" id="tab-feeds">
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>📡</span> न्यूज़ चैनल्स RSS एवं वेब लिंक डिस्पैचर</h3>
+            <button class="btn btn-red btn-sm" onclick="openAddFeedModal()">+ नया RSS / वेब लिंक जोड़ें</button>
+          </div>
+          <div class="panel-body">
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+              यहाँ जोड़े गए लिंक्स तुरंत मोबाइल ऐप की होम फीड पर पोस्ट बॉक्स बनकर दिखेंगे और यूज़र्स 1-क्लिक में 'यह न्यूज़ बना' जैकेट बना सकेंगे।
+            </p>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>चैनल का नाम</th>
+                  <th>RSS / वेब लिंक</th>
+                  <th>श्रेणी (Category)</th>
+                  <th>स्थिति</th>
+                  <th>आज की खबरें</th>
+                  <th>कार्रवाई</th>
+                </tr>
+              </thead>
+              <tbody id="feeds-table">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: MASTER JACKET STUDIO -->
+      <div class="tab-content" id="tab-jacket-studio">
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>🎨</span> मास्टर जैकेट कस्टमाइज़र एवं लाइव 1080x1350 कैनवास प्रीव्यू</h3>
+            <button class="btn btn-gold btn-sm" onclick="alert('मास्टर ब्रैंडिंग सेटिंग्स मोबाइल ऐप और वेब दोनों पर सिंक हो गई!')">सुरक्षित करें एवं सिंक करें</button>
+          </div>
+          <div class="panel-body">
+            <div class="jacket-studio-grid">
+              <!-- Controls -->
+              <div>
+                <div class="form-group">
+                  <label>डिफ़ॉल्ट न्यूज़ चैनल नाम</label>
+                  <input type="text" class="form-input" id="studio-channel" value="AI NEWS 24" oninput="updateJacketPreview()" />
+                </div>
+                <div class="form-group">
+                  <label>शीर्ष हेडर लोगो टेक्स्ट</label>
+                  <input type="text" class="form-input" id="studio-logo" value="AI NEWS MAKER" oninput="updateJacketPreview()" />
+                </div>
+                <div class="form-group">
+                  <label>मुख्य हेडलाइन (Preview Headline)</label>
+                  <textarea class="form-textarea" rows="2" id="studio-headline" oninput="updateJacketPreview()">संसद में डिजिटल मीडिया व AI न्यूज़ प्रसारण पर नया ऐतिहासिक विधेयक पेश</textarea>
+                </div>
+                <div class="form-group">
+                  <label>सब-हेडलाइन / सारांश</label>
+                  <textarea class="form-textarea" rows="2" id="studio-sub" oninput="updateJacketPreview()">सूचना एवं प्रसारण मंत्रालय द्वारा आज डिजिटल पब्लिशर्स और एआई आधारित कंटेंट जनरेशन के लिए नए मानक जारी किए गए।</textarea>
+                </div>
+                <div class="form-group">
+                  <label>रिपोर्टर क्रेडिट लाइन (Footer)</label>
+                  <input type="text" class="form-input" id="studio-reporter" value="ब्यूरो चीफ / विशेष संवाददाता" oninput="updateJacketPreview()" />
+                </div>
+                <div class="form-group">
+                  <label>स्थान (Location)</label>
+                  <input type="text" class="form-input" id="studio-location" value="नई दिल्ली" oninput="updateJacketPreview()" />
+                </div>
+              </div>
+
+              <!-- Live Canvas Visual -->
+              <div class="canvas-preview-wrapper">
+                <div class="news-jacket-frame" id="live-jacket-frame">
+                  <!-- Header Jacket -->
+                  <div class="jacket-header">
+                    <div class="jacket-header-logo" id="prev-logo">AI NEWS MAKER</div>
+                    <div class="jacket-header-tag">BREAKING NEWS</div>
+                  </div>
+
+                  <!-- Body -->
+                  <div class="jacket-body">
+                    <div>
+                      <div class="jacket-body-channel" id="prev-channel">AI NEWS 24</div>
+                      <div class="jacket-body-headline" id="prev-headline">
+                        संसद में डिजिटल मीडिया व AI न्यूज़ प्रसारण पर नया ऐतिहासिक विधेयक पेश
+                      </div>
+                      <div class="jacket-body-sub" id="prev-sub">
+                        सूचना एवं प्रसारण मंत्रालय द्वारा आज डिजिटल पब्लिशर्स और एआई आधारित कंटेंट जारी किए गए।
+                      </div>
+                    </div>
+
+                    <div class="jacket-body-img-mock">
+                      📷 [ लाइव फोटो / ब्रॉडकास्ट विज़ुअल ]
+                    </div>
+                  </div>
+
+                  <!-- Footer Jacket -->
+                  <div class="jacket-footer">
+                    <div class="jacket-footer-reporter" id="prev-reporter">ब्यूरो चीफ / विशेष संवाददाता</div>
+                    <div class="jacket-footer-loc" id="prev-location">नई दिल्ली • 15 सितम्बर 2026</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 6: LIVE TICKER -->
+      <div class="tab-content" id="tab-ticker">
+        <div class="panel">
+          <div class="panel-header">
+            <h3><span>🔴</span> लाइव ब्रेकिंग टिकर कंट्रोलर (Real-time Broadcast)</h3>
+          </div>
+          <div class="panel-body">
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+              यहाँ से आप ऐप और वेबसाइट के टॉप पर स्क्रॉल होने वाले टिकर को तुरंत रियल-टाइम में बदल सकते हैं।
+            </p>
+            <div class="form-group">
+              <label>टिकर टेक्स्ट (Ticker Content)</label>
+              <textarea class="form-textarea" rows="3" id="live-ticker-input">🔴 LIVE: भारत का नया AI सुपरकंप्यूटिंग नेटवर्क सक्रिय • संसद में डिजिटल मीडिया रेगुलेशन बिल पेश • एशियाई खेलों में भारतीय टीम का शानदार प्रदर्शन</textarea>
+            </div>
+            <button class="btn btn-red" onclick="saveLiveTicker()">तुरंत पूरे नेटवर्क पर पब्लिश करें</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL: ADD COMMAND -->
+  <div class="modal-overlay" id="command-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 style="font-size: 16px; font-weight: 800;">यूज़र को निर्देश / कमांड भेजें</h3>
+        <button class="modal-close" onclick="closeCommandModal()">&times;</button>
+      </div>
+      <div class="form-group">
+        <label>लक्षित यूज़र चुनें (Target User)</label>
+        <select class="form-select" id="cmd-target-user">
+          <option value="राहुल शर्मा (Reporter)">राहुल शर्मा (Reporter - फ़ील्ड)</option>
+          <option value="प्रिया वर्मा (Desk)">प्रिया वर्मा (Desk - सब-एडिटर)</option>
+          <option value="अमित कुमार (Video)">अमित कुमार (Video - प्रोड्यूसर)</option>
+          <option value="नेहा सिंह (E-Paper)">नेहा सिंह (E-Paper - कोऑर्डिनेटर)</option>
+          <option value="सभी यूज़र्स (Broadcast)">सभी यूज़र्स (Broadcast)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>कमांड या निर्देश लिखें (Directive)</label>
+        <textarea class="form-textarea" rows="3" id="cmd-text" placeholder="जैसे: हेडलाइन को 5 शब्द छोटा करें और 10 मिनट में री-सबमिट करें"></textarea>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+        <button class="btn btn-outline" onclick="closeCommandModal()">रद्द करें</button>
+        <button class="btn btn-red" onclick="submitCommand()">कमांड भेजें</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD RSS FEED -->
+  <div class="modal-overlay" id="feed-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 style="font-size: 16px; font-weight: 800;">नया RSS / वेब लिंक जोड़ें</h3>
+        <button class="modal-close" onclick="closeAddFeedModal()">&times;</button>
+      </div>
+      <div class="form-group">
+        <label>न्यूज़ चैनल का नाम</label>
+        <input type="text" class="form-input" id="feed-name" placeholder="जैसे: दैनिक जागरण" />
+      </div>
+      <div class="form-group">
+        <label>RSS फीड या वेब लिंक URL</label>
+        <input type="text" class="form-input" id="feed-url" placeholder="https://example.com/rss.xml" />
+      </div>
+      <div class="form-group">
+        <label>श्रेणी (Category)</label>
+        <select class="form-select" id="feed-cat">
+          <option value="ब्रेकिंग न्यूज़">ब्रेकिंग न्यूज़</option>
+          <option value="राजनीति">राजनीति</option>
+          <option value="टेक्नोलॉजी">टेक्नोलॉजी</option>
+          <option value="खेल">खेल</option>
+          <option value="कारोबार">कारोबार</option>
+          <option value="मनोरंजन">मनोरंजन</option>
+        </select>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
+        <button class="btn btn-outline" onclick="closeAddFeedModal()">रद्द करें</button>
+        <button class="btn btn-red" onclick="submitFeed()">फ़ीड जोड़ें</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // INITIAL STATE
+    let users = [
+      { id: "u-1", name: "राहुल शर्मा", role: "सीनियर रिपोर्टर (फील्ड)", email: "rahul.news@example.com", projects: 3, status: "ऑनलाइन" },
+      { id: "u-2", name: "प्रिया वर्मा", role: "सब-एडिटर (डेस्क)", email: "priya.editor@example.com", projects: 5, status: "ऑनलाइन" },
+      { id: "u-3", name: "अमित कुमार", role: "वीडियो प्रोड्यूसर", email: "amit.producer@example.com", projects: 2, status: "ऑनलाइन" },
+      { id: "u-4", name: "नेहा सिंह", role: "ई-पेपर कोऑर्डिनेटर", email: "neha.epaper@example.com", projects: 1, status: "ऑफलाइन" }
+    ];
+
+    let projects = [
+      { id: "proj-101", user: "राहुल शर्मा", type: "ग्राफिक जैकेट", title: "संसद लाइव: बजट सत्र पर विशेष विश्लेषण ग्राफिक", status: "IN_REVIEW", time: "15 मिनट पहले", theme: "रेड ब्रेकिंग" },
+      { id: "proj-102", user: "अमित कुमार", type: "वीडियो न्यूज़", title: "इसरो प्रक्षेपण: लोअर-थर्ड जैकेट रील", status: "APPROVED", time: "35 मिनट पहले", theme: "गोल्डन प्राइम" },
+      { id: "proj-103", user: "प्रिया वर्मा", type: "ग्राफिक जैकेट", title: "बाजार बुलेटिन: सेंसेक्स रिकॉर्ड उछाल", status: "PUBLISHED", time: "1 घंटा पहले", theme: "डार्क स्टूडियो" },
+      { id: "proj-104", user: "नेहा सिंह", type: "ई-पेपर पेज", title: "राष्ट्रीय संस्करण - पेज 1 फ्रंट हेडलाइन लेआउट", status: "DRAFT", time: "2 घंटे पहले", theme: "ब्रॉडशीट प्रिंट" }
+    ];
+
+    let commands = [
+      { id: "cmd-1", user: "राहुल शर्मा", text: "प्रोजेक्ट #proj-101 में सब-हेडलाइन अपडेट करें और 2 मिनट में री-सबमिट करें।", time: "10 मिनट पहले", status: "प्रगति में" },
+      { id: "cmd-2", user: "अमित कुमार", text: "इसरो वीडियो रील को सभी सोशल प्लेटफॉर्म्स पर पब्लिश करें।", time: "30 मिनट पहले", status: "पूर्ण" }
+    ];
+
+    let feeds = [
+      { name: "दैनिक भास्कर", url: "https://dainikbhaskar.com/rss/national.xml", cat: "राजनीति", active: true, count: 18 },
+      { name: "आज तक (Aaj Tak)", url: "https://aajtak.in/rss/breaking.xml", cat: "ब्रेकिंग न्यूज़", active: true, count: 24 },
+      { name: "NDTV इंडिया", url: "https://ndtv.in/rss/topstories.xml", cat: "खेल", active: true, count: 10 },
+      { name: "मनीकंट्रोल (Moneycontrol)", url: "https://moneycontrol.com/rss/market.xml", cat: "कारोबार", active: true, count: 15 },
+      { name: "बीबीसी हिंदी (BBC Hindi)", url: "https://bbc.com/hindi/rss.xml", cat: "मनोरंजन", active: true, count: 8 }
+    ];
+
+    // NAVIGATION TABS
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        item.classList.add('active');
+        const tabId = item.getAttribute('data-tab');
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
+
+    function switchTab(tabId) {
+      document.querySelector(`[data-tab="${tabId}"]`).click();
+    }
+
+    function renderStatusBadge(status) {
+      switch(status) {
+        case 'IN_REVIEW': return '<span class="status-badge badge-review">रिव्यू में</span>';
+        case 'APPROVED': return '<span class="status-badge badge-approved">स्वीकृत</span>';
+        case 'PUBLISHED': return '<span class="status-badge badge-published">पब्लिश हुआ</span>';
+        default: return '<span class="status-badge badge-draft">ड्राफ्ट</span>';
+      }
+    }
+
+    function renderTables() {
+      // Overview Projects
+      const ovBody = document.getElementById('overview-projects-table');
+      ovBody.innerHTML = projects.map(p => `
+        <tr>
+          <td><strong style="color: var(--news-gold);">${p.id}</strong></td>
+          <td>${p.user}</td>
+          <td><span style="font-size: 11px; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px;">${p.type}</span></td>
+          <td style="max-width: 260px; font-weight: 600;">${p.title}</td>
+          <td>${renderStatusBadge(p.status)}</td>
+          <td style="color: var(--text-dim); font-size: 11px;">${p.time}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="approveProject('${p.id}')">स्वीकृत करें</button>
+          </td>
+        </tr>
+      `).join('');
+
+      // All Projects
+      const allBody = document.getElementById('all-projects-table');
+      allBody.innerHTML = projects.map(p => `
+        <tr>
+          <td><strong style="color: var(--news-gold);">${p.id}</strong></td>
+          <td>${p.user}</td>
+          <td>${p.type}</td>
+          <td style="font-weight: 600;">${p.title}</td>
+          <td style="color: var(--news-gold); font-size: 11px;">${p.theme}</td>
+          <td>${renderStatusBadge(p.status)}</td>
+          <td>
+            <button class="btn btn-red btn-sm" onclick="approveProject('${p.id}')">स्वीकृत</button>
+            <button class="btn btn-outline btn-sm" onclick="rejectProject('${p.id}')">कमांड दें</button>
+          </td>
+        </tr>
+      `).join('');
+
+      // Users
+      const userBody = document.getElementById('users-directory-table');
+      userBody.innerHTML = users.map(u => `
+        <tr>
+          <td><strong>${u.name}</strong></td>
+          <td style="color: var(--text-muted);">${u.role}</td>
+          <td style="color: var(--text-dim); font-size: 11px;">${u.email}</td>
+          <td><strong style="color: var(--news-gold);">${u.projects}</strong></td>
+          <td><span style="color: ${u.status === 'ऑनलाइन' ? 'var(--success)' : 'var(--text-dim)'}; font-weight: 700;">● ${u.status}</span></td>
+          <td><button class="btn btn-outline btn-sm" onclick="openCommandFor('${u.name}')">कमांड भेजें</button></td>
+        </tr>
+      `).join('');
+
+      // Commands
+      const cmdBody = document.getElementById('commands-table');
+      cmdBody.innerHTML = commands.map(c => `
+        <tr>
+          <td><strong style="color: var(--news-gold);">${c.id}</strong></td>
+          <td><strong>${c.user}</strong></td>
+          <td style="color: var(--text-muted);">${c.text}</td>
+          <td style="color: var(--text-dim); font-size: 11px;">${c.time}</td>
+          <td><span style="color: ${c.status === 'पूर्ण' ? 'var(--success)' : 'var(--warning)'}; font-weight: 700;">${c.status}</span></td>
+        </tr>
+      `).join('');
+
+      // Feeds
+      const feedBody = document.getElementById('feeds-table');
+      feedBody.innerHTML = feeds.map((f, idx) => `
+        <tr>
+          <td><strong>${f.name}</strong></td>
+          <td style="color: var(--text-dim); font-size: 11px; max-width: 240px; overflow: hidden; text-overflow: ellipsis;">${f.url}</td>
+          <td><span style="background: rgba(198,40,40,0.15); color: var(--news-red-hover); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;">${f.cat}</span></td>
+          <td><span style="color: ${f.active ? 'var(--success)' : 'var(--text-dim)'}; font-weight: 700;">${f.active ? '● सक्रिय' : '○ बंद'}</span></td>
+          <td>${f.count} पोस्ट्स</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="toggleFeed(${idx})">${f.active ? 'बंद करें' : 'शुरू करें'}</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function approveProject(id) {
+      projects = projects.map(p => p.id === id ? { ...p, status: 'APPROVED' } : p);
+      renderTables();
+      alert(`प्रोजेक्ट #${id} स्वीकृत (Approved) हो गया! मोबाइल ऐप में स्टेटस अपडेट हो चुका है।`);
+    }
+
+    function rejectProject(id) {
+      openCommandModal();
+      document.getElementById('cmd-text').value = `प्रोजेक्ट #${id}: कृपया हेडर और फुटर टेक्स्ट री-एडिट करें।`;
+    }
+
+    function toggleFeed(idx) {
+      feeds[idx].active = !feeds[idx].active;
+      renderTables();
+    }
+
+    // LIVE TICKER
+    function saveLiveTicker() {
+      const val = document.getElementById('live-ticker-input').value;
+      document.getElementById('top-ticker-display').innerText = val;
+      alert('लाइव ब्रेकिंग टिकर पूरे ऐप और वेब पर तुरंत पब्लिश हो गया!');
+    }
+
+    // JACKET PREVIEW UPDATE
+    function updateJacketPreview() {
+      document.getElementById('prev-channel').innerText = document.getElementById('studio-channel').value;
+      document.getElementById('prev-logo').innerText = document.getElementById('studio-logo').value;
+      document.getElementById('prev-headline').innerText = document.getElementById('studio-headline').value;
+      document.getElementById('prev-sub').innerText = document.getElementById('studio-sub').value;
+      document.getElementById('prev-reporter').innerText = document.getElementById('studio-reporter').value;
+      document.getElementById('prev-location').innerText = document.getElementById('studio-location').value + ' • 15 सितम्बर 2026';
+    }
+
+    // MODAL HANDLERS
+    function openCommandModal() {
+      document.getElementById('command-modal').classList.add('active');
+    }
+    function closeCommandModal() {
+      document.getElementById('command-modal').classList.remove('active');
+    }
+    function openCommandFor(userName) {
+      openCommandModal();
+      document.getElementById('cmd-target-user').value = userName;
+    }
+    function submitCommand() {
+      const user = document.getElementById('cmd-target-user').value;
+      const text = document.getElementById('cmd-text').value;
+      if (!text) return alert('कृपया निर्देश दर्ज करें');
+      commands.unshift({
+        id: `cmd-${Date.now().toString().slice(-3)}`,
+        user: user,
+        text: text,
+        time: 'अभी-अभी',
+        status: 'प्रगति में'
+      });
+      closeCommandModal();
+      renderTables();
+      alert(`${user} को कमांड भेज दी गई है!`);
+    }
+
+    function openAddFeedModal() {
+      document.getElementById('feed-modal').classList.add('active');
+    }
+    function closeAddFeedModal() {
+      document.getElementById('feed-modal').classList.remove('active');
+    }
+    function submitFeed() {
+      const name = document.getElementById('feed-name').value;
+      const url = document.getElementById('feed-url').value;
+      const cat = document.getElementById('feed-cat').value;
+      if (!name || !url) return alert('कृपया नाम और URL दोनों दर्ज करें');
+      feeds.unshift({ name, url, cat, active: true, count: 0 });
+      closeAddFeedModal();
+      renderTables();
+      alert(`${name} RSS फीड जुड़ गई और होम फीड पर पोस्ट बॉक्स लाइव हो गया!`);
+    }
+
+    renderTables();
+  </script>
+</body>
+</html>

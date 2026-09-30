@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="100%" height="100%">
+  <!-- वायरल सच (VIRAL SACH) - Royal Violet & Vivid Magenta Neon Graphic -->
+  <defs>
+    <linearGradient id="viralPurpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#4C1D95"/>
+    </linearGradient>
+    <linearGradient id="viralPinkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F43F5E"/>
+      <stop offset="50%" stop-color="#E11D48"/>
+      <stop offset="100%" stop-color="#9F1239"/>
+    </linearGradient>
+    <filter id="viralShadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.40"/>
+    </filter>
+  </defs>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@800;900&amp;display=swap');
+    .ribbon-text-upright {
+      font-family: 'Baloo 2', 'Noto Sans Devanagari', -apple-system, sans-serif;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+  </style>
+
+  <!-- Top Accent Lines -->
+  <rect x="180" y="10" width="600" height="6" rx="3" fill="#EC4899"/>
+  <rect x="270" y="20" width="420" height="4" rx="2" fill="#FFE600"/>
+
+  <g filter="url(#viralShadow)">
+    <polygon points="142,34 818,34 788,144 112,144" fill="#000000" opacity="0.25"/>
+
+    <!-- Left Plate: 'वायरल' (Electric Purple) -->
+    <polygon points="148,36 430,36 400,142 118,142" fill="url(#viralPurpleGrad)" stroke="#FFE600" stroke-width="3.5"/>
+    
+    <!-- Right Plate: 'सच' (Vivid Magenta Pink) -->
+    <polygon points="438,36 812,36 782,142 408,142" fill="url(#viralPinkGrad)" stroke="#FFFFFF" stroke-width="3.5"/>
+
+    <!-- Left Highlight Strip -->
+    <polygon points="158,44 178,44 158,134 138,134" fill="#C084FC" opacity="0.85"/>
+
+    <!-- Text: 'वायरल' - Upright White -->
+    <text
+      x="285"
+      y="90"
+      fill="#FFFFFF"
+      class="ribbon-text-upright"
+      font-size="70"
+    >वायरल</text>
+
+    <!-- Text: 'सच' - Upright White with Gold Hint -->
+    <text
+      x="605"
+      y="90"
+      fill="#FFFFFF"
+      class="ribbon-text-upright"
+      font-size="72"
+    >सच</text>
+  </g>
+
+  <!-- Bottom Accent Lines -->
+  <rect x="270" y="152" width="420" height="4" rx="2" fill="#FFE600"/>
+  <rect x="210" y="160" width="540" height="6" rx="3" fill="#8B5CF6"/>
+</svg>
