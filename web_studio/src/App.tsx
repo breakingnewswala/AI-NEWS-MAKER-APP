@@ -1392,11 +1392,12 @@ export default function App() {
                 onBackToGraphic={() => updateStudioMode('graphic')}
               />
             </div>
-          ) : isMobileScreen ? (
-            /* ============================================================== */
-            /* MOBILE ONLY 65% / 35% FROZEN WORKSPACE STUDIO LAYOUT           */
-            /* ============================================================== */
-            <div className="w-full flex flex-col min-h-screen">
+          ) : (
+            <>
+              {/* ============================================================== */}
+              {/* 1. MOBILE ONLY 65% / 35% FROZEN WORKSPACE STUDIO LAYOUT (lg:hidden) */}
+              {/* ============================================================== */}
+              <div className="lg:hidden w-full flex flex-col min-h-screen">
               {/* Top Compact Selector */}
               <div className="sticky top-0 z-30 bg-slate-950 border-b border-slate-800 p-1.5 flex items-center justify-center gap-1.5 shadow-md">
                 <button
@@ -1728,6 +1729,7 @@ export default function App() {
                     autoFillNews={autoFillNews}
                   />
                 </div>
+              </div>
               </div>
 
               {/* ==================================================
