@@ -361,7 +361,7 @@ $channel के विशेष संवाददाता के अनुस�
                             "business" -> NewsCategory.BUSINESS
                             "tech" -> NewsCategory.TECH
                             "entertainment" -> NewsCategory.ENTERTAINMENT
-                            "state" -> NewsCategory.LOCAL
+                            "state" -> NewsCategory.STATE
                             "crime" -> NewsCategory.CRIME
                             else -> NewsCategory.BREAKING
                         }
