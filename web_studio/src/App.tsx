@@ -1408,15 +1408,35 @@ export default function App() {
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      {/* Screen Hide / Show Toggle Button */}
                       <button
                         type="button"
-                        onClick={() => handleDownload('jpeg')}
+                        onClick={() => setIsMobilePreviewHidden(!isMobilePreviewHidden)}
+                        className={"px-2 py-1 text-[10px] font-bold rounded-lg border flex items-center gap-1 cursor-pointer transition active:scale-95 " + (isMobilePreviewHidden ? "bg-amber-400 text-slate-950 border-amber-300 font-black" : "bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800")}
+                        title={isMobilePreviewHidden ? "स्क्रीन दिखाएँ" : "स्क्रीन छिपाएँ"}
+                      >
+                        {isMobilePreviewHidden ? (
+                          <>
+                            <Eye className="w-3 h-3 text-slate-950 shrink-0" />
+                            <span>स्क्रीन दिखाएँ</span>
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>स्क्रीन छिपाएँ</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDownload("jpeg")}
                         disabled={downloading}
                         className="px-2.5 py-1 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 text-[10px] font-black rounded-lg shadow flex items-center gap-1 cursor-pointer transition active:scale-95 disabled:opacity-50"
                         title="कार्ड डाउनलोड करें"
                       >
                         <Download className="w-3 h-3 text-slate-950 shrink-0" />
-                        <span>{downloading ? '...' : 'JPG डाउनलोड'}</span>
+                        <span>{downloading ? "..." : "JPG डाउनलोड"}</span>
                       </button>
 
                       <button
@@ -1440,20 +1460,43 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 70% Live Preview (Left) + 30% Steps Vertical Column (Right) */}
-                  <div className="flex items-stretch gap-2 h-[260px] max-h-[38vh]">
-                    {/* LEFT: 70% Original 4:5 Aspect Ratio Preview */}
-                    <div className="w-[70%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
-                      <CardPreview
-                        card={card}
-                        className="w-full h-full object-contain"
-                        showSafeZone={showSafeZone}
-                        onChange={handleUpdateCard}
-                      />
-                    </div>
+                  {/* 65% Live Preview + 35% Steps Layout or Compact Steps when Hidden */}
+                  {!isMobilePreviewHidden ? (
+                    <div className="flex items-stretch gap-2 h-[260px] max-h-[38vh]">
+                      {/* LEFT: 65% Original 4:5 Aspect Ratio Preview */}
+                      <div className="w-[65%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
+                        <CardPreview
+                          card={card}
+                          className="w-full h-full object-contain"
+                          showSafeZone={showSafeZone}
+                          onChange={handleUpdateCard}
+                        />
+                      </div>
 
-                    {/* RIGHT: 30% Steps Column (Vertical List) */}
-                    <div className="w-[30%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
+                      {/* RIGHT: 35% Steps Column (Vertical List) */}
+                      <div className="w-[35%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
+                        {STUDIO_STEPS.map((s) => {
+                          const isActive = activeStep === s.step;
+                          return (
+                            <button
+                              key={s.step}
+                              type="button"
+                              onClick={() => {
+                                setActiveStep(s.step);
+                              }}
+                              className={"w-full py-1.5 px-1.5 rounded-lg text-[10px] font-black transition-all text-left flex items-center gap-1 cursor-pointer truncate " + (isActive ? "bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 font-black scale-[1.02]" : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800")}
+                              title={s.title}
+                            >
+                              <span className="text-xs shrink-0">{s.icon}</span>
+                              <span className="truncate leading-tight">{s.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    /* When Preview is Hidden: Compact Horizontal Step Strip, giving maximum room to controls below */
+                    <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
                       {STUDIO_STEPS.map((s) => {
                         const isActive = activeStep === s.step;
                         return (
@@ -1463,20 +1506,16 @@ export default function App() {
                             onClick={() => {
                               setActiveStep(s.step);
                             }}
-                            className={`w-full py-1.5 px-1.5 rounded-lg text-[10px] font-black transition-all text-left flex items-center gap-1 cursor-pointer truncate ${
-                              isActive
-                                ? 'bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 font-black scale-[1.02]'
-                                : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800'
-                            }`}
+                            className={"py-1.5 px-2.5 rounded-lg text-[10px] font-black transition-all shrink-0 flex items-center gap-1.5 cursor-pointer " + (isActive ? "bg-amber-400 text-slate-950 shadow ring-2 ring-amber-300 font-black" : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800")}
                             title={s.title}
                           >
-                            <span className="text-xs shrink-0">{s.icon}</span>
-                            <span className="truncate leading-tight">{s.name}</span>
+                            <span className="text-xs">{s.icon}</span>
+                            <span>{s.name}</span>
                           </button>
                         );
                       })}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* 🎛️ Active Step Commands: Rendered DIRECTLY below the Preview Workspace */}

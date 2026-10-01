@@ -1201,3 +1201,125 @@ export function getUserLogoChangeRequestStatus(userEmail: string): 'none' | 'pen
 
 
 
+
+// ==========================================
+// CLOUD USER SYNC & ADMIN USER MANAGEMENT
+// ==========================================
+export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
+  if (typeof window === 'undefined') return getPlanUsers();
+  try {
+    const res = await fetch('/api/admin/users');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) {
+        const localList = getPlanUsers();
+        const mergedMap = new Map<string, PlanUserRecord>();
+
+        // Seed with local users
+        localList.forEach((u) => {
+          const key = (u.email || u.userId || u.name).toLowerCase().trim();
+          mergedMap.set(key, u);
+        });
+
+        // Merge cloud users
+        data.users.forEach((cu: any) => {
+          const key = (cu.email || cu.username || '').toLowerCase().trim();
+          if (!key) return;
+
+          const existing = mergedMap.get(key);
+          const mapped: PlanUserRecord = {
+            userId: cu.username || existing?.userId || key,
+            email: cu.email || existing?.email || `${cu.username}@user.com`,
+            name: cu.fullName || cu.name || existing?.name || cu.username,
+            channelName: cu.channelNameHi || cu.channelNameEn || existing?.channelName || '',
+            channelLogoUrl: cu.channelLogoUrl || existing?.channelLogoUrl,
+            mobile: cu.mobileNumber || existing?.mobile,
+            tier: (cu.tier as UserPlanTier) || existing?.tier || 'basic',
+            planAssignedAt: cu.updatedAt || existing?.planAssignedAt || Date.now(),
+            planExpiresAt: existing?.planExpiresAt,
+            role: cu.role || existing?.role || (key.includes('admin') ? 'admin' : 'user'),
+            isLocked: cu.isLocked !== undefined ? cu.isLocked : (existing?.isLocked ?? true),
+            customHeaderUrl: cu.customHeaderUrl || existing?.customHeaderUrl,
+            customFooterUrl: cu.customFooterUrl || existing?.customFooterUrl,
+            isCustomHeaderActive: cu.isCustomHeaderActive !== undefined ? cu.isCustomHeaderActive : existing?.isCustomHeaderActive,
+            isCustomFooterActive: cu.isCustomFooterActive !== undefined ? cu.isCustomFooterActive : existing?.isCustomFooterActive,
+            websiteUrl: cu.websiteUrl || existing?.websiteUrl,
+          };
+          mergedMap.set(key, mapped);
+        });
+
+        const merged = Array.from(mergedMap.values());
+        localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('ai_news_plan_users_updated'));
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn('[syncCloudUsers background notice]:', err);
+  }
+  return getPlanUsers();
+}
+
+export async function adminUpdateCloudUser(
+  identifier: string,
+  updates: Partial<PlanUserRecord> & { username?: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // 1. Update on server
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(identifier)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...updates,
+        fullName: updates.name,
+        mobileNumber: updates.mobile,
+      }),
+    });
+    const cType = res.headers.get('content-type') || '';
+    if (res.ok && cType.includes('application/json')) {
+      const data = await res.json();
+      if (!data.success && data.error) {
+        return { success: false, error: data.error };
+      }
+    }
+  } catch (err: any) {
+    console.warn('[adminUpdateCloudUser error, saving locally]:', err.message);
+  }
+
+  // 2. Always update locally
+  adminUpdateUserRecord(identifier, updates);
+
+  // If username was changed, update record key locally
+  if (updates.username && updates.username !== identifier) {
+    const list = getPlanUsers();
+    const found = list.find(
+      (u) =>
+        u.email.toLowerCase() === identifier.toLowerCase() ||
+        u.userId.toLowerCase() === identifier.toLowerCase()
+    );
+    if (found) {
+      found.userId = updates.username;
+      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify([...list]));
+      window.dispatchEvent(new CustomEvent('ai_news_plan_users_updated'));
+    }
+  }
+
+  return { success: true };
+}
+
+export async function adminDeleteCloudUser(identifier: string): Promise<boolean> {
+  try {
+    await fetch(`/api/admin/users/${encodeURIComponent(identifier)}`, {
+      method: 'DELETE',
+    });
+  } catch {}
+
+  const list = getPlanUsers().filter(
+    (u) =>
+      u.email.toLowerCase() !== identifier.toLowerCase() &&
+      u.userId.toLowerCase() !== identifier.toLowerCase()
+  );
+  localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(list));
+  window.dispatchEvent(new CustomEvent('ai_news_plan_users_updated'));
+  return true;
+}

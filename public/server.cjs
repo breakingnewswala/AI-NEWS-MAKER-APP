@@ -914,6 +914,108 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/admin/users", (req, res) => {
+  try {
+    const allProfiles = loadProfilesDatabase();
+    if (!allProfiles["admin"] && !allProfiles["breakingnewswala.com@gmail.com"]) {
+      allProfiles["admin"] = {
+        username: "admin",
+        fullName: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+        role: "admin",
+        email: "breakingnewswala.com@gmail.com",
+        district: "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+        channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        channelNameEn: "AI News Maker",
+        channelLogoUrl: "/assets/ai_news_maker_logo.png",
+        channelLogoType: "png",
+        mobileNumber: "9669802408",
+        showMobileNumber: true,
+        websiteUrl: "ainewsmaker.online",
+        tier: "ultra",
+        updatedAt: Date.now()
+      };
+      saveProfilesDatabase(allProfiles);
+    }
+    const usersList = Object.values(allProfiles);
+    return res.json({ success: true, users: usersList });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/admin/users/:username", (req, res) => {
+  try {
+    const origUsername = req.params.username.trim().toLowerCase();
+    const updates = req.body;
+    const allProfiles = loadProfilesDatabase();
+    let foundKey = Object.keys(allProfiles).find(
+      (k) => k.toLowerCase() === origUsername || allProfiles[k].username && allProfiles[k].username.toLowerCase() === origUsername || allProfiles[k].email && allProfiles[k].email.toLowerCase() === origUsername
+    );
+    if (!foundKey) {
+      foundKey = origUsername;
+      allProfiles[foundKey] = {
+        username: origUsername,
+        fullName: updates.fullName || updates.name || origUsername,
+        channelNameHi: updates.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        channelNameEn: updates.channelNameEn || "AI News Maker",
+        channelLogoUrl: updates.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoType: "png",
+        updatedAt: Date.now()
+      };
+    }
+    const currentProfile = allProfiles[foundKey];
+    const newUsername = (updates.username || "").trim().replace(/[^a-zA-Z0-9_]/g, "");
+    if (newUsername && newUsername.toLowerCase() !== currentProfile.username.toLowerCase()) {
+      const lowerNew = newUsername.toLowerCase();
+      const conflict = Object.values(allProfiles).find(
+        (p) => p.username.toLowerCase() === lowerNew && p !== currentProfile
+      );
+      if (conflict) {
+        return res.status(400).json({ error: `\u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E '${newUsername}' \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0916\u093E\u0924\u0947 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0939\u0948\u0964` });
+      }
+      delete allProfiles[foundKey];
+      currentProfile.username = newUsername;
+      foundKey = lowerNew;
+    }
+    if (updates.fullName !== void 0) currentProfile.fullName = updates.fullName;
+    if (updates.name !== void 0) currentProfile.fullName = updates.name;
+    if (updates.mobileNumber !== void 0) currentProfile.mobileNumber = updates.mobileNumber;
+    if (updates.mobile !== void 0) currentProfile.mobileNumber = updates.mobile;
+    if (updates.district !== void 0) currentProfile.district = updates.district;
+    if (updates.channelNameHi !== void 0) currentProfile.channelNameHi = updates.channelNameHi;
+    if (updates.channelNameEn !== void 0) currentProfile.channelNameEn = updates.channelNameEn;
+    if (updates.tier !== void 0) currentProfile.tier = updates.tier;
+    if (updates.role !== void 0) currentProfile.role = updates.role;
+    if (updates.status !== void 0) currentProfile.status = updates.status;
+    if (updates.isLocked !== void 0) currentProfile.isLocked = updates.isLocked;
+    if (updates.channelLogoUrl !== void 0) currentProfile.channelLogoUrl = updates.channelLogoUrl;
+    if (updates.customHeaderUrl !== void 0) currentProfile.customHeaderUrl = updates.customHeaderUrl;
+    if (updates.customFooterUrl !== void 0) currentProfile.customFooterUrl = updates.customFooterUrl;
+    if (updates.isCustomHeaderActive !== void 0) currentProfile.isCustomHeaderActive = updates.isCustomHeaderActive;
+    if (updates.isCustomFooterActive !== void 0) currentProfile.isCustomFooterActive = updates.isCustomFooterActive;
+    currentProfile.updatedAt = Date.now();
+    allProfiles[foundKey] = currentProfile;
+    saveProfilesDatabase(allProfiles);
+    return res.json({ success: true, user: currentProfile });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/admin/users/:username", (req, res) => {
+  try {
+    const origUsername = req.params.username.trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    const foundKey = Object.keys(allProfiles).find(
+      (k) => k.toLowerCase() === origUsername || allProfiles[k].username && allProfiles[k].username.toLowerCase() === origUsername || allProfiles[k].email && allProfiles[k].email.toLowerCase() === origUsername
+    );
+    if (foundKey) {
+      delete allProfiles[foundKey];
+      saveProfilesDatabase(allProfiles);
+    }
+    return res.json({ success: true, message: "User deleted successfully" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "ACc5f93634dce84c45a2c23c7063571f13";
 var TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "34b06e526dbca37904003a7ef6afae73";
 var TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || "SK60e777e96b2b42031b71af39f7399b81";

@@ -984,33 +984,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
             {/* Single Unified Card Box for Google Login & Admin Login */}
             <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl text-left space-y-4">
-              {/* Login vs Sign Up Mode Switcher Tabs */}
-              <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950 rounded-xl border border-slate-800 mb-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  className={`py-2.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    authMode === 'login'
-                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md font-black scale-101'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                  }`}
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>लॉगिन (Login)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('signup')}
-                  className={`py-2.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    authMode === 'signup'
-                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md font-black scale-101'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                  }`}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>नया खाता (Sign Up)</span>
-                </button>
-              </div>
+
 
               {loginErrorMsg && (
                 <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
@@ -1187,7 +1161,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
                 <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                   <User className="w-4 h-4" />
-                  <span>A. पत्रकार / संपादक विवरण व प्राइमरी नंबर</span>
+                  <span>पत्रकार व चैनल विवरण (प्राइमरी नंबर व OTP सत्यापन)</span>
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

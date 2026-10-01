@@ -40,8 +40,13 @@ import {
   Send,
   Hash,
   ChevronDown,
+  FolderTree,
+  PlusCircle,
 } from 'lucide-react';
 import {
+  syncCloudUsers,
+  adminUpdateCloudUser,
+  adminDeleteCloudUser,
   UserPlanTier,
   PlanKeyName,
   PlanFeatureDetail,
@@ -71,6 +76,7 @@ import {
   deleteAdminRssSource,
   syncAllSourcesLive,
 } from '../lib/rssSourceManager';
+import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -87,7 +93,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onPlanChanged,
 }) => {
   // Sub-tabs: 'plans', 'promocodes', 'users', 'rss', 'restricted'
-  const [subTab, setSubTab] = useState<'plans' | 'promocodes' | 'users' | 'restricted' | 'rss' | 'web'>('plans');
+  const [subTab, setSubTab] = useState<'profile' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | ''>('plans');
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -98,6 +104,146 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newRestrictedLogo, setNewRestrictedLogo] = useState<string>('');
   const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Cloud user sync on mount
+  useEffect(() => {
+    syncCloudUsers().then((synced) => {
+      if (Array.isArray(synced) && synced.length > 0) {
+        setPlanUsers(synced);
+      }
+    });
+  }, []);
+
+  // Edit User State
+  const [editingUser, setEditingUser] = useState<PlanUserRecord | null>(null);
+  const [editUsername, setEditUsername] = useState<string>('');
+  const [editFullName, setEditFullName] = useState<string>('');
+  const [editMobile, setEditMobile] = useState<string>('');
+  const [editChannelName, setEditChannelName] = useState<string>('');
+  const [editTier, setEditTier] = useState<UserPlanTier>('basic');
+  const [editStatus, setEditStatus] = useState<'active' | 'suspended'>('active');
+  const [editIsLocked, setEditIsLocked] = useState<boolean>(true);
+  const [isSavingUser, setIsSavingUser] = useState<boolean>(false);
+  const [editUserMsg, setEditUserMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleOpenEditUser = (u: PlanUserRecord) => {
+    setEditingUser(u);
+    setEditUsername(u.userId || u.email.split('@')[0]);
+    setEditFullName(u.name || '');
+    setEditMobile(u.mobile || '');
+    setEditChannelName(u.channelName || '');
+    setEditTier(u.tier || 'basic');
+    setEditStatus((u as any).status || 'active');
+    setEditIsLocked(u.isLocked !== undefined ? u.isLocked : true);
+    setEditUserMsg(null);
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setIsSavingUser(true);
+    setEditUserMsg(null);
+    try {
+      const cleanUsername = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (!cleanUsername) {
+        setEditUserMsg({ type: 'error', text: 'कृपया वैध यूज़रनेम दर्ज करें।' });
+        setIsSavingUser(false);
+        return;
+      }
+      const res = await adminUpdateCloudUser(editingUser.userId || editingUser.email, {
+        username: cleanUsername,
+        name: editFullName.trim(),
+        mobile: editMobile.trim(),
+        channelName: editChannelName.trim(),
+        tier: editTier,
+        isLocked: editIsLocked,
+        status: editStatus,
+      } as any);
+
+      if (!res.success && res.error) {
+        setEditUserMsg({ type: 'error', text: res.error });
+        setIsSavingUser(false);
+        return;
+      }
+
+      const refreshed = await syncCloudUsers();
+      setPlanUsers(refreshed);
+      setEditUserMsg({ type: 'success', text: 'यूज़र ' + cleanUsername + ' का डेटा सफलतापूर्वक अपडेट हो गया!' });
+      setTimeout(() => {
+        setEditingUser(null);
+      }, 1200);
+    } catch (err: any) {
+      setEditUserMsg({ type: 'error', text: err.message || 'यूज़र अपडेट करने में त्रुटि हुई' });
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
+
+  // RSS Categories State
+  const [rssCategories, setRssCategories] = useState<string[]>(() => {
+    const defaults = ['देश / राष्ट्रीय', 'मध्य प्रदेश', 'उत्तर प्रदेश', 'बिहार', 'राजस्थान', 'विदेश', 'व्यापार', 'खेल', 'मनोरंजन'];
+    if (typeof window === 'undefined') return defaults;
+    try {
+      const saved = localStorage.getItem('ai_news_rss_categories_list');
+      return saved ? JSON.parse(saved) : defaults;
+    } catch {
+      return defaults;
+    }
+  });
+  const [newRssCatInput, setNewRssCatInput] = useState<string>('');
+
+  const handleAddRssCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cat = newRssCatInput.trim();
+    if (!cat) return;
+    if (!rssCategories.includes(cat)) {
+      const updated = [...rssCategories, cat];
+      setRssCategories(updated);
+      localStorage.setItem('ai_news_rss_categories_list', JSON.stringify(updated));
+      if (onAddCategory) onAddCategory(cat);
+    }
+    setNewRssCatInput('');
+  };
+
+  const handleDeleteRssCategory = (catToDelete: string) => {
+    if (rssCategories.length <= 1) return;
+    const updated = rssCategories.filter(c => c !== catToDelete);
+    setRssCategories(updated);
+    localStorage.setItem('ai_news_rss_categories_list', JSON.stringify(updated));
+  };
+
+  // Web Categories State
+  const [webCategories, setWebCategories] = useState<string[]>(() => {
+    const defaults = ['देश / राष्ट्रीय', 'राज्य समाचार', 'व्यापार', 'टेक्नोलॉजी', 'खेल', 'विशेष रिपोर्ट'];
+    if (typeof window === 'undefined') return defaults;
+    try {
+      const saved = localStorage.getItem('ai_news_web_categories_list');
+      return saved ? JSON.parse(saved) : defaults;
+    } catch {
+      return defaults;
+    }
+  });
+  const [newWebCatInput, setNewWebCatInput] = useState<string>('');
+
+  const handleAddWebCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cat = newWebCatInput.trim();
+    if (!cat) return;
+    if (!webCategories.includes(cat)) {
+      const updated = [...webCategories, cat];
+      setWebCategories(updated);
+      localStorage.setItem('ai_news_web_categories_list', JSON.stringify(updated));
+      if (onAddCategory) onAddCategory(cat);
+    }
+    setNewWebCatInput('');
+  };
+
+  const handleDeleteWebCategory = (catToDelete: string) => {
+    if (webCategories.length <= 1) return;
+    const updated = webCategories.filter(c => c !== catToDelete);
+    setWebCategories(updated);
+    localStorage.setItem('ai_news_web_categories_list', JSON.stringify(updated));
+  };
 
   // Logo Change Requests State
   const [logoRequests, setLogoRequests] = useState<LogoChangeRequest[]>(() => getLogoChangeRequests());
@@ -465,7 +611,49 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       {/* 6 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
       {/* ========================================================================= */}
       <div className="space-y-3.5">
-        {/* BOX 1: PLANS */}
+
+        {/* ========================================================================= */}
+        {/* STEP 1: प्रोफाइल व चैनल विवरण (PROFILE & BRANDING)                        */}
+        {/* ========================================================================= */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'profile' ? '' : 'profile')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'profile' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
+                <span>1</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  1. प्रोफाइल व चैनल विवरण
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  चैनल लोगो, नाम, प्राइमरी नंबर, कस्टम हेडर/फुटर (PRO/VIP) व प्रोमो कोड रिडीम
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                चैनल प्रोफाइल
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'profile' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'profile' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              {renderProfileContent ? renderProfileContent() : (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  प्रोफाइल लोड हो रही है...
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+
+        {/* STEP 2: PLANS */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'plans' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -474,11 +662,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>1</span>
+                <span>2</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  1. प्लान्स
+                  2. प्लान्स
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   4 वास्तविक प्लान्स (BASIC, ADVANCE, PRO, VIP DESK)
@@ -675,7 +863,45 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
 
-        {/* BOX 2: PROMOCODES */}
+
+        {/* ========================================================================= */}
+        {/* STEP 3: टेम्पलेट प्लान मैनेजर (TEMPLATE PLAN MANAGER)                     */}
+        {/* ========================================================================= */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'templates' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'templates' ? '' : 'templates')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'templates' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>3</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  3. टेम्पलेट प्लान मैनेजर
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  ग्राफिक व वीडियो टेम्पलेट्स के एक्सेस टियर (BASIC, ADVANCE, PRO, VIP DESK)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
+                ADMIN
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'templates' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'templates' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudio} />
+            </div>
+          )}
+        </div>
+
+
+        {/* STEP 4: PROMOCODES */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'promocodes' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -684,11 +910,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>2</span>
+                <span>4</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  2. प्रोमो कोड्स
+                  4. प्रोमो कोड्स
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   सिंगल-यूज़ प्रोमो कोड जनरेशन व एक्टिवेशन
@@ -1038,7 +1264,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
 
-        {/* BOX 3: USERS */}
+
+        {/* STEP 5: USERS */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'users' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1047,11 +1274,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>3</span>
+                <span>5</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  3. यूज़र्स
+                  5. यूज़र्स
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर
@@ -1796,7 +2023,708 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
 
-        {/* BOX 4: RESTRICTED */}
+
+          {/* EDIT USER MODAL (ADMIN POWER: CHANGE USERNAME, PLAN, PHONE, LOCK) */}
+          {editingUser && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-amber-400 text-slate-950 rounded-xl font-black">
+                      <Edit2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-white">
+                        यूज़र विवरण संपादित करें (Admin Edit)
+                      </h3>
+                      <p className="text-xs text-amber-300">
+                        यूज़रनेम, नाम, मोबाइल, प्लान व प्रोफाइल लॉक स्थिति बदलें
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {editUserMsg && (
+                  <div className={editUserMsg.type === 'success' ? 'p-3 rounded-xl border text-xs font-bold flex items-center gap-2 bg-emerald-950/80 border-emerald-500 text-emerald-300' : 'p-3 rounded-xl border text-xs font-bold flex items-center gap-2 bg-rose-950/80 border-rose-500 text-rose-300'}>
+                    {editUserMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                    <span>{editUserMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveEditUser} className="space-y-3.5 text-xs">
+                  {/* 1. Username - Specially Requested by User */}
+                  <div>
+                    <label className="block text-slate-200 font-bold mb-1 flex items-center justify-between">
+                      <span>1. यूज़रनेम (Username / User ID) *</span>
+                      <span className="text-[10px] text-amber-400 font-normal">⚠️ केवल अक्षर, अंक व अंडरस्कोर</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-slate-500 font-bold">@</span>
+                      <input
+                        type="text"
+                        required
+                        value={editUsername}
+                        onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                        placeholder="उदा. ainewsmaker"
+                        className="w-full pl-8 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono font-bold focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      एडमिन के रूप में आप यूज़र का यूज़रनेम बदल सकते हैं। यह परिवर्तन तुरंत क्लाउड सर्वर पर सिंक होगा।
+                    </p>
+                  </div>
+
+                  {/* 2. Full Name & Email */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1">2. पूरा नाम (Full Name) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editFullName}
+                        onChange={(e) => setEditFullName(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1">ईमेल (Email ID - संदर्भ)</label>
+                      <input
+                        type="text"
+                        disabled
+                        value={editingUser.email}
+                        className="w-full px-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-400 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. Mobile Number & Channel Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1">3. मोबाइल नंबर (Mobile) *</label>
+                      <input
+                        type="tel"
+                        value={editMobile}
+                        onChange={(e) => setEditMobile(e.target.value)}
+                        placeholder="10 अंकों का मोबाइल"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1">4. चैनल का नाम (Channel)</label>
+                      <input
+                        type="text"
+                        value={editChannelName}
+                        onChange={(e) => setEditChannelName(e.target.value)}
+                        placeholder="चैनल का नाम"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 4. Plan Tier & Account Status */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1">5. प्लान / टियर (Plan Tier) *</label>
+                      <select
+                        value={editTier}
+                        onChange={(e) => setEditTier(e.target.value as UserPlanTier)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-bold"
+                      >
+                        <option value="basic">बेसिक (BASIC - ₹0)</option>
+                        <option value="advance">एडवांस (ADVANCE - ₹499)</option>
+                        <option value="professional">प्रो (PRO - ₹999)</option>
+                        <option value="ultra">वीआईपी डेस्क (VIP DESK - ₹1,999)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1">6. प्रोफाइल लॉक (Profile Lock) *</label>
+                      <select
+                        value={editIsLocked ? 'locked' : 'unlocked'}
+                        onChange={(e) => setEditIsLocked(e.target.value === 'locked')}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden"
+                      >
+                        <option value="locked">🔒 लॉक (Locked - नो चेंज)</option>
+                        <option value="unlocked">🔓 अनलॉक (Unlocked - एडिट अनुमति)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setEditingUser(null)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition cursor-pointer"
+                    >
+                      रद्द करें
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingUser}
+                      className="px-5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 text-slate-950 font-black rounded-xl shadow-lg transition active:scale-95 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{isSavingUser ? 'सेव हो रहा है...' : 'बदलाव सुरक्षित करें'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+
+        {/* STEP 6: RSS */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rss' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'rss' ? '' : 'rss')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'rss' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>6</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  6. RSS लिंक्स
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${rssSources.filter(s => s.type === "rss").length} RSS लिंक्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'rss' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'rss' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="space-y-6">
+          {/* Header Info Banner */}
+          <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-red-500/30 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30">
+                  <Rss className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    6. RSS लिंक्स प्रबंधन (Live Production RSS Feeds)
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isSyncingRss}
+                  onClick={async () => {
+                    setIsSyncingRss(true);
+                    try {
+                      const res = await syncAllSourcesLive();
+                      setRssSources(getAdminRssSources());
+                      setRssMsg({
+                        type: res.success ? 'success' : 'error',
+                        text: res.success ? `लाइव RSS स्रोतों से ${res.totalNewItems || 0} नए समाचार अपडेट हुए।` : (res.error || 'सिंक त्रुटि'),
+                      });
+                    } catch (e: any) {
+                      setRssMsg({ type: 'error', text: 'RSS सिंक में त्रुटि: ' + e.message });
+                    } finally {
+                      setIsSyncingRss(false);
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg transition active:scale-95 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRss ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingRss ? 'लाइव सिंक जारी...' : 'लाइव RSS सिंक करें'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notification message */}
+            {rssMsg && (
+              <div
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 ${
+                  rssMsg.type === 'success'
+                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                    : 'bg-rose-950/80 border-rose-500 text-rose-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {rssMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{rssMsg.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRssMsg(null)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Flow Banner */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
+              <span className="font-bold text-amber-400">लाइव RSS डेटा प्रवाह (Live RSS Flow):</span>
+              <div className="flex items-center gap-1.5 font-mono text-slate-200">
+                <span className="px-2 py-0.5 bg-red-950/80 border border-red-600/60 rounded text-red-300 font-bold">1. LIVE RSS SOURCE</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-amber-950/80 border border-amber-600/60 rounded text-amber-300 font-bold">2. PRODUCTION FETCH</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">3. XML PARSING</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">4. DATABASE</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">5. HOME FEED</span>
+              </div>
+            </div>
+
+                        {/* RSS Category Management Card */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <FolderTree className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-bold text-white">RSS श्रेणियां (RSS Categories)</span>
+                </div>
+                <span className="text-[10px] text-slate-400">{rssCategories.length} श्रेणियां उपलब्ध</span>
+              </div>
+
+              <form onSubmit={handleAddRssCategory} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newRssCatInput}
+                  onChange={(e) => setNewRssCatInput(e.target.value)}
+                  placeholder="नई RSS श्रेणी का नाम (उदा. मध्य प्रदेश, क्राइम, टेक...)"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-400 focus:outline-hidden"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ नई RSS श्रेणी जोड़ें</span>
+                </button>
+              </form>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {rssCategories.map((cat) => (
+                  <span
+                    key={cat}
+                    className="px-2.5 py-1 bg-slate-900 border border-slate-700 rounded-lg text-[11px] font-bold text-slate-200 flex items-center gap-1.5"
+                  >
+                    <span>{cat}</span>
+                    {rssCategories.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRssCategory(cat)}
+                        className="text-slate-500 hover:text-red-400 transition cursor-pointer"
+                        title="श्रेणी हटाएं"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Add New RSS Source Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newSourceUrl.trim()) {
+                  setRssMsg({ type: 'error', text: 'कृपया वैध RSS Feed XML URL दर्ज करें।' });
+                  return;
+                }
+                addAdminRssSource(newSourceName, newSourceUrl, 'rss', newSourceCategory);
+                setRssSources(getAdminRssSources());
+                setNewSourceName('');
+                setNewSourceUrl('');
+                setRssMsg({ type: 'success', text: `नया RSS स्रोत "${newSourceName || 'RSS Source'}" सफलतापूर्वक जोड़ दिया गया है!` });
+              }}
+              className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-4"
+            >
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                <span>नया लाइव RSS Feed स्रोत जोड़ें</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">चैनल / स्रोत का नाम *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSourceName}
+                    onChange={(e) => setNewSourceName(e.target.value)}
+                    placeholder="उदा. आज तक लाइव RSS"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">RSS Feed XML URL *</label>
+                  <input
+                    type="url"
+                    required
+                    value={newSourceUrl}
+                    onChange={(e) => setNewSourceUrl(e.target.value)}
+                    placeholder="https://feed.aajtak.in/rss/topstories.xml"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी (Category)</label>
+                  <select
+                    value={newSourceCategory}
+                    onChange={(e) => setNewSourceCategory(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                  >
+                    <option value="देश">देश (National)</option>
+                    <option value="मध्य प्रदेश">मध्य प्रदेश</option>
+                    <option value="उत्तर प्रदेश">उत्तर प्रदेश</option>
+                    <option value="बिहार">बिहार</option>
+                    <option value="राजस्थान">राजस्थान</option>
+                    <option value="विदेश">विदेश (International)</option>
+                    <option value="व्यापार">व्यापार (Business)</option>
+                    <option value="खेल">खेल (Sports)</option>
+                    <option value="मनोरंजन">मनोरंजन (Cinema)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="py-2.5 px-5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>RSS स्रोत जोड़ें</span>
+              </button>
+            </form>
+          </div>
+
+          {/* RSS Sources List */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <h4 className="text-sm font-black text-white flex items-center gap-2">
+              <Rss className="w-4 h-4 text-orange-400" />
+              <span>सक्रिय RSS 2.0 फ़ीड्स सूची ({rssSources.filter(s => s.type === 'rss').length})</span>
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
+                  <tr>
+                    <th className="p-3">चैनल नाम</th>
+                    <th className="p-3">श्रेणी</th>
+                    <th className="p-3">RSS XML URL</th>
+                    <th className="p-3 text-center">स्थिति</th>
+                    <th className="p-3 text-right">एक्शन</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-300">
+                  {rssSources.filter(s => s.type === 'rss').map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-850/50">
+                      <td className="p-3 font-bold text-white flex items-center gap-2">
+                        <Rss className="w-3.5 h-3.5 text-orange-400" />
+                        <span>{s.name}</span>
+                      </td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 bg-slate-800 text-amber-300 rounded font-bold text-[10px]">
+                          {s.category}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
+                        {s.url}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleAdminRssSource(s.id);
+                            setRssSources(getAdminRssSources());
+                          }}
+                          className={`px-2.5 py-1 rounded text-[10px] font-black cursor-pointer ${
+                            s.isActive !== false ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {s.isActive !== false ? 'सक्रिय (Active)' : 'निष्क्रिय (Off)'}
+                        </button>
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`क्या आप स्रोत "${s.name}" हटाना चाहते हैं?`)) {
+                              deleteAdminRssSource(s.id);
+                              setRssSources(getAdminRssSources());
+                            }
+                          }}
+                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
+                        >
+                          हटाएँ
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+            </div>
+          )}
+        </div>
+
+
+        {/* STEP 7: WEB */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'web' ? '' : 'web')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'web' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>7</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  7. वेब लिंक्स
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${rssSources.filter(s => s.type === "web").length} वेब लिंक्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'web' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'web' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="space-y-6">
+          {/* Header Info Banner */}
+          <div className="bg-gradient-to-r from-cyan-950/40 via-slate-900 to-blue-950/40 border-2 border-cyan-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-cyan-500/30 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    7. वेब लिंक्स प्रबंधन (Live Web Scraping Sources)
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    वेबसाइट एवं आर्टिकल वेब लिंक्स जोड़ें। बैकएंड प्रोडक्शन स्क्रैपर लाइव आर्टिकल टेक्स्ट व फोटो एक्सट्रैक्ट करके डेटाबेस में सुरक्षित करता है।
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isSyncingRss}
+                  onClick={async () => {
+                    setIsSyncingRss(true);
+                    try {
+                      const res = await syncAllSourcesLive();
+                      setRssSources(getAdminRssSources());
+                      setRssMsg({
+                        type: res.success ? 'success' : 'error',
+                        text: res.success ? `लाइव वेब स्रोतों से ${res.totalNewItems || 0} नए समाचार स्क्रैप हुए।` : (res.error || 'स्क्रैप त्रुटि'),
+                      });
+                    } catch (e: any) {
+                      setRssMsg({ type: 'error', text: 'वेब स्क्रैप में त्रुटि: ' + e.message });
+                    } finally {
+                      setIsSyncingRss(false);
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 border border-cyan-300 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg transition active:scale-95 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRss ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingRss ? 'लाइव स्क्रैप जारी...' : 'लाइव वेब स्क्रैप करें'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Flow Banner */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
+              <span className="font-bold text-cyan-400">लाइव वेब स्क्रैपिंग डेटा प्रवाह (Live Web Scraping Flow):</span>
+              <div className="flex items-center gap-1.5 font-mono text-slate-200">
+                <span className="px-2 py-0.5 bg-cyan-950/80 border border-cyan-600/60 rounded text-cyan-300 font-bold">1. LIVE WEB SOURCE</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">2. SCRAPE & PARSE</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">3. DATABASE</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">4. HOME FEED</span>
+              </div>
+            </div>
+
+            {/* Add New Web Source Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newSourceUrl.trim()) {
+                  setRssMsg({ type: 'error', text: 'कृपया वैध वेब आर्टिकल लिंक दर्ज करें।' });
+                  return;
+                }
+                addAdminRssSource(newSourceName, newSourceUrl, 'web', newSourceCategory);
+                setRssSources(getAdminRssSources());
+                setNewSourceName('');
+                setNewSourceUrl('');
+                setRssMsg({ type: 'success', text: `नया वेब लिंक "${newSourceName || 'Web Source'}" सफलतापूर्वक जोड़ दिया गया है!` });
+              }}
+              className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-4"
+            >
+              <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                <span>नया लाइव वेब लिंक स्रोत जोड़ें</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">वेबसाइट / न्यूज़ पोर्टल का नाम *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSourceName}
+                    onChange={(e) => setNewSourceName(e.target.value)}
+                    placeholder="उदा. पीआईबी प्रेस रिलीज़"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">वेबसाइट / आर्टिकल URL *</label>
+                  <input
+                    type="url"
+                    required
+                    value={newSourceUrl}
+                    onChange={(e) => setNewSourceUrl(e.target.value)}
+                    placeholder="https://pib.gov.in/PressReleasePage.aspx?PRID=..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-cyan-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">श्रेणी (Category)</label>
+                  <select
+                    value={newSourceCategory}
+                    onChange={(e) => setNewSourceCategory(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
+                  >
+                    <option value="देश">देश (National)</option>
+                    <option value="मध्य प्रदेश">मध्य प्रदेश</option>
+                    <option value="उत्तर प्रदेश">उत्तर प्रदेश</option>
+                    <option value="बिहार">बिहार</option>
+                    <option value="राजस्थान">राजस्थान</option>
+                    <option value="विदेश">विदेश (International)</option>
+                    <option value="व्यापार">व्यापार (Business)</option>
+                    <option value="खेल">खेल (Sports)</option>
+                    <option value="मनोरंजन">मनोरंजन (Cinema)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="py-2.5 px-5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>वेब लिंक जोड़ें</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Web Sources List */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <h4 className="text-sm font-black text-white flex items-center gap-2">
+              <Globe className="w-4 h-4 text-cyan-400" />
+              <span>सक्रिय वेब स्क्रैपिंग लिंक्स सूची ({rssSources.filter(s => s.type === 'web').length})</span>
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
+                  <tr>
+                    <th className="p-3">पोर्टल / आर्टिकल नाम</th>
+                    <th className="p-3">श्रेणी</th>
+                    <th className="p-3">वेब URL</th>
+                    <th className="p-3 text-center">स्थिति</th>
+                    <th className="p-3 text-right">एक्शन</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-300">
+                  {rssSources.filter(s => s.type === 'web').map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-850/50">
+                      <td className="p-3 font-bold text-white flex items-center gap-2">
+                        <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>{s.name}</span>
+                      </td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 bg-slate-800 text-cyan-300 rounded font-bold text-[10px]">
+                          {s.category}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
+                        {s.url}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleAdminRssSource(s.id);
+                            setRssSources(getAdminRssSources());
+                          }}
+                          className={`px-2.5 py-1 rounded text-[10px] font-black cursor-pointer ${
+                            s.isActive !== false ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40' : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {s.isActive !== false ? 'सक्रिय (Active)' : 'निष्क्रिय (Off)'}
+                        </button>
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`क्या आप वेब लिंक "${s.name}" हटाना चाहते हैं?`)) {
+                              deleteAdminRssSource(s.id);
+                              setRssSources(getAdminRssSources());
+                            }
+                          }}
+                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
+                        >
+                          हटाएँ
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+            </div>
+          )}
+        </div>
+
+
+        {/* STEP 8: RESTRICTED */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1805,11 +2733,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>4</span>
+                <span>8</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  4. प्रतिबंधित चैनल सुरक्षा सूची
+                  8. प्रतिबंधित चैनल सुरक्षा सूची
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति
@@ -2124,498 +3052,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
 
-        {/* BOX 5: RSS */}
-        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rss' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => setSubTab(subTab === 'rss' ? '' : 'rss')}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'rss' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>5</span>
-              </div>
-              <div className="min-w-0">
-                <span className="text-sm sm:text-base font-black text-white block truncate">
-                  5. RSS लिंक्स
-                </span>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                {`${rssSources.filter(s => s.type === "rss").length} RSS लिंक्स`}
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'rss' ? 'rotate-180 text-amber-400' : ''}`} />
-            </div>
-          </button>
-          {subTab === 'rss' && (
-            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
-        <div className="space-y-6">
-          {/* Header Info Banner */}
-          <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-red-500/30 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30">
-                  <Rss className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-white tracking-wide">
-                    5. RSS लिंक्स प्रबंधन (Live Production RSS Feeds)
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  disabled={isSyncingRss}
-                  onClick={async () => {
-                    setIsSyncingRss(true);
-                    try {
-                      const res = await syncAllSourcesLive();
-                      setRssSources(getAdminRssSources());
-                      setRssMsg({
-                        type: res.success ? 'success' : 'error',
-                        text: res.success ? `लाइव RSS स्रोतों से ${res.totalNewItems || 0} नए समाचार अपडेट हुए।` : (res.error || 'सिंक त्रुटि'),
-                      });
-                    } catch (e: any) {
-                      setRssMsg({ type: 'error', text: 'RSS सिंक में त्रुटि: ' + e.message });
-                    } finally {
-                      setIsSyncingRss(false);
-                    }
-                  }}
-                  className="px-3.5 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg transition active:scale-95 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRss ? 'animate-spin' : ''}`} />
-                  <span>{isSyncingRss ? 'लाइव सिंक जारी...' : 'लाइव RSS सिंक करें'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Notification message */}
-            {rssMsg && (
-              <div
-                className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 ${
-                  rssMsg.type === 'success'
-                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
-                    : 'bg-rose-950/80 border-rose-500 text-rose-300'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  {rssMsg.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                  )}
-                  <span>{rssMsg.text}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setRssMsg(null)}
-                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {/* Flow Banner */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
-              <span className="font-bold text-amber-400">लाइव RSS डेटा प्रवाह (Live RSS Flow):</span>
-              <div className="flex items-center gap-1.5 font-mono text-slate-200">
-                <span className="px-2 py-0.5 bg-red-950/80 border border-red-600/60 rounded text-red-300 font-bold">1. LIVE RSS SOURCE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-amber-950/80 border border-amber-600/60 rounded text-amber-300 font-bold">2. PRODUCTION FETCH</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">3. XML PARSING</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">4. DATABASE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">5. HOME FEED</span>
-              </div>
-            </div>
-
-            {/* Add New RSS Source Form */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!newSourceUrl.trim()) {
-                  setRssMsg({ type: 'error', text: 'कृपया वैध RSS Feed XML URL दर्ज करें।' });
-                  return;
-                }
-                addAdminRssSource(newSourceName, newSourceUrl, 'rss', newSourceCategory);
-                setRssSources(getAdminRssSources());
-                setNewSourceName('');
-                setNewSourceUrl('');
-                setRssMsg({ type: 'success', text: `नया RSS स्रोत "${newSourceName || 'RSS Source'}" सफलतापूर्वक जोड़ दिया गया है!` });
-              }}
-              className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-4"
-            >
-              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5" />
-                <span>नया लाइव RSS Feed स्रोत जोड़ें</span>
-              </h4>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल / स्रोत का नाम *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
-                    onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="उदा. आज तक लाइव RSS"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">RSS Feed XML URL *</label>
-                  <input
-                    type="url"
-                    required
-                    value={newSourceUrl}
-                    onChange={(e) => setNewSourceUrl(e.target.value)}
-                    placeholder="https://feed.aajtak.in/rss/topstories.xml"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी (Category)</label>
-                  <select
-                    value={newSourceCategory}
-                    onChange={(e) => setNewSourceCategory(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                  >
-                    <option value="देश">देश (National)</option>
-                    <option value="मध्य प्रदेश">मध्य प्रदेश</option>
-                    <option value="उत्तर प्रदेश">उत्तर प्रदेश</option>
-                    <option value="बिहार">बिहार</option>
-                    <option value="राजस्थान">राजस्थान</option>
-                    <option value="विदेश">विदेश (International)</option>
-                    <option value="व्यापार">व्यापार (Business)</option>
-                    <option value="खेल">खेल (Sports)</option>
-                    <option value="मनोरंजन">मनोरंजन (Cinema)</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="py-2.5 px-5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>RSS स्रोत जोड़ें</span>
-              </button>
-            </form>
-          </div>
-
-          {/* RSS Sources List */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <h4 className="text-sm font-black text-white flex items-center gap-2">
-              <Rss className="w-4 h-4 text-orange-400" />
-              <span>सक्रिय RSS 2.0 फ़ीड्स सूची ({rssSources.filter(s => s.type === 'rss').length})</span>
-            </h4>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
-                  <tr>
-                    <th className="p-3">चैनल नाम</th>
-                    <th className="p-3">श्रेणी</th>
-                    <th className="p-3">RSS XML URL</th>
-                    <th className="p-3 text-center">स्थिति</th>
-                    <th className="p-3 text-right">एक्शन</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-300">
-                  {rssSources.filter(s => s.type === 'rss').map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-850/50">
-                      <td className="p-3 font-bold text-white flex items-center gap-2">
-                        <Rss className="w-3.5 h-3.5 text-orange-400" />
-                        <span>{s.name}</span>
-                      </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 bg-slate-800 text-amber-300 rounded font-bold text-[10px]">
-                          {s.category}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
-                        {s.url}
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            toggleAdminRssSource(s.id);
-                            setRssSources(getAdminRssSources());
-                          }}
-                          className={`px-2.5 py-1 rounded text-[10px] font-black cursor-pointer ${
-                            s.isActive !== false ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {s.isActive !== false ? 'सक्रिय (Active)' : 'निष्क्रिय (Off)'}
-                        </button>
-                      </td>
-                      <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`क्या आप स्रोत "${s.name}" हटाना चाहते हैं?`)) {
-                              deleteAdminRssSource(s.id);
-                              setRssSources(getAdminRssSources());
-                            }
-                          }}
-                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
-                        >
-                          हटाएँ
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-            </div>
-          )}
-        </div>
-
-        {/* BOX 6: WEB */}
-        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => setSubTab(subTab === 'web' ? '' : 'web')}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'web' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>6</span>
-              </div>
-              <div className="min-w-0">
-                <span className="text-sm sm:text-base font-black text-white block truncate">
-                  6. वेब लिंक्स
-                </span>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                {`${rssSources.filter(s => s.type === "web").length} वेब लिंक्स`}
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'web' ? 'rotate-180 text-amber-400' : ''}`} />
-            </div>
-          </button>
-          {subTab === 'web' && (
-            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
-        <div className="space-y-6">
-          {/* Header Info Banner */}
-          <div className="bg-gradient-to-r from-cyan-950/40 via-slate-900 to-blue-950/40 border-2 border-cyan-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-cyan-500/30 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30">
-                  <Globe className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-white tracking-wide">
-                    6. वेब लिंक्स प्रबंधन (Live Web Scraping Sources)
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    वेबसाइट एवं आर्टिकल वेब लिंक्स जोड़ें। बैकएंड प्रोडक्शन स्क्रैपर लाइव आर्टिकल टेक्स्ट व फोटो एक्सट्रैक्ट करके डेटाबेस में सुरक्षित करता है।
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  disabled={isSyncingRss}
-                  onClick={async () => {
-                    setIsSyncingRss(true);
-                    try {
-                      const res = await syncAllSourcesLive();
-                      setRssSources(getAdminRssSources());
-                      setRssMsg({
-                        type: res.success ? 'success' : 'error',
-                        text: res.success ? `लाइव वेब स्रोतों से ${res.totalNewItems || 0} नए समाचार स्क्रैप हुए।` : (res.error || 'स्क्रैप त्रुटि'),
-                      });
-                    } catch (e: any) {
-                      setRssMsg({ type: 'error', text: 'वेब स्क्रैप में त्रुटि: ' + e.message });
-                    } finally {
-                      setIsSyncingRss(false);
-                    }
-                  }}
-                  className="px-3.5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 border border-cyan-300 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg transition active:scale-95 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRss ? 'animate-spin' : ''}`} />
-                  <span>{isSyncingRss ? 'लाइव स्क्रैप जारी...' : 'लाइव वेब स्क्रैप करें'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Flow Banner */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
-              <span className="font-bold text-cyan-400">लाइव वेब स्क्रैपिंग डेटा प्रवाह (Live Web Scraping Flow):</span>
-              <div className="flex items-center gap-1.5 font-mono text-slate-200">
-                <span className="px-2 py-0.5 bg-cyan-950/80 border border-cyan-600/60 rounded text-cyan-300 font-bold">1. LIVE WEB SOURCE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">2. SCRAPE & PARSE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">3. DATABASE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">4. HOME FEED</span>
-              </div>
-            </div>
-
-            {/* Add New Web Source Form */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!newSourceUrl.trim()) {
-                  setRssMsg({ type: 'error', text: 'कृपया वैध वेब आर्टिकल लिंक दर्ज करें।' });
-                  return;
-                }
-                addAdminRssSource(newSourceName, newSourceUrl, 'web', newSourceCategory);
-                setRssSources(getAdminRssSources());
-                setNewSourceName('');
-                setNewSourceUrl('');
-                setRssMsg({ type: 'success', text: `नया वेब लिंक "${newSourceName || 'Web Source'}" सफलतापूर्वक जोड़ दिया गया है!` });
-              }}
-              className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-4"
-            >
-              <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5" />
-                <span>नया लाइव वेब लिंक स्रोत जोड़ें</span>
-              </h4>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">वेबसाइट / न्यूज़ पोर्टल का नाम *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
-                    onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="उदा. पीआईबी प्रेस रिलीज़"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">वेबसाइट / आर्टिकल URL *</label>
-                  <input
-                    type="url"
-                    required
-                    value={newSourceUrl}
-                    onChange={(e) => setNewSourceUrl(e.target.value)}
-                    placeholder="https://pib.gov.in/PressReleasePage.aspx?PRID=..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-cyan-400 focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">श्रेणी (Category)</label>
-                  <select
-                    value={newSourceCategory}
-                    onChange={(e) => setNewSourceCategory(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
-                  >
-                    <option value="देश">देश (National)</option>
-                    <option value="मध्य प्रदेश">मध्य प्रदेश</option>
-                    <option value="उत्तर प्रदेश">उत्तर प्रदेश</option>
-                    <option value="बिहार">बिहार</option>
-                    <option value="राजस्थान">राजस्थान</option>
-                    <option value="विदेश">विदेश (International)</option>
-                    <option value="व्यापार">व्यापार (Business)</option>
-                    <option value="खेल">खेल (Sports)</option>
-                    <option value="मनोरंजन">मनोरंजन (Cinema)</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="py-2.5 px-5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>वेब लिंक जोड़ें</span>
-              </button>
-            </form>
-          </div>
-
-          {/* Web Sources List */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <h4 className="text-sm font-black text-white flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400" />
-              <span>सक्रिय वेब स्क्रैपिंग लिंक्स सूची ({rssSources.filter(s => s.type === 'web').length})</span>
-            </h4>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
-                  <tr>
-                    <th className="p-3">पोर्टल / आर्टिकल नाम</th>
-                    <th className="p-3">श्रेणी</th>
-                    <th className="p-3">वेब URL</th>
-                    <th className="p-3 text-center">स्थिति</th>
-                    <th className="p-3 text-right">एक्शन</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-300">
-                  {rssSources.filter(s => s.type === 'web').map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-850/50">
-                      <td className="p-3 font-bold text-white flex items-center gap-2">
-                        <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>{s.name}</span>
-                      </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 bg-slate-800 text-cyan-300 rounded font-bold text-[10px]">
-                          {s.category}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
-                        {s.url}
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            toggleAdminRssSource(s.id);
-                            setRssSources(getAdminRssSources());
-                          }}
-                          className={`px-2.5 py-1 rounded text-[10px] font-black cursor-pointer ${
-                            s.isActive !== false ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40' : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {s.isActive !== false ? 'सक्रिय (Active)' : 'निष्क्रिय (Off)'}
-                        </button>
-                      </td>
-                      <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`क्या आप वेब लिंक "${s.name}" हटाना चाहते हैं?`)) {
-                              deleteAdminRssSource(s.id);
-                              setRssSources(getAdminRssSources());
-                            }
-                          }}
-                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
-                        >
-                          हटाएँ
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-            </div>
-          )}
-        </div>
 
       </div>
     </div>

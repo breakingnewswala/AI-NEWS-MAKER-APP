@@ -1060,6 +1060,126 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
   }
 });
 
+// 5. GET All Users (Admin Cloud Synced User Control)
+app.get("/api/admin/users", (req, res) => {
+  try {
+    const allProfiles = loadProfilesDatabase();
+    // Ensure default admin exists
+    if (!allProfiles["admin"] && !allProfiles["breakingnewswala.com@gmail.com"]) {
+      allProfiles["admin"] = {
+        username: "admin",
+        fullName: "मुख्य संपादक",
+        role: "admin",
+        email: "breakingnewswala.com@gmail.com",
+        district: "सेंट्रल डेस्क",
+        channelNameHi: "एआई न्यूज़ मेकर",
+        channelNameEn: "AI News Maker",
+        channelLogoUrl: "/assets/ai_news_maker_logo.png",
+        channelLogoType: "png",
+        mobileNumber: "9669802408",
+        showMobileNumber: true,
+        websiteUrl: "ainewsmaker.online",
+        tier: "ultra",
+        updatedAt: Date.now(),
+      };
+      saveProfilesDatabase(allProfiles);
+    }
+    const usersList = Object.values(allProfiles);
+    return res.json({ success: true, users: usersList });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 6. PUT Admin Update User Record (Allows changing Username, Tier, Name, Mobile, Status, etc.)
+app.put("/api/admin/users/:username", (req, res) => {
+  try {
+    const origUsername = req.params.username.trim().toLowerCase();
+    const updates = req.body;
+    const allProfiles = loadProfilesDatabase();
+
+    // Find user by username or email
+    let foundKey = Object.keys(allProfiles).find(
+      (k) => k.toLowerCase() === origUsername || (allProfiles[k].username && allProfiles[k].username.toLowerCase() === origUsername) || (allProfiles[k].email && allProfiles[k].email.toLowerCase() === origUsername)
+    );
+
+    if (!foundKey) {
+      foundKey = origUsername;
+      allProfiles[foundKey] = {
+        username: origUsername,
+        fullName: updates.fullName || updates.name || origUsername,
+        channelNameHi: updates.channelNameHi || "एआई न्यूज़ मेकर",
+        channelNameEn: updates.channelNameEn || "AI News Maker",
+        channelLogoUrl: updates.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoType: "png",
+        updatedAt: Date.now(),
+      };
+    }
+
+    const currentProfile = allProfiles[foundKey];
+    const newUsername = (updates.username || '').trim().replace(/[^a-zA-Z0-9_]/g, '');
+
+    // If changing username, check uniqueness and rekey
+    if (newUsername && newUsername.toLowerCase() !== currentProfile.username.toLowerCase()) {
+      const lowerNew = newUsername.toLowerCase();
+      const conflict = Object.values(allProfiles).find(
+        (p) => p.username.toLowerCase() === lowerNew && p !== currentProfile
+      );
+      if (conflict) {
+        return res.status(400).json({ error: `यूज़रनेम '${newUsername}' पहले से किसी अन्य खाते द्वारा पंजीकृत है।` });
+      }
+
+      delete allProfiles[foundKey];
+      currentProfile.username = newUsername;
+      foundKey = lowerNew;
+    }
+
+    // Apply updates
+    if (updates.fullName !== undefined) currentProfile.fullName = updates.fullName;
+    if (updates.name !== undefined) currentProfile.fullName = updates.name;
+    if (updates.mobileNumber !== undefined) currentProfile.mobileNumber = updates.mobileNumber;
+    if (updates.mobile !== undefined) currentProfile.mobileNumber = updates.mobile;
+    if (updates.district !== undefined) currentProfile.district = updates.district;
+    if (updates.channelNameHi !== undefined) currentProfile.channelNameHi = updates.channelNameHi;
+    if (updates.channelNameEn !== undefined) currentProfile.channelNameEn = updates.channelNameEn;
+    if (updates.tier !== undefined) currentProfile.tier = updates.tier;
+    if (updates.role !== undefined) currentProfile.role = updates.role;
+    if (updates.status !== undefined) currentProfile.status = updates.status;
+    if (updates.isLocked !== undefined) currentProfile.isLocked = updates.isLocked;
+    if (updates.channelLogoUrl !== undefined) currentProfile.channelLogoUrl = updates.channelLogoUrl;
+    if (updates.customHeaderUrl !== undefined) currentProfile.customHeaderUrl = updates.customHeaderUrl;
+    if (updates.customFooterUrl !== undefined) currentProfile.customFooterUrl = updates.customFooterUrl;
+    if (updates.isCustomHeaderActive !== undefined) currentProfile.isCustomHeaderActive = updates.isCustomHeaderActive;
+    if (updates.isCustomFooterActive !== undefined) currentProfile.isCustomFooterActive = updates.isCustomFooterActive;
+    currentProfile.updatedAt = Date.now();
+
+    allProfiles[foundKey] = currentProfile;
+    saveProfilesDatabase(allProfiles);
+
+    return res.json({ success: true, user: currentProfile });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 7. DELETE Admin Delete User Record
+app.delete("/api/admin/users/:username", (req, res) => {
+  try {
+    const origUsername = req.params.username.trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    const foundKey = Object.keys(allProfiles).find(
+      (k) => k.toLowerCase() === origUsername || (allProfiles[k].username && allProfiles[k].username.toLowerCase() === origUsername) || (allProfiles[k].email && allProfiles[k].email.toLowerCase() === origUsername)
+    );
+    if (foundKey) {
+      delete allProfiles[foundKey];
+      saveProfilesDatabase(allProfiles);
+    }
+    return res.json({ success: true, message: "User deleted successfully" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // ==========================================
 // TWILIO INTEGRATION SERVICE (SMS & WHATSAPP)
 // ==========================================
