@@ -4,7 +4,6 @@ import {
   Bell,
   RefreshCw,
   Shield,
-  Radio,
   ExternalLink,
   Sliders,
   Check,
@@ -23,6 +22,15 @@ import {
   PLAN_KEY_MAP,
 } from '../lib/userPlanManager';
 import { useLanguage } from '../lib/languageContext';
+
+import {
+  getNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  requestNotificationPermission,
+  getNotificationPermissionStatus,
+  AppNotification,
+} from '../lib/notificationManager';
 
 interface AppTopBarWebProps {
   currentTab: 'home' | 'videos' | 'studio' | 'epaper' | 'profile';
@@ -46,6 +54,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   });
   const [adminSystemMode, setAdminSystemModeState] = useState(() => getAdminSystemMode());
   const [testPlan, setTestPlan] = useState(() => getAdminTestPlanTier());
+  const [notificationsList, setNotificationsList] = useState<AppNotification[]>(() => getNotifications());
+  const [notifPermission, setNotifPermission] = useState(() => getNotificationPermissionStatus());
 
   const isAdminUser = isUserAdmin(currentUser);
 
@@ -54,16 +64,20 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       setCurrentTier(getUserSubscription().tier);
       setAdminSystemModeState(getAdminSystemMode());
       setTestPlan(getAdminTestPlanTier());
+      setNotificationsList(getNotifications());
+      setNotifPermission(getNotificationPermissionStatus());
     };
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('ai_news_admin_view_mode_changed', handleUpdate);
     window.addEventListener('ai_news_admin_test_plan_changed', handleUpdate);
     window.addEventListener('ai_news_user_plan_updated', handleUpdate);
+    window.addEventListener('ai_news_notifications_updated', handleUpdate);
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('ai_news_admin_view_mode_changed', handleUpdate);
       window.removeEventListener('ai_news_admin_test_plan_changed', handleUpdate);
       window.removeEventListener('ai_news_user_plan_updated', handleUpdate);
+      window.removeEventListener('ai_news_notifications_updated', handleUpdate);
     };
   }, []);
 
@@ -83,32 +97,21 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     videos: isHindi ? 'वीडियो फ़ीड' : 'Video Feed',
     studio: isHindi ? 'ग्राफिक स्टूडियो' : 'Graphic Studio',
     epaper: isHindi ? 'दैनिक ई-पेपर' : 'E-Paper',
-    profile: isHindi ? 'कंट्रोल पैनल' : 'Control Panel',
+    profile: isAdminUser
+      ? (isHindi ? 'कंट्रोल पैनल' : 'Control Panel')
+      : (isHindi ? 'मेरी प्रोफाइल' : 'My Profile'),
   };
 
-  const notifications = [
-    {
-      id: 1,
-      title: 'संसद में डिजिटल मीडिया व AI बिल पास',
-      time: '10 मिनट पहले',
-      unread: true,
-    },
-    {
-      id: 2,
-      title: 'मौसम विभाग: दिल्ली-एनसीआर में बारिश का अलर्ट',
-      time: '1 घंटा पहले',
-      unread: true,
-    },
-    {
-      id: 3,
-      title: 'नया ई-पेपर राष्ट्रीय संस्करण उपलब्ध है',
-      time: 'आज सुबह 6:00 बजे',
-      unread: false,
-    },
-  ];
+  const unreadCount = notificationsList.filter((n) => n.unread).length;
+
+  const handleRequestPermission = async () => {
+    const perm = await requestNotificationPermission();
+    setNotifPermission(perm);
+  };
 
   const handleRefreshClick = () => {
     setIsRefreshing(true);
+    setNotificationsList(getNotifications());
     onRefresh();
     setTimeout(() => setIsRefreshing(false), 800);
   };
@@ -116,7 +119,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   return (
     <>
       {/* Admin Test as User Global Top Switcher Banner */}
-      {isAdminUser && viewAsMode === 'user' && (
+      {isAdminUser && adminSystemMode === 'test' && (
         <div className="bg-gradient-to-r from-purple-800 via-indigo-900 to-purple-950 text-white text-xs px-3 py-1.5 shadow-lg border-b border-purple-500/50 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 overflow-hidden">
@@ -130,8 +133,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             <button
               type="button"
               onClick={() => {
-                setAdminViewAsMode('admin');
-                setViewAsMode('admin');
+                setAdminSystemMode('admin');
+                setAdminSystemModeState('admin');
               }}
               className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-[11px] transition shadow-md cursor-pointer shrink-0 flex items-center gap-1 active:scale-95"
             >
@@ -142,7 +145,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
         </div>
       )}
 
-      <header className={`bg-slate-950/95 backdrop-blur-md border-b border-slate-800 text-white ${isAdminUser && viewAsMode === 'user' ? 'relative' : 'sticky top-0'} z-40 shadow-md`}>
+      <header className={`bg-slate-950/95 backdrop-blur-md border-b border-slate-800 text-white ${isAdminUser && adminSystemMode === 'test' ? 'relative' : 'sticky top-0'} z-40 shadow-md`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="h-14 flex items-center justify-between gap-2">
             {/* Brand & Logo with Dynamic Plan and Partition Separators */}
@@ -162,25 +165,23 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </div>
 
               <div>
-                {/* Header line: AI News Maker | [Plan] + LIVE Badge */}
+                {/* Header line: AI News Maker + LIVE Badge (NO duplicate plan name here!) */}
                 <div className="flex items-center gap-2">
                   <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
                     AI News Maker
-                  </span>
-                  <span className="text-slate-600 text-xs font-normal">|</span>
-                  <span className="px-1.5 py-0.5 bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-bold rounded-md whitespace-nowrap shadow-xs">
-                    {planDisplay}
                   </span>
                   <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
                     LIVE
                   </span>
                 </div>
 
-                {/* Subtitle line: Smart Digital News Studio | [Plan] with clear partition separator */}
-                <div className="text-[10px] text-slate-300 font-medium hidden sm:flex items-center gap-1.5">
-                  <span>Smart Digital News Studio</span>
-                  <span className="text-slate-600">|</span>
-                  <span className="text-amber-300/90 font-bold">{planDisplay}</span>
+                {/* Subtitle line: Smart Digital News Studio | Plan Name (Shown only once) */}
+                <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5">
+                  <span className="hidden sm:inline">Smart Digital News Studio</span>
+                  <span className="text-slate-600 hidden sm:inline">|</span>
+                  <span className="px-1.5 py-0.2 bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-bold rounded whitespace-nowrap shadow-xs">
+                    {planDisplay}
+                  </span>
                 </div>
               </div>
             </div>
@@ -235,39 +236,12 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              ⚙️ कंट्रोल पैनल
+              {isAdminUser ? '⚙️ कंट्रोल पैनल' : '👤 प्रोफाइल'}
             </button>
           </nav>
 
           {/* Right Action Icons */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Language Selector (हिंदी / English) */}
-            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setLanguage('hi')}
-                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  language === 'hi'
-                    ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="ऐप की भाषा हिंदी करें"
-              >
-                🇮🇳 हिंदी
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  language === 'en'
-                    ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="Switch App Language to English"
-              >
-                🇬🇧 EN
-              </button>
-            </div>
 
             {/* Refresh Button */}
             <button
@@ -278,44 +252,101 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
           </button>
 
-          {/* Notifications */}
+          {/* Real-time Notifications */}
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl relative transition-colors"
+              className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl relative transition-colors cursor-pointer"
               title="सूचनाएं"
             >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-slate-950 animate-ping" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-slate-950" />
+              {unreadCount > 0 && (
+                <>
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-slate-950 animate-ping" />
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-slate-950" />
+                </>
+              )}
             </button>
 
-            {/* Notification Dropdown */}
+            {/* Real-time Notification Dropdown */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                     <Bell className="w-3.5 h-3.5 text-amber-400" />
                     लाइव नोटिफिकेशन्स
+                    {unreadCount > 0 && (
+                      <span className="px-1.5 py-0.2 bg-red-600 text-white text-[10px] rounded-full font-black">
+                        {unreadCount}
+                      </span>
+                    )}
                   </h4>
-                  <button
-                    onClick={() => setShowNotifications(false)}
-                    className="text-xs text-slate-400 hover:text-white"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={() => {
+                          const updated = markAllNotificationsAsRead();
+                          setNotificationsList(updated);
+                        }}
+                        className="text-[10px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                      >
+                        सब पढ़े
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1 hover:border-slate-700 transition-colors"
+                {/* Permission Request Prompt if not granted */}
+                {notifPermission !== 'granted' && (
+                  <div className="p-2.5 bg-gradient-to-r from-amber-950/60 to-slate-900 border border-amber-600/40 rounded-xl flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-amber-200">ताज़ा ब्रेकिंग अलर्ट्स हेतु नोटिफिकेशन चालू करें:</span>
+                    <button
+                      type="button"
+                      onClick={handleRequestPermission}
+                      className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-black rounded-lg cursor-pointer shrink-0 shadow"
                     >
-                      <div className="text-xs font-bold text-slate-200">{n.title}</div>
-                      <div className="text-[10px] text-slate-400">{n.time}</div>
-                    </div>
-                  ))}
+                      अनुमति दें
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {notificationsList.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-500">कोई नई सूचना नहीं है</div>
+                  ) : (
+                    notificationsList.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          markNotificationAsRead(n.id);
+                          setNotificationsList(getNotifications());
+                          if (n.linkTab) onNavigateToTab(n.linkTab);
+                        }}
+                        className={`p-2.5 rounded-xl border space-y-1 transition-colors cursor-pointer ${
+                          n.unread
+                            ? 'bg-slate-950 border-amber-500/40 hover:border-amber-400'
+                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            {n.unread && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
+                            <span>{n.title}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 shrink-0">{n.time}</span>
+                        </div>
+                        {n.message && (
+                          <div className="text-[11px] text-slate-400 leading-snug">{n.message}</div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}

@@ -18,7 +18,7 @@ const https = require('https');
 const http = require('http');
 
 const CLOUD_STORAGE_UPLOAD_URL =
-  'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o?name=news_database.json';
+  'https://firebasestorage.googleapis.com/v0/b/ainewsmakerapp.firebasestorage.app/o?name=news_database.json';
 
 // Locate news_database.json
 let dbPath = path.resolve(__dirname, 'news_database.json');

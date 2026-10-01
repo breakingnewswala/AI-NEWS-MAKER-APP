@@ -222,7 +222,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
         (window as any).google.accounts.id.initialize({
-          client_id: '83006158623-pv84sakflke9nqdsa6qjoecm8k2lkfsv.apps.googleusercontent.com',
+          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
           callback: (response: any) => {
             if (response.credential) {
               try {
@@ -737,7 +737,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {/* Footer info with close button if modal can be dismissed */}
         <div className="bg-neutral-950 px-5 py-3 border-t border-neutral-800 flex items-center justify-between">
           <p className="text-[11px] text-neutral-500">
-            ब्रेकिंग न्यूज़ वाला • मल्टी-यूज़र वेब व मोबाइल डैशबोर्ड
+            AI News Maker • मल्टी-यूज़र वेब व मोबाइल डैशबोर्ड
           </p>
           {onClose && (
             <button

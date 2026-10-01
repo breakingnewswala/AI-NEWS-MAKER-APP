@@ -15,7 +15,7 @@ export const DEFAULT_STEPS: StepItem[] = [
   { step: 3, id: 'step-headline', label: 'हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
   { step: 4, id: 'step-photo', label: 'फोटो', shortLabel: 'फोटो', icon: '📷' },
   { step: 5, id: 'step-location', label: 'लोकेशन', shortLabel: 'लोकेशन', icon: '📍' },
-  { step: 6, id: 'step-date-watermark', label: 'तारीख और वॉटरमार्क', shortLabel: 'तारीख-वॉटरमार्क', icon: '📅' },
+  { step: 6, id: 'step-date-watermark', label: 'तारीख व वॉटरमार्क', shortLabel: 'तारीख-वॉटरमार्क', icon: '📅' },
   { step: 7, id: 'step-header-footer', label: 'हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
   { step: 8, id: 'step-download', label: 'डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
 ];

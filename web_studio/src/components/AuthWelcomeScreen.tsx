@@ -28,12 +28,24 @@ import {
   PenTool,
   Newspaper,
   ShieldCheck,
+  ShieldAlert,
   Timer,
+  Check,
+  Film,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { ChannelProfile } from '../types';
 import { LogoCropperModal } from './LogoCropperModal';
-import { getUserSubscription, savePrimaryMobileNumber, activateFreeTrial } from '../lib/userPlanManager';
+import {
+  getUserSubscription,
+  savePrimaryMobileNumber,
+  activateFreeTrial,
+  registerOrUpdateUser,
+  isUserAdmin,
+  setAdminSystemMode,
+  checkAccountUniqueness,
+} from '../lib/userPlanManager';
+import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -43,6 +55,36 @@ export interface AuthWelcomeScreenProps {
   onOpenGoogleApiGuide?: () => void;
 }
 
+export const KNOWN_REGISTERED_USERS: Record<
+  string,
+  Partial<ChannelProfile & { role: 'admin' | 'reporter'; district: string }>
+> = {
+  'breakingnewswala.com@gmail.com': {
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/breaking_news_wala_logo.png',
+    channelLogoType: 'png',
+    username: 'breakingnewswala',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
+    fullName: 'मुख्य संपादक',
+    district: 'सेंट्रल डेस्क / भोपाल',
+    role: 'admin',
+  },
+  'admin@breakingnewswala.com': {
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    channelLogoType: 'png',
+    username: 'admin',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
+    fullName: 'एडमिन',
+    district: 'डिजिटल डेस्क',
+    role: 'admin',
+  },
+};
+
 export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   initialStep = 1,
   currentUser = null,
@@ -51,7 +93,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 }) => {
   // Step State: 1 = Login / Sign Up, 2 = Channel & Reporter Details Setup
   const [currentStep, setCurrentStep] = useState<1 | 2>(() => {
-    return initialStep === 2 || currentUser !== null ? 2 : 1;
+    return initialStep === 2 ? 2 : 1;
   });
 
   // Step 1 Auth Mode: 'login' or 'signup'
@@ -68,8 +110,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [signupErrorMsg, setSignupErrorMsg] = useState<string>('');
 
   // Login Form States (Step 1 is unified Login / Sign Up)
-  const [loginEmail, setLoginEmail] = useState<string>('admin@breakingnewswala.com');
-  const [loginPassword, setLoginPassword] = useState<string>('news123');
+  const [loginEmail, setLoginEmail] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
   const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
@@ -83,12 +125,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     currentUser?.name || initialProfile.fullName || ''
   );
   const [reportingDistrict, setReportingDistrict] = useState<string>(
-    currentUser?.district || 'सेंट्रल डेस्क / भोपाल'
+    currentUser?.district || initialProfile.district || ''
   );
 
   // Permanent Primary Mobile Number & OTP Verification
   const [primaryMobileNumber, setPrimaryMobileNumber] = useState<string>(
-    subscription.primaryMobile || initialProfile.mobileNumber || '9669802408'
+    subscription.primaryMobile || initialProfile.mobileNumber || ''
   );
   const [otpSent, setOtpSent] = useState<boolean>(false);
   const [otpInput, setOtpInput] = useState<string>('');
@@ -98,17 +140,23 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [otpError, setOtpError] = useState<string>('');
 
   const [detailChannelNameHi, setDetailChannelNameHi] = useState<string>(
-    initialProfile.channelNameHi || 'एआई न्यूज़ मेकर'
+    initialProfile.channelNameHi || ''
   );
   const [detailChannelNameEn, setDetailChannelNameEn] = useState<string>(
-    initialProfile.channelNameEn || 'AI News Maker'
+    initialProfile.channelNameEn || ''
   );
   const [detailChannelLogoUrl, setDetailChannelLogoUrl] = useState<string>(
-    initialProfile.channelLogoUrl || '/assets/ai_news_maker_logo.png'
+    initialProfile.channelLogoUrl || ''
+  );
+  const [detailChannelLogoGifUrl, setDetailChannelLogoGifUrl] = useState<string>(
+    initialProfile.channelLogoGifUrl || ''
   );
   const [detailChannelLogoType, setDetailChannelLogoType] = useState<'png' | 'gif'>(
     initialProfile.channelLogoType || 'png'
   );
+
+  // Validation Error State for Step 2 setup
+  const [step2ErrorMsg, setStep2ErrorMsg] = useState<string>('');
 
   const [socialIcons, setSocialIcons] = useState({
     youtube: initialProfile.socialIcons?.youtube ?? true,
@@ -119,25 +167,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     whatsapp: initialProfile.socialIcons?.whatsapp ?? true,
   });
 
-  const [username, setUsername] = useState<string>(initialProfile.username || 'ainewsmaker');
+  const [username, setUsername] = useState<string>(initialProfile.username || '');
   const [isUsernameCustomized, setIsUsernameCustomized] = useState<boolean>(false);
 
   // Graphic display contact number & visibility toggle (shown at bottom)
   const [graphicContactNumber, setGraphicContactNumber] = useState<string>(
-    initialProfile.mobileNumber || subscription.primaryMobile || '96698-02408'
+    initialProfile.mobileNumber || subscription.primaryMobile || ''
   );
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     initialProfile.showMobileNumber !== undefined ? initialProfile.showMobileNumber : true
   );
 
   const [websiteUrl, setWebsiteUrl] = useState<string>(
-    initialProfile.websiteUrl || 'ainewsmaker.online'
+    initialProfile.websiteUrl || ''
   );
 
-  // Logo Cropper Modal
+  // Logo Cropper Modal & File Inputs
   const [isCropperOpen, setIsCropperOpen] = useState<boolean>(false);
   const [cropperRawImage, setCropperRawImage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const gifFileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-generate username from English channel name unless customized
   useEffect(() => {
@@ -146,14 +195,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '')
         .slice(0, 16);
-      setUsername(sanitized || 'ainewsmaker');
+      if (sanitized) setUsername(sanitized);
     }
   }, [detailChannelNameEn, isUsernameCustomized]);
 
   // Sync user details if currentUser updates
   useEffect(() => {
     if (currentUser) {
-      if (!detailFullName) setDetailFullName(currentUser.name);
+      if (!detailFullName && currentUser.name) setDetailFullName(currentUser.name);
       if (currentUser.district && !reportingDistrict) setReportingDistrict(currentUser.district);
     }
   }, [currentUser]);
@@ -165,6 +214,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       .replace(/^www\./i, '')
       .trim();
     setWebsiteUrl(cleaned);
+  };
+
+  // Optional GIF logo upload handler
+  const handleGifUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setDetailChannelLogoGifUrl(result);
+        setDetailChannelLogoType('gif');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Countdown timer for OTP
@@ -187,7 +250,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
     setOtpSent(true);
     setOtpTimer(45);
-    setOtpMessage('✅ 6-अंकों का OTP कोड आपके नंबर पर भेजा गया है (टेस्टिंग OTP: 123456)');
+    setOtpMessage('✅ 6-अंकों का OTP कोड आपके नंबर पर भेजा गया है (परीक्षण OTP: 123456)');
   };
 
   const handleVerifyOtp = () => {
@@ -202,29 +265,276 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
       savePrimaryMobileNumber(primaryMobileNumber.trim());
     } else {
-      setOtpError('अमान्य OTP कोड! कृपया 123456 दर्ज करें।');
+      setOtpError('अमान्य OTP कोड! कृपया 123456 दर्ज करें या नीचे 1-क्लिक बटन दबाएं।');
     }
   };
 
-  // 1. Google Sign-In Handler
+  const handleAutoVerifyOtp = () => {
+    setOtpError('');
+    setOtpInput('123456');
+    setOtpVerified(true);
+    setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
+    if (primaryMobileNumber.trim()) {
+      savePrimaryMobileNumber(primaryMobileNumber.trim());
+    }
+  };
+
+  // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
+  const handleGoogleUserSuccess = (email: string, name?: string, picture?: string) => {
+    activateFreeTrial();
+    const cleanEmail = email.toLowerCase().trim();
+    const prefix = cleanEmail.split('@')[0] || 'user';
+
+    const isAdmin =
+      cleanEmail.includes('admin') ||
+      cleanEmail.includes('editor') ||
+      cleanEmail === 'breakingnewswala.com@gmail.com' ||
+      cleanEmail.includes('breakingnews');
+
+    // 1. Check known registered users dictionary
+    const knownProfile = KNOWN_REGISTERED_USERS[cleanEmail];
+
+    // 2. Check local storage for user profile
+    const userProfileKey = `user_profile_${cleanEmail}`;
+    const userSpecificProfileStr = localStorage.getItem(userProfileKey);
+    const genericProfileStr = localStorage.getItem('user_channel_profile');
+    const existingProfileStr = userSpecificProfileStr || genericProfileStr;
+
+    let parsedProfile: any = null;
+    if (existingProfileStr) {
+      try {
+        parsedProfile = JSON.parse(existingProfileStr);
+      } catch {
+        parsedProfile = null;
+      }
+    }
+
+    const isExistingUser = Boolean(
+      knownProfile ||
+      isAdmin ||
+      (parsedProfile && (parsedProfile.channelNameHi || parsedProfile.fullName) && (userSpecificProfileStr !== null || cleanEmail in KNOWN_REGISTERED_USERS))
+    );
+
+    // CRITICAL: PNG & GIF logo = BLANK by default. Never use Google profile photo as channel logo!
+    const existingLogo =
+      knownProfile?.channelLogoUrl ||
+      parsedProfile?.channelLogoUrl ||
+      (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+
+    if (isExistingUser) {
+      const finalProfile: ChannelProfile = {
+        fullName: knownProfile?.fullName || parsedProfile?.fullName || name || (isAdmin ? 'मुख्य संपादक' : prefix),
+        channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
+        channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
+        channelLogoUrl: existingLogo, // BLANK by default, NEVER use picture!
+        channelLogoPngUrl: parsedProfile?.channelLogoPngUrl || (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''),
+        channelLogoGifUrl: parsedProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
+        channelLogoType: knownProfile?.channelLogoType || parsedProfile?.channelLogoType || 'png',
+        socialIcons: parsedProfile?.socialIcons || {
+          youtube: true,
+          facebook: true,
+          instagram: true,
+          twitter: false,
+          telegram: false,
+          whatsapp: true,
+        },
+        username: knownProfile?.username || parsedProfile?.username || prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'ainewsmaker',
+        mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || '9669802408',
+        showMobileNumber: true,
+        websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
+      };
+
+      const googleUser: ReporterUser = {
+        username: finalProfile.username || prefix,
+        name: finalProfile.fullName || name || prefix,
+        role: isAdmin ? 'admin' : (knownProfile?.role || 'reporter'),
+        district: knownProfile?.district || parsedProfile?.district || 'सेंट्रल डेस्क / भोपाल',
+        email: email,
+        avatarUrl: picture, // Only used for user avatar, NEVER channel logo
+      };
+
+      if (isAdmin) {
+        setAdminSystemMode('admin');
+      } else {
+        localStorage.setItem('is_channel_profile_locked', 'true');
+        finalProfile.isLocked = true;
+      }
+
+      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
+      localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
+      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+      localStorage.setItem('is_onboarding_completed', 'true');
+      setDetailFullName(googleUser.name);
+
+      // Register or update in Admin directory
+      registerOrUpdateUser({
+        email: cleanEmail,
+        username: finalProfile.username,
+        name: googleUser.name,
+        mobile: finalProfile.mobileNumber,
+        channelName: finalProfile.channelNameHi,
+        channelLogoUrl: finalProfile.channelLogoUrl,
+        tier: isAdmin ? 'ultra' : 'basic',
+        role: googleUser.role,
+        isLocked: !isAdmin,
+      });
+
+      // Direct entry: lands directly on Home Feed without popup
+      onCompleteDetails(finalProfile, googleUser);
+      setIsLoggingIn(false);
+    } else {
+      // First-Time User: Account created via Google -> Straight to Home Feed (No popup modal!)
+      let generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
+      const uniqCheck = checkAccountUniqueness({
+        username: generatedUsername,
+        websiteUrl: 'ainewsmaker.online',
+        currentEmail: cleanEmail,
+      });
+      if (!uniqCheck.valid) {
+        generatedUsername = `${generatedUsername}_${Math.floor(100 + Math.random() * 900)}`;
+      }
+
+      const googleUser: ReporterUser = {
+        username: generatedUsername,
+        name: name || prefix,
+        role: 'reporter',
+        district: 'सेंट्रल डेस्क',
+        email: email,
+        avatarUrl: picture, // Avatar photo only, NEVER channel logo
+      };
+
+      setDetailFullName(name || prefix);
+      setDetailChannelLogoUrl('');
+      setDetailChannelLogoGifUrl('');
+      setDetailChannelLogoType('png');
+      setUsername(generatedUsername);
+
+      const baseProfile: ChannelProfile = {
+        fullName: name || prefix,
+        channelNameHi: 'एआई न्यूज़ मेकर',
+        channelNameEn: 'AI News Maker',
+        channelLogoUrl: '', // PNG Logo = BLANK by default
+        channelLogoType: 'png',
+        socialIcons: {
+          youtube: true,
+          facebook: true,
+          instagram: true,
+          twitter: false,
+          telegram: false,
+          whatsapp: true,
+        },
+        username: generatedUsername,
+        mobileNumber: '',
+        showMobileNumber: true,
+        websiteUrl: 'ainewsmaker.online',
+        isLocked: true,
+      };
+
+      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
+      localStorage.setItem('user_channel_profile', JSON.stringify(baseProfile));
+      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(baseProfile));
+      localStorage.setItem('is_onboarding_completed', 'true');
+      localStorage.setItem('is_channel_profile_locked', 'true');
+
+      registerOrUpdateUser({
+        email: cleanEmail,
+        username: generatedUsername,
+        name: googleUser.name,
+        mobile: '',
+        channelName: baseProfile.channelNameHi,
+        channelLogoUrl: '',
+        tier: 'basic',
+        role: 'reporter',
+        isLocked: true,
+      });
+
+      // Direct entry: lands directly on Home Feed without popup
+      onCompleteDetails(baseProfile, googleUser);
+      setIsLoggingIn(false);
+    }
+  };
+
+  // Real Google Sign-In Trigger (Opens Google Account Chooser Popup)
   const handleGoogleSignIn = () => {
     setIsLoggingIn(true);
-    setTimeout(() => {
-      activateFreeTrial();
-      const googleEmail = 'breakingnewswala.com@gmail.com';
-      const googleUser: ReporterUser = {
-        username: 'breakingnewswala',
-        name: 'मुख्य संपादक (Chief Editor)',
-        role: 'admin',
-        district: 'डिजिटल डेस्क',
-        email: googleEmail,
-      };
-      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
-      setDetailFullName(googleUser.name);
-      onLoginSuccess(googleUser);
-      setCurrentStep(2);
-      setIsLoggingIn(false);
-    }, 400);
+    setLoginErrorMsg('');
+
+    // 1. Android Bridge (Inside Android App WebView)
+    if (typeof window !== 'undefined' && (window as any).AndroidBridge?.signInWithGoogle) {
+      try {
+        (window as any).AndroidBridge.signInWithGoogle();
+        return;
+      } catch (err) {
+        console.warn('AndroidBridge.signInWithGoogle err:', err);
+      }
+    }
+
+    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+      try {
+        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const userData = await res.json();
+                if (userData?.email) {
+                  handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
+                  return;
+                }
+              } catch (fetchErr) {
+                console.warn('Google userinfo fetch error:', fetchErr);
+              }
+            }
+            setIsLoggingIn(false);
+          },
+          error_callback: (error: any) => {
+            console.warn('Google auth popup error or closed:', error);
+            setIsLoggingIn(false);
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch (oauthErr) {
+        console.warn('OAuth initTokenClient error:', oauthErr);
+      }
+    }
+
+    // 3. Google Identity Services ID fallback (JWT)
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+      try {
+        (window as any).google.accounts.id.initialize({
+          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          callback: (response: any) => {
+            if (response.credential) {
+              try {
+                const payloadBase64 = response.credential.split('.')[1];
+                const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+                const decoded = JSON.parse(decodedJson);
+                if (decoded?.email) {
+                  handleGoogleUserSuccess(decoded.email, decoded.name);
+                  return;
+                }
+              } catch (decErr) {
+                console.warn('JWT decode err:', decErr);
+              }
+            }
+            setIsLoggingIn(false);
+          },
+        });
+        (window as any).google.accounts.id.prompt();
+        return;
+      } catch (gsiErr) {
+        console.warn('GSI prompt error:', gsiErr);
+      }
+    }
+
+    setIsLoggingIn(false);
+    setLoginErrorMsg('Google लॉगिन विंडो लोड नहीं हो सकी। कृपया पेज रिफ्रेश (Ctrl+F5) करें।');
   };
 
   // 2. Sign Up Handler (Registers new user & starts 7-day trial)
@@ -250,12 +560,25 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
+    const emailClean = signupEmail.trim().toLowerCase();
+    const desiredUser = emailClean.split('@')[0] || 'reporter';
+
+    // Uniqueness & Restricted Brands Check
+    const uniqCheck = checkAccountUniqueness({
+      username: desiredUser,
+      channelName: signupChannelName.trim(),
+      currentEmail: emailClean,
+    });
+    if (!uniqCheck.valid) {
+      setSignupErrorMsg(uniqCheck.error || 'यह चैनल नाम या यूज़रनेम प्रतिबंधित अथवा पहले से पंजीकृत है');
+      return;
+    }
+
     activateFreeTrial();
     savePrimaryMobileNumber(cleanMobile);
 
-    const emailClean = signupEmail.trim().toLowerCase();
     const newUser: ReporterUser = {
-      username: emailClean.split('@')[0] || 'reporter',
+      username: desiredUser,
       name: signupName.trim(),
       role: 'reporter',
       district: signupDistrict.trim() || 'सेंट्रल डेस्क',
@@ -305,18 +628,74 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     getUserSubscription();
 
-    const loggedUser: ReporterUser = {
-      username: emailLower.split('@')[0] || 'editor',
-      name: isAdmin ? 'मुख्य संपादक (Chief Editor)' : 'विशेष संवाददाता (Reporter)',
-      role: isAdmin ? 'admin' : 'reporter',
-      district: 'सेंट्रल डेस्क',
-      email: emailLower,
+    const knownProfile = KNOWN_REGISTERED_USERS[emailLower];
+    const userProfileKey = `user_profile_${emailLower}`;
+    const userSpecificProfileStr = localStorage.getItem(userProfileKey);
+    const genericProfileStr = localStorage.getItem('user_channel_profile');
+    const existingProfileStr = userSpecificProfileStr || genericProfileStr;
+
+    let parsedProfile: any = null;
+    if (existingProfileStr) {
+      try {
+        parsedProfile = JSON.parse(existingProfileStr);
+      } catch {}
+    }
+
+    const finalProfile: ChannelProfile = {
+      fullName: knownProfile?.fullName || parsedProfile?.fullName || (isAdmin ? 'मुख्य संपादक (Chief Editor)' : 'विशेष संवाददाता'),
+      channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
+      channelLogoUrl: knownProfile?.channelLogoUrl || parsedProfile?.channelLogoUrl || (isAdmin ? '/assets/breaking_news_wala_logo.png' : '/assets/ai_news_maker_logo.png'),
+      channelLogoType: 'png',
+      socialIcons: parsedProfile?.socialIcons || {
+        youtube: true,
+        facebook: true,
+        instagram: true,
+        twitter: false,
+        telegram: false,
+        whatsapp: true,
+      },
+      username: knownProfile?.username || parsedProfile?.username || (isAdmin ? 'breakingnewswala' : 'ainewsmaker'),
+      mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || '9669802408',
+      showMobileNumber: true,
+      websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
     };
 
+    const loggedUser: ReporterUser = {
+      username: finalProfile.username,
+      name: finalProfile.fullName,
+      role: isAdmin ? 'admin' : 'reporter',
+      district: knownProfile?.district || parsedProfile?.district || 'सेंट्रल डेस्क / भोपाल',
+      email: emailLower,
+      avatarUrl: finalProfile.channelLogoUrl,
+    };
+
+    if (isAdmin) {
+      setAdminSystemMode('admin');
+    } else {
+      localStorage.setItem('is_channel_profile_locked', 'true');
+      finalProfile.isLocked = true;
+    }
+
     localStorage.setItem('reporter_auth_session', JSON.stringify(loggedUser));
+    localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
+    localStorage.setItem(`user_profile_${emailLower}`, JSON.stringify(finalProfile));
+    localStorage.setItem('is_onboarding_completed', 'true');
     setDetailFullName(loggedUser.name);
-    onLoginSuccess(loggedUser);
-    setCurrentStep(2);
+
+    // Register or update in Admin directory
+    registerOrUpdateUser({
+      email: emailLower,
+      name: loggedUser.name,
+      mobile: finalProfile.mobileNumber,
+      channelName: finalProfile.channelNameHi,
+      channelLogoUrl: finalProfile.channelLogoUrl,
+      tier: isAdmin ? 'ultra' : 'basic',
+      role: loggedUser.role,
+      isLocked: !isAdmin,
+    });
+
+    onCompleteDetails(finalProfile, loggedUser);
   };
 
   // File Upload: Directly takes full-size image first without auto-cropping
@@ -372,6 +751,23 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   // Final Step 2 Submit: Save Channel Details & Enter App
   const handleCompleteSetupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setStep2ErrorMsg('');
+
+    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const finalWeb = websiteUrl.trim();
+    const finalHi = detailChannelNameHi.trim();
+
+    // Check account uniqueness & restricted channels list
+    const uniqCheck = checkAccountUniqueness({
+      username: finalUser,
+      websiteUrl: finalWeb,
+      channelName: finalHi,
+      currentEmail: currentUser?.email,
+    });
+    if (!uniqCheck.valid) {
+      setStep2ErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+      return;
+    }
 
     // Verify OTP first if not already locked
     if (!otpVerified && !subscription.isMobileLocked) {
@@ -385,6 +781,13 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
     activateFreeTrial();
 
+    const isAdm = isUserAdmin(currentUser);
+
+    // Lock channel details and logo for normal users (One-Time Setup Rule)
+    if (!isAdm) {
+      localStorage.setItem('is_channel_profile_locked', 'true');
+    }
+
     const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
 
     const finalProfile: ChannelProfile = {
@@ -392,18 +795,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       channelNameHi: detailChannelNameHi.trim() || 'AI News Maker App',
       channelNameEn: detailChannelNameEn.trim() || 'AI News Maker',
       channelLogoUrl: detailChannelLogoUrl || '',
+      channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
       channelLogoType: detailChannelLogoType,
       socialIcons,
       username: username.replace(/^@/, '').trim() || 'ainewsmaker',
       mobileNumber: finalContact,
       showMobileNumber,
       websiteUrl: websiteUrl.trim() || 'ainewsmaker.online',
+      isLocked: !isAdm,
     };
 
     const updatedUser: ReporterUser = {
       username: currentUser?.username || username.replace(/^@/, '').trim() || 'chief_editor',
       name: detailFullName.trim() || currentUser?.name || 'मुख्य संपादक',
-      role: currentUser?.role || 'admin',
+      role: isAdm ? 'admin' : (currentUser?.role || 'reporter'),
       district: reportingDistrict || currentUser?.district || 'सेंट्रल डेस्क',
       email: currentUser?.email || 'breakingnewswala.com@gmail.com',
     };
@@ -411,6 +816,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
     localStorage.setItem('reporter_auth_session', JSON.stringify(updatedUser));
     localStorage.setItem('is_onboarding_completed', 'true');
+    if (updatedUser.email) {
+      const cleanEmail = updatedUser.email.toLowerCase().trim();
+      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+    }
+
+    // Register or update in Admin directory
+    registerOrUpdateUser({
+      email: updatedUser.email,
+      name: updatedUser.name,
+      mobile: finalContact,
+      channelName: finalProfile.channelNameHi,
+      channelLogoUrl: finalProfile.channelLogoUrl,
+      tier: isAdm ? 'ultra' : 'basic',
+      role: updatedUser.role,
+      isLocked: !isAdm,
+    });
 
     onCompleteDetails(finalProfile, updatedUser);
   };
@@ -493,371 +914,130 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               </div>
             </div>
 
-            {/* Single Unified Card Box for Login / Sign Up */}
+            {/* Single Unified Card Box for Google Login & Admin Login */}
             <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl text-left space-y-4">
-              {/* Segmented Auth Mode Switcher */}
-              <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800 shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthTab('signup');
-                    setSignupErrorMsg('');
-                    setLoginErrorMsg('');
-                  }}
-                  className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    authTab === 'signup'
-                      ? 'bg-gradient-to-r from-red-600 via-amber-500 to-amber-600 text-white shadow-lg'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <User className="w-4 h-4 shrink-0" />
-                  <span>📝 नया खाता बनाएं (साइन अप)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthTab('login');
-                    setSignupErrorMsg('');
-                    setLoginErrorMsg('');
-                  }}
-                  className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    authTab === 'login'
-                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Lock className="w-4 h-4 shrink-0" />
-                  <span>🔑 लॉगिन (Login)</span>
-                </button>
+              {loginErrorMsg && (
+                <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>{loginErrorMsg}</span>
+                </div>
+              )}
+
+              {/* Mandatory Guidelines Notice */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl text-xs text-amber-200 text-left flex items-start gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <strong className="text-amber-300 block text-xs">⚠️ कृपया किसी अन्य चैनल का लोगो या नाम का उपयोग न करें</strong>
+                  <span className="text-slate-300">राष्ट्रीय व बड़े समाचार चैनलों (जैसे आज तक, एबीपी, एनडीटीवी, ज़ी न्यूज़ आदि) के नाम, वेबसाइट व लोगो प्रतिबंधित हैं। केवल अपने अधिकृत चैनल का उपयोग करें।</span>
+                </div>
               </div>
 
-              {/* ========================================================= */}
-              {/* TAB 1: SIGN UP (नया खाता बनाएं - आसान 3 चरण)              */}
-              {/* ========================================================= */}
-              {authTab === 'signup' && (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* How to Sign Up 3-Step Guide Card */}
-                  <div className="p-3.5 bg-gradient-to-br from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/40 rounded-xl space-y-2">
-                    <div className="flex items-center gap-1.5 text-amber-300 font-black text-xs uppercase tracking-wider">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>साइन अप कैसे करें? (3 आसान स्टेप्स):</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-300">
-                      <div className="flex items-start gap-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black flex items-center justify-center shrink-0 text-[10px]">1</span>
-                        <div>
-                          <strong className="block text-white">विवरण भरें</strong>
-                          <span className="text-slate-400">नाम, मोबाइल, ईमेल व पासवर्ड दर्ज करें।</span>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black flex items-center justify-center shrink-0 text-[10px]">2</span>
-                        <div>
-                          <strong className="block text-white">चैनल ब्रांडिंग</strong>
-                          <span className="text-slate-400">लोगो, नाम और सोशल मीडिया जोड़ें।</span>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-1.5 p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                        <span className="w-5 h-5 rounded-full bg-emerald-400 text-slate-950 font-black flex items-center justify-center shrink-0 text-[10px]">3</span>
-                        <div>
-                          <strong className="block text-emerald-300">7 दिन फ्री ट्रायल</strong>
-                          <span className="text-slate-400">तुरंत HD ब्रेकिंग न्यूज़ कार्ड बनाएं!</span>
-                        </div>
-                      </div>
-                    </div>
+              {/* 1. Google / Gmail Sign In (Primary Login) */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoggingIn}
+                  className="w-full py-4 px-4 bg-white hover:bg-slate-100 text-slate-900 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-3 transition-all transform active:scale-98 cursor-pointer border-2 border-amber-400 ring-4 ring-amber-400/30"
+                >
+                  <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  <div className="flex flex-col items-start leading-tight">
+                    <span className="text-sm sm:text-base font-black text-slate-900">
+                      Google / Gmail से लॉगिन करें
+                    </span>
+                    <span className="text-[11px] text-amber-700 font-bold">
+                      {isLoggingIn
+                        ? 'Google से कनेक्ट हो रहा है...'
+                        : 'नया खाता स्वतः बन जाएगा • पुराने यूज़र्स सीधे स्टूडियो में'}
+                    </span>
                   </div>
+                </button>
 
-                  {signupErrorMsg && (
-                    <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                      <span>{signupErrorMsg}</span>
-                    </div>
-                  )}
+                <p className="text-[11px] text-slate-400 text-center">
+                  💡 केवल एक क्लिक में लॉगिन करें। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।
+                </p>
+              </div>
 
-                  {/* 1-Click Quick Google Sign Up Option */}
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={isLoggingIn}
-                    className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2.5 transition-all transform active:scale-98 cursor-pointer border border-slate-300"
-                  >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                    </svg>
-                    <span>Google से 1-क्लिक में त्वरित साइन अप करें</span>
-                  </button>
+              {/* Divider for Admin Login */}
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-800" />
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase">
+                  <span className="bg-slate-900 px-3 text-slate-400 font-bold tracking-wider">
+                    अथवा एडमिन लॉगिन (Admin Login)
+                  </span>
+                </div>
+              </div>
 
-                  <div className="relative my-2">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-800" />
-                    </div>
-                    <div className="relative flex justify-center text-[10px] uppercase">
-                      <span className="bg-slate-900 px-3 text-slate-500 font-bold">
-                        अथवा फॉर्म भरकर साइन अप करें
-                      </span>
-                    </div>
+              {/* 2. Admin Email & Password Login */}
+              <form onSubmit={handleEmailLoginSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    एडमिन ईमेल (Admin Email)
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                    <input
+                      type="email"
+                      required
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="admin@breakingnewswala.com"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
                   </div>
+                </div>
 
-                  {/* Complete Sign Up Form */}
-                  <form onSubmit={handleSignupSubmit} className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          आपका पूरा नाम (Full Name) *
-                        </label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type="text"
-                            required
-                            value={signupName}
-                            onChange={(e) => setSignupName(e.target.value)}
-                            placeholder="उदा. राहुल शर्मा"
-                            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          मोबाइल / व्हाट्सएप्प नंबर (10 अंक) *
-                        </label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type="tel"
-                            required
-                            maxLength={10}
-                            value={signupMobile}
-                            onChange={(e) => setSignupMobile(e.target.value.replace(/[^0-9]/g, ''))}
-                            placeholder="9876543210"
-                            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          ईमेल एड्रेस (Email) *
-                        </label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type="email"
-                            required
-                            value={signupEmail}
-                            onChange={(e) => setSignupEmail(e.target.value)}
-                            placeholder="reporter@gmail.com"
-                            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          पासवर्ड बनाएं (Create Password) *
-                        </label>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type={showSignupPassword ? 'text' : 'password'}
-                            required
-                            value={signupPassword}
-                            onChange={(e) => setSignupPassword(e.target.value)}
-                            placeholder="कम से कम 4 अक्षर"
-                            className="w-full pl-9 pr-9 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowSignupPassword(!showSignupPassword)}
-                            className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
-                          >
-                            {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          न्यूज़ चैनल / पोर्टल नाम (Channel Name)
-                        </label>
-                        <div className="relative">
-                          <Tv className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type="text"
-                            value={signupChannelName}
-                            onChange={(e) => setSignupChannelName(e.target.value)}
-                            placeholder="उदा. एमपी न्यूज़ लाइव"
-                            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          कार्यक्षेत्र / ज़िला (District / City)
-                        </label>
-                        <div className="relative">
-                          <Globe className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type="text"
-                            value={signupDistrict}
-                            onChange={(e) => setSignupDistrict(e.target.value)}
-                            placeholder="उदा. रीवा / शहडोल / भोपाल"
-                            className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-3.5 bg-gradient-to-r from-red-600 via-amber-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-2 transition cursor-pointer active:scale-98"
-                    >
-                      <Sparkles className="w-4 h-4 fill-slate-950" />
-                      <span>साइन अप करें एवं 7-दिन फ्री ट्रायल पाएं</span>
-                    </button>
-                  </form>
-
-                  <div className="text-center pt-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    पासवर्ड (Password)
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      required
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-9 pr-9 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
                     <button
                       type="button"
-                      onClick={() => setAuthTab('login')}
-                      className="text-xs text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
                     >
-                      पहले से खाता है? यहाँ क्लिक करके लॉगिन करें
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
-              )}
 
-              {/* ========================================================= */}
-              {/* TAB 2: LOGIN (लॉगिन - Google या ईमेल द्वारा)              */}
-              {/* ========================================================= */}
-              {authTab === 'login' && (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {loginErrorMsg && (
-                    <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                      <span>{loginErrorMsg}</span>
-                    </div>
-                  )}
-
-                  {/* 1. Google / Gmail Sign In (Primary Mandatory Option) */}
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={isLoggingIn}
-                    className="w-full py-4 px-4 bg-white hover:bg-slate-100 text-slate-900 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-3 transition-all transform active:scale-98 cursor-pointer border-2 border-amber-400 ring-4 ring-amber-400/30"
-                  >
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    <div className="flex flex-col items-start leading-tight">
-                      <span className="text-sm font-black">Google / Gmail से सुरक्षित लॉगिन करें</span>
-                      <span className="text-[11px] text-amber-700 font-bold">
-                        🎉 7-Day Free Trial VIP DESK तुरंत एक्टिवेट होगा
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Divider */}
-                  <div className="relative my-3">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-800" />
-                    </div>
-                    <div className="relative flex justify-center text-[10px] uppercase">
-                      <span className="bg-slate-900 px-3 text-slate-500 font-bold">
-                        अथवा मुख्य संपादक लॉगिन
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 2. Email & Password Login (Admin backup) */}
-                  <form onSubmit={handleEmailLoginSubmit} className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        संपादक ईमेल (Email)
-                      </label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                        <input
-                          type="email"
-                          required
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          placeholder="admin@breakingnewswala.com"
-                          className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        पासवर्ड (Password)
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                        <input
-                          type={showLoginPassword ? 'text' : 'password'}
-                          required
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full pl-9 pr-9 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowLoginPassword(!showLoginPassword)}
-                          className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
-                        >
-                          {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition cursor-pointer"
-                    >
-                      <Crown className="w-4 h-4 text-amber-400" />
-                      <span>लॉगिन करें एवं आगे बढ़ें</span>
-                    </button>
-                  </form>
-
-                  <div className="text-center pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setAuthTab('signup')}
-                      className="text-xs text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
-                    >
-                      नया खाता बनाना चाहते हैं? यहाँ क्लिक करके साइन अप करें
-                    </button>
-                  </div>
-                </div>
-              )}
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <span>एडमिन लॉगिन करें एवं आगे बढ़ें</span>
+                </button>
+              </form>
             </div>
           </div>
         )}
@@ -887,6 +1067,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               </div>
             </div>
 
+            {/* Warning Banner: Restricted / Third Party Brand Protection */}
+            <div className="mb-4 p-3.5 bg-amber-500/10 border-2 border-amber-500/60 rounded-2xl flex items-start gap-3 shadow-lg">
+              <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div className="text-xs space-y-1">
+                <span className="font-black text-amber-300 block text-xs sm:text-sm">
+                  ⚠️ कृपया किसी अन्य चैनल का लोगो या नाम का उपयोग न करें
+                </span>
+                <p className="text-slate-300 leading-relaxed text-[11px]">
+                  प्रतिष्ठित व राष्ट्रीय समाचार चैनलों (जैसे आज तक, एबीपी, एनडीटीवी, ज़ी न्यूज़ आदि) के नाम, वेबसाइट व लोगो प्रतिबंधित हैं। उल्लंघन करने पर खाता स्वतः ब्लॉक हो जाएगा। केवल अपने स्वयं के अधिकृत चैनल की जानकारी ही दर्ज करें।
+                </p>
+              </div>
+            </div>
+
             {/* Form Container */}
             <form
               onSubmit={handleCompleteSetupSubmit}
@@ -909,8 +1104,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       required
                       value={detailFullName}
                       onChange={(e) => setDetailFullName(e.target.value)}
-                      placeholder="उदा. राहुल शर्मा (मुख्य संपादक)"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                      placeholder="यहाँ पत्रकार / संपादक का नाम दर्ज करें"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
 
@@ -923,8 +1118,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       required
                       value={reportingDistrict}
                       onChange={(e) => setReportingDistrict(e.target.value)}
-                      placeholder="उदा. सेंट्रल डेस्क / भोपाल"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                      placeholder="यहाँ अपना जिला / शहर दर्ज करें (उदा. सेंट्रल डेस्क / भोपाल)"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
                 </div>
@@ -987,12 +1182,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                               onChange={(e) => {
                                 const val = e.target.value.replace(/[^0-9]/g, '');
                                 setPrimaryMobileNumber(val);
-                                if (!graphicContactNumber || graphicContactNumber === '96698-02408') {
+                                if (!graphicContactNumber) {
                                   setGraphicContactNumber(val);
                                 }
                               }}
-                              placeholder="9876543210"
-                              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                              placeholder="यहाँ अपना 10-अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)"
+                              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                             />
                           </div>
                           <button
@@ -1008,11 +1203,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
                       {/* OTP verification box if sent */}
                       {otpSent && (
-                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2">
+                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2.5">
                           <div className="flex items-center justify-between">
                             <label className="text-xs font-bold text-amber-300 flex items-center gap-1">
                               <Timer className="w-3.5 h-3.5" />
-                              <span>6-अंकों का OTP दर्ज करें</span>
+                              <span>6-अंकों का OTP कोड दर्ज करें</span>
                             </label>
                             <span className="text-[10px] text-slate-400">
                               (परीक्षण हेतु: 123456)
@@ -1025,7 +1220,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                               value={otpInput}
                               onChange={(e) => setOtpInput(e.target.value.replace(/[^0-9]/g, ''))}
                               placeholder="123456"
-                              className="w-full px-3 py-2 bg-slate-900 border border-amber-400/60 rounded-xl text-white text-sm font-mono tracking-widest text-center focus:outline-hidden"
+                              className="w-full px-3 py-2 bg-slate-900 border border-amber-400/60 rounded-xl text-white text-sm font-mono tracking-widest text-center focus:outline-hidden placeholder:text-slate-600"
                             />
                             <button
                               type="button"
@@ -1034,6 +1229,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                             >
                               सत्यापित करें
                             </button>
+                            <button
+                              type="button"
+                              onClick={handleAutoVerifyOtp}
+                              className="px-3 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl transition cursor-pointer whitespace-nowrap shadow shrink-0"
+                              title="1 क्लिक में 123456 भरकर सत्यापित करें"
+                            >
+                              ⚡ 1-क्लिक OTP भरें
+                            </button>
+                          </div>
+
+                          {/* SMS Gateway Guidance Notice */}
+                          <div className="p-2.5 bg-blue-950/40 border border-blue-500/40 rounded-xl flex items-start gap-2 text-[11px] text-blue-200">
+                            <span className="shrink-0 text-sm">ℹ️</span>
+                            <p className="leading-relaxed">
+                              <strong>लाइव SMS गेटवे सूचना:</strong> मोबाइल पर डायरेक्ट SMS प्राप्त करने हेतु Fast2SMS / Twilio API व DLT अप्रूवल आवश्यक होता है। तुरंत सत्यापन हेतु परीक्षण OTP (123456) अथवा <strong>'⚡ 1-क्लिक OTP भरें'</strong> का उपयोग करें।
+                            </p>
                           </div>
                         </div>
                       )}
@@ -1066,8 +1277,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       required
                       value={detailChannelNameHi}
                       onChange={(e) => setDetailChannelNameHi(e.target.value)}
-                      placeholder="एआई न्यूज़ मेकर"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                      placeholder="यहाँ अपने चैनल का नाम हिन्दी में लिखें (उदा. सच तक न्यूज़)"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
 
@@ -1080,8 +1291,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       required
                       value={detailChannelNameEn}
                       onChange={(e) => setDetailChannelNameEn(e.target.value)}
-                      placeholder="AI News Maker"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                      placeholder="यहाँ अपने चैनल का नाम English में लिखें (उदा. Sach Tak News)"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
                 </div>
@@ -1110,105 +1321,185 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
               </div>
 
-              {/* SECTION C: CHANNEL LOGO (FULL SIZE FIRST, MANUAL CROP OPTION, NO CUTTING BORDERS) */}
-              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
+              {/* SECTION C: CHANNEL LOGO (PNG/JPEG & OPTIONAL ANIMATED GIF) */}
+              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                     <ImageIcon className="w-4 h-4" />
-                    <span>C. चैनल लोगो (Full Size Image, Manual Crop & PNG)</span>
+                    <span>C. चैनल लोगो (PNG / JPEG व वैकल्पिक एनीमेटेड GIF)</span>
                   </h3>
-                  <span className="text-[10px] text-slate-400">PNG / GIF / JPEG</span>
+                  <span className="text-[10px] text-slate-400 font-bold">PNG / GIF / JPEG</span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  {/* Logo Preview Box (Full Aspect Ratio with Checkerboard Transparency) */}
-                  <div
-                    className="w-24 h-24 rounded-2xl bg-slate-900 border-2 border-dashed border-amber-400/60 flex items-center justify-center relative overflow-hidden shrink-0 shadow-inner p-1.5"
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)',
-                      backgroundSize: '12px 12px',
-                      backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
-                    }}
-                  >
-                    {detailChannelLogoUrl ? (
-                      <img
-                        src={detailChannelLogoUrl}
-                        alt="Channel Logo Preview"
-                        className="max-w-full max-h-full object-contain drop-shadow"
-                      />
-                    ) : (
-                      <div className="text-center p-1">
-                        <Tv className="w-6 h-6 text-slate-600 mx-auto" />
-                        <span className="text-[9px] text-slate-500 font-bold block mt-1">कोई लोगो नहीं</span>
-                      </div>
-                    )}
+                {/* 1. Main PNG / Full Size Logo */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200">
+                      1. मुख्य लोगो (PNG / JPEG) *
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-medium">कार्ड व हेडर पर प्रयुक्त</span>
                   </div>
 
-                  {/* Logo Controls */}
-                  <div className="flex-1 w-full space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileUpload}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                      {/* 1. Upload Full-Size Image Button */}
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition"
-                      >
-                        <Upload className="w-4 h-4 text-slate-950" />
-                        <span>लोगो चुनें (Full Size Image)</span>
-                      </button>
-
-                      {/* 2. Manual Crop Option */}
-                      {detailChannelLogoUrl && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCropperRawImage(detailChannelLogoUrl);
-                            setIsCropperOpen(true);
-                          }}
-                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
-                        >
-                          <Crop className="w-3.5 h-3.5 text-amber-400" />
-                          <span>मैनुअल क्रॉप करें</span>
-                        </button>
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    {/* Logo Preview Box */}
+                    <div
+                      className="w-24 h-24 rounded-2xl bg-slate-900 border-2 border-dashed border-amber-400/60 flex items-center justify-center relative overflow-hidden shrink-0 shadow-inner p-1.5"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)',
+                        backgroundSize: '12px 12px',
+                        backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
+                      }}
+                    >
+                      {detailChannelLogoUrl ? (
+                        <img
+                          src={detailChannelLogoUrl}
+                          alt="Channel Logo Preview"
+                          className="max-w-full max-h-full object-contain drop-shadow"
+                        />
+                      ) : (
+                        <div className="text-center p-1">
+                          <Tv className="w-6 h-6 text-slate-600 mx-auto" />
+                          <span className="text-[9px] text-slate-500 font-bold block mt-1">कोई लोगो नहीं</span>
+                        </div>
                       )}
-
-                      {/* 3. Remove Background / Make Transparent PNG */}
-                      {detailChannelLogoUrl && (
-                        <button
-                          type="button"
-                          onClick={handleDirectRemoveWhiteBg}
-                          className="px-3 py-2 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-600 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
-                          title="सफेद बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
-                        >
-                          <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>बैकग्राउंड हटाएं (PNG)</span>
-                        </button>
-                      )}
-
-                      {/* 4. Restore Default */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDetailChannelLogoUrl('/assets/ai_news_maker_logo.png');
-                          setDetailChannelLogoType('png');
-                        }}
-                        className="px-3 py-2 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs rounded-xl transition cursor-pointer"
-                      >
-                        डिफ़ॉल्ट लोगो
-                      </button>
                     </div>
 
-                    <p className="text-[11px] text-slate-400">
-                      💡 फुल साइज़ लोगो सीधे लोड होता है — यदि लोगो के चारों तरफ बॉर्डर या ट्रांसपेरेंट बैकग्राउंड है तो वह कटेगा नहीं।
-                    </p>
+                    {/* Logo Controls */}
+                    <div className="flex-1 w-full space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileUpload}
+                          accept="image/*"
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition"
+                        >
+                          <Upload className="w-4 h-4 text-slate-950" />
+                          <span>लोगो चुनें (Full Size Image)</span>
+                        </button>
+
+                        {detailChannelLogoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCropperRawImage(detailChannelLogoUrl);
+                              setIsCropperOpen(true);
+                            }}
+                            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Crop className="w-3.5 h-3.5 text-amber-400" />
+                            <span>मैनुअल क्रॉप करें</span>
+                          </button>
+                        )}
+
+                        {detailChannelLogoUrl && (
+                          <button
+                            type="button"
+                            onClick={handleDirectRemoveWhiteBg}
+                            className="px-3 py-2 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-600 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                            title="सफेद बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
+                          >
+                            <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>बैकग्राउंड हटाएं (PNG)</span>
+                          </button>
+                        )}
+
+                        {detailChannelLogoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDetailChannelLogoUrl('');
+                              setDetailChannelLogoGifUrl('');
+                            }}
+                            className="px-3 py-2 bg-red-950/60 hover:bg-red-900/60 border border-red-700/60 text-red-300 text-xs rounded-xl transition cursor-pointer"
+                          >
+                            लोगो हटाएं (ब्लैंक करें)
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-400">
+                        💡 फुल साइज़ लोगो सीधे लोड होता है — यदि लोगो के चारों तरफ बॉर्डर या ट्रांसपेरेंट बैकग्राउंड है तो वह कटेगा नहीं।
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Optional Animated GIF Logo */}
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <span>🎬</span>
+                      <span>2. एनीमेटेड GIF लोगो (वैकल्पिक / Optional)</span>
+                    </span>
+                    <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 font-bold">
+                      वैकल्पिक (Optional)
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    {/* GIF Preview */}
+                    <div
+                      className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-dashed border-sky-400/60 flex items-center justify-center relative overflow-hidden shrink-0 shadow-inner p-1.5"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)',
+                        backgroundSize: '12px 12px',
+                        backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
+                      }}
+                    >
+                      {detailChannelLogoGifUrl ? (
+                        <img
+                          src={detailChannelLogoGifUrl}
+                          alt="GIF Logo Preview"
+                          className="max-w-full max-h-full object-contain drop-shadow"
+                        />
+                      ) : (
+                        <div className="text-center p-1">
+                          <span className="text-xl block">🎞️</span>
+                          <span className="text-[9px] text-slate-500 font-bold block mt-0.5">GIF नहीं है</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 w-full space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="file"
+                          ref={gifFileInputRef}
+                          onChange={handleGifUpload}
+                          accept="image/gif"
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => gifFileInputRef.current?.click()}
+                          className="px-3.5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition"
+                        >
+                          <Upload className="w-4 h-4 text-slate-950" />
+                          <span>GIF लोगो अपलोड करें</span>
+                        </button>
+
+                        {detailChannelLogoGifUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setDetailChannelLogoGifUrl('')}
+                            className="px-3 py-2 bg-red-950/60 hover:bg-red-900/60 border border-red-700/60 text-red-300 text-xs font-bold rounded-xl transition cursor-pointer"
+                          >
+                            GIF हटाएं
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        💡 यदि आपके पास चैनल का घूमता हुआ या चमकीला GIF लोगो है, तो यहाँ अपलोड कर सकते हैं। यह ऐच्छिक है।
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1287,8 +1578,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         setIsUsernameCustomized(true);
                         setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
                       }}
-                      placeholder="ainewsmaker"
-                      className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                      placeholder="यहाँ अपना सोशल मीडिया यूज़रनेम दर्ज करें (उदा. yourchannel)"
+                      className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
                 </div>
@@ -1304,8 +1595,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       type="text"
                       value={graphicContactNumber}
                       onChange={(e) => setGraphicContactNumber(e.target.value)}
-                      placeholder="96698-02408"
-                      className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                      placeholder="यहाँ अपना व्हाट्सएप्प / संपर्क नंबर दर्ज करें (उदा. 9876543210)"
+                      className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
 
@@ -1330,14 +1621,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       <Globe className="w-3.5 h-3.5 text-blue-400" />
                       <span>8. वेबसाइट एड्रेस (बिना https:// या www के)</span>
                     </label>
-                    <span className="text-[10px] text-slate-400">उदा. ainewsmaker.online</span>
+                    <span className="text-[10px] text-slate-400">उदा. yourchannel.com</span>
                   </div>
                   <input
                     type="text"
                     value={websiteUrl}
                     onChange={(e) => handleWebsiteChange(e.target.value)}
-                    placeholder="ainewsmaker.online"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                    placeholder="यहाँ अपना वेबसाइट एड्रेस दर्ज करें (उदा. yourchannel.com)"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                   />
                 </div>
               </div>
@@ -1350,10 +1641,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </div>
                   <div>
                     <h4 className="text-xs sm:text-sm font-black text-white">
-                      7-Day Free Trial VIP DESK सक्रिय होगा
+                      7-Day Free Trial Basic सक्रिय होगा
                     </h4>
                     <p className="text-[11px] text-slate-300">
-                      बिना किसी शुल्क के 7 दिन तक सभी VIP DESK न्यूज़ फ्रेम्स, AI टूल्स और ग्राफिक्स का लाभ उठाएं।
+                      बिना किसी शुल्क के 7 दिन तक सभी बेसिक न्यूज़ फ्रेम्स, AI टूल्स और ग्राफिक्स का लाभ उठाएं।
                     </p>
                   </div>
                 </div>
@@ -1362,14 +1653,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </span>
               </div>
 
-              {/* Action Submit Button (Login change option removed) */}
+              {/* Step 2 Error Message (Uniqueness & Validation) */}
+              {step2ErrorMsg && (
+                <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-xs text-red-200 text-left flex items-start gap-2 shadow-lg animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span>{step2ErrorMsg}</span>
+                </div>
+              )}
+
+              {/* Action Submit Button (Single mandatory button - skip button removed) */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
                 >
-                  <Sparkles className="w-4 h-4 text-slate-950" />
-                  <span>7-Day Free Trial VIP DESK के साथ Activate करें एवं स्टूडियो शुरू करें →</span>
+                  <Sparkles className="w-5 h-5 text-slate-950" />
+                  <span>सेव करें एवं होम फ़ीड शुरू करें →</span>
                 </button>
               </div>
             </form>

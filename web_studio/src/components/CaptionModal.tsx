@@ -9,8 +9,54 @@ interface CaptionModalProps {
   card: NewsCardData;
 }
 
-// Ensure hashtags ALWAYS start with #breakingnewswala and end with #BNWTV
-function buildHashtags(location?: string, existingTagsString?: string): string {
+// Helper to extract channel name and build Hindi & English channel hashtags
+function getChannelHashtags(card?: NewsCardData): { hindiTag: string; englishTag: string } {
+  let hiName = '';
+  let enName = '';
+
+  try {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.channelNameHi) hiName = parsed.channelNameHi;
+      if (parsed.channelNameEn) enName = parsed.channelNameEn;
+    }
+  } catch {}
+
+  if (!hiName && typeof localStorage !== 'undefined') {
+    hiName = localStorage.getItem('app_channel_name') || '';
+  }
+  if (!enName && typeof localStorage !== 'undefined') {
+    enName = localStorage.getItem('app_channel_name_en') || '';
+  }
+
+  // Fallbacks
+  if (!hiName && card?.brandName && card.brandName.trim() !== 'योर लोगो') {
+    hiName = card.brandName.trim();
+  }
+  if (!hiName) hiName = 'AI News Maker';
+  if (!enName) enName = 'AI News Maker';
+
+  // Sanitize Hindi hashtag: keep Devanagari and alphanumeric
+  const cleanHi = hiName.replace(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/g, '').replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
+  // Sanitize English hashtag: PascalCase alphanumeric
+  const cleanEn = enName
+    .split(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('')
+    .replace(/[^a-zA-Z0-9]/g, '');
+
+  return {
+    hindiTag: cleanHi ? `#${cleanHi}` : '#ब्रेकिंगन्यूजवाला',
+    englishTag: cleanEn ? `#${cleanEn}` : '#BreakingNewsWala',
+  };
+}
+
+// Ensure hashtags ALWAYS include both Hindi & English channel hashtags (#ब्रेकिंगन्यूजवाला and #BreakingNewsWala) and end with #BNWTV
+function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
+  const { hindiTag, englishTag } = getChannelHashtags(card);
+
   const loc = (location || 'MP')
     .split(/[\/,]/)[0]
     .trim()
@@ -27,7 +73,8 @@ function buildHashtags(location?: string, existingTagsString?: string): string {
   // If no or few existing tags, seed standard tags
   if (tagList.length < 3) {
     tagList = [
-      '#breakingnewswala',
+      hindiTag,
+      englishTag,
       '#BreakingNews',
       locationTag,
       '#HindiNews',
@@ -35,32 +82,34 @@ function buildHashtags(location?: string, existingTagsString?: string): string {
       '#NewsUpdate',
       '#BNWTV',
     ];
-  }
-
-  // Filter out any variations of #breakingnewswala and #bnwtv so we place them strictly at start & end
-  const middleTags = tagList.filter((t) => {
-    const lower = t.toLowerCase();
-    return lower !== '#breakingnewswala' && lower !== '#bnwtv';
-  });
-
-  // Ensure locationTag is in middleTags
-  if (!middleTags.some((t) => t.toLowerCase() === locationTag.toLowerCase())) {
-    middleTags.splice(1, 0, locationTag);
-  }
-
-  // Deduplicate case-insensitively
-  const seen = new Set<string>();
-  const uniqueMiddle: string[] = [];
-  for (const t of middleTags) {
-    const lower = t.toLowerCase();
-    if (!seen.has(lower)) {
-      seen.add(lower);
-      uniqueMiddle.push(t);
+  } else {
+    // Ensure both Hindi and English channel hashtags are present at the beginning
+    if (!tagList.some((t) => t.toLowerCase() === hindiTag.toLowerCase())) {
+      tagList.unshift(hindiTag);
+    }
+    if (!tagList.some((t) => t.toLowerCase() === englishTag.toLowerCase())) {
+      const idx = tagList.findIndex((t) => t.toLowerCase() === hindiTag.toLowerCase());
+      tagList.splice(idx + 1, 0, englishTag);
     }
   }
 
-  // Return strictly with #breakingnewswala at index 0 and #BNWTV at last index
-  return ['#breakingnewswala', ...uniqueMiddle, '#BNWTV'].join(' ');
+  // Deduplicate case-insensitively while preserving order
+  const seen = new Set<string>();
+  const uniqueTags: string[] = [];
+  for (const t of tagList) {
+    const lower = t.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      uniqueTags.push(t);
+    }
+  }
+
+  // Ensure channel hashtags are at index 0 and 1
+  const filtered = uniqueTags.filter(
+    (t) => t.toLowerCase() !== hindiTag.toLowerCase() && t.toLowerCase() !== englishTag.toLowerCase() && t.toLowerCase() !== '#bnwtv'
+  );
+
+  return [hindiTag, englishTag, ...filtered, '#BNWTV'].join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({
@@ -123,12 +172,12 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
         }
       }
 
-      const tagsToUse = buildHashtags(card.location, existingTags);
+      const tagsToUse = buildHashtags(card.location, existingTags, card);
       setCaptionText(`${newsStory}\n\n${tagsToUse}`);
     } else {
       // Default template strictly adhering to 2-3 detailed paragraphs + tags
       newsStory = `${cleanHeadline}। घटना को लेकर इलाके में हड़कंप मच गया है और प्रत्यक्षदर्शियों के अनुसार स्थिति काफी तनावपूर्ण बनी हुई है।\n\nमामले की सूचना मिलते ही वरिष्ठ प्रशासनिक अधिकारी और पुलिस बल मौके पर पहुंच गए हैं तथा राहत एवं आवश्यक कार्रवाई शुरू कर दी गई है।\n\nफिलहाल स्थिति पर लगातार नजर रखी जा रही है और पूरे घटनाक्रम की विस्तृत जांच के निर्देश दिए गए हैं।`;
-      const tagsToUse = buildHashtags(card.location);
+      const tagsToUse = buildHashtags(card.location, undefined, card);
       setCaptionText(`${newsStory}\n\n${tagsToUse}`);
     }
   }, [isOpen, card]);
@@ -154,15 +203,15 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
 
       const data = await response.json();
       if (response.ok && data.caption) {
-        // Enforce the #breakingnewswala ... #BNWTV order on the output
+        // Enforce the channel hashtags (Hindi & English) ... #BNWTV order on the output
         let text = data.caption.trim();
         const tagMatch = text.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
         if (tagMatch) {
           const bodyText = text.substring(0, tagMatch.index).trim();
-          const enforcedTags = buildHashtags(card.location, tagMatch[0]);
+          const enforcedTags = buildHashtags(card.location, tagMatch[0], card);
           setCaptionText(`${bodyText}\n\n${enforcedTags}`);
         } else {
-          const enforcedTags = buildHashtags(card.location);
+          const enforcedTags = buildHashtags(card.location, undefined, card);
           setCaptionText(`${text}\n\n${enforcedTags}`);
         }
       }

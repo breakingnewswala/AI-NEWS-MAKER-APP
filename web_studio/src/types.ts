@@ -53,6 +53,7 @@ export type TextBreakingBadgeStyle =
 export interface NewsCardImages {
   main: string;
   second?: string;
+  secondary?: string;
   third?: string;
   fourth?: string;
   insetCircle?: string;
@@ -117,7 +118,7 @@ export interface NewsCardData {
   customLogoUrl?: string;
   customLogoPngUrl?: string; // Dedicated PNG logo
   customLogoGifUrl?: string; // Dedicated GIF animated logo
-  logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.0)
+  logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.25)
   customHeaderPng?: string; // Uploaded header PNG (IMAGE NEWS.png)
   headersByDesign?: Partial<Record<FrameDesign, string>>; // Separate header graphic per frame template
   customFooterPng?: string; // Uploaded footer PNG (Footer.png)
@@ -267,6 +268,7 @@ export interface NewsCardData {
   socialHandle: string;
   whatsappNumber: string;
   websiteUrl?: string; // Direct domain without https:// or www (e.g. ainewsmaker.online)
+  date?: string; // Optional custom date string
   showMobileNumber?: boolean; // Toggle phone number visibility on graphics
   channelNameHi?: string;
   channelNameEn?: string;
@@ -353,7 +355,7 @@ export interface AIAnalysisResult {
 }
 
 export interface ChannelProfile {
-  fullName: string;
+  fullName?: string;
   channelNameHi: string;
   channelNameEn: string;
   channelLogoUrl: string;
@@ -378,4 +380,6 @@ export interface ChannelProfile {
   footerIconStyle?: 'color' | 'dark' | 'neutral'; // Default footer icon style
   showMasterBranding?: boolean; // Default master branding visibility
   headlineFontFamily?: string; // Default headline font family
+  district?: string;
+  isLocked?: boolean;
 }

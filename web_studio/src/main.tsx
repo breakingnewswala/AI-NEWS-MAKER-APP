@@ -18,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
 // Register PWA service worker for mobile installability and icon display
 if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      reg.update();
+    }).catch((err) => {
       console.log('SW registration note:', err);
     });
   });

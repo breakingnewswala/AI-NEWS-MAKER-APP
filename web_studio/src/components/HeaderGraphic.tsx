@@ -13,7 +13,7 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
   brandTagline,
   brandName,
   customLogoUrl,
-  logoScale = 1.0,
+  logoScale = 1.25,
 }) => {
   // If user uploaded a custom header PNG, render it directly
   if (customHeaderPng) {
@@ -31,7 +31,7 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
   // Check if custom brand is configured (either custom logo exists, or custom brand name exists)
   const isCustomBranded = Boolean(
     customLogoUrl ||
-    (brandName && brandName.trim() !== '' && brandName.trim() !== 'योर लोगो' && brandName.trim() !== 'ब्रेकिंग न्यूज़ वाला')
+    (brandName && brandName.trim() !== '' && brandName.trim() !== 'योर लोगो')
   );
 
   return (
@@ -44,7 +44,7 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
             {customLogoUrl ? (
               <div
                 style={{
-                  transform: `scale(${logoScale ?? 1.0})`,
+                  transform: `scale(${logoScale ?? 1.25})`,
                   transformOrigin: 'left center',
                 }}
                 className="relative max-h-12 sm:max-h-16 flex items-center justify-center shrink-0 transition-transform"

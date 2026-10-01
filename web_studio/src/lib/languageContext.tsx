@@ -133,7 +133,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const handleSetLanguage = (lang: AppLanguage) => {
-    setLanguage(lang);
+    setAppLanguage(lang);
     setLangState(lang);
   };
 

@@ -25,7 +25,7 @@ export const GRAPHIC_1_FRAME_OPTION: FrameOption = {
   badge: 'BASIC',
   requiredTier: 'basic',
   planCategory: 'BASIC',
-  categoryLabel: 'Basic Frames',
+  categoryLabel: 'BASIC PACKAGE FRAMES',
   graphicNumber: 1,
   aspectRatio: '4:5',
 };
@@ -37,7 +37,7 @@ export const GRAPHIC_2_FRAME_OPTION: FrameOption = {
   badge: 'ADVANCE',
   requiredTier: 'advanced',
   planCategory: 'ADVANCED',
-  categoryLabel: 'Advanced Frames',
+  categoryLabel: 'ADVANCE PACKAGE FRAMES',
   graphicNumber: 2,
   aspectRatio: '4:5',
 };
@@ -49,7 +49,7 @@ export const GRAPHIC_3_FRAME_OPTION: FrameOption = {
   badge: 'PRO',
   requiredTier: 'professional',
   planCategory: 'PRO',
-  categoryLabel: 'Pro Frames',
+  categoryLabel: 'PRO PACKAGE FRAMES',
   graphicNumber: 3,
   aspectRatio: '4:5',
 };
@@ -61,7 +61,7 @@ export const GRAPHIC_4_FRAME_OPTION: FrameOption = {
   badge: 'VIP DESK',
   requiredTier: 'ultra',
   planCategory: 'VIP DESK',
-  categoryLabel: 'VIP Desk Frames',
+  categoryLabel: 'VIP DESK PACKAGE FRAMES',
   graphicNumber: 4,
   aspectRatio: '4:5',
 };
@@ -97,9 +97,9 @@ export function getEffectiveFrameOptions(): FrameOption[] {
     const effectiveCategory = getAdminAssignedPlan(f.id, f.planCategory);
     const effectiveTier = categoryToPlanTier(effectiveCategory);
     const categoryLabel = 
-      effectiveCategory === 'BASIC' ? 'Basic Frames' :
-      effectiveCategory === 'ADVANCED' ? 'Advanced Frames' :
-      effectiveCategory === 'PRO' ? 'Pro Frames' : 'VIP Desk Frames';
+      effectiveCategory === 'BASIC' ? 'BASIC PACKAGE FRAMES' :
+      effectiveCategory === 'ADVANCED' ? 'ADVANCE PACKAGE FRAMES' :
+      effectiveCategory === 'PRO' ? 'PRO PACKAGE FRAMES' : 'VIP DESK PACKAGE FRAMES';
 
     return {
       ...f,
@@ -199,8 +199,7 @@ export function drawOriginalHeader(
   const isBranded = Boolean(
     card.brandName &&
     card.brandName.trim() !== '' &&
-    card.brandName.trim() !== 'योर लोगो' &&
-    card.brandName.trim() !== 'ब्रेकिंग न्यूज़ वाला'
+    card.brandName.trim() !== 'योर लोगो'
   );
   const brandName = isBranded ? card.brandName! : 'योर लोगो';
   const nameParts = brandName.trim().split(/\s+/);
@@ -380,9 +379,10 @@ export function drawBreakingRedHeader(
   // Left side: logo globe and title
   drawGlobeEmblem(ctx, 60, barH / 2 - 4, 38);
 
+  const redChannelTitle = (card.channelNameHi || card.brandName || 'AI NEWS MAKER').trim();
   ctx.fillStyle = '#FFFFFF';
   ctx.font = '900 36px "Noto Sans Devanagari", sans-serif';
-  ctx.fillText('ब्रेकिंग न्यूज़ वाला', 120, barH / 2 + 6);
+  ctx.fillText(redChannelTitle, 120, barH / 2 + 6);
 
   // Right side: "SUPER BREAKING" alert badge
   const alertW = 280;
@@ -427,9 +427,10 @@ export function drawInvestigationHeader(
 
   drawGlobeEmblem(ctx, 55, barH / 2 - 3, 34);
 
+  const invChannelTitle = (card.channelNameHi || card.brandName || 'AI NEWS MAKER').trim();
   ctx.fillStyle = '#FFFFFF';
   ctx.font = '800 32px "Noto Sans Devanagari", sans-serif';
-  ctx.fillText('ब्रेकिंग न्यूज़ वाला', 110, barH / 2 + 5);
+  ctx.fillText(invChannelTitle, 110, barH / 2 + 5);
 
   // Special Report pill
   const pillW = 260;

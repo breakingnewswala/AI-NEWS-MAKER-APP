@@ -23,6 +23,22 @@ import {
   Save,
   X,
   CreditCard,
+  Lock,
+  Unlock,
+  Layers,
+  Upload,
+  Globe,
+  Phone,
+  Image,
+  Sliders,
+  Rss,
+  Link2,
+  ExternalLink,
+  ShieldAlert,
+  MessageSquare,
+  Key,
+  Send,
+  Hash,
 } from 'lucide-react';
 import {
   UserPlanTier,
@@ -38,9 +54,27 @@ import {
   togglePromoCodeStatus,
   getPlanUsers,
   assignPlanToUserManually,
+  adminUpdateUserRecord,
+  assignCustomHeaderFooterToUser,
   PLAN_KEY_MAP,
+  LogoChangeRequest,
+  getLogoChangeRequests,
+  approveLogoChangeRequest,
+  rejectLogoChangeRequest,
 } from '../lib/userPlanManager';
-
+import {
+  AdminRssSource,
+  getAdminRssSources,
+  addAdminRssSource,
+  toggleAdminRssSource,
+  deleteAdminRssSource,
+} from '../lib/rssSourceManager';
+import {
+  RestrictedChannel,
+  getRestrictedChannels,
+  addRestrictedChannel,
+  deleteRestrictedChannel,
+} from '../lib/restrictedChannelsManager';
 interface AdminPlansAndPackagesManagerProps {
   currentUser?: any;
   onPlanChanged?: () => void;
@@ -50,8 +84,31 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   currentUser,
   onPlanChanged,
 }) => {
-  // Sub-tabs: 'plans', 'promocodes', 'users'
-  const [subTab, setSubTab] = useState<'plans' | 'promocodes' | 'users'>('promocodes');
+  // Sub-tabs: 'plans', 'promocodes', 'users', 'rss', 'restricted'
+  const [subTab, setSubTab] = useState<'plans' | 'promocodes' | 'users' | 'rss' | 'restricted'>('promocodes');
+
+  // Restricted Channels Management State
+  const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
+  const [restrictedSearch, setRestrictedSearch] = useState<string>('');
+  const [newRestrictedName, setNewRestrictedName] = useState<string>('');
+  const [newRestrictedWebsite, setNewRestrictedWebsite] = useState<string>('');
+  const [newRestrictedUsername, setNewRestrictedUsername] = useState<string>('');
+  const [newRestrictedLogo, setNewRestrictedLogo] = useState<string>('');
+  const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
+  const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Logo Change Requests State
+  const [logoRequests, setLogoRequests] = useState<LogoChangeRequest[]>(() => getLogoChangeRequests());
+  const [logoReqMsg, setLogoReqMsg] = useState<string>('');
+
+  // RSS & Web Link Sources State
+  const [rssSources, setRssSources] = useState<AdminRssSource[]>(() => getAdminRssSources());
+  const [newSourceName, setNewSourceName] = useState<string>('');
+  const [newSourceUrl, setNewSourceUrl] = useState<string>('');
+  const [newSourceType, setNewSourceType] = useState<'rss' | 'web'>('rss');
+  const [newSourceCategory, setNewSourceCategory] = useState<string>('देश');
+  const [rssMsg, setRssMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSyncingRss, setIsSyncingRss] = useState<boolean>(false);
 
   // Plans Catalog State
   const [plans, setPlans] = useState<PlanFeatureDetail[]>(() => getPlansCatalog());
@@ -83,15 +140,44 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [manualDuration, setManualDuration] = useState<number>(30);
   const [manualAssignMsg, setManualAssignMsg] = useState<string>('');
 
+  const [userSearch, setUserSearch] = useState<string>('');
+
+  // Custom Header & Footer Assignment State (PRO & VIP DESK)
+  const [assignUserEmail, setAssignUserEmail] = useState<string>('');
+  const [assignHeaderUrl, setAssignHeaderUrl] = useState<string>('');
+  const [assignFooterUrl, setAssignFooterUrl] = useState<string>('');
+  const [assignCustomActive, setAssignCustomActive] = useState<boolean>(true);
+  const [assignCustomMsg, setAssignCustomMsg] = useState<string>('');
+
+  // Editing branding modal for a specific user
+  const [editingBrandingUser, setEditingBrandingUser] = useState<PlanUserRecord | null>(null);
+  const [editBrandNameHi, setEditBrandNameHi] = useState<string>('');
+  const [editBrandNameEn, setEditBrandNameEn] = useState<string>('');
+  const [editBrandWebsite, setEditBrandWebsite] = useState<string>('');
+  const [editBrandMobile, setEditBrandMobile] = useState<string>('');
+  const [editBrandLogoUrl, setEditBrandLogoUrl] = useState<string>('');
+  const [editBrandSocials, setEditBrandSocials] = useState<Record<string, boolean>>({
+    youtube: true,
+    facebook: true,
+    instagram: true,
+    twitter: false,
+    telegram: false,
+    whatsapp: true,
+  });
+  const [editBrandMsg, setEditBrandMsg] = useState<string>('');
+
   // Reload data on events
   useEffect(() => {
     const handlePlansUpdated = () => setPlans(getPlansCatalog());
     const handlePromoUpdated = () => setPromoCodes(getPromoCodes());
+    const handleUsersUpdated = () => setPlanUsers(getPlanUsers());
     window.addEventListener('ai_news_plans_updated', handlePlansUpdated);
     window.addEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
+    window.addEventListener('ai_news_plan_users_changed', handleUsersUpdated);
     return () => {
       window.removeEventListener('ai_news_plans_updated', handlePlansUpdated);
       window.removeEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
+      window.removeEventListener('ai_news_plan_users_changed', handleUsersUpdated);
     };
   }, []);
 
@@ -217,6 +303,95 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     setTimeout(() => setManualAssignMsg(''), 5000);
   };
 
+  // Select User for Custom Header / Footer
+  const handleSelectUserForCustomHF = (email: string) => {
+    setAssignUserEmail(email);
+    setAssignCustomMsg('');
+    const user = planUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (user) {
+      setAssignHeaderUrl(user.assignedHeaderUrl || '');
+      setAssignFooterUrl(user.assignedFooterUrl || '');
+      setAssignCustomActive(user.assignedCustomActive !== undefined ? user.assignedCustomActive : true);
+    } else {
+      setAssignHeaderUrl('');
+      setAssignFooterUrl('');
+      setAssignCustomActive(true);
+    }
+  };
+
+  // Custom Header/Footer assignment submit
+  const handleAssignCustomHeaderFooter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignUserEmail.trim()) {
+      setAssignCustomMsg('❌ कृपया सूची से यूज़र चुनें!');
+      return;
+    }
+    const success = assignCustomHeaderFooterToUser(assignUserEmail.trim(), {
+      headerUrl: assignHeaderUrl.trim(),
+      footerUrl: assignFooterUrl.trim(),
+      active: assignCustomActive,
+    });
+    if (success) {
+      setPlanUsers(getPlanUsers());
+      setAssignCustomMsg(`✅ ${assignUserEmail.trim()} के लिए Custom Header/Footer सफलतापूर्वक असाइन व अपडेट हो गया!`);
+      setTimeout(() => setAssignCustomMsg(''), 5000);
+    } else {
+      setAssignCustomMsg('❌ यूज़र रिकॉर्ड नहीं मिला!');
+    }
+  };
+
+  // Handle image upload to DataURL for header/footer
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'header' | 'footer' | 'logo') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (target === 'header') setAssignHeaderUrl(dataUrl);
+      else if (target === 'footer') setAssignFooterUrl(dataUrl);
+      else if (target === 'logo') setEditBrandLogoUrl(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Branding Editor Handlers
+  const handleOpenBrandingEditor = (user: PlanUserRecord) => {
+    setEditingBrandingUser(user);
+    setEditBrandNameHi(user.channelName || '');
+    setEditBrandNameEn(user.channelName || '');
+    setEditBrandWebsite(user.websiteUrl || '');
+    setEditBrandMobile(user.mobile || '');
+    setEditBrandLogoUrl(user.channelLogoUrl || '');
+    setEditBrandSocials(
+      user.socialIcons || {
+        youtube: true,
+        facebook: true,
+        instagram: true,
+        twitter: false,
+        telegram: false,
+        whatsapp: true,
+      }
+    );
+    setEditBrandMsg('');
+  };
+
+  const handleSaveUserBranding = () => {
+    if (!editingBrandingUser) return;
+    adminUpdateUserRecord(editingBrandingUser.email, {
+      channelName: editBrandNameHi || editBrandNameEn,
+      websiteUrl: editBrandWebsite,
+      mobile: editBrandMobile,
+      channelLogoUrl: editBrandLogoUrl,
+      socialIcons: editBrandSocials,
+    });
+    setPlanUsers(getPlanUsers());
+    setEditBrandMsg('✅ यूज़र ब्रांडिंग विवरण सफलतापूर्वक सुरक्षित हो गया!');
+    setTimeout(() => {
+      setEditingBrandingUser(null);
+      setEditBrandMsg('');
+    }, 1500);
+  };
+
   // Filtered Promo Codes
   const filteredPromoCodes = promoCodes.filter((c) => {
     const matchesSearch =
@@ -322,9 +497,41 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>3. प्लान यूज़र्स सूची (Assigned Users)</span>
+          <span>3. यूज़र कंट्रोल व कस्टम हेडर/फुटर (User Control)</span>
           <span className="px-1.5 py-0.2 bg-slate-950/40 text-[10px] font-mono rounded">
             {planUsers.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('rss')}
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            subTab === 'rss'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20'
+              : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          <Rss className="w-4 h-4" />
+          <span>4. RSS फ़ीड व वेब लिंक (RSS Feeds & Web Sources)</span>
+          <span className="px-1.5 py-0.2 bg-slate-950/40 text-[10px] font-mono rounded">
+            {rssSources.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('restricted')}
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            subTab === 'restricted'
+              ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-500/20'
+              : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-red-400" />
+          <span>5. प्रतिबंधित चैनल सूची (Restricted Brands)</span>
+          <span className="px-1.5 py-0.2 bg-slate-950/40 text-[10px] font-mono rounded">
+            {restrictedList.length}
           </span>
         </button>
       </div>
@@ -849,11 +1056,343 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       )}
 
       {/* ========================================================================= */}
-      {/* SUB-TAB 3: ASSIGNED PLAN USERS & MANUAL ASSIGNMENT                       */}
+      {/* SUB-TAB 3: USER CONTROL & CUSTOM HEADER / FOOTER                          */}
       {/* ========================================================================= */}
       {subTab === 'users' && (
         <div className="space-y-6">
-          {/* Manual Assignment Form */}
+          {/* 0. LOGO CHANGE REQUESTS MANAGEMENT CARD */}
+          <div className="bg-gradient-to-br from-slate-900 via-amber-950/20 to-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-amber-500/30 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/30 font-black">
+                  <Image className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide flex items-center gap-2">
+                    <span>लोगो बदलने के अनुरोध (Logo Change Requests)</span>
+                    {logoRequests.filter((r) => r.status === 'pending').length > 0 && (
+                      <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full animate-pulse">
+                        {logoRequests.filter((r) => r.status === 'pending').length} नए
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-amber-200">
+                    यूज़र्स द्वारा चैनल लोगो बदलने हेतु सबमिट की गई रिक्वेस्ट। एडमिन द्वारा स्वीकृत (Approve) करने पर संबंधित यूज़र का प्रोफाइल अनलॉक हो जाएगा।
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[11px] font-black rounded-lg">
+                🔐 ONE-TIME SETUP UNLOCK
+              </span>
+            </div>
+
+            {logoReqMsg && (
+              <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{logoReqMsg}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLogoReqMsg('')}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {logoRequests.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
+                वर्तमान में कोई लोगो बदलने का अनुरोध प्राप्त नहीं हुआ है। जब कोई यूज़र प्रोफाइल से अनुरोध करेगा, वह यहाँ प्रदर्शित होगा।
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">यूज़र विवरण</th>
+                      <th className="p-3">चैनल नाम</th>
+                      <th className="p-3">अनुरोध का कारण</th>
+                      <th className="p-3">दिनांक</th>
+                      <th className="p-3">स्थिति (Status)</th>
+                      <th className="p-3 text-right">कार्रवाई (Action)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                    {logoRequests.map((req) => (
+                      <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="p-3">
+                          <div className="font-bold text-white font-mono">{req.userEmail}</div>
+                        </td>
+                        <td className="p-3 font-semibold text-amber-300">
+                          {req.channelName || '—'}
+                        </td>
+                        <td className="p-3 text-slate-300 max-w-xs">
+                          {req.reason || 'लोगो बदलने की अनुमति चाहिए'}
+                        </td>
+                        <td className="p-3 text-slate-400 whitespace-nowrap">
+                          {new Date(req.createdAt).toLocaleDateString('hi-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {req.status === 'pending' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-black">
+                              ⏳ लंबित (Pending)
+                            </span>
+                          ) : req.status === 'approved' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[10px] font-black">
+                              ✓ स्वीकृत (Unlocked)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-rose-300 text-[10px] font-black">
+                              ✕ अस्वीकृत (Rejected)
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          {req.status === 'pending' ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  approveLogoChangeRequest(req.id);
+                                  setLogoRequests(getLogoChangeRequests());
+                                  setPlanUsers(getPlanUsers());
+                                  setLogoReqMsg(`यूज़र ${req.userEmail} का लोगो परिवर्तन अनुरोध स्वीकृत! उनका प्रोफाइल अनलॉक कर दिया गया है।`);
+                                  if (onPlanChanged) onPlanChanged();
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] rounded-lg shadow flex items-center gap-1 cursor-pointer transition active:scale-95"
+                                title="स्वीकृत करें (यूज़र को अनलॉक करें)"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>स्वीकृत करें</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  rejectLogoChangeRequest(req.id);
+                                  setLogoRequests(getLogoChangeRequests());
+                                  setLogoReqMsg(`यूज़र ${req.userEmail} का अनुरोध अस्वीकृत कर दिया गया।`);
+                                }}
+                                className="px-2 py-1 bg-slate-800 hover:bg-rose-900/60 border border-slate-700 hover:border-rose-600 text-slate-300 hover:text-rose-200 font-bold text-[11px] rounded-lg cursor-pointer transition"
+                                title="अस्वीकृत करें"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>अस्वीकृत</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 italic">
+                              {req.status === 'approved' ? 'अनलॉक पूर्ण' : 'कार्रवाई पूर्ण'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* 1. SINGLE MANAGEMENT BOX: CUSTOM HEADER / FOOTER */}
+          <div className="bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    CUSTOM HEADER / FOOTER
+                  </h3>
+                  <p className="text-xs text-purple-200">
+                    Database के यूज़र को कस्टम हेडर व फुटर असाइन करें (PRO व VIP DESK हेतु विशेष सुविधा)
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-purple-900/60 text-purple-300 border border-purple-500/40 text-[11px] font-black rounded-lg">
+                PRO & VIP DESK EXCLUSIVE
+              </span>
+            </div>
+
+            {assignCustomMsg && (
+              <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{assignCustomMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAssignCustomHeaderFooter} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. User Selection */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                    <span>1. User (डेटाबेस यूज़र चुनें) *</span>
+                    <span className="text-[10px] text-amber-400 font-mono">कुल {planUsers.length}</span>
+                  </label>
+                  <select
+                    value={assignUserEmail}
+                    onChange={(e) => handleSelectUserForCustomHF(e.target.value)}
+                    className="w-full bg-slate-950 border border-purple-500/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-purple-400 cursor-pointer font-bold"
+                    required
+                  >
+                    <option value="">-- यूज़र चुनें (Select User) --</option>
+                    <optgroup label="पात्र यूज़र्स (Eligible PRO & VIP DESK Users)">
+                      {planUsers
+                        .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
+                        .map((u) => {
+                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : u.tier.toUpperCase();
+                          return (
+                            <option key={u.userId} value={u.email}>
+                              ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{tierLabel}]
+                            </option>
+                          );
+                        })}
+                    </optgroup>
+                    <optgroup label="अन्य यूज़र्स (Other Users)">
+                      {planUsers
+                        .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
+                        .map((u) => (
+                          <option key={u.userId} value={u.email}>
+                            {u.name ? `${u.name} (${u.email})` : u.email} — [{u.tier.toUpperCase()}]
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                  {assignUserEmail && (
+                    <div className="mt-1.5 text-[11px] text-purple-300 flex items-center gap-1.5">
+                      <span>चयनित:</span>
+                      <span className="font-bold text-white truncate max-w-[200px]">{assignUserEmail}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Header File / URL */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                    <span>2. Custom Header (PNG)</span>
+                    {assignHeaderUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignHeaderUrl('')}
+                        className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                      >
+                        हटाएँ
+                      </button>
+                    )}
+                  </label>
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      value={assignHeaderUrl}
+                      onChange={(e) => setAssignHeaderUrl(e.target.value)}
+                      placeholder="Header Image URL या फ़ाइल चुनें..."
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-purple-400"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
+                        <Upload className="w-3.5 h-3.5 text-purple-400" />
+                        <span>हेडर इमेज अपलोड करें</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => handleFileUpload(e, 'header')}
+                          className="hidden"
+                        />
+                      </label>
+                      {assignHeaderUrl && (
+                        <div className="w-9 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
+                          <img src={assignHeaderUrl} alt="Header Preview" className="w-full h-full object-contain" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Footer File / URL */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                    <span>3. Custom Footer (PNG)</span>
+                    {assignFooterUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignFooterUrl('')}
+                        className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                      >
+                        हटाएँ
+                      </button>
+                    )}
+                  </label>
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      value={assignFooterUrl}
+                      onChange={(e) => setAssignFooterUrl(e.target.value)}
+                      placeholder="Footer Image URL या फ़ाइल चुनें..."
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-purple-400"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
+                        <Upload className="w-3.5 h-3.5 text-purple-400" />
+                        <span>फुटर इमेज अपलोड करें</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => handleFileUpload(e, 'footer')}
+                          className="hidden"
+                        />
+                      </label>
+                      {assignFooterUrl && (
+                        <div className="w-9 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
+                          <img src={assignFooterUrl} alt="Footer Preview" className="w-full h-full object-contain" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Controls: Active / Inactive Switch & Assign Button */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-purple-500/20">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-300">स्थिति (Status):</span>
+                  <button
+                    type="button"
+                    onClick={() => setAssignCustomActive(!assignCustomActive)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-2 cursor-pointer ${
+                      assignCustomActive
+                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md shadow-emerald-900/30'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <Power className={`w-3.5 h-3.5 ${assignCustomActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                    <span>{assignCustomActive ? 'Active (सक्रिय)' : 'Inactive (निष्क्रिय)'}</span>
+                  </button>
+                  <span className="text-[11px] text-slate-400">
+                    {assignCustomActive
+                      ? 'यह हेडर/फुटर केवल चयनित यूज़र के App और Web में लागू होगा।'
+                      : 'निष्क्रिय होने पर सामान्य हेडर/फुटर दिखेंगे।'}
+                  </span>
+                </div>
+
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer transition"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Assign (कस्टम हेडर/फुटर असाइन करें)</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* 2. Manual Plan Assignment Form */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <Users className="w-5 h-5 text-amber-400" />
@@ -916,47 +1455,905 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </form>
           </div>
 
-          {/* Assigned Users Table */}
+          {/* 3. ADMIN USER CONTROL: ALL REGISTERED USERS DATABASE RECORDS */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">सक्रिय यूज़र्स व उनके प्लान्स ({planUsers.length})</h3>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>ADMIN USER CONTROL: पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स</span>
+                  <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-xs font-black rounded-full">
+                    {planUsers.length}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  हर यूज़र का रिकॉर्ड (User Name, Channel Name, Email, Profile/Branding, Current Plan)। Profile/Branding डिफ़ॉल्ट में LOCK रहती है, Admin यहाँ से अनलॉक कर सकता है।
+                </p>
+              </div>
+
+              {/* Search Box */}
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="यूज़र / ईमेल / चैनल खोजें..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
+                />
+              </div>
             </div>
 
             {planUsers.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">
-                फिलहाल कोई मैन्युअल असाइनमेंट रिकॉर्ड नहीं है। प्रोमो कोड रिडीम करने पर यूज़र्स यहाँ स्वतः जुड़ेंगे।
+                फिलहाल कोई यूज़र रिकॉर्ड नहीं है। यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/50">
-                      <th className="p-3">यूज़र (User)</th>
-                      <th className="p-3">सक्रिय प्लान (Active Plan)</th>
-                      <th className="p-3">एक्टिवेशन माध्यम</th>
-                      <th className="p-3">शुरुआत तिथि</th>
-                      <th className="p-3">एक्सपायरी तिथि</th>
+                      <th className="p-3">User & Account Info</th>
+                      <th className="p-3">Channel Name & Logo</th>
+                      <th className="p-3">Profile / Branding Info</th>
+                      <th className="p-3">Current Plan</th>
+                      <th className="p-3">Profile Lock Status</th>
+                      <th className="p-3">कस्टम H/F स्थिति</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
-                    {planUsers.map((u) => (
-                      <tr key={u.userId} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="p-3 font-bold text-white">{u.email}</td>
-                        <td className="p-3">{getTierBadge(u.tier)}</td>
-                        <td className="p-3 text-slate-300 font-mono text-[11px]">{u.activatedVia}</td>
-                        <td className="p-3 text-slate-400">{new Date(u.activatedAt).toLocaleDateString('hi-IN')}</td>
-                        <td className="p-3 text-amber-400 font-bold">
-                          {new Date(u.expiresAt).toLocaleDateString('hi-IN')}
+                    {planUsers
+                      .filter((u) => {
+                        if (!userSearch.trim()) return true;
+                        const s = userSearch.toLowerCase();
+                        return (
+                          u.email.toLowerCase().includes(s) ||
+                          (u.name && u.name.toLowerCase().includes(s)) ||
+                          (u.channelName && u.channelName.toLowerCase().includes(s)) ||
+                          (u.mobile && u.mobile.includes(s))
+                        );
+                      })
+                      .map((u) => (
+                        <tr key={u.userId} className="hover:bg-slate-800/40 transition-colors">
+                          {/* User & Account */}
+                          <td className="p-3">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              <span>{u.name || u.email.split('@')[0]}</span>
+                              {u.role === 'admin' && (
+                                <span className="px-1.5 py-0.2 bg-red-600/80 text-white text-[9px] font-black rounded uppercase">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">{u.email}</div>
+                            {u.mobile && (
+                              <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
+                            )}
+                          </td>
+
+                          {/* Channel & Logo */}
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-700 p-0.5 flex items-center justify-center overflow-hidden shrink-0">
+                                {u.channelLogoUrl ? (
+                                  <img
+                                    src={u.channelLogoUrl}
+                                    alt="Logo"
+                                    className="w-full h-full object-contain"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLElement).style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="text-[9px] font-mono text-slate-500 font-bold text-center leading-tight">
+                                    लोगो नहीं<br />(BLANK)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-slate-200 truncate max-w-[130px]">
+                                  {u.channelName || 'चैनल नाम नहीं'}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {u.channelLogoUrl ? (u.channelLogoUrl.includes('.gif') ? 'GIF Logo' : 'PNG Logo') : 'डिफ़ॉल्ट ब्लैंक'}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Profile / Branding Info */}
+                          <td className="p-3">
+                            <div className="space-y-1">
+                              <div className="text-[11px] text-slate-300 truncate max-w-[150px]">
+                                🌐 {u.websiteUrl || <span className="text-slate-500">वेबसाइट नहीं</span>}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                📱 {u.mobile || <span className="text-slate-500">नंबर नहीं</span>}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenBrandingEditor(u)}
+                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-slate-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>ब्रांडिंग संपादित करें</span>
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Current Plan */}
+                          <td className="p-3">
+                            <div className="space-y-1.5">
+                              <div>{getTierBadge(u.tier)}</div>
+                              <select
+                                value={u.tier}
+                                onChange={(e) => {
+                                  const newTier = e.target.value as UserPlanTier;
+                                  adminUpdateUserRecord(u.email, { tier: newTier });
+                                  setPlanUsers(getPlanUsers());
+                                }}
+                                className="bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-0.5 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                              >
+                                <option value="basic">BASIC</option>
+                                <option value="advanced">ADVANCE</option>
+                                <option value="professional">PRO</option>
+                                <option value="ultra">VIP DESK</option>
+                              </select>
+                              <div className="text-[10px] text-slate-400">
+                                वैध: {new Date(u.expiresAt).toLocaleDateString('hi-IN')}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Profile Lock Status (Admin Unlock Control) */}
+                          <td className="p-3">
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newLockState = !u.isLocked;
+                                  adminUpdateUserRecord(u.email, { isLocked: newLockState });
+                                  setPlanUsers(getPlanUsers());
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                                  u.isLocked !== false
+                                    ? 'bg-amber-950/60 border-amber-600/80 text-amber-300 hover:bg-amber-900/60'
+                                    : 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60'
+                                }`}
+                                title={
+                                  u.isLocked !== false
+                                    ? 'क्लिक करके इस विशिष्ट यूज़र को अनलॉक करें'
+                                    : 'क्लिक करके इस विशिष्ट यूज़र को सुरक्षित लॉक करें'
+                                }
+                              >
+                                {u.isLocked !== false ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                                <span>{u.isLocked !== false ? '🔒 लॉक्ड (डिफ़ॉल्ट)' : '🔓 अनलॉक्ड'}</span>
+                              </button>
+                              <div className="text-[9px] text-slate-400">
+                                {u.isLocked !== false ? 'एडिट प्रतिबंधित' : 'यूज़र एडिट कर सकता है'}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Custom H/F Assignment Status */}
+                          <td className="p-3">
+                            {u.assignedCustomActive && (u.assignedHeaderUrl || u.assignedFooterUrl) ? (
+                              <span className="px-2 py-0.5 bg-purple-950 border border-purple-500 text-purple-300 rounded text-[10px] font-bold">
+                                ✨ असाइन्ड (Active)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500">डिफ़ॉल्ट</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* 4. MODAL: EDIT USER BRANDING BY ADMIN */}
+          {editingBrandingUser && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Edit2 className="w-4 h-4 text-amber-400" />
+                      <span>यूज़र ब्रांडिंग विवरण संपादित करें</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                      {editingBrandingUser.name || editingBrandingUser.email} ({editingBrandingUser.email})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingBrandingUser(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {editBrandMsg && (
+                  <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold">
+                    {editBrandMsg}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल नाम (Channel Name)</label>
+                    <input
+                      type="text"
+                      value={editBrandNameHi}
+                      onChange={(e) => setEditBrandNameHi(e.target.value)}
+                      placeholder="उदा. ब्रेकिंग न्यूज़ 24"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">वेबसाइट URL (Website)</label>
+                    <input
+                      type="text"
+                      value={editBrandWebsite}
+                      onChange={(e) => setEditBrandWebsite(e.target.value)}
+                      placeholder="उदा. www.breakingnews24.com"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">संपर्क / व्हाट्सऐप नंबर (Mobile)</label>
+                    <input
+                      type="text"
+                      value={editBrandMobile}
+                      onChange={(e) => setEditBrandMobile(e.target.value)}
+                      placeholder="उदा. 9876543210"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल लोगो (PNG/GIF URL या अपलोड)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editBrandLogoUrl}
+                        onChange={(e) => setEditBrandLogoUrl(e.target.value)}
+                        placeholder="Logo image URL..."
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                      <label className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-slate-700">
+                        <Upload className="w-3.5 h-3.5 text-amber-400" />
+                        <span>अपलोड</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileUpload(e, 'logo')}
+                          className="hidden"
+                        />
+                      </label>
+                      {editBrandLogoUrl && (
+                        <div className="w-8 h-8 rounded border border-slate-700 overflow-hidden bg-slate-950 shrink-0">
+                          <img src={editBrandLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">सोशल आइकन्स (Social Icons)</label>
+                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-200">
+                      {['youtube', 'facebook', 'instagram', 'twitter', 'telegram', 'whatsapp'].map((s) => (
+                        <label key={s} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer hover:border-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={!!editBrandSocials[s]}
+                            onChange={(e) =>
+                              setEditBrandSocials({ ...editBrandSocials, [s]: e.target.checked })
+                            }
+                            className="rounded text-amber-500"
+                          />
+                          <span className="capitalize">{s}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setEditingBrandingUser(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    रद्द करें
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveUserBranding}
+                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-lg"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>विवरण सुरक्षित करें</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUB-TAB 4: RSS FEEDS & WEB LINKS SOURCE MANAGEMENT                       */}
+      {/* ========================================================================= */}
+      {subTab === 'rss' && (
+        <div className="space-y-6">
+          {/* Header Info Banner */}
+          <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-red-500/30 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30">
+                  <Rss className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    RSS फ़ीड व वेब लिंक स्रोत प्रबंधन (RSS Feeds & Web Sources)
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    विभिन्न न्यूज़ चैनलों की RSS Feeds व वेब लिंक जोड़ें। सक्रिय (Active) स्रोत स्वतः ही होम फ़ीड (Home Feed) में न्यूज़ प्रदर्शित करेंगे।
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSyncingRss(true);
+                    setRssSources(getAdminRssSources());
+                    setTimeout(() => {
+                      setIsSyncingRss(false);
+                      setRssMsg({ type: 'success', text: 'सक्रिय RSS व वेब लिंक स्रोतों से न्यूज़ सफलतापूर्वक सिंक हो गई है।' });
+                    }, 800);
+                  }}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow transition active:scale-95"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRss ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>स्रोत सिंक करें</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notification message */}
+            {rssMsg && (
+              <div
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 ${
+                  rssMsg.type === 'success'
+                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                    : 'bg-rose-950/80 border-rose-500 text-rose-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {rssMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{rssMsg.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRssMsg(null)}
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Flow Banner */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
+              <span className="font-bold text-amber-400">लाइव डेटा प्रवाह (Live Flow):</span>
+              <div className="flex items-center gap-1.5 font-mono text-slate-200">
+                <span className="px-2 py-0.5 bg-red-950/80 border border-red-600/60 rounded text-red-300 font-bold">1. ADMIN ADD</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-amber-950/80 border border-amber-600/60 rounded text-amber-300 font-bold">2. SOURCE ACTIVE</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">3. NEWS FETCH</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">4. HOME FEED</span>
+                <span>→</span>
+                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">5. ALL USERS</span>
+              </div>
+            </div>
+
+            {/* Add New Source Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newSourceUrl.trim()) {
+                  setRssMsg({ type: 'error', text: 'कृपया वैध RSS Feed URL या Web Link दर्ज करें।' });
+                  return;
+                }
+                addAdminRssSource(newSourceName, newSourceUrl, newSourceType, newSourceCategory);
+                setRssSources(getAdminRssSources());
+                setNewSourceName('');
+                setNewSourceUrl('');
+                setRssMsg({ type: 'success', text: `नया स्रोत "${newSourceName || 'New Source'}" सफलतापूर्वक जोड़ दिया गया है!` });
+              }}
+              className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-4"
+            >
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" />
+                <span>नया RSS Feed / Web Link स्रोत जोड़ें</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                {/* 1. Source Name */}
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">
+                    स्रोत / चैनल का नाम *
+                  </label>
+                  <input
+                    type="text"
+                    value={newSourceName}
+                    onChange={(e) => setNewSourceName(e.target.value)}
+                    placeholder="उदा. आज तक / अमर उजाला"
+                    required
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-hidden focus:border-red-500 text-xs"
+                  />
+                </div>
+
+                {/* 2. Source Type */}
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">
+                    स्रोत का प्रकार (Type) *
+                  </label>
+                  <select
+                    value={newSourceType}
+                    onChange={(e) => setNewSourceType(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-hidden focus:border-red-500 text-xs font-bold cursor-pointer"
+                  >
+                    <option value="rss">📡 RSS Feed (XML / Atom)</option>
+                    <option value="web">🌐 वेब आर्टिकल लिंक (Web URL)</option>
+                  </select>
+                </div>
+
+                {/* 3. Category */}
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">
+                    डिफ़ॉल्ट श्रेणी (Category) *
+                  </label>
+                  <select
+                    value={newSourceCategory}
+                    onChange={(e) => setNewSourceCategory(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-hidden focus:border-red-500 text-xs font-bold cursor-pointer"
+                  >
+                    <option value="देश">देश (National)</option>
+                    <option value="राज्य">राज्य (State / Regional)</option>
+                    <option value="राजनीति">राजनीति (Politics)</option>
+                    <option value="व्यापार">व्यापार (Business)</option>
+                    <option value="खेल">खेल (Sports)</option>
+                    <option value="मनोरंजन">मनोरंजन (Entertainment)</option>
+                    <option value="अपराध">अपराध (Crime)</option>
+                    <option value="मौसम">मौसम व तकनीक (Tech & Weather)</option>
+                  </select>
+                </div>
+
+                {/* 4. URL */}
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">
+                    फ़ीड / वेब लिंक URL *
+                  </label>
+                  <input
+                    type="url"
+                    value={newSourceUrl}
+                    onChange={(e) => setNewSourceUrl(e.target.value)}
+                    placeholder="https://example.com/rss.xml"
+                    required
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-hidden focus:border-red-500 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end pt-2 border-t border-slate-800">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>स्रोत जोड़ें व सक्रिय करें</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Current Active & Inactive Sources Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <span>कॉन्फ़िगर किए गए स्रोत (Configured Sources)</span>
+                  <span className="px-2 py-0.5 bg-slate-800 text-amber-300 rounded-full font-mono text-[10px]">
+                    कुल {rssSources.length}
+                  </span>
+                </h4>
+                <div className="text-[11px] text-slate-400">
+                  सक्रिय स्रोत: <strong className="text-emerald-400">{rssSources.filter((s) => s.isActive).length}</strong> / {rssSources.length}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">स्रोत नाम</th>
+                      <th className="p-3">प्रकार (Type)</th>
+                      <th className="p-3">श्रेणी (Category)</th>
+                      <th className="p-3">URL</th>
+                      <th className="p-3 text-center">स्थिति (Active)</th>
+                      <th className="p-3 text-right">कार्रवाई (Action)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                    {rssSources.map((source) => (
+                      <tr key={source.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="p-3">
+                          <div className="font-bold text-white flex items-center gap-2">
+                            {source.type === 'rss' ? (
+                              <span className="p-1 rounded bg-red-950 text-red-400 border border-red-800/60">
+                                <Rss className="w-3 h-3" />
+                              </span>
+                            ) : (
+                              <span className="p-1 rounded bg-blue-950 text-blue-400 border border-blue-800/60">
+                                <Link2 className="w-3 h-3" />
+                              </span>
+                            )}
+                            <span>{source.name}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {source.type === 'rss' ? (
+                            <span className="px-2 py-0.5 rounded bg-red-500/10 border border-red-500/40 text-red-300 text-[10px] font-bold">
+                              📡 RSS XML
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/40 text-blue-300 text-[10px] font-bold">
+                              🌐 Web Link
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold border border-slate-700">
+                            {source.category}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-amber-300 underline flex items-center gap-1"
+                          >
+                            <span className="truncate">{source.url}</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </td>
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toggleAdminRssSource(source.id);
+                              setRssSources(getAdminRssSources());
+                              setRssMsg({
+                                type: 'success',
+                                text: `स्रोत "${source.name}" का स्टेटस ${!source.isActive ? 'सक्रिय (Active)' : 'निष्क्रीय (Inactive)'} कर दिया गया।`,
+                              });
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black cursor-pointer transition border ${
+                              source.isActive
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                            }`}
+                          >
+                            {source.isActive ? '✓ सक्रिय (Active)' : '✕ निष्क्रीय (OFF)'}
+                          </button>
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`क्या आप स्रोत "${source.name}" को हटाना चाहते हैं?`)) {
+                                deleteAdminRssSource(source.id);
+                                setRssSources(getAdminRssSources());
+                                setRssMsg({ type: 'success', text: `स्रोत "${source.name}" हटा दिया गया।` });
+                              }
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer"
+                            title="स्रोत हटाएं"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}
-    </div>
+
+      {/* ========================================================================= */}
+      {/* SUB-TAB 5: RESTRICTED CHANNELS MANAGER (प्रतिबंधित चैनल सुरक्षा प्रणाली)    */}
+      {/* ========================================================================= */}
+      {subTab === 'restricted' && (
+        <div className="space-y-6">
+          {/* Top Explanation Banner */}
+          <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-amber-600 flex items-center justify-center text-white font-black shadow-lg shrink-0">
+                  <ShieldAlert className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-black text-white">
+                      प्रतिबंधित चैनल सुरक्षा सूची (Restricted News Brands)
+                    </h3>
+                    <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
+                      Brand Protection
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    बड़े राष्ट्रीय मीडिया नेटवर्क्स (आज तक, एबीपी न्यूज़, एनडीटीवी, ज़ी न्यूज़ आदि) के नाम, वेबसाइट व लोगो अनधिकृत उपयोग से सुरक्षित हैं। कोई भी यूज़र इन चैनलों के नाम, वेबसाइट या यूज़रनेम से खाता नहीं बना सकता।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-bold text-red-300 bg-red-950/60 px-3 py-1.5 rounded-xl border border-red-500/40">
+                <span>सुरक्षित चैनल्स: {restrictedList.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Feedback Message */}
+          {restrictedMsg && (
+            <div
+              className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                restrictedMsg.type === 'success'
+                  ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-300'
+                  : 'bg-red-950/80 border border-red-500/80 text-red-300'
+              }`}
+            >
+              {restrictedMsg.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              )}
+              <span>{restrictedMsg.text}</span>
+            </div>
+          )}
+
+          {/* Add New Restricted Channel Card */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 text-sm font-black text-amber-300 border-b border-slate-800 pb-2.5">
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>नया चैनल प्रतिबंधित सूची में जोड़ें (Add Restricted Channel)</span>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newRestrictedName.trim()) {
+                  setRestrictedMsg({ type: 'error', text: 'कृपया चैनल का नाम दर्ज करें' });
+                  return;
+                }
+                if (!newRestrictedWebsite.trim() && !newRestrictedUsername.trim()) {
+                  setRestrictedMsg({ type: 'error', text: 'कृपया वेबसाइट या यूज़रनेम दर्ज करें' });
+                  return;
+                }
+                const added = addRestrictedChannel({
+                  channelName: newRestrictedName.trim(),
+                  websiteUrl: newRestrictedWebsite.trim(),
+                  username: newRestrictedUsername.trim() || newRestrictedName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16),
+                  logoUrl: newRestrictedLogo.trim() || undefined,
+                  reason: newRestrictedReason.trim() || 'राष्ट्रीय/आधिकारिक समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित',
+                });
+                setRestrictedList(getRestrictedChannels());
+                setNewRestrictedName('');
+                setNewRestrictedWebsite('');
+                setNewRestrictedUsername('');
+                setNewRestrictedLogo('');
+                setNewRestrictedReason('');
+                setRestrictedMsg({
+                  type: 'success',
+                  text: `✅ चैनल "${added.channelName}" सफलतापूर्वक प्रतिबंधित सूची में जोड़ दिया गया।`,
+                });
+                setTimeout(() => setRestrictedMsg(null), 5000);
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  1. चैनल का नाम (Channel Name) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newRestrictedName}
+                  onChange={(e) => setNewRestrictedName(e.target.value)}
+                  placeholder="उदा. आज तक (Aaj Tak)"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  2. वेबसाइट एड्रेस (Domain) *
+                </label>
+                <input
+                  type="text"
+                  value={newRestrictedWebsite}
+                  onChange={(e) => setNewRestrictedWebsite(e.target.value)}
+                  placeholder="उदा. aajtak.in (बिना https:// के)"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  3. यूज़रनेम (Username)
+                </label>
+                <input
+                  type="text"
+                  value={newRestrictedUsername}
+                  onChange={(e) => setNewRestrictedUsername(e.target.value)}
+                  placeholder="उदा. aajtak"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  4. चैनल लोगो इमेज URL
+                </label>
+                <input
+                  type="url"
+                  value={newRestrictedLogo}
+                  onChange={(e) => setNewRestrictedLogo(e.target.value)}
+                  placeholder="उदा. https://example.com/logo.png"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-2">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  5. प्रतिबंध का कारण (Reason / Notes)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newRestrictedReason}
+                    onChange={(e) => setNewRestrictedReason(e.target.value)}
+                    placeholder="उदा. राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित"
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                  />
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>प्रतिबंधित करें</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          {/* Search & Channels Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-3 p-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={restrictedSearch}
+                  onChange={(e) => setRestrictedSearch(e.target.value)}
+                  placeholder="चैनल नाम, वेबसाइट या यूज़रनेम खोजें..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+              <span className="text-xs text-slate-400 font-semibold self-center">
+                कुल प्रतिबंधित ब्रांड्स: {restrictedList.length}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
+                  <tr>
+                    <th className="p-3">लोगो</th>
+                    <th className="p-3">चैनल का नाम</th>
+                    <th className="p-3">वेबसाइट</th>
+                    <th className="p-3">यूज़रनेम</th>
+                    <th className="p-3">कारण / सुरक्षा</th>
+                    <th className="p-3 text-right">कार्रवाई</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 font-medium">
+                  {restrictedList
+                    .filter((c) => {
+                      if (!restrictedSearch) return true;
+                      const q = restrictedSearch.toLowerCase();
+                      return (
+                        c.channelName.toLowerCase().includes(q) ||
+                        c.websiteUrl.toLowerCase().includes(q) ||
+                        c.username.toLowerCase().includes(q) ||
+                        (c.reason && c.reason.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-850/50 transition">
+                        <td className="p-3 whitespace-nowrap">
+                          {item.logoUrl ? (
+                            <img
+                              src={item.logoUrl}
+                              alt={item.channelName}
+                              className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-[10px] font-black flex items-center justify-center">
+                              🛡️
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="font-bold text-white text-xs">{item.channelName}</span>
+                        </td>
+                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-blue-300">
+                          {item.websiteUrl}
+                        </td>
+                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-amber-300">
+                          @{item.username}
+                        </td>
+                        <td className="p-3 text-[11px] text-slate-300">
+                          <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 text-[10px] font-bold">
+                            {item.reason || 'प्रतिबंधित चैनल'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
+                                deleteRestrictedChannel(item.id);
+                                setRestrictedList(getRestrictedChannels());
+                                setRestrictedMsg({
+                                  type: 'success',
+                                  text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।`,
+                                });
+                              }
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer"
+                            title="प्रतिबंध हटाएं"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+          </div>
   );
 };

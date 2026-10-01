@@ -119,7 +119,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [channelLogoUrl, setChannelLogoUrl] = useState<string>(
     profile?.channelLogoUrl || currentUser?.channelLogoUrl || ''
   );
-  const [logoScale, setLogoScale] = useState<number>(100); // 50% to 180%
+  const [logoScale, setLogoScale] = useState<number>(125); // 50% to 180%, default 125%
   const [socialHandle, setSocialHandle] = useState<string>(
     profile?.username ? (profile.username.startsWith('@') ? profile.username : `@${profile.username}`) : '@BreakingNewsWala'
   );
@@ -709,8 +709,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 </div>
               )}
 
-              {/* Top Branding Overlay (Live Tag + Scalable Logo / Name) */}
-              <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex items-center justify-between pointer-events-none z-10">
+              {/* Top Branding Overlay (Live Tag + Scalable Logo / Name) - Inside Safe Zone */}
+              <div className="absolute top-0 left-0 right-0 px-4 sm:px-6 pt-3 sm:pt-4 pb-2 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex items-center justify-between pointer-events-none z-10">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase tracking-wider animate-pulse flex items-center gap-1 shadow">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
@@ -744,8 +744,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
               {/* Lower-Third News Jacket Overlay */}
               <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10 flex flex-col">
-                {/* Location Strip */}
-                <div className="bg-amber-500/95 text-neutral-950 font-black text-[11px] sm:text-xs px-3 py-1 flex items-center justify-between border-t border-amber-400 shadow-md">
+                {/* Location Strip - Safe Zone */}
+                <div className="bg-amber-500/95 text-neutral-950 font-black text-[11px] sm:text-xs px-4 sm:px-6 py-1.5 flex items-center justify-between border-t border-amber-400 shadow-md">
                   <span className="flex items-center gap-1 tracking-wide">
                     <MapPin className="w-3 h-3 text-red-700" />
                     {location}
@@ -755,8 +755,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </span>
                 </div>
 
-                {/* Red Headline Band (Handles 2 or 3 lines) */}
-                <div className="bg-gradient-to-r from-red-700 via-red-600 to-red-800 text-white px-3 py-2 border-t border-red-500/40 shadow-xl space-y-0.5">
+                {/* Red Headline Band (Handles 2 or 3 lines) - Safe Zone */}
+                <div className="bg-gradient-to-r from-red-700 via-red-600 to-red-800 text-white px-4 sm:px-6 py-2 border-t border-red-500/40 shadow-xl space-y-0.5">
                   {headline.split('\n').map((line, idx) => (
                     <h3 key={idx} className="font-black text-xs sm:text-sm leading-snug drop-shadow-md line-clamp-1">
                       {line}
@@ -769,8 +769,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   )}
                 </div>
 
-                {/* Bottom Center-Aligned Footer Bar */}
-                <div className="bg-neutral-950/95 text-neutral-200 px-2 py-1 text-[10px] border-t border-neutral-800 flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap shadow-inner">
+                {/* Bottom Center-Aligned Footer Bar - Safe Zone */}
+                <div className="bg-neutral-950/95 text-neutral-200 px-4 sm:px-6 py-1 text-[10px] border-t border-neutral-800 flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap shadow-inner">
                   <div className="flex items-center gap-1 text-amber-400">
                     <Youtube className="w-2.5 h-2.5 text-red-500" />
                     <Facebook className="w-2.5 h-2.5 text-blue-500" />
@@ -794,8 +794,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   )}
                 </div>
 
-                {/* Scrolling Bottom Ticker */}
-                <div className="bg-slate-950 text-amber-300 px-3 py-0.5 text-[9px] sm:text-[10px] font-bold border-t border-slate-800 flex items-center gap-2 overflow-hidden whitespace-nowrap">
+                {/* Scrolling Bottom Ticker - Safe Zone */}
+                <div className="bg-slate-950 text-amber-300 px-4 sm:px-6 py-0.5 text-[9px] sm:text-[10px] font-bold border-t border-slate-800 flex items-center gap-2 overflow-hidden whitespace-nowrap">
                   <span className="px-1.5 py-0.2 bg-red-600 text-white text-[8px] font-black rounded shrink-0">
                     ताज़ा
                   </span>
@@ -1280,10 +1280,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setLogoScale(100)}
-                      className="px-1.5 py-0.5 bg-slate-800 text-amber-400 rounded hover:bg-slate-700"
+                      onClick={() => setLogoScale(125)}
+                      className="px-1.5 py-0.5 bg-slate-800 text-amber-400 rounded hover:bg-slate-700 font-bold"
+                      title="125% डिफ़ॉल्ट पर रीसेट करें"
                     >
-                      100%
+                      125%
                     </button>
                     <button
                       type="button"

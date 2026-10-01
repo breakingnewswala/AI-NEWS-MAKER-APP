@@ -15,9 +15,11 @@ import {
   Eye,
   EyeOff,
   AtSign,
+  ShieldAlert,
 } from 'lucide-react';
 import { ChannelProfile } from '../types';
 import { LogoCropperModal } from './LogoCropperModal';
+import { checkAccountUniqueness } from '../lib/userPlanManager';
 
 interface ChannelOnboardingModalProps {
   isOpen: boolean;
@@ -75,7 +77,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
 
   // Username: Auto initialized from English channel name
   const [username, setUsername] = useState<string>(
-    initialProfile?.username || 'breakingnewswala'
+    initialProfile?.username || 'ainewsmaker'
   );
   const [isUsernameCustomized, setIsUsernameCustomized] = useState<boolean>(false);
 
@@ -176,33 +178,53 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fullName.trim()) {
-      setErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
-      return;
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
     }
-    if (!channelNameHi.trim() || !channelNameEn.trim()) {
-      setErrorMsg('कृपया चैनल का नाम हिन्दी और अंग्रेज़ी दोनों में दर्ज करें');
-      return;
-    }
+
+    const finalFullName = (fullName || userName || 'मुख्य संपादक').trim();
+    const finalHi = (channelNameHi || 'एआई न्यूज़ मेकर').trim();
+    const finalEn = (channelNameEn || 'AI News Maker').trim();
+    const finalUser = (username || finalEn).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'ainewsmaker';
 
     setErrorMsg('');
 
+    // Check account uniqueness and restricted brands
+    const uniqCheck = checkAccountUniqueness({
+      username: finalUser,
+      websiteUrl: websiteUrl.trim(),
+      channelName: finalHi,
+      currentEmail: (initialProfile as any)?.email,
+    });
+    if (!uniqCheck.valid) {
+      setErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+      return;
+    }
+
     const profile: ChannelProfile = {
-      fullName: fullName.trim(),
-      channelNameHi: channelNameHi.trim(),
-      channelNameEn: channelNameEn.trim(),
-      channelLogoUrl: channelLogoUrl || '',
+      fullName: finalFullName,
+      channelNameHi: finalHi,
+      channelNameEn: finalEn,
+      channelLogoUrl: channelLogoUrl || channelLogoPngUrl || channelLogoGifUrl || '/assets/ai_news_maker_logo.png',
       channelLogoPngUrl,
       channelLogoGifUrl,
       channelLogoType,
       socialIcons,
-      username: username.replace(/^@/, '').trim(),
+      username: finalUser,
       mobileNumber: mobileNumber.trim(),
       showMobileNumber,
       websiteUrl: websiteUrl.trim(),
     };
+
+    try {
+      localStorage.setItem('user_channel_profile', JSON.stringify(profile));
+      localStorage.setItem('app_channel_name', profile.channelNameHi);
+      localStorage.setItem('app_channel_name_en', profile.channelNameEn);
+      localStorage.setItem('is_onboarding_completed', 'true');
+    } catch (err) {
+      console.warn('localStorage save failed', err);
+    }
 
     onSaveProfile(profile);
   };
@@ -237,8 +259,17 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
             )}
           </div>
 
+          {/* Warning Banner: Restricted / Third Party Brand Protection */}
+          <div className="mx-4 sm:mx-6 mt-4 p-3 bg-amber-500/10 border border-amber-500/50 rounded-xl flex items-start gap-2.5 text-xs text-amber-200">
+            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <strong className="text-amber-300 block text-xs">⚠️ कृपया किसी अन्य चैनल का लोगो या नाम का उपयोग न करें</strong>
+              <span className="text-[11px] text-neutral-300">राष्ट्रीय व प्रतिष्ठित समाचार चैनलों (उदा. आज तक, एबीपी, एनडीटीवी आदि) के नाम, वेबसाइट व लोगो प्रतिबंधित हैं। केवल अपने अधिकृत चैनल का उपयोग करें।</span>
+            </div>
+          </div>
+
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+          <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} className="p-4 sm:p-6 space-y-4 max-h-[82vh] overflow-y-auto">
             {errorMsg && (
               <div className="p-2.5 bg-red-950/80 border border-red-500/80 rounded-lg text-red-200 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
@@ -255,7 +286,6 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                 <User className="absolute left-3 top-2.5 w-4 h-4 text-neutral-400" />
                 <input
                   type="text"
-                  required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="उदा. राहुल शर्मा (संपादक / रिपोर्टर)"
@@ -272,7 +302,6 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  required
                   value={channelNameHi}
                   onChange={(e) => setChannelNameHi(e.target.value)}
                   placeholder="उदा. एआई न्यूज़ मेकर"
@@ -285,7 +314,6 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  required
                   value={channelNameEn}
                   onChange={(e) => setChannelNameEn(e.target.value)}
                   placeholder="e.g. AI News Maker"
@@ -547,7 +575,6 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                 <span className="absolute left-3 top-2.5 text-amber-400 font-bold text-sm">@</span>
                 <input
                   type="text"
-                  required
                   value={username}
                   onChange={(e) => {
                     setIsUsernameCustomized(true);
@@ -612,11 +639,15 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
             {/* Submit Button: Enter App */}
             <div className="pt-2">
               <button
-                type="submit"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }}
                 className="w-full py-3 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-600 hover:to-yellow-600 text-black font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
               >
                 <Sparkles className="w-5 h-5 text-black" />
-                <span>ऐप के अंदर प्रवेश करें (Enter Studio)</span>
+                <span>✨ ऐप के अंदर प्रवेश करें (Enter Studio)</span>
               </button>
             </div>
           </form>

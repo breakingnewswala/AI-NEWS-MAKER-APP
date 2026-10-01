@@ -1,42 +1,32 @@
-# Built application files
-*.apk
-*.aar
-*.aab
-*.dex
-*.so
-
-# Build directories
-build/
-**/build/
-app/build/
-.build-outputs/
-dist/
-**/dist/
-captures/
+*.iml
+.gradle
+.kotlin
+/local.properties
+local.properties
+/.idea
+.DS_Store
+/build
+/captures
 .externalNativeBuild
 .cxx
-
-# Node dependencies
-node_modules/
-**/node_modules/
-
-# Gradle files
-.gradle/
-
-# IDE & OS
-*.iml
-.idea/
-.DS_Store
-Thumbs.db
-.kotlin/
-
-# Secrets & Environment
-local.properties
-.env
-.env.local
 debug.keystore
-debug.keystore.base64
-*.log
 
-# Keep important config templates
+# Node & Build artifacts
+node_modules/
+web_studio/node_modules/
+dist/
+web_studio/dist/
+.firebase/
+
+# Environment files with secrets
+.env
+.env.*
+web_studio/.env
 !.env.example
+!web_studio/.env.example
+
+# Large archive & binary files
+*.zip
+*.apk
+*.tar.gz
+*.log

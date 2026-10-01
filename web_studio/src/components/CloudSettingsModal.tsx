@@ -479,7 +479,7 @@ export const CloudSettingsModal: React.FC<CloudSettingsModalProps> = ({
         {/* Modal Footer */}
         <div className="p-3 sm:p-4 border-t border-neutral-800 bg-neutral-950 flex items-center justify-between">
           <span className="text-[11px] text-neutral-400">
-            ब्रेकिंग न्यूज़ वाला • एंटरप्राइज़ क्लाउड सॉल्यूशन
+            AI News Maker • एंटरप्राइज़ क्लाउड सॉल्यूशन
           </span>
           <button
             type="button"

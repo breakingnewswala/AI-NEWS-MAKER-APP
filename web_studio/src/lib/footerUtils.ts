@@ -1,4 +1,5 @@
 import { NewsCardData, FrameDesign } from '../types';
+import { getAssignedCustomHeaderFooter } from './userPlanManager';
 
 export function getFrameDesignLabel(design?: FrameDesign): string {
   switch (design) {
@@ -18,11 +19,15 @@ export function getFrameDesignLabel(design?: FrameDesign): string {
       return 'कस्टम पीएनजी फ्रेम (Custom PNG)';
     case 'jacket-original':
     default:
-      return 'ब्रेकिंग न्यूज़ वाला (मूल जैकेट)';
+      return 'AI News Maker (मूल जैकेट)';
   }
 }
 
 export function getActiveFooterPng(card: NewsCardData): string | undefined {
+  const assigned = getAssignedCustomHeaderFooter();
+  if (assigned && assigned.active && assigned.footerUrl) {
+    return assigned.footerUrl;
+  }
   const design = card.frameDesign || 'jacket-original';
   if (card.footersByDesign && card.footersByDesign[design] !== undefined) {
     return card.footersByDesign[design];

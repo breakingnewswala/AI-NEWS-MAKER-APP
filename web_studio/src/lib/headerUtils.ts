@@ -1,6 +1,11 @@
 import { NewsCardData, FrameDesign } from '../types';
+import { getAssignedCustomHeaderFooter } from './userPlanManager';
 
 export function getActiveHeaderPng(card: NewsCardData): string | undefined {
+  const assigned = getAssignedCustomHeaderFooter();
+  if (assigned && assigned.active && assigned.headerUrl) {
+    return assigned.headerUrl;
+  }
   const design = card.frameDesign || 'jacket-original';
   if (card.headersByDesign && card.headersByDesign[design] !== undefined) {
     return card.headersByDesign[design];

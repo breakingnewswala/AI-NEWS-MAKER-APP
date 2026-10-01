@@ -1,0 +1,35 @@
+{
+  "project_info": {
+    "project_id": "gen-lang-client-0130460668",
+    "project_number": "83006158623",
+    "firebase_url": "https://gen-lang-client-0130460668.firebaseio.com",
+    "storage_bucket": "gen-lang-client-0130460668.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:83006158623:android:1e9e7771ad619177e8222a",
+        "android_client_info": {
+          "package_name": "com.aistudio.ainewsmaker.dyynbu"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJ0cpKePFrHPGwqk0-O2VbqxYypJ-ckJ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
   Flame,
@@ -34,6 +34,68 @@ import {
 import { NewsFeedPost, INITIAL_CATEGORIES } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
+import { getActiveRssNewsPosts } from '../lib/rssSourceManager';
+
+// Category visual differentiation helper: professional, subtle color coding per category
+export function getCategoryVisualTheme(category?: string, categoryName?: string) {
+  const cat = (category || categoryName || '').toLowerCase();
+
+  if (cat.includes('देश') || cat.includes('nation') || cat.includes('india')) {
+    return {
+      cardBorder: 'border-blue-500/35 hover:border-blue-400/80',
+      badgeBg: 'bg-blue-950/85 text-blue-300 border border-blue-500/40',
+      accentDot: 'bg-blue-400',
+    };
+  }
+  if (cat.includes('राज्य') || cat.includes('state') || cat.includes('regional')) {
+    return {
+      cardBorder: 'border-emerald-500/35 hover:border-emerald-400/80',
+      badgeBg: 'bg-emerald-950/85 text-emerald-300 border border-emerald-500/40',
+      accentDot: 'bg-emerald-400',
+    };
+  }
+  if (cat.includes('अपराध') || cat.includes('crime') || cat.includes('police')) {
+    return {
+      cardBorder: 'border-rose-500/35 hover:border-rose-400/80',
+      badgeBg: 'bg-rose-950/85 text-rose-300 border border-rose-500/40',
+      accentDot: 'bg-rose-400',
+    };
+  }
+  if (cat.includes('राजनीति') || cat.includes('politic') || cat.includes('election')) {
+    return {
+      cardBorder: 'border-purple-500/35 hover:border-purple-400/80',
+      badgeBg: 'bg-purple-950/85 text-purple-300 border border-purple-500/40',
+      accentDot: 'bg-purple-400',
+    };
+  }
+  if (cat.includes('व्यापार') || cat.includes('business') || cat.includes('market') || cat.includes('economy')) {
+    return {
+      cardBorder: 'border-amber-500/35 hover:border-amber-400/80',
+      badgeBg: 'bg-amber-950/85 text-amber-300 border border-amber-500/40',
+      accentDot: 'bg-amber-400',
+    };
+  }
+  if (cat.includes('खेल') || cat.includes('sport') || cat.includes('cricket')) {
+    return {
+      cardBorder: 'border-orange-500/35 hover:border-orange-400/80',
+      badgeBg: 'bg-orange-950/85 text-orange-300 border border-orange-500/40',
+      accentDot: 'bg-orange-400',
+    };
+  }
+  if (cat.includes('मनोरंजन') || cat.includes('entertain') || cat.includes('cinema') || cat.includes('bollywood')) {
+    return {
+      cardBorder: 'border-fuchsia-500/35 hover:border-fuchsia-400/80',
+      badgeBg: 'bg-fuchsia-950/85 text-fuchsia-300 border border-fuchsia-500/40',
+      accentDot: 'bg-fuchsia-400',
+    };
+  }
+  // Default (tech, weather, international, etc.)
+  return {
+    cardBorder: 'border-teal-500/35 hover:border-teal-400/80',
+    badgeBg: 'bg-teal-950/85 text-teal-300 border border-teal-500/40',
+    accentDot: 'bg-teal-400',
+  };
+}
 
 // Strip technical source tags (RSS, Web, RSS Feed, Web Source) universally from Home Feed
 export function cleanViewerHeadline(rawTitle: string): string {
@@ -87,6 +149,24 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
 
+  // Active Admin RSS & Web Link Sources News Integration
+  const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
+
+  useEffect(() => {
+    const handleRssUpdate = () => {
+      setActiveRssPosts(getActiveRssNewsPosts());
+    };
+    window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
+    return () => window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
+  }, []);
+
+  // Merge active RSS/Web posts with database news posts seamlessly
+  const combinedPosts = useMemo(() => {
+    const existingIds = new Set(posts.map((p) => p.id));
+    const newFromRss = activeRssPosts.filter((p) => !existingIds.has(p.id));
+    return [...newFromRss, ...posts];
+  }, [posts, activeRssPosts]);
+
   const toggleSelectNews = (id: string) => {
     setSelectedNewsIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -107,21 +187,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   };
 
-  // Filter posts
-  const filteredPosts = posts.filter((p) => {
+  // Filter posts from combined feed (including active RSS/Web sources)
+  const filteredPosts = combinedPosts.filter((p) => {
     if (selectedCategory === 'all') return true;
     if (selectedCategory === 'breaking') return p.breaking;
     return p.category === selectedCategory || p.categoryName.includes(selectedCategory);
   });
 
-  const breakingPosts = posts.filter((p) => p.breaking).length > 0
-    ? posts.filter((p) => p.breaking)
-    : posts.slice(0, 6);
+  const breakingPosts = combinedPosts.filter((p) => p.breaking).length > 0
+    ? combinedPosts.filter((p) => p.breaking)
+    : combinedPosts.slice(0, 6);
 
   // Identify highlights (exclusive / breaking) for Notification Board Carousel
-  const highlightPosts = posts.filter((p) => p.isExclusive || p.breaking).length > 0
-    ? posts.filter((p) => p.isExclusive || p.breaking).slice(0, 6)
-    : posts.slice(0, 5);
+  const highlightPosts = combinedPosts.filter((p) => p.isExclusive || p.breaking).length > 0
+    ? combinedPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 6)
+    : combinedPosts.slice(0, 5);
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -269,31 +349,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* 2. Top Hero Section with Fast Actions */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800/80 to-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-700/60 shadow-xl">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-400 mb-1 tracking-wider uppercase">
-              <Flame className="w-4 h-4 text-red-500" />
-              डिजिटल न्यूज़ बुलेटिन व लाइव डेस्क
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white">
-              दैनिक लाइव न्यूज़ फ़ीड
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-              सभी राष्ट्रीय, प्रादेशिक और ब्रेकिंग खबरों की सीधी कवरेज • 1-क्लिक में स्टूडियो में ग्राफिक्स बनाएं
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <button
-              onClick={onOpenAddPostModal}
-              className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-sm rounded-xl shadow-lg flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>नई खबर जोड़ें</span>
-            </button>
-          </div>
-        </div>
 
         {/* Admin Bulk Moderation Action Bar (Visible only when Admin selects items) */}
         {canModerate && selectedNewsIds.length > 0 && (
@@ -528,6 +583,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             {filteredPosts.map((post) => {
               const isSelected = selectedNewsIds.includes(post.id);
               const isHighlighted = post.isExclusive;
+              const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
 
               return (
                 <div
@@ -535,7 +591,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${
                     isHighlighted
                       ? 'border-amber-400 ring-2 ring-amber-400/40 shadow-xl shadow-amber-500/10'
-                      : 'border-slate-800 hover:border-slate-700'
+                      : `${catTheme.cardBorder} hover:shadow-lg`
                   }`}
                 >
                   {/* Admin Moderation Bar (Visible strictly to authenticated Admin in Admin Mode) */}
@@ -614,7 +670,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             ब्रेकिंग
                           </span>
                         )}
-                        <span className="px-2.5 py-0.5 bg-slate-900/80 backdrop-blur-sm text-amber-300 text-[11px] font-bold rounded-md">
+                        {/* Category Badge with distinct visual style */}
+                        <span className={`px-2.5 py-0.5 backdrop-blur-sm ${catTheme.badgeBg} text-[11px] font-bold rounded-md flex items-center gap-1`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${catTheme.accentDot}`} />
                           {post.categoryName}
                         </span>
                       </div>

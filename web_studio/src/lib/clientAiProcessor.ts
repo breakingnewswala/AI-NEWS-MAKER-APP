@@ -142,7 +142,7 @@ export function processNewsLocally(
     category = 'मौसम';
   }
 
-  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#breakingnewswala #BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, '')} #BNWTV`;
+  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए हमारे साथ बने रहें।\n\n#BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, '')} #AINewsMaker`;
 
   return {
     headline,

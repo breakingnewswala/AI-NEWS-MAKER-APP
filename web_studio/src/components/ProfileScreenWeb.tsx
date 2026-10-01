@@ -32,6 +32,9 @@ import {
   RefreshCw,
   Ticket,
   Package,
+  AlertCircle,
+  Film,
+  Layers,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
@@ -43,6 +46,7 @@ import {
   isUserAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
+  setAdminTestMode,
   getAdminTestPlanTier,
   setAdminTestPlanTier,
   activateFreeTrial,
@@ -54,6 +58,12 @@ import {
   UserPlanTier,
   UserSubscriptionInfo,
   AdminSystemMode,
+  isChannelProfileLocked,
+  registerOrUpdateUser,
+  submitLogoChangeRequest,
+  getUserLogoChangeRequestStatus,
+  getLogoChangeRequests,
+  checkAccountUniqueness,
 } from '../lib/userPlanManager';
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
@@ -80,9 +90,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   onAddCategory,
   onDeleteCategory,
 }) => {
-  // Tabs: 'profile', 'plans_packages', 'templates', 'dashboard'
+  // Admin check & Channel Profile Lock check
+  const isAdmin = isUserAdmin(currentUser);
+  const [isLockedForUserState, setIsLockedForUserState] = useState(() => !isAdmin && isChannelProfileLocked(currentUser));
+  const isLockedForUser = isLockedForUserState;
+  const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
+    getUserLogoChangeRequestStatus(currentUser?.email || '')
+  );
+
+  useEffect(() => {
+    const handleLogoUpdates = () => {
+      setIsLockedForUserState(!isAdmin && isChannelProfileLocked(currentUser));
+      setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || ''));
+    };
+    window.addEventListener('ai_news_logo_requests_updated', handleLogoUpdates);
+    window.addEventListener('ai_news_channel_profile_unlocked', handleLogoUpdates);
+    window.addEventListener('ai_news_plan_users_changed', handleLogoUpdates);
+    return () => {
+      window.removeEventListener('ai_news_logo_requests_updated', handleLogoUpdates);
+      window.removeEventListener('ai_news_channel_profile_unlocked', handleLogoUpdates);
+      window.removeEventListener('ai_news_plan_users_changed', handleLogoUpdates);
+    };
+  }, [currentUser?.email, isAdmin]);
+
+  // Tabs: 'profile', 'plans_packages', 'templates', 'dashboard' (Admin only gets multi-tab access)
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
-    if (typeof window !== 'undefined') {
+    if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
       if (h.includes('plan') || h.includes('package') || h.includes('promo')) {
         return 'plans_packages';
@@ -98,6 +131,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   });
 
   useEffect(() => {
+    if (!isAdmin) {
+      if (activeTab !== 'profile') setActiveTab('profile');
+      return;
+    }
     const handleOpenRss = () => setActiveTab('dashboard');
     const handleOpenTemplates = () => setActiveTab('templates');
     const handleOpenPlans = () => setActiveTab('plans_packages');
@@ -121,7 +158,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       window.removeEventListener('open_plans_packages', handleOpenPlans);
       window.removeEventListener('hashchange', handleHash);
     };
-  }, []);
+  }, [isAdmin]);
 
   // Subscription & User Tier State
   const [subscription, setSubscription] = useState<UserSubscriptionInfo>(() => getUserSubscription());
@@ -135,10 +172,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [promoRedeemResult, setPromoRedeemResult] = useState<RedeemResult | null>(null);
 
   // Admin Mode & Test Mode state
-  const isAdmin = isUserAdmin(currentUser);
   const [adminSystemMode, setAdminSystemModeState] = useState<AdminSystemMode>(() => getAdminSystemMode());
   const [testPlanTier, setTestPlanTierState] = useState<UserPlanTier>(() => getAdminTestPlanTier());
   const [testModeMsg, setTestModeMsg] = useState<string>('');
+  const testModeEnabled = adminSystemMode === 'test';
+  const setTestModeEnabled = (enabled: boolean) => handleSwitchAdminMode(enabled ? 'test' : 'admin');
 
   // Switch Admin Mode: Admin Mode vs Test Mode
   const handleSwitchAdminMode = (newMode: AdminSystemMode) => {
@@ -270,9 +308,24 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const updated = [newSource, ...rssSources];
     setRssSources(updated);
     localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+
+    // Automatically make available in Home Feed
+    onAddNewPost({
+      title: `🔴 [${newSource.channelName}] लाइव अपडेट: ${newSource.categoryName} पर बड़ी खबर`,
+      summary: `यह समाचार ${newSource.channelName} के वेब/RSS स्रोत (${newSource.url}) से होम फ़ीड में स्वचालित रूप से सक्रिय किया गया है।`,
+      sourceChannel: newSource.channelName,
+      sourceUrl: newSource.url,
+      category: newSource.category,
+      categoryName: newSource.categoryName,
+      publishedTime: 'अभी-अभी (Admin Source)',
+      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
+      breaking: true,
+      isExclusive: false,
+    });
+
     setRssChannelInput('');
     setRssUrlInput('');
-    setRssSuccessMsg('नया RSS / वेब लिंक चैनल सफलतापूर्वक जोड़ा गया!');
+    setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव हो गया!');
     setTimeout(() => setRssSuccessMsg(''), 3500);
   };
 
@@ -338,6 +391,27 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   const [reporterDistrict, setReporterDistrict] = useState<string>(() => currentUser?.district || 'भोपाल / सेंट्रल डेस्क');
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
+
+  // Sync profile when updated externally (e.g. from ChannelOnboardingModal)
+  useEffect(() => {
+    const handleProfileSync = () => {
+      const saved = localStorage.getItem('user_channel_profile');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setChannelProfile(parsed);
+          if (parsed.customHeaderPng !== undefined) setCustomHeaderPng(parsed.customHeaderPng);
+          if (parsed.customFooterPng !== undefined) setCustomFooterPng(parsed.customFooterPng);
+        } catch {}
+      }
+    };
+    window.addEventListener('channel_profile_updated', handleProfileSync);
+    window.addEventListener('storage', handleProfileSync);
+    return () => {
+      window.removeEventListener('channel_profile_updated', handleProfileSync);
+      window.removeEventListener('storage', handleProfileSync);
+    };
+  }, []);
 
   // Custom Header & Custom Footer PNG states (PRO & VIP DESK exclusive)
   const [customHeaderPng, setCustomHeaderPng] = useState<string>(() => {
@@ -557,6 +631,18 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   };
 
   const handleSaveChannelBranding = () => {
+    // Check account uniqueness and restricted brands
+    const uniqCheck = checkAccountUniqueness({
+      username: channelProfile.username,
+      websiteUrl: channelProfile.websiteUrl,
+      channelName: channelProfile.channelNameHi,
+      currentEmail: currentUser?.email,
+    });
+    if (!uniqCheck.valid) {
+      alert(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+      return;
+    }
+
     const isProOrVipUser = subscription.tier === 'professional' || subscription.tier === 'ultra' || isAdmin;
     const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
     const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
@@ -591,6 +677,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       },
     };
     localStorage.setItem('profile_header_footer_json', JSON.stringify(headerFooterConfig));
+
+    // For non-admin users, permanently lock profile & record in admin database
+    if (!isAdmin) {
+      localStorage.setItem('is_channel_profile_locked', 'true');
+      registerOrUpdateUser({
+        name: currentUser?.name || channelProfile.fullName || 'संपादक',
+        email: currentUser?.email || 'user@breakingnewswala.com',
+        channelName: channelProfile.channelNameHi,
+        channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
+        mobile: channelProfile.mobileNumber,
+        isLocked: true,
+      });
+    }
 
     // Dispatch update event for active studio card
     if (typeof window !== 'undefined') {
@@ -695,7 +794,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
             <div>
               <h1 className="text-xl font-black text-white flex items-center gap-2">
-                <span>कंट्रोल पैनल (Control Panel)</span>
+                <span>{isAdmin ? 'एडमिन कंट्रोल पैनल (Admin Control Panel)' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
                 {testModeEnabled && isAdmin && (
                   <span className="px-2 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[10px] font-black rounded-full uppercase flex items-center gap-1">
                     <FlaskConical className="w-3 h-3 text-purple-400" />
@@ -704,7 +803,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )}
               </h1>
               <p className="text-xs text-slate-400">
-                प्रोफाइल, 4-टियर सब्सक्रिप्शन अपग्रेड, चैनल सेटिंग्स व डैशबोर्ड
+                {isAdmin
+                  ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
+                  : 'प्रोफाइल विवरण, 7-Day Free Trial Basic व प्रोमो कोड रिडीम'}
               </p>
             </div>
           </div>
@@ -777,11 +878,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
             {onOpenOnboarding && (
               <button
                 onClick={onOpenOnboarding}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm"
                 title="चैनल लोगो, नाम व ब्रांडिंग विवरण एडिट करें"
               >
                 <Sliders className="w-3.5 h-3.5 text-amber-400" />
@@ -789,13 +890,37 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               </button>
             )}
 
-            <button
-              onClick={onOpenStudio}
-              className="px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold rounded-xl shadow-lg flex items-center gap-2 cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4 text-amber-200" />
-              <span>ग्राफिक स्टूडियो खोलें</span>
-            </button>
+            {/* Primary Mobile Number - Clean & balanced in same profile information area */}
+            <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
+              <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              {subscription.isMobileLocked ? (
+                <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
+                  <span>+91 {subscription.primaryMobile}</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-800 flex items-center gap-0.5">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>स्थायी लॉक</span>
+                  </span>
+                </div>
+              ) : (
+                <form onSubmit={handleSavePrimaryMobile} className="flex items-center gap-1.5">
+                  <span className="text-amber-300 font-medium">प्राइमरी मोबाइल:</span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="10 अंक"
+                    value={mobileInput}
+                    onChange={(e) => setMobileInput(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-24 px-1.5 py-0.5 bg-slate-950 border border-slate-700 rounded text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                  />
+                  <button
+                    type="submit"
+                    className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] cursor-pointer"
+                  >
+                    सेव
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
 
@@ -807,39 +932,41 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
         )}
 
-        {/* 7-Day Free Trial Basic Status Banner */}
-        <div className="bg-gradient-to-r from-amber-500/20 via-red-500/15 to-amber-500/20 border border-amber-500/60 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md shrink-0">
-              🎁
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-black text-white">
-                  7-Day Free Trial Basic {subscription.isTrialActive ? 'सक्रिय है' : 'उपलब्ध है'}
-                </h3>
-                <span className="px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-black rounded-full uppercase">
-                  {subscription.isTrialActive ? `${subscription.daysRemaining} दिन शेष` : '7 दिन फ्री'}
-                </span>
+        {/* 7-Day Free Trial Basic Status Banner - Hidden for Admin */}
+        {!isAdmin && (
+          <div className="bg-gradient-to-r from-amber-500/20 via-red-500/15 to-amber-500/20 border border-amber-500/60 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md shrink-0">
+                🎁
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                सभी 50+ रेडी फ्रेम्स, AI हेडलाइन्स और न्यूज़ ग्राफिक्स का निःशुल्क लाभ उठाएं।
-              </p>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-black text-white">
+                    7-Day Free Trial Basic {subscription.isTrialActive ? 'सक्रिय है' : 'उपलब्ध है'}
+                  </h3>
+                  <span className="px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-black rounded-full uppercase">
+                    {subscription.isTrialActive ? `${subscription.daysRemaining} दिन शेष` : '7 दिन फ्री'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  सभी 50+ रेडी फ्रेम्स, AI हेडलाइन्स और न्यूज़ ग्राफिक्स का निःशुल्क लाभ उठाएं।
+                </p>
+              </div>
             </div>
+            <button
+              onClick={() => {
+                activateFreeTrial();
+                setSubscription(getUserSubscription());
+                setPlanSuccessMsg('🎉 आपका 7-Day Free Trial Basic सफलतापूर्वक सक्रिय हो गया है!');
+                setTimeout(() => setPlanSuccessMsg(''), 5000);
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4 text-slate-950" />
+              <span>7-Day Free Trial Basic के साथ Activate करें</span>
+            </button>
           </div>
-          <button
-            onClick={() => {
-              activateFreeTrial();
-              setSubscription(getUserSubscription());
-              setPlanSuccessMsg('🎉 आपका 7-Day Free Trial Basic सफलतापूर्वक सक्रिय हो गया है!');
-              setTimeout(() => setPlanSuccessMsg(''), 5000);
-            }}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
-          >
-            <Sparkles className="w-4 h-4 text-slate-950" />
-            <span>7-Day Free Trial Basic के साथ Activate करें</span>
-          </button>
-        </div>
+        )}
 
         {/* ========================================================================= */}
         {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
@@ -949,21 +1076,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
         )}
 
-        {/* TABS: 1. प्रोफाइल व रिडीम, 2. प्लान्स व पैकेज (Admin), 3. टेम्पलेट मैनेजर (Admin), 4. डैशबोर्ड (Admin) */}
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`shrink-0 px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'profile'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg'
-                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            <span>1. प्रोफाइल व रिडीम</span>
-          </button>
+        {/* TABS: Only visible to Admin (Normal users only have Profile & Redeem view) */}
+        {isAdmin && (
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto no-scrollbar">
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`shrink-0 px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'profile'
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg'
+                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              <span>1. प्रोफाइल व रिडीम</span>
+            </button>
 
-          {isAdmin && (
             <button
               onClick={() => setActiveTab('plans_packages')}
               className={`shrink-0 px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer ${
@@ -973,14 +1100,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               }`}
             >
               <Package className="w-4 h-4" />
-              <span>2. प्लान्स व प्रोमो कोड</span>
+              <span>2. प्लान्स व पैकेज (यूज़र लिस्ट)</span>
               <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-black rounded uppercase">
                 Admin
               </span>
             </button>
-          )}
 
-          {isAdmin && (
             <button
               onClick={() => setActiveTab('templates')}
               className={`shrink-0 px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer ${
@@ -995,25 +1120,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 Admin
               </span>
             </button>
-          )}
 
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`shrink-0 px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'dashboard'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg'
-                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-            }`}
-          >
-            <FolderTree className="w-4 h-4" />
-            <span>{isAdmin ? '4. डैशबोर्ड (RSS व लिंक्स)' : '2. डैशबोर्ड'}</span>
-            {isAdmin && (
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`shrink-0 px-5 sm:px-6 py-3 rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg'
+                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+              }`}
+            >
+              <FolderTree className="w-4 h-4" />
+              <span>4. डैशबोर्ड (RSS व लिंक्स)</span>
               <span className="px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-black rounded uppercase">
                 Admin
               </span>
-            )}
-          </button>
-        </div>
+            </button>
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* ========================================================================= */}
@@ -1021,146 +1144,67 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         {/* ========================================================================= */}
         {activeTab === 'profile' && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            {/* PROMO CODE REDEMPTION BOX (USER & ADMIN - SINGLE-USE ACTIVATION) */}
-            <div className="bg-gradient-to-r from-amber-500/15 via-slate-900 to-amber-500/15 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
-                    <Ticket className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-white flex items-center gap-2">
-                      <span>🎁 प्रोमो कोड रिडीम करें (Redeem Promo Code)</span>
-                      <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded uppercase">
-                        Instant Activation
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-300">
-                      यदि आपने ऑफ़लाइन/UPI पेमेंट किया है या आपके पास प्रोमो कोड है, तो यहाँ दर्ज करके तुरंत अपना प्लान एक्टिवेट करें।
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Input Form */}
-              <form onSubmit={handleRedeemPromoCode} className="flex flex-col sm:flex-row gap-2.5 pt-1">
-                <input
-                  type="text"
-                  value={userPromoInput}
-                  onChange={(e) => setUserPromoInput(e.target.value.toUpperCase())}
-                  placeholder="उदा. PRO2026 या PRO-RIT2026-001"
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm font-mono font-black text-amber-300 uppercase tracking-widest focus:outline-hidden focus:border-amber-500 shadow-inner"
-                />
-                <button
-                  type="submit"
-                  disabled={isRedeemingPromo || !userPromoInput.trim()}
-                  className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>{isRedeemingPromo ? 'वेरीफाई हो रहा है...' : 'प्रोमो कोड अप्लाई करें'}</span>
-                </button>
-              </form>
-
-              {promoRedeemResult && (
-                <div
-                  className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
-                    promoRedeemResult.success
-                      ? 'bg-emerald-950/90 border border-emerald-500 text-emerald-300'
-                      : 'bg-red-950/90 border border-red-500 text-red-300'
-                  }`}
-                >
-                  {promoRedeemResult.success ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                  )}
-                  <span>{promoRedeemResult.message}</span>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 1: PRIMARY MOBILE NUMBER (Permanent & Unchangeable) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
-                    <Phone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white">
-                      प्राइमरी मोबाइल नंबर (Permanent Mobile Number)
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      सुरक्षा व अकाउंट वेरिफिकेशन हेतु एक बार ही लिया जाएगा (परिवर्तन की अनुमति नहीं है)
-                    </p>
+            {/* PROMO CODE REDEMPTION BOX (USER ONLY - HIDDEN IN ADMIN MODE) */}
+            {!isAdmin && (
+              <div className="bg-gradient-to-r from-amber-500/15 via-slate-900 to-amber-500/15 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
+                      <Ticket className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-white flex items-center gap-2">
+                        <span>🎁 प्रोमो कोड रिडीम करें (Redeem Promo Code)</span>
+                        <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded uppercase">
+                          Instant Activation
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-300">
+                        यदि आपने ऑफ़लाइन/UPI पेमेंट किया है या आपके पास प्रोमो कोड है, तो यहाँ दर्ज करके तुरंत अपना प्लान एक्टिवेट करें।
+                      </p>
+                    </div>
                   </div>
                 </div>
-                {subscription.isMobileLocked ? (
-                  <span className="px-3 py-1 bg-emerald-950/80 border border-emerald-600 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>स्थायी लॉक है</span>
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 bg-amber-950/80 border border-amber-600 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>नंबर दर्ज करें</span>
-                  </span>
+
+                {/* Input Form */}
+                <form onSubmit={handleRedeemPromoCode} className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                  <input
+                    type="text"
+                    value={userPromoInput}
+                    onChange={(e) => setUserPromoInput(e.target.value.toUpperCase())}
+                    placeholder="उदा. PRO2026 या PRO-RIT2026-001"
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm font-mono font-black text-amber-300 uppercase tracking-widest focus:outline-hidden focus:border-amber-500 shadow-inner"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isRedeemingPromo || !userPromoInput.trim()}
+                    className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>{isRedeemingPromo ? 'वेरीफाई हो रहा है...' : 'प्रोमो कोड अप्लाई करें'}</span>
+                  </button>
+                </form>
+
+                {promoRedeemResult && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                      promoRedeemResult.success
+                        ? 'bg-emerald-950/90 border border-emerald-500 text-emerald-300'
+                        : 'bg-red-950/90 border border-red-500 text-red-300'
+                    }`}
+                  >
+                    {promoRedeemResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    )}
+                    <span>{promoRedeemResult.message}</span>
+                  </div>
                 )}
               </div>
+            )}
 
-              {subscription.isMobileLocked ? (
-                <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl">
-                      <Lock className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400">आपका पंजीकृत प्राइमरी नंबर:</div>
-                      <div className="text-base font-black text-white font-mono tracking-wider">
-                        +91 {subscription.primaryMobile}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-400 bg-slate-900 px-3 py-2 rounded-xl border border-slate-800 text-center sm:text-right">
-                    🔒 यह नंबर लॉक है और सुरक्षा कारणों से बदला नहीं जा सकता।
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleSavePrimaryMobile} className="space-y-3">
-                  <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-xs text-amber-200 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <b>महत्वपूर्ण निर्देश:</b> यह आपका प्राथमिक संपर्क नंबर होगा। प्रोफाइल में यह नंबर केवल एक बार दर्ज किया जा सकेगा और भविष्य में इसे <b>बदला नहीं जा सकेगा</b>।
-                    </div>
-                  </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">+91</span>
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        required
-                        value={mobileInput}
-                        onChange={(e) => setMobileInput(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="10 अंकों का मोबाइल नंबर दर्ज करें"
-                        className="w-full pl-12 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm font-mono focus:border-amber-400 focus:outline-hidden"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition"
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>सेव व स्थायी रूप से लॉक करें</span>
-                    </button>
-                  </div>
-                  {mobileError && (
-                    <div className="text-xs text-red-400 font-semibold">{mobileError}</div>
-                  )}
-                </form>
-              )}
-            </div>
 
             {/* SECTION 2: 4-TIER PLANS & UPGRADE (Basic, Advanced, Professional, Ultra) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
@@ -1191,41 +1235,43 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Watermark Status Alert Banner */}
-              {subscription.tier === 'basic' ? (
-                <div className="p-4 bg-amber-950/60 border border-amber-600/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
-                      <AlertTriangle className="w-5 h-5" />
+              {/* Watermark Status Alert Banner (User Only) */}
+              {!isAdmin && (
+                subscription.tier === 'basic' ? (
+                  <div className="p-4 bg-amber-950/60 border border-amber-600/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-amber-300 uppercase">
+                          बेसिक यूजर: 7 दिन का फ्री ट्रायल सक्रिय ({subscription.daysRemaining} दिन शेष)
+                        </div>
+                        <div className="text-xs text-slate-300 mt-0.5">
+                          बेसिक प्लान में आपके द्वारा बनाए गए सभी ग्राफिक पर <b>"AI News Maker App" वॉटरमार्क</b> रहेगा। वॉटरमार्क हटाने व 1080p Full HD के लिए कृपया नीचे दिए गए किसी भी प्लान में अपग्रेड करें।
+                        </div>
+                      </div>
                     </div>
+                    <button
+                      onClick={() => handleUpgradePlan('advanced')}
+                      className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl shrink-0 shadow-lg cursor-pointer transition"
+                    >
+                      वॉटरमार्क हटाएं (अपग्रेड)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-emerald-950/60 border border-emerald-600/70 rounded-2xl flex items-center gap-3">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
                     <div>
-                      <div className="text-xs font-black text-amber-300 uppercase">
-                        बेसिक यूजर: 7 दिन का फ्री ट्रायल सक्रिय ({subscription.daysRemaining} दिन शेष)
+                      <div className="text-xs font-black text-emerald-300 uppercase">
+                        ✅ प्रीमियम सक्रिय ({activePlanDetail.nameHi})
                       </div>
-                      <div className="text-xs text-slate-300 mt-0.5">
-                        बेसिक प्लान में आपके द्वारा बनाए गए सभी ग्राफिक पर <b>"AI News Maker App" वॉटरमार्क</b> रहेगा। वॉटरमार्क हटाने व 1080p Full HD के लिए कृपया नीचे दिए गए किसी भी प्लान में अपग्रेड करें।
+                      <div className="text-xs text-emerald-100/90 mt-0.5">
+                        आपके सभी कार्ड्स और वीडियो <b>100% वॉटरमार्क रहित (No Watermark)</b> व अल्ट्रा-शार्प क्वालिटी में रेंडर हो रहे हैं।
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleUpgradePlan('advanced')}
-                    className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl shrink-0 shadow-lg cursor-pointer transition"
-                  >
-                    वॉटरमार्क हटाएं (अपग्रेड)
-                  </button>
-                </div>
-              ) : (
-                <div className="p-4 bg-emerald-950/60 border border-emerald-600/70 rounded-2xl flex items-center gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
-                  <div>
-                    <div className="text-xs font-black text-emerald-300 uppercase">
-                      ✅ प्रीमियम सक्रिय ({activePlanDetail.nameHi})
-                    </div>
-                    <div className="text-xs text-emerald-100/90 mt-0.5">
-                      आपके सभी कार्ड्स और वीडियो <b>100% वॉटरमार्क रहित (No Watermark)</b> व अल्ट्रा-शार्प क्वालिटी में रेंडर हो रहे हैं।
-                    </div>
-                  </div>
-                </div>
+                )
               )}
 
               {/* 4 Plan Cards Grid */}
@@ -1289,7 +1335,17 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
                       {/* Plan Action Button */}
                       <div className="pt-2">
-                        {isCurrent ? (
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('plans_packages')}
+                            className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/40 flex items-center justify-center gap-1.5 cursor-pointer transition"
+                            title="एडमिन मोड: प्लान सेटिंग्स प्रबंधित करें"
+                          >
+                            <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                            <span>⚙️ प्लान सेटिंग्स (Admin Managed)</span>
+                          </button>
+                        ) : isCurrent ? (
                           <div className="w-full py-2 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
                             ✓ वर्तमान सक्रिय प्लान
                           </div>
@@ -1318,7 +1374,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               </div>
             </div>
 
-            {/* SECTION 3: CHANNEL & LOGO BRANDING (Mapped to Graphic Studio Footer) */}
+            {/* SECTION: CHANNEL & LOGO BRANDING */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1355,138 +1411,224 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                 )}
 
-                {/* 2 Distinct Upload Options: PNG CHANNEL LOGO & GIF CHANNEL LOGO */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {/* OPTION 1: PNG CHANNEL LOGO */}
-                  <div className={`p-3.5 rounded-xl border transition-all ${
-                    channelProfile.channelLogoType === 'png'
-                      ? 'bg-amber-500/10 border-amber-400/80 shadow-md ring-1 ring-amber-400/40'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                        <span>📦</span>
-                        <span>PNG CHANNEL LOGO</span>
+                {/* If user profile is locked, show locked display card. Otherwise, show upload options */}
+                {isLockedForUser ? (
+                  <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border-2 border-amber-500/50 rounded-xl p-4 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-500 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Lock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                            <span>चैनल लोगो (स्थायी रूप से सुरक्षित)</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 font-bold border border-emerald-700">
+                              One-Time Set ✓
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-slate-400">
+                            सुरक्षा व कॉपीराइट नियमों के तहत चैनल लोगो केवल एक बार सेट किया जा सकता है।
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-slate-800 text-amber-300 font-mono border border-slate-700">
+                        🔒 One-Time Locked
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleSwitchLogoType('png')}
-                        className={`text-[10px] font-black px-2 py-0.5 rounded transition ${
-                          channelProfile.channelLogoType === 'png'
-                            ? 'bg-amber-400 text-black font-extrabold'
-                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        }`}
-                      >
-                        {channelProfile.channelLogoType === 'png' ? '✓ सक्रिय' : 'चुनें'}
-                      </button>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                    <div className="flex items-center gap-3.5 p-3 bg-slate-950 rounded-xl border border-slate-800">
+                      <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
                         <img
-                          src={channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
-                          alt="PNG Logo"
+                          src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
+                          alt="Channel Logo"
                           className="w-full h-full object-contain"
                         />
                       </div>
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>PNG लोगो अपलोड</span>
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/jpg,image/webp"
-                            onChange={handlePngLogoUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-[10px] text-slate-400">
-                          पारदर्शी / स्टैंडर्ड चैनल लोगो
+                      <div className="space-y-1">
+                        <div className="text-xs font-bold text-white flex items-center gap-2">
+                          <span>{channelProfile.channelNameHi || 'आपका चैनल'}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono">
+                            {channelProfile.channelLogoType === 'gif' ? '🎬 GIF' : '📦 PNG'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          {channelProfile.channelNameEn || 'AI News Maker'}
+                        </div>
+                        <p className="text-[10px] text-amber-200/80">
+                          लोगो में बदलाव कराने हेतु एडमिन से अनुरोध करें।
                         </p>
+
+                        <div className="pt-2 flex items-center gap-2 flex-wrap">
+                          {logoReqStatus === 'pending' ? (
+                            <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                              <span>लोगो बदलने का अनुरोध एडमिन के पास लंबित है</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const reason = window.prompt(
+                                  'लोगो बदलने का कारण लिखें (यह अनुरोध एडमिन को भेजा जाएगा):',
+                                  'नया आधिकारिक चैनल लोगो अपडेट करना है'
+                                );
+                                if (reason !== null) {
+                                  submitLogoChangeRequest(
+                                    currentUser?.email || '',
+                                    channelProfile.channelNameHi || '',
+                                    channelProfile.channelLogoUrl,
+                                    reason
+                                  );
+                                  setLogoReqStatus('pending');
+                                  alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा स्वीकृति मिलते ही आप नया लोगो अपलोड कर सकेंगे।');
+                                }
+                              }}
+                              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              <span>लोगो बदलने के लिए एडमिन से अनुरोध करें</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <>
+                    {/* 2 Distinct Upload Options: PNG CHANNEL LOGO & GIF CHANNEL LOGO */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {/* OPTION 1: PNG CHANNEL LOGO */}
+                      <div className={`p-3.5 rounded-xl border transition-all ${
+                        channelProfile.channelLogoType === 'png'
+                          ? 'bg-amber-500/10 border-amber-400/80 shadow-md ring-1 ring-amber-400/40'
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                            <span>📦</span>
+                            <span>PNG CHANNEL LOGO</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchLogoType('png')}
+                            className={`text-[10px] font-black px-2 py-0.5 rounded transition ${
+                              channelProfile.channelLogoType === 'png'
+                                ? 'bg-amber-400 text-black font-extrabold'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            {channelProfile.channelLogoType === 'png' ? '✓ सक्रिय' : 'चुनें'}
+                          </button>
+                        </div>
 
-                  {/* OPTION 2: GIF CHANNEL LOGO */}
-                  <div className={`p-3.5 rounded-xl border transition-all ${
-                    channelProfile.channelLogoType === 'gif'
-                      ? 'bg-red-500/10 border-red-500/80 shadow-md ring-1 ring-red-500/40'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-red-300 flex items-center gap-1">
-                        <span>🎬</span>
-                        <span>GIF CHANNEL LOGO</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleSwitchLogoType('gif')}
-                        className={`text-[10px] font-black px-2 py-0.5 rounded transition ${
-                          channelProfile.channelLogoType === 'gif'
-                            ? 'bg-red-500 text-white font-extrabold'
-                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        }`}
-                      >
-                        {channelProfile.channelLogoType === 'gif' ? '✓ सक्रिय' : 'चुनें'}
-                      </button>
+                        <div className="flex items-center gap-3">
+                          <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                            <img
+                              src={channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
+                              alt="PNG Logo"
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>PNG लोगो अपलोड</span>
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/jpg,image/webp"
+                                onChange={handlePngLogoUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <p className="text-[10px] text-slate-400">
+                              पारदर्शी / स्टैंडर्ड चैनल लोगो
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* OPTION 2: GIF CHANNEL LOGO */}
+                      <div className={`p-3.5 rounded-xl border transition-all ${
+                        channelProfile.channelLogoType === 'gif'
+                          ? 'bg-red-500/10 border-red-500/80 shadow-md ring-1 ring-red-500/40'
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-red-300 flex items-center gap-1">
+                            <span>🎬</span>
+                            <span>GIF CHANNEL LOGO</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchLogoType('gif')}
+                            className={`text-[10px] font-black px-2 py-0.5 rounded transition ${
+                              channelProfile.channelLogoType === 'gif'
+                                ? 'bg-red-500 text-white font-extrabold'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            {channelProfile.channelLogoType === 'gif' ? '✓ सक्रिय' : 'चुनें'}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                            {channelProfile.channelLogoGifUrl ? (
+                              <img
+                                src={channelProfile.channelLogoGifUrl}
+                                alt="GIF Logo"
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <Film className="w-6 h-6 text-slate-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>GIF लोगो अपलोड</span>
+                              <input
+                                type="file"
+                                accept="image/gif"
+                                onChange={handleGifLogoUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <p className="text-[10px] text-slate-400">
+                              एनिमेटेड घूमने वाला लाइव लोगो
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                        {channelProfile.channelLogoGifUrl ? (
-                          <img
-                            src={channelProfile.channelLogoGifUrl}
-                            alt="GIF Logo"
-                            className="w-full h-full object-contain"
-                          />
-                        ) : (
-                          <Film className="w-6 h-6 text-slate-600" />
-                        )}
+                    {/* Admin Logo Management Tools */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsJpgModalOpen(true)}
+                          className="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+                          title="JPG लोगो से बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                          <span>JPG को PNG में बदलें</span>
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>GIF लोगो अपलोड</span>
-                          <input
-                            type="file"
-                            accept="image/gif"
-                            onChange={handleGifLogoUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-[10px] text-slate-400">
-                          एनिमेटेड घूमने वाला लाइव लोगो
-                        </p>
-                      </div>
+
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={handleAdminResetLogo}
+                          className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+                          title="लोगो को मूल डिफ़ॉल्ट पर रीसेट करें"
+                        >
+                          <span>🔄 Logo Upload Reset</span>
+                        </button>
+                      )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Admin Logo Management Tools */}
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsJpgModalOpen(true)}
-                      className="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                      title="JPG लोगो से बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                      <span>JPG को PNG में बदलें</span>
-                    </button>
-                  </div>
-
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={handleAdminResetLogo}
-                      className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                      title="लोगो को मूल डिफ़ॉल्ट पर रीसेट करें"
-                    >
-                      <span>🔄 Logo Upload Reset</span>
-                    </button>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
 
               {/* JPG to Transparent PNG Modal */}
@@ -1580,32 +1722,56 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               {/* Channel Names */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    चैनल का नाम (हिन्दी में) *
+                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
+                    <span>चैनल का नाम (हिन्दी में) *</span>
+                    {isLockedForUser && (
+                      <span className="text-amber-400 text-[10px] font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        <span>स्थायी लॉक</span>
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={channelProfile.channelNameHi}
+                    readOnly={isLockedForUser}
                     onChange={(e) =>
+                      !isLockedForUser &&
                       setChannelProfile((p) => ({ ...p, channelNameHi: e.target.value }))
                     }
                     placeholder="AI News Maker App"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-bold"
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold ${
+                      isLockedForUser
+                        ? 'bg-slate-900/60 border border-slate-800 text-slate-300 cursor-not-allowed select-none'
+                        : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    चैनल का नाम (English में) *
+                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
+                    <span>चैनल का नाम (English में) *</span>
+                    {isLockedForUser && (
+                      <span className="text-amber-400 text-[10px] font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        <span>स्थायी लॉक</span>
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={channelProfile.channelNameEn}
+                    readOnly={isLockedForUser}
                     onChange={(e) =>
+                      !isLockedForUser &&
                       setChannelProfile((p) => ({ ...p, channelNameEn: e.target.value }))
                     }
                     placeholder="AI News Maker"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-bold"
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold ${
+                      isLockedForUser
+                        ? 'bg-slate-900/60 border border-slate-800 text-slate-300 cursor-not-allowed select-none'
+                        : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                    }`}
                   />
                 </div>
               </div>
@@ -1626,20 +1792,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    सोशल यूज़रनेम (@username)
+                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
+                    <span>सोशल यूज़रनेम (@username)</span>
+                    {isLockedForUser && (
+                      <span className="text-amber-400 text-[10px] font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        <span>स्थायी लॉक</span>
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={channelProfile.username}
+                    readOnly={isLockedForUser}
                     onChange={(e) =>
+                      !isLockedForUser &&
                       setChannelProfile((p) => ({
                         ...p,
                         username: e.target.value.replace(/[^a-zA-Z0-9._]/g, ''),
                       }))
                     }
                     placeholder="ainewsmaker"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-mono ${
+                      isLockedForUser
+                        ? 'bg-slate-900/60 border border-slate-800 text-slate-300 cursor-not-allowed select-none'
+                        : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                    }`}
                   />
                 </div>
               </div>
@@ -1895,32 +2073,87 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                 </div>
               ) : (
-                /* Locked for BASIC and ADVANCED */
-                <div className="p-5 bg-red-950/30 border-2 border-red-500/40 rounded-xl flex items-start gap-3.5">
-                  <div className="p-2.5 bg-red-500/20 text-red-400 rounded-xl shrink-0">
-                    <Lock className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <h4 className="text-sm font-black text-red-400">
-                      🔒 कस्टम हेडर व फुटर अपलोड केवल PRO और VIP DESK में उपलब्ध है
-                    </h4>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      आपके वर्तमान प्लान (<strong>{PLAN_KEY_MAP[subscription.tier]}</strong>) में कस्टम हेडर व फुटर अपलोड विकल्प उपलब्ध नहीं है। अपना खुद का हेडर व फुटर लगाने के लिए कृपया <strong>PRO</strong> या <strong>VIP DESK</strong> प्लान में अपग्रेड करें।
-                    </p>
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const plansSec = document.getElementById('plans-upgrade-grid');
-                          if (plansSec) {
-                            plansSec.scrollIntoView({ behavior: 'smooth' });
-                          }
-                        }}
-                        className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-red-600 text-slate-950 font-black text-xs rounded-lg shadow cursor-pointer transition hover:opacity-95"
-                      >
-                        ⚡ PRO / VIP DESK में अपग्रेड करें
-                      </button>
+                /* Locked for BASIC and ADVANCE - Informational Section (View benefits only, no edit/upload/activate) */
+                <div className="p-5 bg-gradient-to-br from-slate-900 via-slate-900/95 to-purple-950/40 border-2 border-purple-500/40 rounded-2xl space-y-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="p-2.5 bg-purple-500/20 text-purple-300 rounded-xl shrink-0">
+                      <Lock className="w-6 h-6" />
                     </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-purple-300">
+                          Custom Header/Footer क्या है?
+                        </h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/80 text-purple-200 border border-purple-600 font-bold">
+                          PRO व VIP DESK हेतु विशेष सुविधा
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        कस्टम हेडर व फुटर आपके न्यूज़ चैनल की एक मुकम्मल, प्रीमियम विजुअल पहचान है जो आपके हर ग्राफिक और वीडियो कार्ड पर डिफ़ॉल्ट ब्रांडिंग की जगह स्वतः लग जाती है।
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Benefits of Custom Header / Footer */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-300 pt-1">
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <span>✨</span>
+                        <span>कस्टम हेडर (Header PNG):</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        कार्ड के शीर्ष पर आपका कस्टमाइज़्ड लोगो, चैनल का आधिकारिक नाम और स्पेशल ग्राफिक स्ट्रिप बिना किसी डिफ़ॉल्ट टेक्स्ट के प्रदर्शित होती है।
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+                        <span>🏷️</span>
+                        <span>कस्टम फुटर (Footer PNG):</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        निचली पट्टी में आपके सोशल मीडिया हैंडल्स, वेबसाइट व कॉन्टैक्ट का मुकम्मल डिज़ाइन किया हुआ आर्टवर्क स्वतः लग जाता है।
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <div className="font-bold text-sky-300 flex items-center gap-1.5">
+                        <span>⚡</span>
+                        <span>ऑटोमैटिक 1-क्लिक एप्लीकेशन:</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        एक बार सेट या असाइन होने पर स्टूडियो के सभी उपलब्ध पैकेज फ्रेम्स में यह स्वतः लागू रहता है।
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                      <div className="font-bold text-red-400 flex items-center gap-1.5">
+                        <span>🔒</span>
+                        <span>सेटिंग लॉक्ड (Locked Access):</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        वर्तमान में आपके {PLAN_KEY_MAP[subscription.tier]} प्लान में यह लॉक है। इसे सक्रिय करने हेतु कृपया PRO या VIP DESK में अपग्रेड करें।
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between flex-wrap gap-2 border-t border-slate-800/80">
+                    <span className="text-[11px] text-slate-400">
+                      * बेसिक व एडवांस यूज़र्स इसे एडिट, अपलोड या एक्टिवेट नहीं कर सकते।
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const plansSec = document.getElementById('plans-upgrade-grid');
+                        if (plansSec) {
+                          plansSec.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>PRO / VIP DESK में अपग्रेड करें</span>
+                    </button>
                   </div>
                 </div>
               )}

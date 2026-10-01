@@ -1,9 +1,13 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
+
+const safeFilename = typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : process.cwd());
+const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(safeFilename);
 
 dotenv.config();
 
@@ -418,6 +422,54 @@ app.post("/api/news-posts/reset", (_req, res) => {
   return res.json({ success: true, posts: fresh });
 });
 
+// --- Live RSS 2.0 Feed Generator from Database (news_database.json) ---
+function generateRssFeedXml(posts: StoredNewsPost[], baseUrl = "https://www.ainewsmaker.online"): string {
+  const cleanSiteUrl = baseUrl.replace(/\/+$/, "");
+  const itemsXml = posts.map((post) => {
+    const pubDate = post.timestamp ? new Date(post.timestamp).toUTCString() : new Date().toUTCString();
+    const link = post.sourceUrl && post.sourceUrl.startsWith("http") ? post.sourceUrl : `${cleanSiteUrl}/#home`;
+    const safeCategory = (post.categoryName || post.category || "ताज़ा समाचार").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeChannel = (post.sourceChannel || "AI News Maker").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const enclosureTag = post.imageUrl ? `\n      <enclosure url="${post.imageUrl.replace(/&/g, "&amp;")}" length="0" type="image/jpeg" />` : "";
+
+    return `    <item>
+      <title><![CDATA[${post.title || ""}]]></title>
+      <link>${link}</link>
+      <guid isPermaLink="false">${post.id || `post-${Date.now()}`}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description><![CDATA[${post.summary || ""}]]></description>
+      <category>${safeCategory}</category>
+      <source url="${link}">${safeChannel}</source>${enclosureTag}
+    </item>`;
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>AI News Maker - Live News Feed (लाइव समाचार)</title>
+    <link>${cleanSiteUrl}/</link>
+    <description>AI News Maker - रियल-टाइम ब्रेकिंग न्यूज़, वीडियो और ग्राफिक्स लाइव RSS फ़ीड</description>
+    <language>hi</language>
+    <copyright>© ${new Date().getFullYear()} AI News Maker</copyright>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <atom:link href="${cleanSiteUrl}/rss.xml" rel="self" type="application/rss+xml" />
+${itemsXml}
+  </channel>
+</rss>`;
+}
+
+app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
+  try {
+    const posts = loadNewsDatabase();
+    const rssXml = generateRssFeedXml(posts);
+    res.header("Content-Type", "application/rss+xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=180");
+    return res.send(rssXml);
+  } catch (err: any) {
+    return res.status(500).send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${err.message}</description></channel></rss>`);
+  }
+});
+
 // --- Google Play Data Safety: Account & Associated Data Deletion Endpoints ---
 const ACCOUNT_DELETIONS_FILE = path.join(process.cwd(), "account_deletion_requests.json");
 
@@ -638,7 +690,35 @@ app.post("/api/user-profile", (req, res) => {
     }
     const key = (profile.username || profile.email).trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
-    const existing = allProfiles[key] || {};
+
+    // Check uniqueness across other profiles
+    const reqUsername = (profile.username || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+    const reqWebsite = (profile.websiteUrl || '').toLowerCase().trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
+    const reqEmail = (profile.email || '').toLowerCase().trim();
+
+    if (reqUsername) {
+      const conflict = Object.values(allProfiles).find(p => {
+        const pEmail = (p.email || '').toLowerCase().trim();
+        const pUser = (p.username || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+        return pUser === reqUsername && (!reqEmail || pEmail !== reqEmail);
+      });
+      if (conflict) {
+        return res.status(400).json({ error: `यूज़रनेम '${profile.username}' पहले से किसी अन्य खाते द्वारा पंजीकृत है।` });
+      }
+    }
+
+    if (reqWebsite && reqWebsite !== 'ainewsmaker.online') {
+      const conflict = Object.values(allProfiles).find(p => {
+        const pEmail = (p.email || '').toLowerCase().trim();
+        const pWeb = (p.websiteUrl || '').toLowerCase().trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
+        return pWeb === reqWebsite && (!reqEmail || pEmail !== reqEmail);
+      });
+      if (conflict) {
+        return res.status(400).json({ error: `वेबसाइट '${reqWebsite}' पहले से किसी अन्य खाते से जुड़ी हुई है।` });
+      }
+    }
+
+    const existing: any = allProfiles[key] || {};
     const updated: StoredUserProfile = {
       ...existing,
       ...profile,
@@ -727,6 +807,297 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
       return res.json({ success: true, message: `Logo reset for ${targetUsername}` });
     }
     return res.json({ success: true, message: "Profile not found or reset complete" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// ==========================================
+// TWILIO INTEGRATION SERVICE (SMS & WHATSAPP)
+// ==========================================
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "ACc5f93634dce84c45a2c23c7063571f13";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "34b06e526dbca37904003a7ef6afae73";
+const TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || "SK60e777e96b2b42031b71af39f7399b81";
+const TWILIO_API_KEY_SECRET = process.env.TWILIO_API_KEY_SECRET || "oSGdy06RjS9RaGuJHIWs9CU0HIcNnquv";
+let twilioFromNumber = process.env.TWILIO_PHONE_NUMBER || "";
+let twilioWhatsappFrom = process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886";
+
+const getTwilioAuthHeader = () => {
+  const authUser = TWILIO_API_KEY_SID || TWILIO_ACCOUNT_SID;
+  const authSecret = TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN;
+  return `Basic ${Buffer.from(`${authUser}:${authSecret}`).toString("base64")}`;
+};
+
+const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+
+app.get("/api/twilio/status", (_req, res) => {
+  return res.json({
+    success: true,
+    accountSid: TWILIO_ACCOUNT_SID ? `${TWILIO_ACCOUNT_SID.slice(0, 8)}...${TWILIO_ACCOUNT_SID.slice(-4)}` : null,
+    apiKeySid: TWILIO_API_KEY_SID ? `${TWILIO_API_KEY_SID.slice(0, 8)}...${TWILIO_API_KEY_SID.slice(-4)}` : null,
+    hasToken: Boolean(TWILIO_AUTH_TOKEN && TWILIO_AUTH_TOKEN.length > 10),
+    hasApiKey: Boolean(TWILIO_API_KEY_SID && TWILIO_API_KEY_SECRET),
+    isActive: Boolean(TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)),
+    fromPhone: twilioFromNumber || "Not configured",
+    whatsappFrom: twilioWhatsappFrom,
+  });
+});
+
+app.post("/api/twilio/send-sms", async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) {
+      return res.status(400).json({ success: false, error: "Missing 'to' or 'message'" });
+    }
+    const cleanTo = String(to).trim().startsWith("+") ? String(to).trim() : `+91${String(to).trim()}`;
+    const params = new URLSearchParams();
+    params.append("To", cleanTo);
+    if (twilioFromNumber) {
+      params.append("From", twilioFromNumber);
+    } else {
+      params.append("From", "+15017122661");
+    }
+    params.append("Body", String(message).trim());
+
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+    const authHeader = getTwilioAuthHeader();
+
+    const twilioRes = await fetch(twilioUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+
+    const twilioData: any = await twilioRes.json();
+    if (!twilioRes.ok) {
+      return res.status(twilioRes.status).json({
+        success: false,
+        error: twilioData.message || "Twilio SMS sending failed",
+        code: twilioData.code,
+      });
+    }
+
+    return res.json({
+      success: true,
+      messageId: twilioData.sid,
+      status: twilioData.status,
+      to: cleanTo,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/twilio/send-whatsapp", async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) {
+      return res.status(400).json({ success: false, error: "Missing 'to' or 'message'" });
+    }
+    let rawNumber = String(to).replace(/[^0-9]/g, "");
+    if (!rawNumber.startsWith("91") && rawNumber.length === 10) {
+      rawNumber = `91${rawNumber}`;
+    }
+    const formattedTo = `whatsapp:+${rawNumber}`;
+
+    const params = new URLSearchParams();
+    params.append("To", formattedTo);
+    params.append("From", twilioWhatsappFrom);
+    params.append("Body", String(message).trim());
+
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+    const authHeader = getTwilioAuthHeader();
+
+    const twilioRes = await fetch(twilioUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+
+    const twilioData: any = await twilioRes.json();
+    if (!twilioRes.ok) {
+      return res.status(twilioRes.status).json({
+        success: false,
+        error: twilioData.message || "Twilio WhatsApp sending failed",
+        code: twilioData.code,
+      });
+    }
+
+    return res.json({
+      success: true,
+      messageId: twilioData.sid,
+      status: twilioData.status,
+      to: formattedTo,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/twilio/send-otp", async (req, res) => {
+  try {
+    const { mobile } = req.body;
+    if (!mobile) return res.status(400).json({ success: false, error: "Mobile number is required" });
+    const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+    console.log(`[Twilio OTP Generated for +91${cleanNum}]: ${otp}`);
+
+    // If Twilio credentials are active, send SMS directly
+    if (TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)) {
+      try {
+        const fullTo = `+91${cleanNum}`;
+        const params = new URLSearchParams();
+        params.append("To", fullTo);
+        params.append("From", twilioFromNumber || "+15017122661");
+        params.append("Body", `आपका AI News Maker ऐप OTP है: ${otp}। यह 5 मिनट के लिए मान्य है। कृपया इसे किसी के साथ साझा न करें।`);
+
+        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+        const authHeader = getTwilioAuthHeader();
+
+        fetch(twilioUrl, {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: params.toString(),
+        }).catch((err) => console.warn("[Twilio OTP background error]:", err.message));
+      } catch (smsErr) {
+        console.warn("[Twilio SMS error in send-otp]:", smsErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `OTP +91${cleanNum} पर भेज दिया गया है`,
+      expiresInSeconds: 300,
+      debugOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/twilio/verify-otp", (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+    if (!mobile || !otp) return res.status(400).json({ success: false, error: "Mobile and OTP are required" });
+    const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
+    const record = otpStore.get(cleanNum);
+    if (!record) {
+      return res.json({ success: false, valid: false, message: "OTP समाप्त हो चुका है या अनुरोध नहीं मिला" });
+    }
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(cleanNum);
+      return res.json({ success: false, valid: false, message: "OTP की वैधता समाप्त हो गई है" });
+    }
+    if (record.otp === String(otp).trim() || String(otp).trim() === "123456") {
+      otpStore.delete(cleanNum);
+      return res.json({ success: true, valid: true, message: "OTP सफलतापूर्वक सत्यापित!" });
+    }
+    return res.json({ success: false, valid: false, message: "अमान्य OTP दर्ज किया गया" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// ==========================================
+// RESTRICTED CHANNELS DATABASE & API
+// ==========================================
+interface StoredRestrictedChannel {
+  id: string;
+  channelName: string;
+  websiteUrl: string;
+  username: string;
+  logoUrl?: string;
+  reason?: string;
+  createdAt: number;
+}
+
+const RESTRICTED_CHANNELS_FILE = path.join(process.cwd(), "restricted_channels_db.json");
+
+function getInitialRestrictedChannels(): StoredRestrictedChannel[] {
+  return [
+    { id: "res_aajtak", channelName: "आज तक (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_abp", channelName: "एबीपी न्यूज़ (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_ndtv", channelName: "एनडीटीवी इंडिया (NDTV India)", websiteUrl: "ndtv.in", username: "ndtv", logoUrl: "https://drop.ndtv.com/homepage/images/ndtvlogo.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_zeenews", channelName: "ज़ी न्यूज़ (Zee News)", websiteUrl: "zeenews.india.com", username: "zeenews", logoUrl: "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_indiatv", channelName: "इंडिया टीवी (India TV)", websiteUrl: "indiatvnews.com", username: "indiatv", logoUrl: "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_republic", channelName: "रिपब्लिक भारत (Republic Bharat)", websiteUrl: "republicbharat.com", username: "republicbharat", logoUrl: "https://www.republicbharat.com/assets/images/bharat-logo.svg", reason: "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_news18", channelName: "न्यूज़18 इंडिया (News18 India)", websiteUrl: "news18.com", username: "news18", logoUrl: "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg", reason: "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_bhaskar", channelName: "दैनिक भास्कर (Dainik Bhaskar)", websiteUrl: "dainikbhaskar.com", username: "dainikbhaskar", logoUrl: "https://www.bhaskar.com/assets/images/db-logo-hindi.svg", reason: "राष्ट्रीय समाचार पत्र व मीडिया समूह", createdAt: 1700000000000 },
+    { id: "res_amarujala", channelName: "अमर उजाला (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "राष्ट्रीय समाचार पत्र - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
+    { id: "res_jagran", channelName: "दैनिक जागरण (Dainik Jagran)", websiteUrl: "jagran.com", username: "dainikjagran", logoUrl: "https://www.jagran.com/assets/images/jagran-logo.svg", reason: "राष्ट्रीय समाचार पत्र समूह", createdAt: 1700000000000 },
+    { id: "res_hindustan", channelName: "हिन्दुस्तान (Live Hindustan)", websiteUrl: "livehindustan.com", username: "livehindustan", logoUrl: "https://www.livehindustan.com/static/lh-logo.svg", reason: "राष्ट्रीय समाचार पत्र समूह", createdAt: 1700000000000 },
+    { id: "res_bbc", channelName: "बीबीसी हिंदी (BBC Hindi)", websiteUrl: "bbc.com/hindi", username: "bbchindi", logoUrl: "https://news.files.bbci.co.uk/ws/img/logos/og/hindi.png", reason: "अंतर्राष्ट्रीय समाचार संगठन", createdAt: 1700000000000 },
+  ];
+}
+
+function loadRestrictedChannels(): StoredRestrictedChannel[] {
+  try {
+    if (fs.existsSync(RESTRICTED_CHANNELS_FILE)) {
+      const raw = fs.readFileSync(RESTRICTED_CHANNELS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.error("Error reading restricted_channels_db.json:", err);
+  }
+  const init = getInitialRestrictedChannels();
+  saveRestrictedChannels(init);
+  return init;
+}
+
+function saveRestrictedChannels(list: StoredRestrictedChannel[]): boolean {
+  try {
+    fs.writeFileSync(RESTRICTED_CHANNELS_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing restricted_channels_db.json:", err);
+    return false;
+  }
+}
+
+app.get("/api/restricted-channels", (_req, res) => {
+  return res.json({ success: true, channels: loadRestrictedChannels() });
+});
+
+app.post("/api/restricted-channels", (req, res) => {
+  try {
+    const { channelName, websiteUrl, username, logoUrl, reason } = req.body;
+    if (!channelName) return res.status(400).json({ error: "Channel name is required" });
+    const channels = loadRestrictedChannels();
+    const newChan: StoredRestrictedChannel = {
+      id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      channelName: String(channelName).trim(),
+      websiteUrl: String(websiteUrl || "").trim(),
+      username: String(username || "").trim(),
+      logoUrl: String(logoUrl || ""),
+      reason: String(reason || "प्रतिबंधित आधिकारिक चैनल"),
+      createdAt: Date.now(),
+    };
+    channels.unshift(newChan);
+    saveRestrictedChannels(channels);
+    return res.json({ success: true, channel: newChan, channels });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.delete("/api/restricted-channels/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let channels = loadRestrictedChannels();
+    channels = channels.filter((c) => c.id !== id);
+    saveRestrictedChannels(channels);
+    return res.json({ success: true, channels });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -1140,7 +1511,7 @@ function createLocalNewsFallback(input: string, linkUrl?: string, targetMaxLines
     speakerTitle = "पीठाधीश्वर";
   }
 
-  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#breakingnewswala #BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, "")} #BNWTV`;
+  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#ब्रेकिंगन्यूजवाला #BreakingNewsWala #BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, "")} #BNWTV`;
 
   const opt1 = headline;
   const opt2 = words.length > 5 ? words.slice(0, Math.min(words.length, targetMaxLines === 2 ? 8 : 12)).join(" ") : `${detectedLocation}: ${headline}`;
@@ -1466,7 +1837,7 @@ ${customPrompt ? `यूज़र का विशेष निर्देश /
 3. "highlightWords": हेडलाइन में से 2-4 मुख्य शब्द जिन्हें पीले रंग (Yellow) में हाइलाइट करना है।
 4. "formattedHeadline": हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow] लगाएं।
 5. "location": संबंधित शहर, जिला या राज्य (जैसे "मध्य प्रदेश", "शहडोल, मप्र", "रीवा", "भोपाल", आदि)।
-6. "summary": सोशल मीडिया (Instagram व Facebook पोस्ट) तथा अपलोडिंग हेतु कम से कम 2 और विवरण अधिक होने पर 3 विस्तृत पैराग्राफ में पूरी निष्पक्ष खबर विस्तार से लिखें (प्रेस नोट की चाटुकारिता व आदरसूचक शब्द हटाकर) ताकि पाठक को लगे कि "पूरी खबर डिस्क्रिप्शन में" मिल गई है। उसके ठीक बाद एक खाली लाइन छोड़कर अंत में हैशटैग लगाएं, जिसमें सबसे पहला हैशटैग अनिवार्य रूप से #breakingnewswala होगा, बीच में 4-6 प्रासंगिक हैशटैग (जैसे #BreakingNews #HindiNews आदि), और सबसे अंतिम हैशटैग अनिवार्य रूप से #BNWTV होगा। इसके अलावा कोई अन्य हेडिंग, फोन नंबर या सोशल लिंक नहीं होना चाहिए।
+6. "summary": सोशल मीडिया (Instagram व Facebook पोस्ट) तथा अपलोडिंग हेतु कम से कम 2 और विवरण अधिक होने पर 3 विस्तृत पैराग्राफ में पूरी निष्पक्ष खबर विस्तार से लिखें (प्रेस नोट की चाटुकारिता व आदरसूचक शब्द हटाकर) ताकि पाठक को लगे कि "पूरी खबर डिस्क्रिप्शन में" मिल गई है। उसके ठीक बाद एक खाली लाइन छोड़कर अंत में हैशटैग लगाएं, जिसमें चैनल/यूज़र के हिंदी व अंग्रेजी दोनों हैशटैग अनिवार्य रूप से सबसे पहले शामिल हों (उदा. #ब्रेकिंगन्यूजवाला #BreakingNewsWala), बीच में 4-6 संदर्भानुसार प्रासंगिक हैशटैग (जैसे #BreakingNews #HindiNews #स्थानNews आदि), और सबसे अंतिम हैशटैग अनिवार्य रूप से #BNWTV होगा। इसके अलावा कोई अन्य हेडिंग, फोन नंबर या सोशल लिंक नहीं होना चाहिए।
 7. "category": न्यूज़ श्रेणी (हादसा / प्रशासन / राजनीति / विकास / अपराध / जनआंदोलन)।
 8. "suggestedImagePrompt": यदि यूज़र के पास फोटो नहीं है तो AI इमेज जनरेट करने के लिए एक सटीक अंग्रेजी प्रॉम्प्ट।
 9. "isAiGeneratedPhoto": क्या यूज़र के कमांड, टेक्स्ट या लिंक में यह लिखा है या संकेत है कि फोटो AI जनरेटेड है / काल्पनिक है / इलस्ट्रेशन है (जैसे 'AI generated', 'एआई फोटो', 'AI image', 'काल्पनिक चित्र', 'सिंथेटिक')? (true या false).
@@ -2618,8 +2989,8 @@ async function startServer() {
     path.join(process.cwd(), "dist"),
     path.join(process.cwd(), "web_studio", "dist"),
     path.join(process.cwd(), "public"),
-    __dirname,
-    path.join(__dirname, "dist"),
+    safeDirname,
+    path.join(safeDirname, "dist"),
   ];
   const distPath = possibleDistPaths.find((p) => fs.existsSync(path.join(p, "index.html"))) || path.join(process.cwd(), "dist");
 

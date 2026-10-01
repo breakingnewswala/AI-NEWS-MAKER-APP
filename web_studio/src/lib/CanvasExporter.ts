@@ -1175,7 +1175,7 @@ function drawLogoBadge(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  brandName: string = 'ब्रेकिंग न्यूज़ वाला',
+  brandName: string = 'AI News Maker',
   tagline: string = 'भारत के जिलों से आपके दिलों तक'
 ) {
   ctx.save();
@@ -1597,7 +1597,7 @@ async function drawGraphic001Canvas(
 
     // 3. LOGO (Upper-Right portion of photo): Transparent / No-Background
     if (customLogoImg) {
-      const scale = card.logoScale ?? 1.0;
+      const scale = card.logoScale ?? 1.25;
       const maxW = 300 * scale;
       const maxH = 95 * scale;
       const scaleFactor = Math.min(maxW / customLogoImg.width, maxH / customLogoImg.height, 1);
@@ -2129,7 +2129,7 @@ async function drawGraphic002Canvas(
   ctx.stroke();
 
   if (customLogoImg) {
-    const scale = card.logoScale ?? 1.0;
+    const scale = card.logoScale ?? 1.25;
     const maxLogoW = (logoBoxW - 24) * scale;
     const maxLogoH = (logoBoxH - 18) * scale;
     const logoRatio = customLogoImg.width / customLogoImg.height;
@@ -2641,7 +2641,7 @@ async function drawGraphic003Canvas(
   ctx.stroke();
 
   if (customLogoImg) {
-    const scale = card.logoScale ?? 1.0;
+    const scale = card.logoScale ?? 1.25;
     const maxLogoW = (logoBoxW - 24) * scale;
     const maxLogoH = (logoBoxH - 18) * scale;
     const logoRatio = customLogoImg.width / customLogoImg.height;
@@ -2972,7 +2972,7 @@ async function drawGraphic004Canvas(
   ctx.stroke();
 
   if (customLogoImg) {
-    const scale = card.logoScale ?? 1.0;
+    const scale = card.logoScale ?? 1.25;
     const maxLogoW = (logoBoxW - 24) * scale;
     const maxLogoH = (logoBoxH - 16) * scale;
     const logoRatio = customLogoImg.width / customLogoImg.height;
@@ -3558,7 +3558,7 @@ async function drawDefaultJacketContent(
 
   // 4. Top-Right: YOUR LOGO or Custom Logo (with user logoScale) - only if master branding enabled
   if (card.showMasterBranding !== false) {
-    const userScale = Math.max(0.5, Math.min(2.0, card.logoScale ?? 1.0));
+    const userScale = Math.max(0.5, Math.min(2.0, card.logoScale ?? 1.25));
     if (customLogoImg) {
       const maxLogoW = 240 * userScale;
       const maxLogoH = 100 * userScale;
@@ -5147,7 +5147,7 @@ async function drawEPaperJacketContent(
             title: 'स्थान रिक्त है - विज्ञापन हेतु संपर्क करें',
             subtitle: 'ई-पेपर विशेष संस्करण में प्रचार प्रसार के लिए',
             phone: card.whatsappNumber || '96698-02408',
-            sponsorName: 'ब्रेकिंग न्यूज़ वाला डिजिटल नेटवर्क',
+            sponsorName: card.channelNameHi || card.brandName || 'डिजिटल न्यूज़ नेटवर्क',
           };
           await drawEpaperAdBox(ctx, defaultAd, col2X, col2GapStartY, colW, col2GapH, epaperFont);
         }
@@ -5832,7 +5832,9 @@ function drawAiGeneratedWatermark(
   text: string = 'AI GENERATED'
 ) {
   ctx.save();
-  const x = 22;
+  // Safe Zone enforced position on left wall
+  const safeLeft = Math.max(34, Math.round(width * 0.038));
+  const x = safeLeft;
   const y = height * 0.44;
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
@@ -5870,8 +5872,9 @@ function drawDateStamp(
   dateText: string
 ) {
   ctx.save();
-  // Placed right along the right wall near the top/header area
-  const x = width - 24;
+  // Safe Zone enforced position along the right wall near header area
+  const safeRight = Math.max(36, Math.round(width * 0.038));
+  const x = width - safeRight;
   const y = Math.round(height * 0.22);
   ctx.translate(x, y);
   ctx.rotate((90 * Math.PI) / 180); // 90° clockwise

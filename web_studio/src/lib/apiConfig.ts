@@ -1,6 +1,7 @@
 // Helper to resolve API URLs correctly whether running on Web (HTTP/HTTPS) or inside Android WebView (file://)
 
 export const DEFAULT_CLOUD_BASE_URL = 'https://ais-dev-ymjokrnulobq2aemilipe6-496088405107.asia-southeast1.run.app';
+export const GOOGLE_OAUTH_CLIENT_ID = '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com';
 
 export function getCustomCloudUrl(): string {
   if (typeof window !== 'undefined') {

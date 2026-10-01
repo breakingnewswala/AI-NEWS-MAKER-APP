@@ -184,3 +184,47 @@ export function getAllHeadlineFonts(): HeadlineFontOption[] {
   }));
   return [...BUILTIN_HEADLINE_FONTS, ...custom];
 }
+
+export type FontPackageTier = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
+
+/**
+ * Checks whether user can upload custom fonts.
+ * Strictly VIP DESK (and Admin) only!
+ * BASIC users: false
+ * ADVANCE users: false
+ * PRO users: false
+ * VIP DESK users: true
+ */
+export function canUserUploadCustomFont(userTier?: string | null, isAdmin: boolean = false): boolean {
+  if (isAdmin) return true;
+  const t = (userTier || '').toLowerCase().trim();
+  return t === 'ultra' || t === 'vip desk' || t === 'vip_desk' || t === 'vip';
+}
+
+/**
+ * Package-based headline font access system.
+ * System is prepared for exact per-package font mapping to be provided in next instruction.
+ * Without inventing arbitrary mappings now, this architecture isolates access per package.
+ */
+export function getHeadlineFontsForPackage(userTier?: string | null, isAdmin: boolean = false): HeadlineFontOption[] {
+  const allFonts = getAllHeadlineFonts();
+  if (isAdmin) return allFonts;
+
+  // Custom fonts are strictly accessible only to VIP DESK users
+  const isVipDesk = canUserUploadCustomFont(userTier, isAdmin);
+  if (!isVipDesk) {
+    return allFonts.filter((f) => !f.isCustom);
+  }
+  return allFonts;
+}
+
+/**
+ * Package Font Mapping structure.
+ * Ready for future mapping instructions without inventing arbitrary assignments.
+ */
+export const PACKAGE_FONT_MAPPING: Record<FontPackageTier, string[]> = {
+  BASIC: [],
+  ADVANCE: [],
+  PRO: [],
+  'VIP DESK': [],
+};

@@ -12,6 +12,9 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.content.Context
+import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 
 object NewsRepository {
@@ -309,6 +312,90 @@ $channel के विशेष संवाददाता के अनुस�
 
     private val _posts = MutableStateFlow<List<NewsPost>>(createInitialPosts())
     val posts: StateFlow<List<NewsPost>> = _posts.asStateFlow()
+
+    const val CLOUD_STORAGE_NEWS_URL = "https://firebasestorage.googleapis.com/v0/b/ainewsmakerapp.firebasestorage.app/o/news_database.json?alt=media"
+
+    init {
+        repositoryScope.launch {
+            syncWithFirebaseCloud()
+        }
+    }
+
+    /**
+     * Synchronize news feed posts with Firebase Cloud Storage live database
+     * Connects and unifies Android Mobile App and Web Studio live feed
+     */
+    suspend fun syncWithFirebaseCloud(context: Context? = null) = withContext(Dispatchers.IO) {
+        try {
+            val url = java.net.URL("$CLOUD_STORAGE_NEWS_URL&_t=${System.currentTimeMillis()}")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("Accept", "application/json")
+
+            if (conn.responseCode == 200) {
+                val jsonString = conn.inputStream.bufferedReader().use { it.readText() }
+                val jsonArray = JSONArray(jsonString)
+                if (jsonArray.length() > 0) {
+                    val cloudPosts = mutableListOf<NewsPost>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        val id = obj.optString("id", "cloud-post-$i")
+                        val title = obj.optString("title", "")
+                        val summary = obj.optString("summary", "")
+                        val sourceChannel = obj.optString("sourceChannel", "AI News Maker")
+                        val sourceUrl = obj.optString("sourceUrl", "")
+                        val catStr = obj.optString("category", "breaking")
+                        val catName = obj.optString("categoryName", "ब्रेकिंग न्यूज़")
+                        val publishedTime = obj.optString("publishedTime", "अभी-अभी")
+                        val imageUrl = obj.optString("imageUrl", "")
+                        val isBreaking = obj.optBoolean("breaking", false)
+                        val isExclusive = obj.optBoolean("isExclusive", false)
+                        val timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                        val fullContent = obj.optString("fullContent", summary)
+
+                        val catEnum = when (catStr.lowercase()) {
+                            "politics" -> NewsCategory.POLITICS
+                            "sports" -> NewsCategory.SPORTS
+                            "business" -> NewsCategory.BUSINESS
+                            "tech" -> NewsCategory.TECH
+                            "entertainment" -> NewsCategory.ENTERTAINMENT
+                            "state" -> NewsCategory.LOCAL
+                            "crime" -> NewsCategory.CRIME
+                            else -> NewsCategory.BREAKING
+                        }
+
+                        if (title.isNotBlank()) {
+                            cloudPosts.add(
+                                NewsPost(
+                                    id = id,
+                                    title = title,
+                                    summary = summary,
+                                    sourceChannel = sourceChannel,
+                                    sourceUrl = sourceUrl,
+                                    category = catEnum,
+                                    categoryName = catName,
+                                    publishedTime = publishedTime,
+                                    imageUrl = imageUrl,
+                                    breaking = isBreaking,
+                                    timestamp = timestamp,
+                                    fullContent = fullContent,
+                                    isExclusive = isExclusive
+                                )
+                            )
+                        }
+                    }
+                    if (cloudPosts.isNotEmpty()) {
+                        _posts.value = cloudPosts
+                        Log.i("NewsRepository", "Successfully synced ${cloudPosts.size} posts from Firebase Cloud Storage")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("NewsRepository", "Firebase cloud news sync error: ${e.message}")
+        }
+    }
 
     private val _userRole = MutableStateFlow(UserRole.USER)
     val userRole: StateFlow<UserRole> = _userRole.asStateFlow()

@@ -863,7 +863,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               brandTagline={card.brandTagline}
               brandName={card.brandName}
               customLogoUrl={card.customLogoUrl}
-              logoScale={card.logoScale}
+              logoScale={card.logoScale ?? 1.25}
             />
           )
         ) : (
@@ -873,7 +873,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             brandTagline={card.brandTagline}
             brandName={card.brandName}
             customLogoUrl={card.customLogoUrl}
-            logoScale={card.logoScale}
+            logoScale={card.logoScale ?? 1.25}
           />
         )}
       </div>
@@ -887,12 +887,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         />
       )}
 
-      {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED or प्रतीकात्मक फोटो): Vertical along Left Wall, Rotated 90° */}
+      {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED or प्रतीकात्मक फोटो): Vertical along Left Wall, Rotated 90° - Inside Safe Zone */}
       {(card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
         (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (
         <div
-          className="absolute left-1.5 sm:left-2 top-[44%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
+          className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
           style={{ width: '28px', height: '140px' }}
         >
           <div className="absolute -rotate-90 whitespace-nowrap bg-black/65 backdrop-blur-[2px] border border-white/25 px-3 py-0.5 sm:py-1 rounded-sm shadow-md flex items-center justify-center">
@@ -905,10 +905,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         </div>
       )}
 
-      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box, placed near header */}
+      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Inside Safe Zone */}
       {card.showDate !== false && card.frameDesign !== 'graphic_001' && card.frameDesign !== 'graphic_002' && card.frameDesign !== 'graphic_003' && card.frameDesign !== 'graphic_004' && card.frameDesign !== 'jacket-default' && card.frameDesign !== 'jacket-text-breaking' && card.frameDesign !== 'jacket-morning' && card.frameDesign !== 'jacket-epaper' && (
         <div
-          className="absolute right-1 sm:right-2 top-[22%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
+          className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
           style={{ width: '24px', height: '180px' }}
         >
           <div
@@ -960,7 +960,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 <div
                   className="ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%]"
                   style={{
-                    transform: `scale(${card.logoScale ?? 1.0})`,
+                    transform: `scale(${card.logoScale ?? 1.25})`,
                     transformOrigin: 'top right',
                   }}
                 >
@@ -1137,7 +1137,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                   card.customLogoUrl ? '' : 'bg-[#FFFBEB] border-2 border-[#EA580C] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 gap-2 shadow-lg min-w-[130px] sm:min-w-[160px]'
                 }`}
                 style={{
-                  transform: `scale(${card.logoScale ?? 1.0})`,
+                  transform: `scale(${card.logoScale ?? 1.25})`,
                   transformOrigin: 'top right',
                 }}
               >
@@ -1301,7 +1301,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 card.customLogoUrl ? '' : 'bg-white/95 backdrop-blur-md border-2 border-amber-500 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 gap-2 shadow-xl min-w-[130px] sm:min-w-[160px]'
               }`}
               style={{
-                transform: `scale(${card.logoScale ?? 1.0})`,
+                transform: `scale(${card.logoScale ?? 1.25})`,
                 transformOrigin: 'top right',
               }}
             >
@@ -1425,7 +1425,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               <div
                 className="relative bg-[#FFFBEB] border-2 border-[#EA580C] rounded-xl px-2.5 py-0.5 sm:px-3.5 sm:py-1 flex items-center gap-1.5 shadow-xs transition-transform max-w-[65%]"
                 style={{
-                  transform: `scale(${card.logoScale ?? 1.0})`,
+                  transform: `scale(${card.logoScale ?? 1.25})`,
                 }}
               >
                 {card.customLogoUrl ? (
@@ -1588,7 +1588,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             <div
               className="ml-auto flex flex-col items-end pointer-events-auto transition-transform"
               style={{
-                transform: `scale(${card.logoScale ?? 1.0})`,
+                transform: `scale(${card.logoScale ?? 1.25})`,
                 transformOrigin: 'top right',
               }}
             >
@@ -2320,7 +2320,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                             title: 'स्थान रिक्त है - विज्ञापन हेतु संपर्क करें',
                             subtitle: 'ई-पेपर विशेष संस्करण में प्रचार प्रसार के लिए',
                             phone: card.whatsappNumber || '96698-02408',
-                            sponsorName: 'ब्रेकिंग न्यूज़ वाला डिजिटल नेटवर्क',
+                            sponsorName: card.channelNameHi || card.brandName || 'डिजिटल न्यूज़ नेटवर्क',
                           }, 'shrink-0 min-h-[65px]')
                         ) : null}
                       </div>

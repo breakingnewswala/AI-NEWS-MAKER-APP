@@ -102,7 +102,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
 
   const handleCopyApkLink = () => {
     const fullUrl = `${window.location.origin}${versionInfo?.downloadUrl || '/app-release.apk'}`;
-    const textToShare = `📲 *ब्रेकिंग न्यूज़ वाला स्टूडियो मोबाइल ऐप*\n\nनया वर्जन v${latestVersion} उपलब्ध है!\n\nडाउनलोड लिंक:\n${fullUrl}\n\nसुविधाएं:\n- 🌅 मॉर्निंग जैकेट 1-क्लिक AI सुविचार\n- 📱 मोबाइल स्प्लिट-स्क्रीन लाइव प्रीव्यू\n- ⚡ 4 मुख्य जैकेट्स व फास्ट डाउनलोड`;
+    const textToShare = `📲 *AI News Maker Studio मोबाइल ऐप*\n\nनया वर्जन v${latestVersion} उपलब्ध है!\n\nडाउनलोड लिंक:\n${fullUrl}\n\nसुविधाएं:\n- 🌅 मॉर्निंग जैकेट 1-क्लिक AI सुविचार\n- 📱 मोबाइल स्प्लिट-स्क्रीन लाइव प्रीव्यू\n- ⚡ 4 मुख्य जैकेट्स व फास्ट डाउनलोड`;
     
     navigator.clipboard.writeText(textToShare);
     setCopiedLink(true);

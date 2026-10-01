@@ -132,9 +132,9 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
       }}
       className={`w-full border-t border-neutral-200/50 px-2 sm:px-4 ${pyClass} flex items-center justify-center shadow-inner select-none overflow-hidden text-center whitespace-nowrap`}
     >
-      {/* 3 Active Blocks: Center-aligned, No partition lines, Compact spacing */}
+      {/* Master Branding Active Blocks: Strict order ONE (Social) -> TWO (Website) -> THREE (Contact) */}
       <div className="flex items-center justify-center gap-2 sm:gap-3.5 max-w-full overflow-hidden flex-wrap text-center">
-        {/* Block 1: Social Media Icons + Social Handle */}
+        {/* Section 1: Social Media Icons + Handle */}
         {hasSocial && (
           <div className="flex items-center justify-center gap-1 sm:gap-1.5 shrink-0">
             {/* YouTube */}
@@ -205,7 +205,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
               </div>
             )}
 
-            {/* Social Handle */}
+            {/* Social Handle (No internal divider between icon and text) */}
             {displayHandle && (
               <span
                 style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
@@ -217,8 +217,19 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
           </div>
         )}
 
-        {/* Block 2: Website (+ Address) */}
-        {cleanWebsite && (
+        {/* Partition Divider between Section 1 and Section 2 */}
+        {hasSocial && hasWeb && (
+          <span
+            style={{ color: separatorColor }}
+            className="select-none text-xs font-light opacity-60 shrink-0 px-0.5"
+            aria-hidden="true"
+          >
+            |
+          </span>
+        )}
+
+        {/* Section 2: Website (+ Icon) */}
+        {hasWeb && (
           <div className="flex items-center justify-center gap-1 shrink-0">
             <svg
               style={{ color: effectiveTextColor }}
@@ -243,8 +254,19 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
           </div>
         )}
 
-        {/* Block 3: WhatsApp + Contact */}
-        {cleanPhone && (
+        {/* Partition Divider before Section 3 (if either Section 1 or Section 2 is active) */}
+        {hasContact && (hasSocial || hasWeb) && (
+          <span
+            style={{ color: separatorColor }}
+            className="select-none text-xs font-light opacity-60 shrink-0 px-0.5"
+            aria-hidden="true"
+          >
+            |
+          </span>
+        )}
+
+        {/* Section 3: WhatsApp + Contact */}
+        {hasContact && (
           <div className="flex items-center justify-center gap-1 shrink-0">
             {hasIcon('whatsapp') && (
               <div

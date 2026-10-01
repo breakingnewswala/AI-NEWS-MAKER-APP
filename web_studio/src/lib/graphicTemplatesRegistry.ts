@@ -336,17 +336,17 @@ export function getTemplateHeadlineConfig(templateId?: string): TemplateConfig &
 
 export const DEFAULT_TEMPLATE_PLAN_CONFIGS: Record<string, TemplatePlanConfig> = {
   graphic_001: {
-    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+    allowedPlans: ['BASIC'],
     isActive: true,
     version: 'v1.0',
   },
   graphic_002: {
-    allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
+    allowedPlans: ['ADVANCED'],
     isActive: true,
     version: 'v1.0',
   },
   graphic_003: {
-    allowedPlans: ['PRO', 'VIP DESK'],
+    allowedPlans: ['PRO'],
     isActive: true,
     version: 'v1.0',
   },
@@ -357,7 +357,7 @@ export const DEFAULT_TEMPLATE_PLAN_CONFIGS: Record<string, TemplatePlanConfig> =
   },
 };
 
-const STORAGE_KEY_TEMPLATE_CONFIGS = 'admin_template_configs_v2';
+const STORAGE_KEY_TEMPLATE_CONFIGS = 'admin_template_configs_v3';
 
 export function getAllTemplateConfigs(): Record<string, TemplatePlanConfig> {
   if (typeof window === 'undefined') return DEFAULT_TEMPLATE_PLAN_CONFIGS;
@@ -401,17 +401,25 @@ export function saveTemplateConfig(templateId: string, update: Partial<TemplateP
 
 /**
  * Checks whether a template is visible and accessible for a user's active plan.
- * - Admin: sees all 4 approved templates (as long as admin, regardless of user plan)
+ * - Admin: sees all approved templates (regardless of user plan)
  * - User: sees strictly and only the templates allowed for their active plan!
+ *   BASIC: only BASIC PACKAGE FRAMES
+ *   ADVANCE: only ADVANCE PACKAGE FRAMES
+ *   PRO: PRO PACKAGE FRAMES + CUSTOM FRAMES
+ *   VIP DESK: VIP DESK PACKAGE FRAMES + CUSTOM FRAMES
  */
 export function isTemplateAvailableForUserPlan(
   templateId: string,
   userPlanTier: string | null | undefined,
   isAdmin: boolean = false
 ): boolean {
-  const config = getTemplateConfig(templateId);
-  if (!config.isActive && !isAdmin) return false;
   if (isAdmin) return true;
+  if (templateId === 'custom-png') {
+    const userCat = normalizeUserPlanTier(userPlanTier);
+    return userCat === 'PRO' || userCat === 'VIP DESK';
+  }
+  const config = getTemplateConfig(templateId);
+  if (!config.isActive) return false;
   const userCat = normalizeUserPlanTier(userPlanTier);
   return config.allowedPlans.includes(userCat);
 }

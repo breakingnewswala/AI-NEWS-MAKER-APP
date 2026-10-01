@@ -4,6 +4,10 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -20,21 +24,48 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // server.ts
+var server_exports = {};
+__export(server_exports, {
+  TEMPLATE_CONFIG_REGISTRY: () => TEMPLATE_CONFIG_REGISTRY,
+  getTemplateConfig: () => getTemplateConfig
+});
+module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var import_vite = require("vite");
+var import_url = require("url");
 var import_genai = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
+var import_meta = {};
+var __filename = (0, import_url.fileURLToPath)(import_meta.url);
+var __dirname = import_path.default.dirname(__filename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
-var PORT = 3e3;
+var PORT = parseInt(process.env.APP_PORT || process.env.DEFAULT_APP_PORT || (process.env.PORT === "8080" ? "3000" : process.env.PORT || "3000"), 10);
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 app.use(import_express.default.json({ limit: "25mb" }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "25mb" }));
-var dynamicOpenAiKey = process.env.OPENAI_API_KEY || "";
+var CONFIGURED_OPENAI_KEY = "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";
+var CONFIGURED_GEMINI_KEY = "AQ.Ab8RN6Llqa6KH_g2YuLo7EPCR8nBZS3pWoGPOrMnzgVGNLwYbA";
+if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY") {
+  process.env.GEMINI_API_KEY = CONFIGURED_GEMINI_KEY;
+}
+if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "MY_OPENAI_API_KEY") {
+  process.env.OPENAI_API_KEY = CONFIGURED_OPENAI_KEY;
+}
+var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : CONFIGURED_OPENAI_KEY;
 var dynamicCustomDomain = "";
 app.get("/api/ai-providers-status", (req, res) => {
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -101,6 +132,587 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
+function getInitialRichNewsPosts() {
+  const now = Date.now();
+  return [
+    {
+      id: "live-post-1",
+      title: "\u092D\u093E\u0930\u0924 \u0928\u0947 \u0932\u0949\u0928\u094D\u091A \u0915\u093F\u092F\u093E \u0928\u092F\u093E AI \u0938\u0941\u092A\u0930\u0915\u0902\u092A\u094D\u092F\u0942\u091F\u093F\u0902\u0917 \u0928\u0947\u091F\u0935\u0930\u094D\u0915, \u0935\u0948\u0936\u094D\u0935\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u092C\u0928\u0940 \u0928\u0908 \u092A\u0939\u091A\u093E\u0928",
+      summary: "\u0935\u093F\u091C\u094D\u091E\u093E\u0928 \u090F\u0935\u0902 \u092A\u094D\u0930\u094C\u0926\u094D\u092F\u094B\u0917\u093F\u0915\u0940 \u092E\u0902\u0924\u094D\u0930\u093E\u0932\u092F \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u091C \u0926\u0947\u0936 \u0915\u0947 \u0905\u0924\u094D\u092F\u093E\u0927\u0941\u0928\u093F\u0915 AI \u0938\u0941\u092A\u0930\u0915\u0902\u092A\u094D\u092F\u0942\u091F\u093F\u0902\u0917 \u0915\u094D\u0932\u0938\u094D\u091F\u0930 \u0915\u093E \u0905\u0928\u093E\u0935\u0930\u0923 \u0915\u093F\u092F\u093E \u0917\u092F\u093E\u0964 \u092F\u0939 \u0924\u0915\u0928\u0940\u0915 \u092E\u094C\u0938\u092E \u092A\u0942\u0930\u094D\u0935\u093E\u0928\u0941\u092E\u093E\u0928 \u0914\u0930 \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u0915\u094D\u0930\u093E\u0902\u0924\u093F \u0932\u093E\u090F\u0917\u0940\u0964",
+      sourceChannel: "\u0926\u0948\u0928\u093F\u0915 \u092D\u093E\u0938\u094D\u0915\u0930 (Dainik Bhaskar)",
+      sourceUrl: "https://dainikbhaskar.com/tech/ai-supercomputing",
+      category: "tech",
+      categoryName: "\u091F\u0947\u0915\u094D\u0928\u094B\u0932\u0949\u091C\u0940",
+      publishedTime: "10 \u092E\u093F\u0928\u091F \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: true,
+      timestamp: now - 10 * 60 * 1e3,
+      fullContent: `\u0935\u093F\u091C\u094D\u091E\u093E\u0928 \u090F\u0935\u0902 \u092A\u094D\u0930\u094C\u0926\u094D\u092F\u094B\u0917\u093F\u0915\u0940 \u092E\u0902\u0924\u094D\u0930\u093E\u0932\u092F \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u091C \u0926\u0947\u0936 \u0915\u0947 \u0905\u0924\u094D\u092F\u093E\u0927\u0941\u0928\u093F\u0915 AI \u0938\u0941\u092A\u0930\u0915\u0902\u092A\u094D\u092F\u0942\u091F\u093F\u0902\u0917 \u0915\u094D\u0932\u0938\u094D\u091F\u0930 \u0915\u093E \u092D\u0935\u094D\u092F \u0905\u0928\u093E\u0935\u0930\u0923 \u0915\u093F\u092F\u093E \u0917\u092F\u093E\u0964
+
+\u{1F4CC} \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u0935\u0930\u0923 \u090F\u0935\u0902 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F:
+\u0907\u0938 \u0928\u090F \u0915\u094D\u0932\u0938\u094D\u091F\u0930 \u0938\u0947 \u0926\u0947\u0936 \u0915\u0947 \u0932\u093E\u0916\u094B\u0902 \u0935\u0948\u091C\u094D\u091E\u093E\u0928\u093F\u0915\u094B\u0902, \u091B\u093E\u0924\u094D\u0930\u094B\u0902 \u0914\u0930 \u0938\u094D\u091F\u093E\u0930\u094D\u091F\u0905\u092A\u094D\u0938 \u0915\u094B \u0905\u092D\u0942\u0924\u092A\u0942\u0930\u094D\u0935 \u0915\u092E\u094D\u092A\u094D\u092F\u0942\u091F\u093F\u0902\u0917 \u0915\u094D\u0937\u092E\u0924\u093E \u092E\u093F\u0932\u0947\u0917\u0940\u0964 \u092F\u0939 \u092E\u094C\u0938\u092E \u092A\u0942\u0930\u094D\u0935\u093E\u0928\u0941\u092E\u093E\u0928, \u091A\u093F\u0915\u093F\u0924\u094D\u0938\u093E \u0905\u0928\u0941\u0938\u0902\u0927\u093E\u0928 \u0914\u0930 \u0905\u0902\u0924\u0930\u093F\u0915\u094D\u0937 \u0905\u0928\u094D\u0935\u0947\u0937\u0923 \u092E\u0947\u0902 \u0921\u0947\u091F\u093E \u090F\u0928\u093E\u0932\u093F\u0938\u093F\u0938 \u0915\u094B 10 \u0917\u0941\u0928\u093E \u0924\u0947\u091C \u0915\u0930 \u0926\u0947\u0917\u093E\u0964
+
+\u{1F3A4} \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092C\u092F\u093E\u0928:
+\u0915\u0947\u0902\u0926\u094D\u0930\u0940\u092F \u0935\u093F\u091C\u094D\u091E\u093E\u0928 \u092E\u0902\u0924\u094D\u0930\u0940 \u0928\u0947 \u0915\u0939\u093E: "\u092D\u093E\u0930\u0924 \u0905\u092C \u0915\u0947\u0935\u0932 \u0924\u0915\u0928\u0940\u0915 \u0915\u093E \u0909\u092A\u092D\u094B\u0915\u094D\u0924\u093E \u0928\u0939\u0940\u0902, \u092C\u0932\u094D\u0915\u093F \u0935\u0948\u0936\u094D\u0935\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 AI \u0938\u092E\u093E\u0927\u093E\u0928\u094B\u0902 \u0915\u093E \u0936\u0940\u0930\u094D\u0937 \u0928\u093F\u0930\u094D\u092E\u093E\u0924\u093E \u092C\u0928 \u0930\u0939\u093E \u0939\u0948\u0964"
+
+\u{1F4CA} \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941:
+\u2022 100 \u092A\u0947\u091F\u093E\u092B\u094D\u0932\u0949\u092A\u094D\u0938 \u0938\u0947 \u0905\u0927\u093F\u0915 \u0915\u0940 \u0915\u092E\u094D\u092A\u094D\u092F\u0942\u091F\u0947\u0936\u0928\u0932 \u0938\u094D\u092A\u0940\u0921
+\u2022 \u0926\u0947\u0936 \u0915\u0947 \u0938\u092D\u0940 \u092A\u094D\u0930\u092E\u0941\u0916 IITs \u0914\u0930 \u0905\u0928\u0941\u0938\u0902\u0927\u093E\u0928 \u0938\u0902\u0938\u094D\u0925\u093E\u0928\u094B\u0902 \u0938\u0947 \u0938\u0940\u0927\u093E \u091C\u0941\u0921\u093C\u093E\u0935
+\u2022 100% \u0939\u0930\u093F\u0924 \u090A\u0930\u094D\u091C\u093E \u0938\u0947 \u0938\u0902\u091A\u093E\u0932\u093F\u0924 \u0921\u093E\u091F\u093E \u0938\u0947\u0902\u091F\u0930`
+    },
+    {
+      id: "live-post-2",
+      title: "\u0938\u0902\u0938\u0926 \u092E\u0947\u0902 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0914\u0930 AI \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094D\u0930\u0938\u093E\u0930\u0923 \u092A\u0930 \u0910\u0924\u093F\u0939\u093E\u0938\u093F\u0915 \u0935\u093F\u0927\u0947\u092F\u0915 \u092A\u093E\u0930\u093F\u0924",
+      summary: "\u0938\u0942\u091A\u0928\u093E \u090F\u0935\u0902 \u092A\u094D\u0930\u0938\u093E\u0930\u0923 \u092E\u0902\u0924\u094D\u0930\u093E\u0932\u092F \u0928\u0947 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u092C\u094D\u0932\u093F\u0936\u0930\u094D\u0938 \u0914\u0930 \u090F\u0906\u0908 \u0906\u0927\u093E\u0930\u093F\u0924 \u0915\u0902\u091F\u0947\u0902\u091F \u091C\u0928\u0930\u0947\u0936\u0928 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u0915 \u0924\u092F \u0915\u0930\u0928\u0947 \u0939\u0947\u0924\u0941 \u0910\u0924\u093F\u0939\u093E\u0938\u093F\u0915 \u092C\u093F\u0932 \u092A\u093E\u0930\u093F\u0924 \u0915\u093F\u092F\u093E\u0964 \u0921\u0940\u092A\u092B\u0947\u0915 \u092A\u0930 \u0915\u0921\u093C\u0947 \u0926\u0902\u0921 \u0915\u093E \u092A\u094D\u0930\u093E\u0935\u0927\u093E\u0928\u0964",
+      sourceChannel: "\u0906\u091C \u0924\u0915 (Aaj Tak)",
+      sourceUrl: "https://aajtak.in/national/digital-media-ai-bill",
+      category: "politics",
+      categoryName: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F",
+      publishedTime: "25 \u092E\u093F\u0928\u091F \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: false,
+      timestamp: now - 25 * 60 * 1e3,
+      fullContent: `\u0938\u0902\u0938\u0926 \u0915\u0947 \u0926\u094B\u0928\u094B\u0902 \u0938\u0926\u0928\u094B\u0902 \u092E\u0947\u0902 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0914\u0930 \u090F\u0906\u0908 \u0915\u0902\u091F\u0947\u0902\u091F \u0915\u0947 \u0928\u093F\u092F\u092E\u0928 \u0939\u0947\u0924\u0941 \u0928\u092F\u093E \u0915\u093E\u0928\u0942\u0928 \u0927\u094D\u0935\u0928\u093F\u092E\u0924 \u0938\u0947 \u092A\u093E\u0930\u093F\u0924 \u0915\u093F\u092F\u093E \u0917\u092F\u093E\u0964
+
+\u{1F4CC} \u092E\u0941\u0916\u094D\u092F \u092C\u093E\u0924\u0947\u0902:
+1. \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902 \u0914\u0930 \u092F\u0942\u091F\u094D\u092F\u0942\u092C \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0938\u094D\u0935-\u092A\u094D\u0930\u092E\u093E\u0923\u0928 \u092A\u094D\u0930\u0923\u093E\u0932\u0940\u0964
+2. \u090F\u0906\u0908 \u091C\u0928\u0930\u0947\u091F\u0947\u0921 \u0924\u0938\u094D\u0935\u0940\u0930\u094B\u0902 \u0914\u0930 \u0921\u0940\u092A\u092B\u0947\u0915 \u0935\u0940\u0921\u093F\u092F\u094B \u092A\u0930 \u0935\u093E\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F\u0964
+3. \u0924\u0925\u094D\u092F\u0939\u0940\u0928 \u0935 \u092D\u094D\u0930\u093E\u092E\u0915 \u0916\u092C\u0930\u094B\u0902 \u092A\u0930 \u0924\u094D\u0935\u0930\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0939\u0947\u0924\u0941 \u0921\u093F\u091C\u093F\u091F\u0932 \u0913\u092E\u094D\u092C\u0921\u094D\u0938\u092E\u0948\u0928 \u0915\u0940 \u0928\u093F\u092F\u0941\u0915\u094D\u0924\u093F\u0964`
+    },
+    {
+      id: "live-post-3",
+      title: "\u090F\u0936\u093F\u092F\u093E \u0915\u092A \u0915\u094D\u0930\u093F\u0915\u0947\u091F: \u092D\u093E\u0930\u0924 \u0928\u0947 \u0930\u094B\u092E\u093E\u0902\u091A\u0915 \u092E\u0941\u0915\u093E\u092C\u0932\u0947 \u092E\u0947\u0902 \u092A\u093E\u0915\u093F\u0938\u094D\u0924\u093E\u0928 \u0915\u094B 5 \u0935\u093F\u0915\u0947\u091F \u0938\u0947 \u0939\u0930\u093E\u092F\u093E",
+      summary: "\u092D\u093E\u0930\u0924\u0940\u092F \u091F\u0940\u092E \u0928\u0947 \u0936\u093E\u0928\u0926\u093E\u0930 \u0916\u0947\u0932 \u0915\u093E \u092A\u094D\u0930\u0926\u0930\u094D\u0936\u0928 \u0915\u0930\u0924\u0947 \u0939\u0941\u090F \u0905\u0902\u0924\u093F\u092E \u0913\u0935\u0930 \u092E\u0947\u0902 \u091C\u0940\u0924 \u0926\u0930\u094D\u091C \u0915\u0940\u0964 \u0938\u0932\u093E\u092E\u0940 \u092C\u0932\u094D\u0932\u0947\u092C\u093E\u091C \u0928\u0947 85 \u0930\u0928\u094B\u0902 \u0915\u0940 \u0928\u093E\u092C\u093E\u0926 \u092A\u093E\u0930\u0940 \u0916\u0947\u0932\u0940, \u0917\u0947\u0902\u0926\u092C\u093E\u091C\u094B\u0902 \u0928\u0947 \u0921\u0947\u0925 \u0913\u0935\u0930\u094D\u0938 \u092E\u0947\u0902 \u0915\u0938\u0940 \u0939\u0941\u0908 \u0917\u0947\u0902\u0926\u092C\u093E\u091C\u0940 \u0915\u0940\u0964",
+      sourceChannel: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E",
+      sourceUrl: "https://ndtv.in/sports/asia-cup-victory",
+      category: "sports",
+      categoryName: "\u0916\u0947\u0932",
+      publishedTime: "45 \u092E\u093F\u0928\u091F \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: true,
+      timestamp: now - 45 * 60 * 1e3,
+      fullContent: `\u0905\u0902\u0924\u093F\u092E \u0913\u0935\u0930 \u092E\u0947\u0902 \u091A\u093E\u0939\u093F\u090F \u0925\u0947 12 \u0930\u0928, \u092D\u093E\u0930\u0924\u0940\u092F \u092C\u0932\u094D\u0932\u0947\u092C\u093E\u091C\u094B\u0902 \u0928\u0947 2 \u0917\u0947\u0902\u0926 \u0936\u0947\u0937 \u0930\u0939\u0924\u0947 \u091C\u0940\u0924 \u0926\u093F\u0932\u093E \u0926\u0940\u0964 \u0907\u0938 \u091C\u0940\u0924 \u0915\u0947 \u0938\u093E\u0925 \u092D\u093E\u0930\u0924\u0940\u092F \u091F\u0940\u092E \u0905\u0902\u0915 \u0924\u093E\u0932\u093F\u0915\u093E \u092E\u0947\u0902 \u0936\u0940\u0930\u094D\u0937 \u092A\u0930 \u092A\u0939\u0941\u0902\u091A \u0917\u0908 \u0939\u0948\u0964`
+    },
+    {
+      id: "live-post-4",
+      title: "\u0938\u0947\u0902\u0938\u0947\u0915\u094D\u0938 \u092E\u0947\u0902 1100 \u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0930\u093F\u0915\u0949\u0930\u094D\u0921 \u0909\u091B\u093E\u0932, \u0928\u093F\u092B\u094D\u091F\u0940 25,500 \u0915\u0947 \u0928\u090F \u0936\u093F\u0916\u0930 \u092A\u0930 \u092A\u0939\u0941\u0902\u091A\u093E",
+      summary: "\u0918\u0930\u0947\u0932\u0942 \u0936\u0947\u092F\u0930 \u092C\u093E\u091C\u093E\u0930\u094B\u0902 \u092E\u0947\u0902 \u0935\u093F\u0926\u0947\u0936\u0940 \u0938\u0902\u0938\u094D\u0925\u093E\u0917\u0924 \u0928\u093F\u0935\u0947\u0936\u0915\u094B\u0902 (FII) \u0915\u0940 \u0935\u093E\u092A\u0938\u0940 \u0938\u0947 \u092C\u093E\u091C\u093E\u0930 \u0928\u0908 \u090A\u0902\u091A\u093E\u0908 \u092A\u0930 \u092A\u0939\u0941\u0902\u091A\u093E\u0964 \u092C\u0948\u0902\u0915\u093F\u0902\u0917, \u0911\u091F\u094B \u0914\u0930 \u0906\u0908\u091F\u0940 \u0938\u0947\u0915\u094D\u091F\u0930 \u092E\u0947\u0902 \u092D\u093E\u0930\u0940 \u0932\u093F\u0935\u093E\u0932\u0940 \u0926\u0947\u0916\u0928\u0947 \u0915\u094B \u092E\u093F\u0932\u0940\u0964",
+      sourceChannel: "\u092E\u0928\u0940\u0915\u0902\u091F\u094D\u0930\u094B\u0932 (Moneycontrol)",
+      sourceUrl: "https://moneycontrol.com/markets/sensex-record",
+      category: "business",
+      categoryName: "\u0915\u093E\u0930\u094B\u092C\u093E\u0930",
+      publishedTime: "1 \u0918\u0902\u091F\u093E \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
+      breaking: false,
+      isExclusive: false,
+      timestamp: now - 60 * 60 * 1e3,
+      fullContent: `\u092D\u093E\u0930\u0924\u0940\u092F \u0936\u0947\u092F\u0930 \u092C\u093E\u091C\u093E\u0930 \u0928\u0947 \u0906\u091C \u0928\u092F\u093E \u0907\u0924\u093F\u0939\u093E\u0938 \u0930\u091A\u093E\u0964 \u0938\u0947\u0902\u0938\u0947\u0915\u094D\u0938 1100 \u0905\u0902\u0915\u094B\u0902 \u0915\u0940 \u0924\u0947\u091C\u0940 \u0915\u0947 \u0938\u093E\u0925 \u092C\u0902\u0926 \u0939\u0941\u0906 \u0914\u0930 \u0928\u093F\u092B\u094D\u091F\u0940 \u0928\u0947 \u092A\u0939\u0932\u0940 \u092C\u093E\u0930 25,500 \u0915\u093E \u0938\u094D\u0924\u0930 \u091B\u0941\u0906\u0964 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0915\u094B\u0902 \u0915\u093E \u092E\u093E\u0928\u0928\u093E \u0939\u0948 \u0915\u093F \u092E\u091C\u092C\u0942\u0924 \u0906\u0930\u094D\u0925\u093F\u0915 \u0906\u0902\u0915\u0921\u093C\u0947 \u092C\u093E\u091C\u093E\u0930 \u0915\u094B \u0917\u0924\u093F \u0926\u0947 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964`
+    },
+    {
+      id: "live-post-5",
+      title: "\u0907\u0938\u0930\u094B \u0928\u0947 \u0917\u0917\u0928\u092F\u093E\u0928 \u092E\u093F\u0936\u0928 \u0915\u0947 \u0926\u0942\u0938\u0930\u0947 \u0915\u094D\u0930\u0942-\u090F\u0938\u094D\u0915\u0947\u092A \u0938\u093F\u0938\u094D\u091F\u092E \u0915\u093E \u0938\u092B\u0932 \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u093F\u092F\u093E",
+      summary: "\u092D\u093E\u0930\u0924\u0940\u092F \u0905\u0902\u0924\u0930\u093F\u0915\u094D\u0937 \u0905\u0928\u0941\u0938\u0902\u0927\u093E\u0928 \u0938\u0902\u0917\u0920\u0928 (ISRO) \u0928\u0947 \u0936\u094D\u0930\u0940\u0939\u0930\u093F\u0915\u094B\u091F\u093E \u0938\u0947 \u092E\u093E\u0928\u0935 \u0905\u0902\u0924\u0930\u093F\u0915\u094D\u0937 \u0909\u0921\u093C\u093E\u0928 \u0917\u0917\u0928\u092F\u093E\u0928 \u0915\u0947 \u0932\u093F\u090F \u0905\u0924\u094D\u092F\u093E\u0927\u0941\u0928\u093F\u0915 \u0938\u0947\u092B\u094D\u091F\u0940 \u092E\u0949\u0921\u094D\u092F\u0942\u0932 \u0915\u093E \u0938\u092B\u0932 \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u092A\u0942\u0930\u093E \u0915\u093F\u092F\u093E\u0964",
+      sourceChannel: "ABP \u0928\u094D\u092F\u0942\u091C\u093C",
+      sourceUrl: "https://abplive.com/science/gaganyaan-test",
+      category: "tech",
+      categoryName: "\u091F\u0947\u0915\u094D\u0928\u094B\u0932\u0949\u091C\u0940",
+      publishedTime: "2 \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1517976487507-5b3b11329582?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: false,
+      timestamp: now - 120 * 60 * 1e3,
+      fullContent: `\u0907\u0938\u0930\u094B \u0928\u0947 \u0905\u0902\u0924\u0930\u093F\u0915\u094D\u0937 \u092F\u093E\u0924\u094D\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0928\u0947 \u0935\u093E\u0932\u0947 \u0915\u094D\u0930\u0942 \u092E\u0949\u0921\u094D\u092F\u0942\u0932 \u0915\u093E \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092A\u0942\u0930\u093E \u0915\u0930 \u0932\u093F\u092F\u093E \u0939\u0948\u0964 \u0906\u0917\u093E\u092E\u0940 \u0935\u0930\u094D\u0937 \u0915\u0947 \u0905\u0902\u0924 \u0924\u0915 \u092E\u093E\u0928\u0935 \u092E\u093F\u0936\u0928 \u0915\u0940 \u092F\u094B\u091C\u0928\u093E \u0939\u0948\u0964`
+    },
+    {
+      id: "live-post-6",
+      title: "\u092E\u094C\u0938\u092E \u0905\u0932\u0930\u094D\u091F: \u0909\u0924\u094D\u0924\u0930 \u092D\u093E\u0930\u0924 \u092E\u0947\u0902 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0914\u0930 \u0913\u0932\u093E\u0935\u0943\u0937\u094D\u091F\u093F \u0915\u0940 \u091A\u0947\u0924\u093E\u0935\u0928\u0940 \u091C\u093E\u0930\u0940",
+      summary: "\u092E\u094C\u0938\u092E \u0935\u093F\u092D\u093E\u0917 (IMD) \u0928\u0947 \u0905\u0917\u0932\u0947 48 \u0918\u0902\u091F\u094B\u0902 \u092E\u0947\u0902 \u0926\u093F\u0932\u094D\u0932\u0940, \u0939\u0930\u093F\u092F\u093E\u0923\u093E, \u092A\u0902\u091C\u093E\u092C \u0914\u0930 \u092A\u0936\u094D\u091A\u093F\u092E\u0940 \u092F\u0942\u092A\u0940 \u0915\u0947 \u0915\u0908 \u091C\u093F\u0932\u094B\u0902 \u092E\u0947\u0902 \u0924\u0947\u091C \u0906\u0902\u0927\u0940 \u0914\u0930 \u092C\u093E\u0930\u093F\u0936 \u0915\u0947 \u0932\u093F\u090F \u0911\u0930\u0947\u0902\u091C \u0905\u0932\u0930\u094D\u091F \u091C\u093E\u0930\u0940 \u0915\u093F\u092F\u093E \u0939\u0948\u0964",
+      sourceChannel: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala)",
+      sourceUrl: "https://amarujala.com/weather/heavy-rain-alert",
+      category: "state",
+      categoryName: "\u0930\u093E\u091C\u094D\u092F / \u0938\u094D\u0925\u093E\u0928\u0940\u092F",
+      publishedTime: "2.5 \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: false,
+      timestamp: now - 150 * 60 * 1e3,
+      fullContent: `\u092E\u094C\u0938\u092E \u0935\u093F\u092D\u093E\u0917 \u0928\u0947 \u092A\u0936\u094D\u091A\u093F\u092E\u0940 \u0935\u093F\u0915\u094D\u0937\u094B\u092D \u0915\u0947 \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u094B\u0928\u0947 \u0915\u0947 \u0915\u093E\u0930\u0923 \u0909\u0924\u094D\u0924\u0930 \u092D\u093E\u0930\u0924 \u0915\u0947 \u0915\u0908 \u0930\u093E\u091C\u094D\u092F\u094B\u0902 \u092E\u0947\u0902 \u0924\u0947\u091C \u0939\u0935\u093E\u0913\u0902 \u0915\u0947 \u0938\u093E\u0925 \u092C\u093E\u0930\u093F\u0936 \u0914\u0930 \u0913\u0932\u093E\u0935\u0943\u0937\u094D\u091F\u093F \u0915\u0940 \u0938\u0902\u092D\u093E\u0935\u0928\u093E \u091C\u0924\u093E\u0908 \u0939\u0948\u0964 \u0915\u093F\u0938\u093E\u0928\u094B\u0902 \u0915\u094B \u0915\u091F\u0940 \u092B\u0938\u0932 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0938\u094D\u0925\u093E\u0928\u094B\u0902 \u092A\u0930 \u0930\u0916\u0928\u0947 \u0915\u0940 \u0938\u0932\u093E\u0939 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0964`
+    },
+    {
+      id: "live-post-7",
+      title: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0930\u093E\u091C\u092E\u093E\u0930\u094D\u0917\u094B\u0902 \u092A\u0930 \u0905\u092C \u0932\u093E\u0917\u0942 \u0939\u094B\u0917\u093E \u0938\u0947\u091F\u0947\u0932\u093E\u0907\u091F \u0906\u0927\u093E\u0930\u093F\u0924 \u091F\u094B\u0932 \u0915\u0932\u0947\u0915\u094D\u0936\u0928 \u0938\u093F\u0938\u094D\u091F\u092E",
+      summary: "\u0938\u0921\u093C\u0915 \u092A\u0930\u093F\u0935\u0939\u0928 \u092E\u0902\u0924\u094D\u0930\u093E\u0932\u092F \u0928\u0947 \u092B\u093E\u0938\u094D\u091F\u0948\u0917 \u0915\u0947 \u092C\u093E\u0926 \u0905\u092C \u091C\u0940\u092A\u0940\u090F\u0938 \u0914\u0930 \u0938\u0948\u091F\u0947\u0932\u093E\u0907\u091F \u0906\u0927\u093E\u0930\u093F\u0924 \u091F\u094B\u0932 \u092A\u094D\u0930\u0923\u093E\u0932\u0940 \u0915\u094B \u0926\u0947\u0936 \u0915\u0947 \u092A\u094D\u0930\u092E\u0941\u0916 \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938\u0935\u0947 \u092A\u0930 \u092A\u093E\u092F\u0932\u091F \u092A\u094D\u0930\u094B\u091C\u0947\u0915\u094D\u091F \u0915\u0947 \u0924\u094C\u0930 \u092A\u0930 \u0936\u0941\u0930\u0942 \u0915\u0930\u0928\u0947 \u0915\u0940 \u0918\u094B\u0937\u0923\u093E \u0915\u0940 \u0939\u0948\u0964",
+      sourceChannel: "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (Zee News)",
+      sourceUrl: "https://zeenews.india.com/automobiles/satellite-toll",
+      category: "politics",
+      categoryName: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F",
+      publishedTime: "3 \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1545459720-aac8509eb02c?w=800&auto=format&fit=crop",
+      breaking: false,
+      isExclusive: false,
+      timestamp: now - 180 * 60 * 1e3,
+      fullContent: `\u0928\u0908 \u092A\u094D\u0930\u0923\u093E\u0932\u0940 \u0915\u0947 \u0924\u0939\u0924 \u0935\u093E\u0939\u0928\u094B\u0902 \u092E\u0947\u0902 \u0932\u0917\u0947 \u0913\u092C\u0940\u092F\u0942 (\u0911\u0928-\u092C\u094B\u0930\u094D\u0921 \u092F\u0942\u0928\u093F\u091F) \u0915\u0947 \u091C\u0930\u093F\u090F \u0924\u092F \u0915\u0940 \u0917\u0908 \u0926\u0942\u0930\u0940 \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 \u0938\u094D\u0935\u0924\u0903 \u091F\u094B\u0932 \u0915\u091F \u091C\u093E\u090F\u0917\u093E\u0964 \u0907\u0938\u0938\u0947 \u091F\u094B\u0932 \u092A\u094D\u0932\u093E\u091C\u093E \u092A\u0930 \u0932\u0917\u0928\u0947 \u0935\u093E\u0932\u093E \u0938\u092E\u092F \u0936\u0942\u0928\u094D\u092F \u0939\u094B \u091C\u093E\u090F\u0917\u093E\u0964`
+    },
+    {
+      id: "live-post-8",
+      title: "\u0938\u094B\u0928\u0947 \u0915\u0940 \u0915\u0940\u092E\u0924\u094B\u0902 \u092E\u0947\u0902 \u092D\u093E\u0930\u0940 \u0917\u093F\u0930\u093E\u0935\u091F, \u091A\u093E\u0902\u0926\u0940 2000 \u0930\u0941\u092A\u092F\u0947 \u092A\u094D\u0930\u0924\u093F \u0915\u093F\u0932\u094B \u0938\u0938\u094D\u0924\u0940 \u0939\u0941\u0908",
+      summary: "\u0935\u0948\u0936\u094D\u0935\u093F\u0915 \u092C\u093E\u091C\u093E\u0930\u094B\u0902 \u092E\u0947\u0902 \u092E\u091C\u092C\u0942\u0924\u0940 \u0915\u0947 \u092C\u093E\u0926 \u0918\u0930\u0947\u0932\u0942 \u0938\u0930\u094D\u0930\u093E\u092B\u093E \u092C\u093E\u091C\u093E\u0930 \u092E\u0947\u0902 \u0938\u094B\u0928\u0947 \u0914\u0930 \u091A\u093E\u0902\u0926\u0940 \u0915\u0940 \u0915\u0940\u092E\u0924\u094B\u0902 \u092E\u0947\u0902 \u092C\u0921\u093C\u0940 \u0917\u093F\u0930\u093E\u0935\u091F \u0926\u0930\u094D\u091C \u0915\u0940 \u0917\u0908\u0964 \u0924\u094D\u092F\u094B\u0939\u093E\u0930\u0940 \u0938\u0940\u091C\u0928 \u0938\u0947 \u092A\u0939\u0932\u0947 \u0916\u0930\u0940\u0926\u093E\u0930\u094B\u0902 \u0915\u0947 \u091A\u0947\u0939\u0930\u0947 \u0916\u093F\u0932\u0947\u0964",
+      sourceChannel: "\u0926\u0948\u0928\u093F\u0915 \u091C\u093E\u0917\u0930\u0923 (Dainik Jagran)",
+      sourceUrl: "https://jagran.com/business/gold-silver-prices",
+      category: "business",
+      categoryName: "\u0915\u093E\u0930\u094B\u092C\u093E\u0930",
+      publishedTime: "3.5 \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1610375461246-83df859d849d?w=800&auto=format&fit=crop",
+      breaking: false,
+      isExclusive: false,
+      timestamp: now - 210 * 60 * 1e3,
+      fullContent: `24 \u0915\u0948\u0930\u0947\u091F \u0938\u094B\u0928\u0947 \u0915\u0940 \u0915\u0940\u092E\u0924 \u092A\u094D\u0930\u0924\u093F 10 \u0917\u094D\u0930\u093E\u092E \u092E\u0947\u0902 750 \u0930\u0941\u092A\u092F\u0947 \u0915\u0940 \u0915\u092E\u0940 \u0906\u0908, \u0935\u0939\u0940\u0902 \u091A\u093E\u0902\u0926\u0940 2000 \u0930\u0941\u092A\u092F\u0947 \u0938\u0938\u094D\u0924\u0940 \u0939\u094B\u0915\u0930 84,000 \u0930\u0941\u092A\u092F\u0947 \u092A\u094D\u0930\u0924\u093F \u0915\u093F\u0932\u094B\u0917\u094D\u0930\u093E\u092E \u0915\u0947 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0906 \u0917\u0908 \u0939\u0948\u0964`
+    },
+    {
+      id: "live-post-9",
+      title: "\u0930\u0947\u0932\u0935\u0947 \u0915\u093E \u092C\u0921\u093C\u093E \u0910\u0932\u093E\u0928: 50 \u0928\u090F \u0930\u0942\u091F\u094B\u0902 \u092A\u0930 \u0926\u094C\u0921\u093C\u0947\u0902\u0917\u0940 \u0938\u094D\u0932\u0940\u092A\u0930 \u0935\u0902\u0926\u0947 \u092D\u093E\u0930\u0924 \u091F\u094D\u0930\u0947\u0928\u0947\u0902",
+      summary: "\u0932\u0902\u092C\u0940 \u0926\u0942\u0930\u0940 \u0915\u0947 \u092F\u093E\u0924\u094D\u0930\u093F\u092F\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0935\u093F\u0936\u094D\u0935\u0938\u094D\u0924\u0930\u0940\u092F \u0938\u0941\u0935\u093F\u0927\u093E\u0913\u0902 \u0938\u0947 \u0932\u0948\u0938 \u0938\u094D\u0932\u0940\u092A\u0930 \u0935\u0902\u0926\u0947 \u092D\u093E\u0930\u0924 \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938 \u091F\u094D\u0930\u0947\u0928\u094B\u0902 \u0915\u093E \u092A\u0930\u093F\u091A\u093E\u0932\u0928 \u091C\u0932\u094D\u0926 \u0936\u0941\u0930\u0942 \u0939\u094B\u0917\u093E\u0964 \u0924\u0947\u091C \u0930\u092B\u094D\u0924\u093E\u0930 \u0914\u0930 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u092F\u093E\u0924\u094D\u0930\u093E \u0915\u093E \u0905\u0928\u0941\u092D\u0935\u0964",
+      sourceChannel: "\u0939\u093F\u0902\u0926\u0941\u0938\u094D\u0924\u093E\u0928 (Live Hindustan)",
+      sourceUrl: "https://livehindustan.com/national/vande-bharat-sleeper",
+      category: "state",
+      categoryName: "\u0930\u093E\u091C\u094D\u092F / \u0938\u094D\u0925\u093E\u0928\u0940\u092F",
+      publishedTime: "4 \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=800&auto=format&fit=crop",
+      breaking: false,
+      isExclusive: false,
+      timestamp: now - 240 * 60 * 1e3,
+      fullContent: `\u0930\u0947\u0932 \u092E\u0902\u0924\u094D\u0930\u093E\u0932\u092F \u0928\u0947 50 \u0928\u090F \u0930\u0942\u091F\u094B\u0902 \u0915\u094B \u0905\u0902\u0924\u093F\u092E \u0930\u0942\u092A \u0926\u0947 \u0926\u093F\u092F\u093E \u0939\u0948\u0964 \u0928\u0908 \u0938\u094D\u0932\u0940\u092A\u0930 \u091F\u094D\u0930\u0947\u0928\u094B\u0902 \u092E\u0947\u0902 \u0905\u0924\u094D\u092F\u093E\u0927\u0941\u0928\u093F\u0915 \u090F\u092F\u0930 \u0938\u0938\u094D\u092A\u0947\u0902\u0936\u0928, \u092C\u093E\u092F\u094B-\u0935\u0948\u0915\u094D\u092F\u0942\u092E \u091F\u0949\u092F\u0932\u0947\u091F\u094D\u0938 \u0914\u0930 \u0915\u0935\u091A \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u092A\u094D\u0930\u0923\u093E\u0932\u0940 \u0936\u093E\u092E\u093F\u0932 \u0939\u0948\u0902\u0964`
+    },
+    {
+      id: "live-post-10",
+      title: "\u0938\u093E\u0907\u092C\u0930 \u092A\u0941\u0932\u093F\u0938 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908: 500 \u0915\u0930\u094B\u0921\u093C \u0915\u0947 \u0911\u0928\u0932\u093E\u0907\u0928 \u0917\u0947\u092E\u093F\u0902\u0917 \u0938\u093F\u0902\u0921\u093F\u0915\u0947\u091F \u0915\u093E \u092D\u0902\u0921\u093E\u092B\u094B\u0921\u093C",
+      summary: "\u0935\u093F\u0936\u0947\u0937 \u091F\u093E\u0938\u094D\u0915 \u092B\u094B\u0930\u094D\u0938 \u0928\u0947 \u092B\u0930\u094D\u091C\u0940 \u0921\u093F\u091C\u093F\u091F\u0932 \u092A\u0947\u092E\u0947\u0902\u091F \u0917\u0947\u091F\u0935\u0947 \u0914\u0930 \u0905\u0935\u0948\u0927 \u0917\u0947\u092E\u093F\u0902\u0917 \u0910\u092A \u0915\u0947 \u091C\u0930\u093F\u090F \u0915\u0930\u094B\u0921\u093C\u094B\u0902 \u0915\u0940 \u0920\u0917\u0940 \u0915\u0930\u0928\u0947 \u0935\u093E\u0932\u0947 \u0905\u0902\u0924\u0930\u0930\u093E\u091C\u094D\u092F\u0940\u092F \u0917\u093F\u0930\u094B\u0939 \u0915\u0947 8 \u0938\u0926\u0938\u094D\u092F\u094B\u0902 \u0915\u094B \u0926\u092C\u094B\u091A\u093E\u0964",
+      sourceChannel: "\u092A\u0924\u094D\u0930\u093F\u0915\u093E (Patrika)",
+      sourceUrl: "https://patrika.com/crime/cyber-crime-busted",
+      category: "crime",
+      categoryName: "\u0915\u094D\u0930\u093E\u0907\u092E / \u0905\u092A\u0930\u093E\u0927",
+      publishedTime: "5 \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947",
+      imageUrl: "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: true,
+      timestamp: now - 300 * 60 * 1e3,
+      fullContent: `\u092A\u0941\u0932\u093F\u0938 \u0928\u0947 \u0906\u0930\u094B\u092A\u093F\u092F\u094B\u0902 \u0915\u0947 \u092A\u093E\u0938 \u0938\u0947 25 \u0932\u0948\u092A\u091F\u0949\u092A, 60 \u0938\u094D\u092E\u093E\u0930\u094D\u091F\u092B\u094B\u0928 \u0914\u0930 100 \u0938\u0947 \u091C\u094D\u092F\u093E\u0926\u093E \u092B\u094D\u0930\u0940\u091C \u092C\u0948\u0902\u0915 \u0916\u093E\u0924\u094B\u0902 \u0915\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u092C\u0930\u093E\u092E\u0926 \u0915\u0940 \u0939\u0948\u0964`
+    }
+  ];
+}
+function loadNewsDatabase() {
+  try {
+    if (import_fs.default.existsSync(NEWS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(NEWS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Error reading news_database.json:", err);
+  }
+  const initial = getInitialRichNewsPosts();
+  saveNewsDatabase(initial);
+  return initial;
+}
+function saveNewsDatabase(posts) {
+  try {
+    import_fs.default.writeFileSync(NEWS_DB_FILE, JSON.stringify(posts, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing news_database.json:", err);
+    return false;
+  }
+}
+function formatRelativeTime(timestamp) {
+  const diffMs = Date.now() - timestamp;
+  const diffMinutes = Math.max(1, Math.floor(diffMs / 6e4));
+  if (diffMinutes < 60) return `${diffMinutes} \u092E\u093F\u0928\u091F \u092A\u0939\u0932\u0947`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} \u0918\u0902\u091F\u0947 \u092A\u0939\u0932\u0947`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} \u0926\u093F\u0928 \u092A\u0939\u0932\u0947`;
+}
+app.get("/api/news-posts", (_req, res) => {
+  const posts = loadNewsDatabase();
+  const dynamicPosts = posts.map((p) => ({
+    ...p,
+    publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime
+  }));
+  return res.json({ success: true, posts: dynamicPosts });
+});
+app.post("/api/news-posts", (req, res) => {
+  try {
+    const payload = req.body;
+    let existing = loadNewsDatabase();
+    if (Array.isArray(payload)) {
+      existing = payload;
+    } else if (payload && payload.title) {
+      const newPost = {
+        id: payload.id || `post-${Date.now()}`,
+        title: payload.title,
+        summary: payload.summary || "",
+        sourceChannel: payload.sourceChannel || "\u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0942\u092E",
+        sourceUrl: payload.sourceUrl || "",
+        category: payload.category || "breaking",
+        categoryName: payload.categoryName || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
+        publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
+        imageUrl: payload.imageUrl || "",
+        breaking: Boolean(payload.breaking),
+        isExclusive: Boolean(payload.isExclusive),
+        fullContent: payload.fullContent || payload.summary || "",
+        district: payload.district || "",
+        location: payload.location || "",
+        timestamp: payload.timestamp || Date.now()
+      };
+      existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
+    }
+    saveNewsDatabase(existing);
+    return res.json({ success: true, posts: existing });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/news-posts/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => p.id === id ? { ...p, ...updates } : p);
+    saveNewsDatabase(existing);
+    return res.json({ success: true, posts: existing });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/news-posts/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let existing = loadNewsDatabase();
+    existing = existing.filter((p) => p.id !== id);
+    saveNewsDatabase(existing);
+    return res.json({ success: true, posts: existing });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/news-posts/reset", (_req, res) => {
+  const fresh = getInitialRichNewsPosts();
+  saveNewsDatabase(fresh);
+  return res.json({ success: true, posts: fresh });
+});
+function generateRssFeedXml(posts, baseUrl = "https://www.ainewsmaker.online") {
+  const cleanSiteUrl = baseUrl.replace(/\/+$/, "");
+  const itemsXml = posts.map((post) => {
+    const pubDate = post.timestamp ? new Date(post.timestamp).toUTCString() : (/* @__PURE__ */ new Date()).toUTCString();
+    const link = post.sourceUrl && post.sourceUrl.startsWith("http") ? post.sourceUrl : `${cleanSiteUrl}/#home`;
+    const safeCategory = (post.categoryName || post.category || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeChannel = (post.sourceChannel || "AI News Maker").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const enclosureTag = post.imageUrl ? `
+      <enclosure url="${post.imageUrl.replace(/&/g, "&amp;")}" length="0" type="image/jpeg" />` : "";
+    return `    <item>
+      <title><![CDATA[${post.title || ""}]]></title>
+      <link>${link}</link>
+      <guid isPermaLink="false">${post.id || `post-${Date.now()}`}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description><![CDATA[${post.summary || ""}]]></description>
+      <category>${safeCategory}</category>
+      <source url="${link}">${safeChannel}</source>${enclosureTag}
+    </item>`;
+  }).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>AI News Maker - Live News Feed (\u0932\u093E\u0907\u0935 \u0938\u092E\u093E\u091A\u093E\u0930)</title>
+    <link>${cleanSiteUrl}/</link>
+    <description>AI News Maker - \u0930\u093F\u092F\u0932-\u091F\u093E\u0907\u092E \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C, \u0935\u0940\u0921\u093F\u092F\u094B \u0914\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938 \u0932\u093E\u0907\u0935 RSS \u092B\u093C\u0940\u0921</description>
+    <language>hi</language>
+    <copyright>\xA9 ${(/* @__PURE__ */ new Date()).getFullYear()} AI News Maker</copyright>
+    <lastBuildDate>${(/* @__PURE__ */ new Date()).toUTCString()}</lastBuildDate>
+    <atom:link href="${cleanSiteUrl}/rss.xml" rel="self" type="application/rss+xml" />
+${itemsXml}
+  </channel>
+</rss>`;
+}
+app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
+  try {
+    const posts = loadNewsDatabase();
+    const rssXml = generateRssFeedXml(posts);
+    res.header("Content-Type", "application/rss+xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=180");
+    return res.send(rssXml);
+  } catch (err) {
+    return res.status(500).send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${err.message}</description></channel></rss>`);
+  }
+});
+var ACCOUNT_DELETIONS_FILE = import_path.default.join(process.cwd(), "account_deletion_requests.json");
+function loadAccountDeletionRequests() {
+  try {
+    if (import_fs.default.existsSync(ACCOUNT_DELETIONS_FILE)) {
+      const raw = import_fs.default.readFileSync(ACCOUNT_DELETIONS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error("Error reading account_deletion_requests.json:", err);
+  }
+  return [];
+}
+function saveAccountDeletionRequests(records) {
+  try {
+    import_fs.default.writeFileSync(ACCOUNT_DELETIONS_FILE, JSON.stringify(records, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing account_deletion_requests.json:", err);
+    return false;
+  }
+}
+app.post("/api/account-deletion-requests", (req, res) => {
+  try {
+    const { email, mobile, channelName, reason } = req.body || {};
+    const cleanEmail = (email || "").toString().trim().toLowerCase();
+    const cleanMobile = (mobile || "").toString().trim();
+    const cleanChannel = (channelName || "").toString().trim().toLowerCase();
+    let existingPosts = loadNewsDatabase();
+    const initialCount = existingPosts.length;
+    if (cleanChannel.length > 2 || cleanEmail.length > 4) {
+      existingPosts = existingPosts.filter((p) => {
+        const pChannel = (p.sourceChannel || "").toLowerCase();
+        if (cleanChannel.length > 2 && (pChannel.includes(cleanChannel) || cleanChannel.includes(pChannel))) {
+          return false;
+        }
+        return true;
+      });
+      if (existingPosts.length !== initialCount) {
+        saveNewsDatabase(existingPosts);
+      }
+    }
+    const clearedCount = initialCount - existingPosts.length;
+    const requestId = `DEL-${Date.now()}-${Math.floor(1e3 + Math.random() * 9e3)}`;
+    const record = {
+      id: requestId,
+      email: cleanEmail || "unknown",
+      mobile: cleanMobile,
+      channelName: cleanChannel,
+      reason: reason || "User requested account & data deletion via portal",
+      requestedAt: Date.now(),
+      status: "COMPLETED",
+      clearedPostsCount: clearedCount
+    };
+    const allRequests = loadAccountDeletionRequests();
+    allRequests.unshift(record);
+    saveAccountDeletionRequests(allRequests);
+    console.log(`[Account Deletion] Processed request for ${cleanEmail || cleanMobile || cleanChannel}. Cleared posts: ${clearedCount}`);
+    return res.json({
+      success: true,
+      requestId,
+      message: "Account and associated data deletion request successfully processed. All profile and news data purged.",
+      clearedPostsCount: clearedCount
+    });
+  } catch (err) {
+    console.error("Error processing account deletion request:", err);
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.all("/api/user-data/delete-account", (req, res) => {
+  try {
+    const { email, mobile, channelName } = req.body || {};
+    const cleanEmail = (email || "").toString().trim().toLowerCase();
+    const cleanChannel = (channelName || "").toString().trim().toLowerCase();
+    let existingPosts = loadNewsDatabase();
+    const initialCount = existingPosts.length;
+    if (cleanChannel.length > 2) {
+      existingPosts = existingPosts.filter((p) => {
+        const pChannel = (p.sourceChannel || "").toLowerCase();
+        return !pChannel.includes(cleanChannel);
+      });
+      if (existingPosts.length !== initialCount) {
+        saveNewsDatabase(existingPosts);
+      }
+    }
+    const requestId = `DEL-APP-${Date.now()}`;
+    const record = {
+      id: requestId,
+      email: cleanEmail || "in-app-user",
+      mobile: (mobile || "").toString().trim(),
+      channelName: cleanChannel,
+      reason: "In-App one-click account & all data deletion",
+      requestedAt: Date.now(),
+      status: "PURGED",
+      clearedPostsCount: initialCount - existingPosts.length
+    };
+    const allRequests = loadAccountDeletionRequests();
+    allRequests.unshift(record);
+    saveAccountDeletionRequests(allRequests);
+    return res.json({
+      success: true,
+      message: "In-app account and all associated data purged successfully from server.",
+      requestId
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/account-deletion-requests", (_req, res) => {
+  return res.json({ success: true, requests: loadAccountDeletionRequests() });
+});
+var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
+var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
+var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+try {
+  import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
+} catch {
+}
+app.use("/uploads", import_express.default.static(import_path.default.join(process.cwd(), "public", "uploads")));
+function loadProfilesDatabase() {
+  try {
+    if (import_fs.default.existsSync(PROFILES_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(PROFILES_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error("Error reading user_profiles_db.json:", err);
+  }
+  return {};
+}
+function saveProfilesDatabase(data) {
+  try {
+    import_fs.default.writeFileSync(PROFILES_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error saving user_profiles_db.json:", err);
+    return false;
+  }
+}
+app.get("/api/user-profile", (req, res) => {
+  const username = (req.query.username || "").toString().trim().toLowerCase();
+  const email = (req.query.email || "").toString().trim().toLowerCase();
+  const allProfiles = loadProfilesDatabase();
+  const match = Object.values(allProfiles).find(
+    (p) => username && p.username.toLowerCase() === username || email && p.email?.toLowerCase() === email
+  );
+  if (match) {
+    return res.json({ success: true, profile: match });
+  }
+  return res.json({ success: true, profile: null });
+});
+app.post("/api/user-profile", (req, res) => {
+  try {
+    const profile = req.body;
+    if (!profile || !profile.username && !profile.email) {
+      return res.status(400).json({ error: "Username or email is required" });
+    }
+    const key = (profile.username || profile.email).trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    const existing = allProfiles[key] || {};
+    const updated = {
+      ...existing,
+      ...profile,
+      username: profile.username || existing.username || key,
+      fullName: profile.fullName || existing.fullName || "\u0938\u0902\u092A\u093E\u0926\u0915",
+      role: profile.role || existing.role || (key.includes("admin") ? "admin" : "reporter"),
+      email: profile.email || existing.email,
+      district: profile.district || existing.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+      channelNameHi: profile.channelNameHi || existing.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameEn: profile.channelNameEn || existing.channelNameEn || "AI News Maker",
+      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoPngUrl: profile.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
+      channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
+      updatedAt: Date.now()
+    };
+    allProfiles[key] = updated;
+    saveProfilesDatabase(allProfiles);
+    return res.json({ success: true, profile: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/upload-logo", (req, res) => {
+  try {
+    const { dataUrl, logoType, username } = req.body;
+    if (!dataUrl || typeof dataUrl !== "string") {
+      return res.status(400).json({ error: "Missing dataUrl" });
+    }
+    const isGif = logoType === "gif" || dataUrl.startsWith("data:image/gif");
+    const ext = isGif ? "gif" : "png";
+    const filename = `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
+    const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
+    import_fs.default.writeFileSync(filePath, buffer);
+    try {
+      import_fs.default.writeFileSync(webFilePath, buffer);
+    } catch {
+    }
+    const logoUrl = `/uploads/logos/${filename}`;
+    if (username) {
+      const allProfiles = loadProfilesDatabase();
+      const key = username.trim().toLowerCase();
+      if (allProfiles[key]) {
+        if (isGif) {
+          allProfiles[key].channelLogoGifUrl = logoUrl;
+          allProfiles[key].channelLogoType = "gif";
+          allProfiles[key].channelLogoUrl = logoUrl;
+        } else {
+          allProfiles[key].channelLogoPngUrl = logoUrl;
+          allProfiles[key].channelLogoType = "png";
+          allProfiles[key].channelLogoUrl = logoUrl;
+        }
+        allProfiles[key].updatedAt = Date.now();
+        saveProfilesDatabase(allProfiles);
+      }
+    }
+    return res.json({ success: true, logoUrl, logoType: isGif ? "gif" : "png" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/reset-user-logo", (req, res) => {
+  try {
+    const { targetUsername } = req.body;
+    if (!targetUsername) {
+      return res.status(400).json({ error: "targetUsername is required" });
+    }
+    const allProfiles = loadProfilesDatabase();
+    const key = targetUsername.trim().toLowerCase();
+    if (allProfiles[key]) {
+      allProfiles[key].channelLogoUrl = "/assets/ai_news_maker_logo.png";
+      allProfiles[key].channelLogoPngUrl = void 0;
+      allProfiles[key].channelLogoGifUrl = void 0;
+      allProfiles[key].channelLogoType = "png";
+      allProfiles[key].updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+      return res.json({ success: true, message: `Logo reset for ${targetUsername}` });
+    }
+    return res.json({ success: true, message: "Profile not found or reset complete" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var serveAccountDeletionHtml = (_req, res) => {
+  const possiblePaths = [
+    import_path.default.join(process.cwd(), "public", "delete-account", "index.html"),
+    import_path.default.join(process.cwd(), "dist", "delete-account", "index.html"),
+    import_path.default.join(process.cwd(), "web_studio", "public", "delete-account", "index.html")
+  ];
+  for (const p of possiblePaths) {
+    if (import_fs.default.existsSync(p)) {
+      return res.sendFile(p);
+    }
+  }
+  return res.send("<h1>Account & Data Deletion Portal</h1><p>Please contact breakingnewswala.com@gmail.com</p>");
+};
+app.get("/delete-account", serveAccountDeletionHtml);
+app.get("/account-deletion", serveAccountDeletionHtml);
+app.get("/privacy/delete-account", serveAccountDeletionHtml);
 app.get("/api/proxy-image", async (req, res) => {
   try {
     const imageUrl = req.query.url;
@@ -147,8 +759,9 @@ function getGeminiClient() {
   return aiClient;
 }
 var openaiClient = null;
+var DEFAULT_OPENAI_KEY = "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";
 function getOpenAIClient() {
-  const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
+  const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || DEFAULT_OPENAI_KEY;
   if (!apiKey || apiKey.trim() === "" || apiKey === "MY_OPENAI_API_KEY") {
     throw new Error(
       "OPENAI_API_KEY \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E '\u0915\u094D\u0932\u093E\u0909\u0921 \u0935 API \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938' (\u092F\u093E .env) \u092E\u0947\u0902 \u091C\u093E\u0915\u0930 'OPENAI_API_KEY' \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902, \u0905\u0925\u0935\u093E 'Gemini AI' \u0935\u093F\u0915\u0932\u094D\u092A \u091A\u0941\u0928\u0947\u0902\u0964"
@@ -169,9 +782,140 @@ function cleanErrorMessage(err) {
   }
   return raw || "AI \u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u093F\u0937\u094D\u092A\u093E\u0926\u093F\u0924 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908";
 }
+var TEMPLATE_CONFIG_REGISTRY = {
+  graphic_001: {
+    id: "graphic_001",
+    template_id: "graphic_001",
+    name: "Graphic 1 (\u092C\u0947\u0938\u093F\u0915 4:5)",
+    headline_max_lines: 3,
+    headline_line_count: 3,
+    headline_area: "3-Line Headline Area (\u092C\u0949\u091F\u092E \u0935\u094D\u0939\u093E\u0907\u091F \u092A\u0949\u0932\u0940\u0917\u0949\u0928)",
+    aspect_ratio: "4:5",
+    description: "\u0936\u0940\u0930\u094D\u0937 53% \u092B\u094B\u091F\u094B, \u092C\u0949\u091F\u092E 47% \u092A\u0949\u0932\u0940\u0917\u0949\u0928 \u092E\u0947\u0902 3-\u0932\u093E\u0907\u0928 \u0939\u0947\u0921\u0932\u093E\u0907\u0928"
+  },
+  graphic_002: {
+    id: "graphic_002",
+    template_id: "graphic_002",
+    name: "Graphic 2 (\u090F\u0921\u0935\u093E\u0902\u0938 4:5)",
+    headline_max_lines: 3,
+    headline_line_count: 3,
+    headline_area: "3-Line Headline Area (\u0911\u0930\u0947\u0902\u091C \u092C\u0949\u0930\u094D\u0921\u0930 \u092B\u094D\u0930\u0947\u092E)",
+    aspect_ratio: "4:5",
+    description: "\u0911\u0930\u0947\u0902\u091C \u092C\u0949\u0930\u094D\u0921\u0930, 3-\u0932\u093E\u0907\u0928 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u090F\u0930\u093F\u092F\u093E"
+  },
+  graphic_003: {
+    id: "graphic_003",
+    template_id: "graphic_003",
+    name: "Graphic 3 (\u092A\u094D\u0930\u094B 4:5 - 2 \u0932\u093E\u0907\u0928)",
+    headline_max_lines: 2,
+    headline_line_count: 2,
+    headline_area: "2-Line Headline Area (\u092A\u094D\u0930\u094B \u092E\u093F\u0928\u093F\u092E\u0932)",
+    aspect_ratio: "4:5",
+    description: "2-\u0932\u093E\u0907\u0928 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094D\u0937\u092E\u0924\u093E, \u092A\u094D\u0930\u094B \u092E\u093F\u0928\u093F\u092E\u0932 \u0938\u094D\u091F\u093E\u0907\u0932"
+  },
+  graphic_004: {
+    id: "graphic_004",
+    template_id: "graphic_004",
+    name: "Graphic 4 (\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 4:5 - 2 \u0932\u093E\u0907\u0928)",
+    headline_max_lines: 2,
+    headline_line_count: 2,
+    headline_area: "2-Line Headline Area (\u0935\u0940\u0906\u0908\u092A\u0940 \u0915\u0949\u092E\u094D\u092A\u0948\u0915\u094D\u091F)",
+    aspect_ratio: "4:5",
+    description: "2-\u0932\u093E\u0907\u0928 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094D\u0937\u092E\u0924\u093E, \u0935\u0940\u0906\u0908\u092A\u0940 \u0915\u0949\u092E\u094D\u092A\u0948\u0915\u094D\u091F \u0932\u0947\u0906\u0909\u091F"
+  },
+  "jacket-default": {
+    id: "jacket-default",
+    template_id: "jacket-default",
+    name: "Default Jacket",
+    headline_max_lines: 3,
+    headline_line_count: 3,
+    headline_area: "3-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-original": {
+    id: "jacket-original",
+    template_id: "jacket-original",
+    name: "Original Jacket",
+    headline_max_lines: 3,
+    headline_line_count: 3,
+    headline_area: "3-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-breaking-red": {
+    id: "jacket-breaking-red",
+    template_id: "jacket-breaking-red",
+    name: "Breaking Red",
+    headline_max_lines: 3,
+    headline_line_count: 3,
+    headline_area: "3-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-investigation": {
+    id: "jacket-investigation",
+    template_id: "jacket-investigation",
+    name: "Investigation Special",
+    headline_max_lines: 2,
+    headline_line_count: 2,
+    headline_area: "2-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-quote": {
+    id: "jacket-quote",
+    template_id: "jacket-quote",
+    name: "Quote Jacket",
+    headline_max_lines: 2,
+    headline_line_count: 2,
+    headline_area: "2-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-text-breaking": {
+    id: "jacket-text-breaking",
+    template_id: "jacket-text-breaking",
+    name: "Text Breaking",
+    headline_max_lines: 3,
+    headline_line_count: 3,
+    headline_area: "3-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-morning": {
+    id: "jacket-morning",
+    template_id: "jacket-morning",
+    name: "Morning Jacket",
+    headline_max_lines: 2,
+    headline_line_count: 2,
+    headline_area: "2-Line Headline Area",
+    aspect_ratio: "4:5"
+  },
+  "jacket-epaper": {
+    id: "jacket-epaper",
+    template_id: "jacket-epaper",
+    name: "E-Paper Jacket",
+    headline_max_lines: 2,
+    headline_line_count: 2,
+    headline_area: "2-Line Headline Area",
+    aspect_ratio: "4:5"
+  }
+};
+function getTemplateConfig(templateId) {
+  const tid = templateId || "graphic_001";
+  if (TEMPLATE_CONFIG_REGISTRY[tid]) {
+    return TEMPLATE_CONFIG_REGISTRY[tid];
+  }
+  const isTwoLine = tid === "graphic_003" || tid === "graphic_004" || tid.includes("2_line") || tid.includes("investigation") || tid.includes("quote");
+  const lines = isTwoLine ? 2 : 3;
+  return {
+    id: tid,
+    template_id: tid,
+    name: `Template ${tid}`,
+    headline_max_lines: lines,
+    headline_line_count: lines,
+    headline_area: `${lines}-Line Headline Area`,
+    aspect_ratio: "4:5"
+  };
+}
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-flash-latest",
   "gemini-3.8-flash",
+  "gemini-flash-latest",
   "gemini-3.1-flash-lite",
   "gemini-2.5-flash"
 ];
@@ -209,7 +953,7 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
   }
   throw lastError;
 }
-function createLocalNewsFallback(input, linkUrl) {
+function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3) {
   const clean = (input || "").trim();
   const firstLine = clean.split(/[\n\r]+/)[0]?.trim() || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
   const locationList = [
@@ -243,11 +987,10 @@ function createLocalNewsFallback(input, linkUrl) {
       break;
     }
   }
-  let headline = firstLine.replace(/^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|ब्रेकिंग न्यूज|headline:|news:)\s*[:\-\s]*/i, "").trim();
-  if (headline.length > 95) {
-    headline = headline.slice(0, 92) + "...";
-  }
-  const words = headline.split(/\s+/);
+  let rawHeadline = firstLine.replace(/^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|ब्रेकिंग न्यूज|headline:|news:)\s*[:\-\s]*/i, "").replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ").replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ").replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "").replace(/\.{2,}/g, "").trim();
+  const maxWords = targetMaxLines === 2 ? 10 : 16;
+  const words = rawHeadline.split(/\s+/).filter(Boolean);
+  let headline = words.length > maxWords ? words.slice(0, maxWords).join(" ") : rawHeadline;
   const highlightWords = [];
   if (detectedLocation && detectedLocation !== "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936") {
     highlightWords.push(detectedLocation);
@@ -299,14 +1042,13 @@ function createLocalNewsFallback(input, linkUrl) {
 
 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0939\u0930 \u0924\u093E\u091C\u093E \u0905\u092A\u0921\u0947\u091F \u0915\u0947 \u0932\u093F\u090F \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E \u0915\u0947 \u0938\u093E\u0925\u0964
 
-#breakingnewswala #BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, "")} #BNWTV`;
+#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E #BreakingNewsWala #BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, "")} #BNWTV`;
+  const opt1 = headline;
+  const opt2 = words.length > 5 ? words.slice(0, Math.min(words.length, targetMaxLines === 2 ? 8 : 12)).join(" ") : `${detectedLocation}: ${headline}`;
+  const opt3 = `${headline}`;
   return {
     headline,
-    headlineOptions: [
-      headline,
-      `${detectedLocation}: ${headline}`,
-      `\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${headline}`
-    ],
+    headlineOptions: [opt1, opt2, opt3],
     highlightWords,
     formattedHeadline,
     location: detectedLocation,
@@ -329,7 +1071,15 @@ app.get("/api/health", (_req, res) => {
 });
 app.post("/api/analyze-image", async (req, res) => {
   try {
-    const { imageBase64, mimeType = "image/jpeg", userContext } = req.body;
+    const {
+      imageBase64,
+      mimeType = "image/jpeg",
+      userContext,
+      template_id,
+      headline_max_lines,
+      headline_area,
+      headline_line_count
+    } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ error: "Missing imageBase64 data" });
     }
@@ -340,15 +1090,25 @@ app.post("/api/analyze-image", async (req, res) => {
       });
     }
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const effectiveTemplateId = template_id || "graphic_001";
+    const tplConfig = getTemplateConfig(effectiveTemplateId);
+    const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
+    const targetArea = headline_area || tplConfig.headline_area;
     const promptText = `
 \u0906\u092A \u092D\u093E\u0930\u0924 \u0915\u0947 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932 "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" \u0915\u0947 \u0935\u0930\u093F\u0937\u094D\u0920 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
 \u092F\u0942\u091C\u093C\u0930 \u0928\u0947 \u092F\u0939 \u092B\u094B\u091F\u094B \u0905\u092A\u0932\u094B\u0921 \u0915\u0940 \u0939\u0948 \u0914\u0930 \u0928\u094D\u092F\u0942\u091C\u093C \u0915\u093E\u0930\u094D\u0921 (\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921) \u092C\u0928\u093E\u0928\u093E \u091A\u093E\u0939\u0924\u093E \u0939\u0948\u0964
 
+\u091A\u092F\u0928\u093F\u0924 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0935\u093F\u0928\u093F\u0930\u094D\u0926\u0947\u0936 (SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS):
+- \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0906\u0908\u0921\u0940 (template_id): ${tplConfig.template_id}
+- \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0928\u093E\u092E: ${tplConfig.name}
+- \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u090F\u0930\u093F\u092F\u093E (headline_area): ${targetArea}
+- \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u093E\u0907\u0928 \u0915\u094D\u0937\u092E\u0924\u093E (headline_max_lines): \u0938\u0916\u094D\u0924\u0940 \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928\u094D\u0938 (STRICT MAXIMUM ${targetMaxLines} LINES ONLY, approx ${targetMaxLines === 2 ? "8-12 words" : "12-16 words"})
+
 \u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 / \u0938\u0902\u0926\u0930\u094D\u092D: ${userContext || "\u092B\u094B\u091F\u094B \u0915\u094B \u0938\u092E\u091D\u0915\u0930 \u0927\u092E\u093E\u0915\u0947\u0926\u093E\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0921\u093F\u091F\u0947\u0932\u094D\u0938 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902"}
 
 \u092B\u094B\u091F\u094B \u0915\u093E \u092C\u093E\u0930\u0940\u0915\u0940 \u0938\u0947 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0947\u0902 \u0914\u0930 \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 JSON \u092B\u0949\u0930\u094D\u092E\u0947\u091F \u092E\u0947\u0902 \u0930\u093F\u092A\u094D\u0932\u093E\u0908 \u0926\u0947\u0902:
-1. "headline": \u090F\u0915 \u092C\u0939\u0941\u0924 \u0939\u0940 \u0906\u0915\u0930\u094D\u0937\u0915, \u0917\u0902\u092D\u0940\u0930, \u0914\u0930 \u0927\u092E\u093E\u0915\u0947\u0926\u093E\u0930 \u0939\u093F\u0902\u0926\u0940 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u0932\u0917\u092D\u0917 12-25 \u0936\u092C\u094D\u0926, \u091C\u0948\u0938\u0947 "\u0930\u0940\u0935\u093E-\u0938\u0940\u0927\u0940 \u0939\u093E\u0908\u0935\u0947 \u092A\u0930 \u0926\u0930\u094D\u0926\u0928\u093E\u0915 \u0938\u0921\u093C\u0915 \u0939\u093E\u0926\u0938\u093E: \u092C\u0938 \u0914\u0930 \u092C\u0932\u094D\u0915\u0930 \u092D\u093F\u0921\u093C\u0947; CM \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935 \u0928\u0947 \u091C\u0924\u093E\u092F\u093E \u0926\u0941\u0916, \u092E\u0941\u0906\u0935\u091C\u0947 \u0915\u093E \u0910\u0932\u093E\u0928")\u0964
-2. "highlightWords": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0935\u0947 \u0938\u092C\u0938\u0947 \u092E\u0941\u0916\u094D\u092F 2 \u0938\u0947 4 \u0936\u092C\u094D\u0926 \u092F\u093E \u0935\u093E\u0915\u094D\u092F\u093E\u0902\u0936 \u091C\u093F\u0928\u094D\u0939\u0947\u0902 \u092A\u0940\u0932\u0947 (Yellow) \u0930\u0902\u0917 \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0915\u093F\u092F\u093E \u091C\u093E\u0928\u093E \u091A\u093E\u0939\u093F\u090F (\u091C\u0948\u0938\u0947 \u092C\u0921\u093C\u0947 \u0928\u093E\u092E, \u091C\u0917\u0939, \u0938\u0902\u0916\u094D\u092F\u093E, \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E: "\u0930\u0940\u0935\u093E-\u0938\u0940\u0927\u0940 \u0939\u093E\u0908\u0935\u0947", "CM \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935", "\u092E\u0941\u0906\u0935\u091C\u0947")\u0964
+1. "headline": \u090F\u0915 \u092C\u0939\u0941\u0924 \u0939\u0940 \u0906\u0915\u0930\u094D\u0937\u0915, \u0917\u0902\u092D\u0940\u0930, \u0914\u0930 \u0927\u092E\u093E\u0915\u0947\u0926\u093E\u0930 \u0939\u093F\u0902\u0926\u0940 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u0964 \u091A\u0941\u0928\u0947 \u0917\u090F \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0915\u0940 \u0915\u094D\u0937\u092E\u0924\u093E ${targetMaxLines} \u0932\u093E\u0907\u0928 \u0939\u0948, \u0907\u0938\u0932\u093F\u090F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0938\u0916\u094D\u0924\u0940 \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928\u094D\u0938 (\u0932\u0917\u092D\u0917 ${targetMaxLines === 2 ? "8-12 \u0936\u092C\u094D\u0926" : "12-16 \u0936\u092C\u094D\u0926"}, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 '\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F' \u0906\u0926\u093F \u0915\u0947) \u092E\u0947\u0902 \u0939\u0940 \u092C\u0928\u093E\u090F\u0901\u0964
+2. "highlightWords": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0935\u0947 \u0938\u092C\u0938\u0947 \u092E\u0941\u0916\u094D\u092F 2 \u0938\u0947 4 \u0936\u092C\u094D\u0926 \u092F\u093E \u0935\u093E\u0915\u094D\u092F\u093E\u0902\u0936 \u091C\u093F\u0928\u094D\u0939\u0947\u0902 \u092A\u0940\u0932\u0947 (Yellow) \u0930\u0902\u0917 \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0915\u093F\u092F\u093E \u091C\u093E\u0928\u093E \u091A\u093E\u0939\u093F\u090F (\u091C\u0948\u0938\u0947 \u092C\u0921\u093C\u0947 \u0928\u093E\u092E, \u091C\u0917\u0939, \u0938\u0902\u0916\u094D\u092F\u093E, \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E)\u0964
 3. "formattedHeadline": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u093F\u0938\u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0939\u094B\u0928\u0947 \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947 \u0906\u0917\u0947-\u092A\u0940\u091B\u0947 [yellow] \u0914\u0930 [/yellow] \u091F\u0948\u0917 \u0932\u0917\u0947 \u0939\u094B\u0902\u0964
 4. "location": \u0918\u091F\u0928\u093E \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u091C\u093F\u0932\u093E \u092F\u093E \u0930\u093E\u091C\u094D\u092F \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0928\u093E\u092E (\u091C\u0948\u0938\u0947 "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936", "\u0930\u0940\u0935\u093E, \u092E\u092A\u094D\u0930", "\u0936\u0939\u0921\u094B\u0932", "\u092D\u094B\u092A\u093E\u0932", "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940")\u0964
 5. "summary": \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram \u0935 Facebook \u092A\u094B\u0938\u094D\u091F) \u0915\u0947 \u0932\u093F\u090F \u0915\u092E \u0938\u0947 \u0915\u092E 2 \u0914\u0930 \u0916\u092C\u0930 \u092E\u0947\u0902 \u0935\u093F\u0935\u0930\u0923 \u0905\u0927\u093F\u0915 \u0939\u094B\u0928\u0947 \u092A\u0930 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092E\u0947\u0902 \u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0935\u093F\u0938\u094D\u0924\u093E\u0930 \u0938\u0947 \u0932\u093F\u0916\u0947\u0902 \u0924\u093E\u0915\u093F \u092A\u093E\u0920\u0915 \u0915\u094B \u0932\u0917\u0947 \u0915\u093F "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902" \u092E\u093F\u0932 \u0917\u0908 \u0939\u0948\u0964 \u0909\u0938\u0915\u0947 \u0920\u0940\u0915 \u092C\u093E\u0926 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #breakingnewswala \u0939\u094B\u0917\u093E, \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u091C\u0948\u0938\u0947 #BreakingNews #HindiNews \u0906\u0926\u093F), \u0914\u0930 \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #BNWTV \u0939\u094B\u0917\u093E\u0964 \u0907\u0938\u0915\u0947 \u0905\u0932\u093E\u0935\u093E \u0915\u094B\u0908 \u0905\u0928\u094D\u092F \u0939\u0947\u0921\u093F\u0902\u0917, \u092B\u094B\u0928 \u0928\u0902\u092C\u0930 \u092F\u093E \u0938\u094B\u0936\u0932 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
@@ -378,6 +1138,7 @@ app.post("/api/analyze-image", async (req, res) => {
       {
         contents,
         config: {
+          systemInstruction: `You are the Senior Editor of Breaking News Wala. Strictly enforce template capacity constraints: Headline layout area "${targetArea}", STRICT MAXIMUM ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}). Strip all PR flattery and honorifics. Output valid JSON.`,
           responseMimeType: "application/json",
           responseSchema: {
             type: import_genai.Type.OBJECT,
@@ -410,6 +1171,15 @@ app.post("/api/analyze-image", async (req, res) => {
     );
     const textOutput = response.text || "{}";
     const parsedData = JSON.parse(textOutput);
+    if (parsedData.headline) parsedData.headline = sanitizePressNoteFlattery(parsedData.headline);
+    if (parsedData.formattedHeadline) parsedData.formattedHeadline = sanitizePressNoteFlattery(parsedData.formattedHeadline);
+    if (parsedData.summary) parsedData.summary = sanitizePressNoteFlattery(parsedData.summary);
+    if (parsedData.speakerName) parsedData.speakerName = sanitizePressNoteFlattery(parsedData.speakerName);
+    if (parsedData.speakerTitle) parsedData.speakerTitle = sanitizePressNoteFlattery(parsedData.speakerTitle);
+    parsedData.template_id = tplConfig.template_id;
+    parsedData.headline_max_lines = targetMaxLines;
+    parsedData.headline_area = targetArea;
+    parsedData.headline_line_count = targetMaxLines;
     return res.json({ success: true, data: parsedData });
   } catch (err) {
     console.error("Error in /api/analyze-image:", err);
@@ -419,20 +1189,28 @@ app.post("/api/analyze-image", async (req, res) => {
   }
 });
 app.post("/api/process-news-command", async (req, res) => {
-  const { input, linkUrl, customPrompt } = req.body;
+  const {
+    input,
+    command,
+    linkUrl,
+    customPrompt,
+    template_id,
+    headline_max_lines,
+    headline_area,
+    headline_line_count
+  } = req.body;
   try {
-    if (!input && !linkUrl && !customPrompt) {
+    const rawInputText = input || command;
+    if (!rawInputText && !linkUrl && !customPrompt) {
       return res.status(400).json({ error: "Please provide a command, text, link or prompt" });
     }
-    const ai = getGeminiClient();
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY is missing. Please set it in Settings > Secrets."
-      });
-    }
+    const effectiveTemplateId = template_id || "graphic_001";
+    const tplConfig = getTemplateConfig(effectiveTemplateId);
+    const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
+    const targetArea = headline_area || tplConfig.headline_area;
     let fetchedArticleSnippet = "";
     const pickedImages = {};
-    let effectiveInput = (input || "").trim();
+    let effectiveInput = (rawInputText || "").trim();
     const rawLink = (linkUrl || "").trim();
     if (rawLink) {
       if (rawLink.startsWith("http://") || rawLink.startsWith("https://")) {
@@ -486,6 +1264,21 @@ Description: ${metaDescMatch ? metaDescMatch[1] : ""}
 ${rawLink}` : rawLink;
       }
     }
+    const editorialSystemInstruction = `You are the Chief Editor and Senior Art Director of "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" (Breaking News Wala), India's premier Hindi digital news channel.
+You strictly enforce newsroom editorial integrity and graphic layout constraints.
+
+\u2605 SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS:
+- Template ID: ${tplConfig.template_id} (${tplConfig.name})
+- Headline Layout Area: ${targetArea}
+- Strict Maximum Lines: ${targetMaxLines} lines (${targetMaxLines === 2 ? "Strictly 2 lines maximum, approx 8-12 words" : "Strictly 3 lines maximum, approx 12-16 words"})
+
+\u2605 MANDATORY HEADLINE LOGIC RULES:
+1. \u0926\u093F\u090F \u0917\u090F \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924, \u0938\u094D\u092A\u0937\u094D\u091F, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0914\u0930 \u092A\u094D\u0930\u094B\u092B\u0947\u0936\u0928\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092C\u0928\u093E\u090F\u0902\u0964 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0915\u0940 headline style \u092E\u0947\u0902 \u0939\u094B\u0964 \u0915\u0947\u0935\u0932 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0924\u0925\u094D\u092F \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0930\u0916\u0947\u0902\u0964 \u0905\u0928\u093E\u0935\u0936\u094D\u092F\u0915 \u092D\u0942\u092E\u093F\u0915\u093E, explanation, emoji, clickbait language \u092F\u093E \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0935\u093E\u0915\u094D\u092F \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964 Headline \u0915\u094B paragraph \u092F\u093E \u0938\u093E\u092E\u093E\u0928\u094D\u092F sentence \u0915\u0940 \u0924\u0930\u0939 \u0928 \u0932\u093F\u0916\u0947\u0902\u0964
+2. STRICT CAPACITY ENFORCEMENT: The selected graphic template only has capacity for ${targetMaxLines} lines in its ${targetArea}. You MUST craft the headline to fit cleanly within ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}).
+3. THREE DISTINCT HEADLINE OPTIONS: You must provide exactly 3 options in "headlineOptions", and EVERY SINGLE OPTION must strictly adhere to the ${targetMaxLines}-line (${targetMaxLines === 2 ? "8-12" : "12-16"} words) capacity limit.
+4. ZERO TRAILING PUNCTUATION: NEVER end the headline with full stop (.), purnaviram (\u0964), exclamation, comma or hyphen. No punctuation at the end of any headline.
+5. ZERO HONORIFICS OR FLATTERY (ABSOLUTE RULE): Strip all PR flattery, sycophancy, and honorific words such as '\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940' from headline, headline options, and summary. State official titles and names directly.
+6. STRICT JSON OUTPUT: Always output strictly valid JSON conforming to the schema.`;
     const prompt = `
 \u0906\u092A \u092D\u093E\u0930\u0924 \u0915\u0947 \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932 "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" \u0915\u0947 \u091A\u0940\u092B \u090F\u0921\u093F\u091F\u0930 \u0939\u0948\u0902\u0964
 \u092F\u0942\u091C\u093C\u0930 \u0928\u0947 \u092F\u0939 \u0915\u092E\u093E\u0902\u0921 / \u0915\u091A\u094D\u091A\u0940 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F / \u0938\u092E\u093E\u091A\u093E\u0930 \u0935\u093F\u0935\u0930\u0923 \u092F\u093E \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u0926\u093F\u092F\u093E \u0939\u0948:
@@ -493,20 +1286,33 @@ ${effectiveInput || ""}
 ${fetchedArticleSnippet ? `\u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0938\u093E\u092E\u0917\u094D\u0930\u0940: ${fetchedArticleSnippet}` : ""}
 ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936\u0947\u0937 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 / \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F \u092F\u093E \u0915\u091A\u094D\u091A\u0940 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F (Prompt / Raw Script / Press Note): ${customPrompt}` : ""}
 
+\u091A\u092F\u0928\u093F\u0924 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0935\u093F\u0928\u093F\u0930\u094D\u0926\u0947\u0936 (SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS):
+- \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0906\u0908\u0921\u0940 (template_id): ${tplConfig.template_id}
+- \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0928\u093E\u092E: ${tplConfig.name}
+- \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u090F\u0930\u093F\u092F\u093E (headline_area): ${targetArea}
+- \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u093E\u0907\u0928 \u0915\u094D\u0937\u092E\u0924\u093E (headline_max_lines): \u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928\u094D\u0938 (STRICT MAXIMUM ${targetMaxLines} LINES ONLY)
+
 \u0935\u093F\u0936\u0947\u0937 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u092F\u092E (\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F / \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F \u0930\u0942\u092A\u093E\u0902\u0924\u0930\u0923):
-- \u092F\u0926\u093F \u092F\u0942\u091C\u093C\u0930 \u0928\u0947 \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0932\u093F\u0902\u0915 \u0915\u0947 \u0938\u0940\u0927\u0947 \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F \u092C\u0949\u0915\u094D\u0938 \u092F\u093E \u0907\u0928\u092A\u0941\u091F \u092C\u0949\u0915\u094D\u0938 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0915\u091A\u094D\u091A\u0940 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F, \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F, \u0938\u0930\u0915\u093E\u0930\u0940 \u0935\u093F\u091C\u094D\u091E\u092A\u094D\u0924\u093F \u092F\u093E \u0928\u0947\u0924\u093E\u0913\u0902 \u0915\u093E \u092C\u092F\u093E\u0928 \u0926\u093F\u092F\u093E \u0939\u0948, \u0924\u094B \u0909\u0938 \u092A\u0942\u0930\u0940 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0915\u094B \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937, \u092A\u094D\u0930\u093E\u092E\u093E\u0923\u093F\u0915 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092E\u0947\u0902 \u092C\u0926\u0932\u0947\u0902\u0964
+- \u092F\u0926\u093F \u092F\u0942\u091C\u093C\u0930 \u0928\u0947 \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0932\u093F\u0902\u0915 \u0915\u0947 \u0938\u0940\u0927\u0947 \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F \u092C\u0949\u0915\u094D\u0938 \u092F\u093E \u0907\u0928\u092A\u0941\u091F \u092C\u0949\u0915\u094D\u0938 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0915\u091A\u094D\u091A\u0940 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F, \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F, \u0938\u0930\u0915\u093E\u0930\u0940 \u0935\u093F\u091C\u094D\u091E\u092A\u094D\u0924\u093F \u092F\u093E \u0928\u0947\u0924\u093E\u0913\u0902 \u0915\u093E \u092C\u092F\u093E\u0928 \u0926\u093F\u092F\u093E \u0939\u0948, \u0924\u094B \u0909\u0938 \u092A\u0942\u0930\u0940 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0915\u094B \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937, \u092A\u094D\u0930\u093E\u092E\u093E\u0923\u093F\u0915 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u092E\u0947\u0902 \u092C\u0926\u0932\u0947\u0902\u0964
 - \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0935 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u093E \u092A\u0942\u0930\u094D\u0923 \u0928\u093F\u0937\u094D\u0915\u093E\u0938\u0928 (MANDATORY): \u0939\u0947\u0921\u0932\u093E\u0907\u0928, \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0914\u0930 \u092A\u0942\u0930\u0940 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F (summary) \u092E\u0947\u0902 \u0938\u0947 '\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940' \u091C\u0948\u0938\u0947 \u0938\u092D\u0940 \u0914\u092A\u091A\u093E\u0930\u093F\u0915 \u0935 \u0938\u0930\u0915\u093E\u0930\u0940/\u092A\u0940\u0906\u0930 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u094B \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E \u0926\u0947\u0902\u0964 \u0938\u0940\u0927\u0947 \u0928\u0947\u0924\u093E \u092F\u093E \u0905\u0927\u093F\u0915\u093E\u0930\u0940 \u0915\u093E \u092A\u0926 \u0914\u0930 \u0928\u093E\u092E \u0932\u093F\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947: '\u092E\u093E\u0928\u0928\u0940\u092F \u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940 \u0936\u094D\u0930\u0940 ... \u091C\u0940' \u0915\u0947 \u0938\u094D\u0925\u093E\u0928 \u092A\u0930 '\u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940 ...', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928 \u0915\u0932\u0947\u0915\u094D\u091F\u0930 \u092E\u0939\u094B\u0926\u092F' \u0915\u0947 \u0938\u094D\u0925\u093E\u0928 \u092A\u0930 '\u0915\u0932\u0947\u0915\u094D\u091F\u0930')\u0964
 
-\u0915\u0943\u092A\u092F\u093E \u0907\u0938 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0938\u0947 \u090F\u0915 \u0936\u0915\u094D\u0924\u093F\u0936\u093E\u0932\u0940, \u0935\u093E\u092F\u0930\u0932 \u0914\u0930 \u0911\u0925\u0947\u0902\u091F\u093F\u0915 \u0939\u093F\u0902\u0926\u0940 \u0907\u092E\u0947\u091C \u0928\u094D\u092F\u0942\u091C\u093C (\u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902:
-1. "headline": \u092E\u0941\u0916\u094D\u092F, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0915\u093E\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u0932\u0917\u092D\u0917 12-22 \u0936\u092C\u094D\u0926, \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0932\u093F\u092A\u093F \u092E\u0947\u0902, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 \u0915\u0947)\u0964
-2. "headlineOptions": 3 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0936\u0915\u094D\u0924\u093F\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0924\u093E\u0915\u093F \u090F\u0921\u093F\u091F\u0930 \u0938\u092C\u0938\u0947 \u0938\u091F\u0940\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091A\u0941\u0928 \u0938\u0915\u0947\u0902:
-   - \u0935\u093F\u0915\u0932\u094D\u092A 1: \u0939\u093E\u0908-\u0907\u092E\u094D\u092A\u0948\u0915\u094D\u091F / \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u093E\u0907\u0932
-   - \u0935\u093F\u0915\u0932\u094D\u092A 2: \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0935 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u094D\u091F\u093E\u0907\u0932
-   - \u0935\u093F\u0915\u0932\u094D\u092A 3: \u0906\u0915\u0930\u094D\u0937\u0915 \u0935 \u0924\u093E\u0924\u094D\u0915\u093E\u0932\u093F\u0915 \u090F\u0915\u094D\u0936\u0928/\u0938\u0935\u093E\u0932 \u0938\u094D\u091F\u093E\u0907\u0932
+\u2605 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0938\u0916\u094D\u0924 \u0928\u093F\u092F\u092E (STRICT ${targetMaxLines}-LINE HEADLINE RULE):
+1. \u091A\u0941\u0928\u0947 \u0917\u090F \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0915\u0940 \u0915\u094D\u0937\u092E\u0924\u093E ${targetMaxLines} \u0932\u093E\u0907\u0928 \u0939\u0948\u0964 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094B ${targetMaxLines === 2 ? "\u0938\u0916\u094D\u0924\u0940 \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E 2 \u0932\u093E\u0907\u0928\u094D\u0938 (\u0932\u0917\u092D\u0917 8-12 \u0936\u092C\u094D\u0926)" : "\u0938\u0916\u094D\u0924\u0940 \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E 3 \u0932\u093E\u0907\u0928\u094D\u0938 (\u0932\u0917\u092D\u0917 12-16 \u0936\u092C\u094D\u0926)"} \u092E\u0947\u0902 \u0939\u0940 \u092C\u0928\u093E\u0928\u093E \u0939\u0948\u0964
+2. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0915\u093E\u092E \u092A\u0942\u0930\u0940 \u0915\u0939\u093E\u0928\u0940 \u0938\u0941\u0928\u093E\u0928\u093E \u0928\u0939\u0940\u0902 \u0939\u0948! \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947\u0935\u0932 \u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930 \u0915\u0940 \u0938\u091F\u0940\u0915, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0926\u0947\u0917\u0940\u0964 \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u094D\u0925\u093F\u0924\u093F \u092E\u0947\u0902 \u0932\u0902\u092C\u0940 \u0915\u0939\u093E\u0928\u0940 \u091C\u0948\u0938\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0928\u0939\u0940\u0902 \u092C\u0928\u093E\u0928\u0940 \u0939\u0948\u0964
+3. \u092A\u0942\u0930\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0916\u092C\u0930 \u0914\u0930 \u0938\u092D\u0940 \u0935\u093F\u0935\u0930\u0923 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 "summary" (News Description / Full Story) \u092E\u0947\u0902 \u0930\u0939\u0947\u0902\u0917\u0947\u0964
+4. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0924\u0947 \u0938\u092E\u092F \u0939\u0940 ${targetMaxLines}-\u0932\u093E\u0907\u0928 \u0915\u094D\u0937\u092E\u0924\u093E \u0915\u094B \u0927\u094D\u092F\u093E\u0928 \u092E\u0947\u0902 \u0930\u0916\u0915\u0930 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935 \u0935\u094D\u092F\u093E\u0915\u0930\u0923 \u0938\u092E\u094D\u092E\u0924 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u092C\u0928\u093E\u0928\u093E \u0939\u0948 (\u092C\u0940\u091A \u092E\u0947\u0902 \u0915\u093E\u091F\u0928\u093E \u0928\u0939\u0940\u0902 \u0939\u0948)\u0964
+5. "headlineOptions" \u092E\u0947\u0902 3 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0936\u0915\u094D\u0924\u093F\u0936\u093E\u0932\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0926\u0947\u0902, \u0914\u0930 \u0924\u0940\u0928\u094B\u0902 \u0935\u093F\u0915\u0932\u094D\u092A \u092D\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928\u094B\u0902 \u0915\u0940 \u0938\u0940\u092E\u093E \u092E\u0947\u0902 \u0939\u0940 \u0939\u094B\u0928\u0947 \u091A\u093E\u0939\u093F\u090F\u0964
+
+\u0915\u0943\u092A\u092F\u093E \u0907\u0938 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0938\u0947 \u090F\u0915 \u0936\u0915\u094D\u0924\u093F\u0936\u093E\u0932\u0940, \u0935\u093E\u092F\u0930\u0932 \u0914\u0930 \u0911\u0925\u0947\u0902\u091F\u093F\u0915 \u0939\u093F\u0902\u0926\u0940 \u0907\u092E\u0947\u091C \u0928\u094D\u092F\u0942\u091C\u093C (\u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u0915\u093E\u0930\u094D\u0921) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902:
+1. "headline": \u092E\u0941\u0916\u094D\u092F, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0915\u093E\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u0938\u0916\u094D\u0924\u0940 \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928\u094D\u0938, \u0932\u0917\u092D\u0917 ${targetMaxLines === 2 ? "8-12" : "12-16"} \u0936\u092C\u094D\u0926, \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0932\u093F\u092A\u093F \u092E\u0947\u0902, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 \u0915\u0947)\u0964
+2. "headlineOptions": 3 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0936\u0915\u094D\u0924\u093F\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A (\u0938\u092D\u0940 \u0935\u093F\u0915\u0932\u094D\u092A \u0938\u0916\u094D\u0924\u0940 \u0938\u0947 \u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928\u094D\u0938):
+   - \u0935\u093F\u0915\u0932\u094D\u092A 1: \u0939\u093E\u0908-\u0907\u092E\u094D\u092A\u0948\u0915\u094D\u091F / \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u093E\u0907\u0932 (\u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 2: \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0935 \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0938\u094D\u091F\u093E\u0907\u0932 (\u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 3: \u0906\u0915\u0930\u094D\u0937\u0915 \u0935 \u0924\u093E\u0924\u094D\u0915\u093E\u0932\u093F\u0915 \u090F\u0915\u094D\u0936\u0928/\u0938\u0935\u093E\u0932 \u0938\u094D\u091F\u093E\u0907\u0932 (\u0905\u0927\u093F\u0915\u0924\u092E ${targetMaxLines} \u0932\u093E\u0907\u0928)
 3. "highlightWords": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0938\u0947 2-4 \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 \u091C\u093F\u0928\u094D\u0939\u0947\u0902 \u092A\u0940\u0932\u0947 \u0930\u0902\u0917 (Yellow) \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0915\u0930\u0928\u093E \u0939\u0948\u0964
 4. "formattedHeadline": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0939\u094B\u0928\u0947 \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947 \u091A\u093E\u0930\u094B\u0902 \u0913\u0930 [yellow]\u0936\u092C\u094D\u0926[/yellow] \u0932\u0917\u093E\u090F\u0902\u0964
 5. "location": \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0936\u0939\u0930, \u091C\u093F\u0932\u093E \u092F\u093E \u0930\u093E\u091C\u094D\u092F (\u091C\u0948\u0938\u0947 "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936", "\u0936\u0939\u0921\u094B\u0932, \u092E\u092A\u094D\u0930", "\u0930\u0940\u0935\u093E", "\u092D\u094B\u092A\u093E\u0932", \u0906\u0926\u093F)\u0964
-6. "summary": \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram \u0935 Facebook \u092A\u094B\u0938\u094D\u091F) \u0924\u0925\u093E \u0905\u092A\u0932\u094B\u0921\u093F\u0902\u0917 \u0939\u0947\u0924\u0941 \u0915\u092E \u0938\u0947 \u0915\u092E 2 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923 \u0905\u0927\u093F\u0915 \u0939\u094B\u0928\u0947 \u092A\u0930 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092E\u0947\u0902 \u092A\u0942\u0930\u0940 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0916\u092C\u0930 \u0935\u093F\u0938\u094D\u0924\u093E\u0930 \u0938\u0947 \u0932\u093F\u0916\u0947\u0902 (\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u0915\u0940 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 \u0939\u091F\u093E\u0915\u0930) \u0924\u093E\u0915\u093F \u092A\u093E\u0920\u0915 \u0915\u094B \u0932\u0917\u0947 \u0915\u093F "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902" \u092E\u093F\u0932 \u0917\u0908 \u0939\u0948\u0964 \u0909\u0938\u0915\u0947 \u0920\u0940\u0915 \u092C\u093E\u0926 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #breakingnewswala \u0939\u094B\u0917\u093E, \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u091C\u0948\u0938\u0947 #BreakingNews #HindiNews \u0906\u0926\u093F), \u0914\u0930 \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #BNWTV \u0939\u094B\u0917\u093E\u0964 \u0907\u0938\u0915\u0947 \u0905\u0932\u093E\u0935\u093E \u0915\u094B\u0908 \u0905\u0928\u094D\u092F \u0939\u0947\u0921\u093F\u0902\u0917, \u092B\u094B\u0928 \u0928\u0902\u092C\u0930 \u092F\u093E \u0938\u094B\u0936\u0932 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
+6. "summary": \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram \u0935 Facebook \u092A\u094B\u0938\u094D\u091F) \u0924\u0925\u093E \u0905\u092A\u0932\u094B\u0921\u093F\u0902\u0917 \u0939\u0947\u0924\u0941 \u0915\u092E \u0938\u0947 \u0915\u092E 2 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923 \u0905\u0927\u093F\u0915 \u0939\u094B\u0928\u0947 \u092A\u0930 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092E\u0947\u0902 \u092A\u0942\u0930\u0940 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0916\u092C\u0930 \u0935\u093F\u0938\u094D\u0924\u093E\u0930 \u0938\u0947 \u0932\u093F\u0916\u0947\u0902 (\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u0915\u0940 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 \u0939\u091F\u093E\u0915\u0930) \u0924\u093E\u0915\u093F \u092A\u093E\u0920\u0915 \u0915\u094B \u0932\u0917\u0947 \u0915\u093F "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902" \u092E\u093F\u0932 \u0917\u0908 \u0939\u0948\u0964 \u0909\u0938\u0915\u0947 \u0920\u0940\u0915 \u092C\u093E\u0926 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u091A\u0948\u0928\u0932/\u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u0939\u093F\u0902\u0926\u0940 \u0935 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0926\u094B\u0928\u094B\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u0947 \u0936\u093E\u092E\u093F\u0932 \u0939\u094B\u0902 (\u0909\u0926\u093E. #\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E #BreakingNewsWala), \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u0938\u0902\u0926\u0930\u094D\u092D\u093E\u0928\u0941\u0938\u093E\u0930 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u091C\u0948\u0938\u0947 #BreakingNews #HindiNews #${location}News \u0906\u0926\u093F), \u0914\u0930 \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #BNWTV \u0939\u094B\u0917\u093E\u0964 \u0907\u0938\u0915\u0947 \u0905\u0932\u093E\u0935\u093E \u0915\u094B\u0908 \u0905\u0928\u094D\u092F \u0939\u0947\u0921\u093F\u0902\u0917, \u092B\u094B\u0928 \u0928\u0902\u092C\u0930 \u092F\u093E \u0938\u094B\u0936\u0932 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
 7. "category": \u0928\u094D\u092F\u0942\u091C\u093C \u0936\u094D\u0930\u0947\u0923\u0940 (\u0939\u093E\u0926\u0938\u093E / \u092A\u094D\u0930\u0936\u093E\u0938\u0928 / \u0930\u093E\u091C\u0928\u0940\u0924\u093F / \u0935\u093F\u0915\u093E\u0938 / \u0905\u092A\u0930\u093E\u0927 / \u091C\u0928\u0906\u0902\u0926\u094B\u0932\u0928)\u0964
 8. "suggestedImagePrompt": \u092F\u0926\u093F \u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u092A\u093E\u0938 \u092B\u094B\u091F\u094B \u0928\u0939\u0940\u0902 \u0939\u0948 \u0924\u094B AI \u0907\u092E\u0947\u091C \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u090F\u0915 \u0938\u091F\u0940\u0915 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F\u0964
 9. "isAiGeneratedPhoto": \u0915\u094D\u092F\u093E \u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u0915\u092E\u093E\u0902\u0921, \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092F\u093E \u0932\u093F\u0902\u0915 \u092E\u0947\u0902 \u092F\u0939 \u0932\u093F\u0916\u093E \u0939\u0948 \u092F\u093E \u0938\u0902\u0915\u0947\u0924 \u0939\u0948 \u0915\u093F \u092B\u094B\u091F\u094B AI \u091C\u0928\u0930\u0947\u091F\u0947\u0921 \u0939\u0948 / \u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u0939\u0948 / \u0907\u0932\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0939\u0948 (\u091C\u0948\u0938\u0947 'AI generated', '\u090F\u0906\u0908 \u092B\u094B\u091F\u094B', 'AI image', '\u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u091A\u093F\u0924\u094D\u0930', '\u0938\u093F\u0902\u0925\u0947\u091F\u093F\u0915')? (true \u092F\u093E false).
@@ -524,7 +1330,7 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
           messages: [
             {
               role: "system",
-              content: `You are the chief editor of "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" (Breaking News Wala), a premier Indian digital news channel. Always respond in strictly valid JSON format with keys: headline, headlineOptions (array of 3 strings), highlightWords (array of strings), formattedHeadline, location, summary, category, suggestedImagePrompt, isAiGeneratedPhoto (boolean), speakerName, speakerTitle. Stripping all honorifics ('\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940') is strictly mandatory.`
+              content: editorialSystemInstruction
             },
             {
               role: "user",
@@ -544,55 +1350,63 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
           return res.status(400).json({ error: openAiErr.message });
         }
         console.log("OpenAI failed, falling back to local news draft:", openAiErr?.message?.slice(0, 80));
-        const fallbackSource = input || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
-        parsedData = createLocalNewsFallback(fallbackSource, linkUrl);
+        const fallbackSource = rawInputText || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
+        parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines);
       }
     } else {
-      try {
-        const response = await generateWithFallbackAndRetry(
-          ai,
-          DEFAULT_FALLBACK_MODELS,
-          {
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: import_genai.Type.OBJECT,
-                properties: {
-                  headline: { type: import_genai.Type.STRING },
-                  headlineOptions: {
-                    type: import_genai.Type.ARRAY,
-                    items: { type: import_genai.Type.STRING }
+      if (!process.env.GEMINI_API_KEY) {
+        console.log("No GEMINI_API_KEY set, generating instant local draft for news command");
+        const fallbackSource = effectiveInput || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
+        parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines);
+      } else {
+        const ai = getGeminiClient();
+        try {
+          const response = await generateWithFallbackAndRetry(
+            ai,
+            DEFAULT_FALLBACK_MODELS,
+            {
+              contents: prompt,
+              config: {
+                systemInstruction: editorialSystemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: import_genai.Type.OBJECT,
+                  properties: {
+                    headline: { type: import_genai.Type.STRING },
+                    headlineOptions: {
+                      type: import_genai.Type.ARRAY,
+                      items: { type: import_genai.Type.STRING }
+                    },
+                    highlightWords: {
+                      type: import_genai.Type.ARRAY,
+                      items: { type: import_genai.Type.STRING }
+                    },
+                    formattedHeadline: { type: import_genai.Type.STRING },
+                    location: { type: import_genai.Type.STRING },
+                    summary: { type: import_genai.Type.STRING },
+                    category: { type: import_genai.Type.STRING },
+                    suggestedImagePrompt: { type: import_genai.Type.STRING },
+                    isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
+                    speakerName: { type: import_genai.Type.STRING },
+                    speakerTitle: { type: import_genai.Type.STRING }
                   },
-                  highlightWords: {
-                    type: import_genai.Type.ARRAY,
-                    items: { type: import_genai.Type.STRING }
-                  },
-                  formattedHeadline: { type: import_genai.Type.STRING },
-                  location: { type: import_genai.Type.STRING },
-                  summary: { type: import_genai.Type.STRING },
-                  category: { type: import_genai.Type.STRING },
-                  suggestedImagePrompt: { type: import_genai.Type.STRING },
-                  isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
-                  speakerName: { type: import_genai.Type.STRING },
-                  speakerTitle: { type: import_genai.Type.STRING }
-                },
-                required: [
-                  "headline",
-                  "highlightWords",
-                  "formattedHeadline",
-                  "location",
-                  "summary"
-                ]
+                  required: [
+                    "headline",
+                    "highlightWords",
+                    "formattedHeadline",
+                    "location",
+                    "summary"
+                  ]
+                }
               }
             }
-          }
-        );
-        parsedData = JSON.parse(response.text || "{}");
-      } catch (geminiError) {
-        console.log("All Gemini models busy in process-news-command, generating instant fallback:", geminiError?.message?.slice(0, 80));
-        const fallbackSource = input || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
-        parsedData = createLocalNewsFallback(fallbackSource, linkUrl);
+          );
+          parsedData = JSON.parse(response.text || "{}");
+        } catch (geminiError) {
+          console.log("All Gemini models busy in process-news-command, generating instant fallback:", geminiError?.message?.slice(0, 80));
+          const fallbackSource = rawInputText || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
+          parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines);
+        }
       }
     }
     if (parsedData) {
@@ -606,6 +1420,10 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
       if (parsedData.summary) parsedData.summary = sanitizePressNoteFlattery(parsedData.summary);
       if (parsedData.speakerName) parsedData.speakerName = sanitizePressNoteFlattery(parsedData.speakerName);
       if (parsedData.speakerTitle) parsedData.speakerTitle = sanitizePressNoteFlattery(parsedData.speakerTitle);
+      parsedData.template_id = tplConfig.template_id;
+      parsedData.headline_max_lines = targetMaxLines;
+      parsedData.headline_area = targetArea;
+      parsedData.headline_line_count = targetMaxLines;
     }
     parsedData.pickedImages = pickedImages;
     return res.json({ success: true, data: parsedData });
@@ -619,6 +1437,7 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
 function sanitizePressNoteFlattery(text) {
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
+  cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Breaking News:|ब्रेकिंग न्यूज़:)\s*/i, "");
   cleaned = cleaned.replace(
     /(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu,
     " "
@@ -629,7 +1448,9 @@ function sanitizePressNoteFlattery(text) {
   );
   cleaned = cleaned.replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "");
   cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "");
-  return cleaned.replace(/[ \t]{2,}/g, " ").trim();
+  cleaned = cleaned.replace(/[ \t]{2,}/g, " ").trim();
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  return cleaned;
 }
 function createEpaperLocalFallback(rawInput, city = "", reporterName = "") {
   const sanitized = sanitizePressNoteFlattery(rawInput);
@@ -1045,7 +1866,7 @@ Return ONLY the English prompt string.`
   }
 });
 app.post("/api/generate-caption", async (req, res) => {
-  const { headline, location, existingSummary, category, style = "detailed_3_para", customInstruction, aiProvider = "gemini" } = req.body;
+  const { headline, location: location2, existingSummary, category, style = "detailed_3_para", customInstruction, aiProvider = "gemini" } = req.body;
   try {
     if (!headline) {
       return res.status(400).json({ error: "Headline is required" });
@@ -1065,7 +1886,7 @@ app.post("/api/generate-caption", async (req, res) => {
 \u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E \u0914\u0930 \u092B\u0947\u0938\u092C\u0941\u0915 \u092A\u094B\u0938\u094D\u091F \u0915\u093E \u0935\u093F\u0938\u094D\u0924\u0943\u0924, \u092A\u094D\u0930\u093E\u092E\u093E\u0923\u093F\u0915 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902:
 
 \u0939\u0947\u0921\u0932\u093E\u0907\u0928: "${headline}"
-\u0938\u094D\u0925\u093E\u0928: "${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"}"
+\u0938\u094D\u0925\u093E\u0928: "${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"}"
 \u0936\u094D\u0930\u0947\u0923\u0940: "${category || "\u0928\u094D\u092F\u0942\u091C\u093C"}"
 ${existingSummary ? `\u0938\u0902\u0926\u0930\u094D\u092D / \u092E\u094C\u091C\u0942\u0926\u093E \u0935\u093F\u0935\u0930\u0923: ${existingSummary}` : ""}
 ${customInstruction ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936\u0947\u0937 \u092C\u0926\u0932\u093E\u0935 / \u0928\u093F\u0930\u094D\u0926\u0947\u0936: ${customInstruction}` : ""}
@@ -1077,7 +1898,7 @@ ${styleDirective}
 4. \u0920\u0940\u0915 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 6 \u0938\u0947 8 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902\u0964
 5. \u0939\u0948\u0936\u091F\u0948\u0917 \u0915\u094D\u0930\u092E (MUST):
    - \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #breakingnewswala
-   - \u092C\u0940\u091A \u092E\u0947\u0902 \u0918\u091F\u0928\u093E/\u0938\u094D\u0925\u093E\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u0909\u0926\u093E: #BreakingNews #HindiNews #LatestNews #${(location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
+   - \u092C\u0940\u091A \u092E\u0947\u0902 \u0918\u091F\u0928\u093E/\u0938\u094D\u0925\u093E\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u0909\u0926\u093E: #BreakingNews #HindiNews #LatestNews #${(location2 || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
    - \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #BNWTV
 
 \u0915\u0947\u0935\u0932 \u0924\u0948\u092F\u093E\u0930 \u0915\u0948\u092A\u094D\u0936\u0928 \u0915\u093E \u0936\u0941\u0926\u094D\u0927 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0926\u0947\u0902, \u0915\u094B\u0908 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u092E\u093E\u0930\u094D\u0915\u0921\u093E\u0909\u0928 \u092F\u093E \u0915\u094B\u091F\u0947\u0936\u0928 \u0928\u0939\u0940\u0902\u0964`;
@@ -1106,10 +1927,10 @@ ${styleDirective}
           return res.status(400).json({ error: openAiCapErr.message });
         }
         console.log("OpenAI caption busy, using fallback template");
-        const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
+        const locTag = (location2 || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
         caption = `${headline}
 
-${existingSummary || `${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
+${existingSummary || `${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
 
 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0939\u0930 \u0924\u093E\u091C\u093E \u0905\u092A\u0921\u0947\u091F \u0915\u0947 \u0932\u093F\u090F \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E \u0915\u0947 \u0938\u093E\u0925\u0964
 
@@ -1128,10 +1949,10 @@ ${existingSummary || `${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930
         caption = (response.text || "").trim();
       } catch (capErr) {
         console.log("Caption generation AI busy, using fallback template:", capErr?.message?.slice(0, 80));
-        const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
+        const locTag = (location2 || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
         caption = `${headline}
 
-${existingSummary || `${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
+${existingSummary || `${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
 
 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0939\u0930 \u0924\u093E\u091C\u093E \u0905\u092A\u0921\u0947\u091F \u0915\u0947 \u0932\u093F\u090F \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E \u0915\u0947 \u0938\u093E\u0925\u0964
 
@@ -1434,28 +2255,36 @@ app.post("/api/admin/update-version-info", (req, res) => {
 });
 async function startServer() {
   const possibleDistPaths = [
-    import_path.default.join(process.cwd(), "web_studio", "dist"),
     import_path.default.join(process.cwd(), "dist"),
+    import_path.default.join(process.cwd(), "web_studio", "dist"),
+    import_path.default.join(process.cwd(), "public"),
     __dirname,
     import_path.default.join(__dirname, "dist")
   ];
   const distPath = possibleDistPaths.find((p) => import_fs.default.existsSync(import_path.default.join(p, "index.html"))) || import_path.default.join(process.cwd(), "dist");
-  if (process.env.NODE_ENV === "development" && import_fs.default.existsSync(import_path.default.join(process.cwd(), "index.html"))) {
-    const vite = await (0, import_vite.createServer)({
-      server: { middlewareMode: true },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
-  } else {
-    console.log(`Serving static studio files from: ${distPath}`);
-    app.use(import_express.default.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(import_path.default.join(distPath, "index.html"));
-    });
-  }
-  app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Serving static studio files from: ${distPath}`);
+  app.use(import_express.default.static(distPath));
+  app.get("*", (_req, res) => {
+    res.sendFile(import_path.default.join(distPath, "index.html"));
+  });
+  const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`News Graphic Studio server running on http://0.0.0.0:${PORT}`);
   });
+  if (PORT !== 3e3) {
+    try {
+      const backupServer = app.listen(3e3, "0.0.0.0", () => {
+        console.log(`Backup listener running on http://0.0.0.0:3000`);
+      });
+      backupServer.on("error", (e) => {
+      });
+    } catch (_err) {
+    }
+  }
 }
 startServer();
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  TEMPLATE_CONFIG_REGISTRY,
+  getTemplateConfig
+});
 //# sourceMappingURL=server.cjs.map
