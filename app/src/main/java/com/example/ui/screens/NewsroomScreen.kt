@@ -154,11 +154,106 @@ fun NewsroomScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            // Permanent Dual Studio Mode Switcher: 1. ग्राफिक फोटो न्यूज़  2. वीडियो न्यूज़
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Slate950,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Option 1: ग्राफिक फोटो न्यूज़
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clickable {
+                                currentMode = NewsroomMode.GRAPHIC_DESIGN
+                                activeStudioWebView?.evaluateJavascript(
+                                    "if (window.setStudioMode) { window.setStudioMode('graphic'); }",
+                                    null
+                                )
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (currentMode == NewsroomMode.GRAPHIC_DESIGN) NewsGold else Color(0xFF1E293B),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (currentMode == NewsroomMode.GRAPHIC_DESIGN) Color(0xFFF59E0B) else Color(0xFF334155)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = if (currentMode == NewsroomMode.GRAPHIC_DESIGN) Color(0xFF0F172A) else Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "ग्राफिक फोटो न्यूज़",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (currentMode == NewsroomMode.GRAPHIC_DESIGN) Color(0xFF0F172A) else Color(0xFFE2E8F0)
+                            )
+                        }
+                    }
+
+                    // Option 2: वीडियो न्यूज़
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clickable {
+                                currentMode = NewsroomMode.VIDEO_DESIGN
+                                activeStudioWebView?.evaluateJavascript(
+                                    "if (window.setStudioMode) { window.setStudioMode('video'); }",
+                                    null
+                                )
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (currentMode == NewsroomMode.VIDEO_DESIGN) Color(0xFFDC2626) else Color(0xFF1E293B),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (currentMode == NewsroomMode.VIDEO_DESIGN) Color(0xFFEF4444) else Color(0xFF334155)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Videocam,
+                                contentDescription = null,
+                                tint = if (currentMode == NewsroomMode.VIDEO_DESIGN) Color.White else Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "वीडियो न्यूज़",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (currentMode == NewsroomMode.VIDEO_DESIGN) Color.White else Color(0xFFE2E8F0)
+                            )
+                        }
+                    }
+                }
+            }
+
             // MAIN CONTENT AREA: Unified Web Studio Engine hosting both Photo News and Video News (exact Web version design)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .weight(1f)
                     .background(Slate950)
             ) {
                 BreakingNewsStudioWebView(

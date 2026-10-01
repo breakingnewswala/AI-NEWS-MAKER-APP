@@ -1341,8 +1341,8 @@ export default function App() {
       {/* 3. Studio Tab */}
       {currentTab === 'studio' && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
-          {/* Studio Type Selector: Permanent top navigation for both Graphic & Video Studio */}
-          <div className="w-full mb-3">
+          {/* Studio Type Selector: Permanent top navigation for both Graphic & Video Studio (shown in web; in Android APK the native top mode bar handles this) */}
+          <div className={`w-full mb-3 ${isAndroidEnvironment ? 'hidden' : 'block'}`}>
             <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
               <button
                 type="button"
