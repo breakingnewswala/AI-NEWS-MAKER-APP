@@ -20,7 +20,7 @@ data class AuthUser(
 )
 
 object AuthManager {
-    const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com"
+    const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
     const val DEFAULT_OPENAI_API_KEY = "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"
 

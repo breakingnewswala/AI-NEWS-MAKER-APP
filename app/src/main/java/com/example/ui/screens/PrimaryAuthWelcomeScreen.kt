@@ -438,9 +438,11 @@ fun PrimaryAuthWelcomeScreen(
                                                         district = "डिजिटल डेस्क"
                                                     )
                                                     fullName = displayName
-                                                    if (profilePic.isNotBlank() && channelLogoUrl.isBlank()) {
-                                                        channelLogoUrl = profilePic
-                                                    }
+                                                    // Channel logo PNG must default to BLANK, user manually fills branding
+                                                    channelLogoUrl = ""
+                                                    channelLogoType = "png"
+                                                    channelNameHi = ""
+                                                    channelNameEn = ""
                                                     Toast.makeText(context, "✅ Google से साइन अप सफल: $displayName", Toast.LENGTH_SHORT).show()
                                                     currentStep = 2
                                                     isLoadingGoogle = false
@@ -801,9 +803,11 @@ fun PrimaryAuthWelcomeScreen(
                                                         district = "डिजिटल डेस्क"
                                                     )
                                                     fullName = displayName
-                                                    if (profilePic.isNotBlank() && channelLogoUrl.isBlank()) {
-                                                        channelLogoUrl = profilePic
-                                                    }
+                                                    // Channel logo PNG must default to BLANK, user manually fills branding
+                                                    channelLogoUrl = ""
+                                                    channelLogoType = "png"
+                                                    channelNameHi = ""
+                                                    channelNameEn = ""
                                                     Toast.makeText(context, "✅ Google लॉगिन सफल: $displayName", Toast.LENGTH_SHORT).show()
                                                     currentStep = 2
                                                     isLoadingGoogle = false

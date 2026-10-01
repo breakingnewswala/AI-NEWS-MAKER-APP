@@ -25,6 +25,10 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.example.model.UserRole
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -623,6 +627,54 @@ class NewsStudioBridge(
     fun onStudioModeChanged(mode: String) {
         (context as? android.app.Activity)?.runOnUiThread {
             onStudioModeChanged?.invoke(mode)
+        }
+    }
+
+    @JavascriptInterface
+    fun signInWithGoogle() {
+        val activity = context as? android.app.Activity ?: return
+        activity.runOnUiThread {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                try {
+                    val credentialManager = androidx.credentials.CredentialManager.create(context)
+                    val googleIdOption = com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(com.example.data.AuthManager.DEFAULT_GOOGLE_CLIENT_ID)
+                        .setAutoSelectEnabled(true)
+                        .build()
+
+                    val request = androidx.credentials.GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+
+                    val result = credentialManager.getCredential(activity, request)
+                    val credential = result.credential
+                    if (credential is androidx.credentials.CustomCredential && credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                        val googleIdToken = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+                        val displayName = googleIdToken.displayName ?: "Google User"
+                        val email = googleIdToken.id
+
+                        val assignedRole = if (com.example.data.AuthManager.isReviewerEmail(email)) UserRole.ADMIN else UserRole.USER
+                        com.example.data.AuthManager.login(
+                            context = context,
+                            name = displayName,
+                            email = email,
+                            role = assignedRole,
+                            district = "डिजिटल डेस्क"
+                        )
+
+                        val cleanName = displayName.replace("'", "\\'")
+                        val cleanEmail = email.replace("'", "\\'")
+                        getWebView()?.evaluateJavascript(
+                            "if (window.handleGoogleUserSuccess) { window.handleGoogleUserSuccess('$cleanEmail', '$cleanName', ''); }",
+                            null
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("GoogleAuthBridge", "Native Google sign-in failed: ${e.message}", e)
+                    Toast.makeText(context, "Google लॉगिन: ${e.localizedMessage ?: "रद्द किया गया"}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
     @JavascriptInterface

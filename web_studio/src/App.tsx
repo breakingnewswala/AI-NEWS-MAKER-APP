@@ -1341,31 +1341,31 @@ export default function App() {
       {/* 3. Studio Tab */}
       {currentTab === 'studio' && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
-          {/* Studio Type Selector: Compact permanent top navigation */}
-          <div className="w-full sticky top-[56px] z-30 bg-slate-950/95 backdrop-blur-md pt-1 pb-1.5 border-b border-neutral-800/80 mb-3">
+          {/* Studio Type Selector: Permanent top navigation for both Graphic & Video Studio */}
+          <div className="w-full mb-3">
             <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
               <button
                 type="button"
                 onClick={() => updateStudioMode('graphic')}
-                className={`flex-1 py-1.5 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
                   studioMode === 'graphic'
-                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md'
+                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
                 }`}
               >
-                <Palette className="w-3.5 h-3.5" />
+                <Palette className="w-4 h-4 text-neutral-950" />
                 <span>ग्राफिक फोटो न्यूज़</span>
               </button>
               <button
                 type="button"
                 onClick={() => updateStudioMode('video')}
-                className={`flex-1 py-1.5 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
                   studioMode === 'video'
-                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md'
+                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
                     : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
                 }`}
               >
-                <Film className="w-3.5 h-3.5" />
+                <Film className="w-4 h-4 text-white" />
                 <span>वीडियो न्यूज़</span>
               </button>
             </div>
@@ -1392,7 +1392,7 @@ export default function App() {
                   id="mobile-studio-sticky-workspace"
                   className={`sticky ${
                     isAndroidEnvironment ? 'top-0' : 'top-[52px]'
-                  } z-30 w-full bg-slate-950/98 backdrop-blur-md pt-1 pb-2 border-b border-slate-800 shadow-2xl`}
+                  } z-20 w-full bg-slate-950/98 backdrop-blur-md pt-1 pb-2 border-b border-slate-800 shadow-2xl`}
                 >
                   <div className="w-full flex items-stretch gap-2 bg-neutral-950 p-2 sm:p-2.5 rounded-2xl border border-neutral-800 shadow-xl">
                     {/* ─── LEFT SIDE = 65% LIVE PREVIEW ─── */}
@@ -1423,11 +1423,11 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* 4:5 Scaled Live Preview Container */}
-                      <div className="w-full flex-1 flex items-center justify-center min-h-[190px] max-h-[250px] sm:max-h-[290px] aspect-[4/5] mx-auto rounded-xl overflow-hidden shadow-md ring-1 ring-neutral-800 bg-black relative">
+                      {/* 4:5 Scaled Live Preview Container - True 4:5 ratio without clipping */}
+                      <div className="w-full aspect-[4/5] mx-auto rounded-xl overflow-hidden shadow-md ring-1 ring-neutral-800 bg-black relative flex items-center justify-center">
                         <CardPreview
                           card={card}
-                          className="w-full h-full object-contain"
+                          className="w-full h-full"
                           showSafeZone={showSafeZone}
                           onChange={handleUpdateCard}
                         />

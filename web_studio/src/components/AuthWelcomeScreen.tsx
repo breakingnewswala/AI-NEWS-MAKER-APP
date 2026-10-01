@@ -383,7 +383,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       onCompleteDetails(finalProfile, googleUser);
       setIsLoggingIn(false);
     } else {
-      // First-Time User: Account created via Google -> Straight to Home Feed (No popup modal!)
+      // First-Time User: Account created via Google -> Show Step 2 Channel Branding Setup Screen
       let generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
       const uniqCheck = checkAccountUniqueness({
         username: generatedUsername,
@@ -404,55 +404,28 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       };
 
       setDetailFullName(name || prefix);
-      setDetailChannelLogoUrl('');
-      setDetailChannelLogoGifUrl('');
+      setDetailChannelLogoUrl(''); // PNG Logo = BLANK by default
+      setDetailChannelLogoGifUrl(''); // GIF Logo = BLANK by default
       setDetailChannelLogoType('png');
+      setDetailChannelNameHi(''); // User manually fills channel branding
+      setDetailChannelNameEn('');
       setUsername(generatedUsername);
+      setTempRegisteredUser(googleUser);
+      setIsGoogleLoggedIn(true);
 
-      const baseProfile: ChannelProfile = {
-        fullName: name || prefix,
-        channelNameHi: 'एआई न्यूज़ मेकर',
-        channelNameEn: 'AI News Maker',
-        channelLogoUrl: '', // PNG Logo = BLANK by default
-        channelLogoType: 'png',
-        socialIcons: {
-          youtube: true,
-          facebook: true,
-          instagram: true,
-          twitter: false,
-          telegram: false,
-          whatsapp: true,
-        },
-        username: generatedUsername,
-        mobileNumber: '',
-        showMobileNumber: true,
-        websiteUrl: 'ainewsmaker.online',
-        isLocked: true,
-      };
-
-      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
-      localStorage.setItem('user_channel_profile', JSON.stringify(baseProfile));
-      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(baseProfile));
-      localStorage.setItem('is_onboarding_completed', 'true');
-      localStorage.setItem('is_channel_profile_locked', 'true');
-
-      registerOrUpdateUser({
-        email: cleanEmail,
-        username: generatedUsername,
-        name: googleUser.name,
-        mobile: '',
-        channelName: baseProfile.channelNameHi,
-        channelLogoUrl: '',
-        tier: 'basic',
-        role: 'reporter',
-        isLocked: true,
-      });
-
-      // Direct entry: lands directly on Home Feed without popup
-      onCompleteDetails(baseProfile, googleUser);
+      // Transition to Step 2 for channel branding onboarding
+      setCurrentStep(2);
       setIsLoggingIn(false);
     }
   };
+
+  // Expose handleGoogleUserSuccess globally for native AndroidBridge
+  React.useEffect(() => {
+    (window as any).handleGoogleUserSuccess = handleGoogleUserSuccess;
+    return () => {
+      delete (window as any).handleGoogleUserSuccess;
+    };
+  }, []);
 
   // Real Google Sign-In Trigger (Opens Google Account Chooser Popup)
   const handleGoogleSignIn = () => {
