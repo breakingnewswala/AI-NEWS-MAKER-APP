@@ -162,11 +162,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const cleanEmail = email.trim().toLowerCase();
       const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail.startsWith('admin');
       const prefix = cleanEmail.split('@')[0];
-      const defaultName = displayName || prefix.replace(/[._-]/g, ' ');
-
+      // CRITICAL: Do NOT auto-fill Google account name or username. User enters manually.
       const user: ReporterUser = {
-        username: prefix,
-        name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
+        username: '',
+        name: '',
         role: isAdmin ? 'admin' : 'reporter',
         email: cleanEmail,
         district: isAdmin ? 'सेंट्रल डेस्क' : 'डिजिटल डेस्क',

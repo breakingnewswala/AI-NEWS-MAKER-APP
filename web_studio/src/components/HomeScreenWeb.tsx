@@ -402,7 +402,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-400 animate-pulse" />
                 <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide">
-                  विशेष नोटिफिकेशन बोर्ड (HIGHLIGHTS)
+                  विशेष सूचना बोर्ड
                 </span>
               </div>
 

@@ -122,9 +122,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const initialProfile: Partial<ChannelProfile> = savedProfileStr ? JSON.parse(savedProfileStr) : {};
   const subscription = getUserSubscription();
 
-  const [detailFullName, setDetailFullName] = useState<string>(
-    currentUser?.name || initialProfile.fullName || ''
-  );
+  const [detailFullName, setDetailFullName] = useState<string>(initialProfile.fullName || '');
   const [reportingDistrict, setReportingDistrict] = useState<string>(
     currentUser?.district || initialProfile.district || ''
   );
@@ -203,7 +201,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   // Sync user details if currentUser updates
   useEffect(() => {
     if (currentUser) {
-      if (!detailFullName && currentUser.name) setDetailFullName(currentUser.name);
+      // Preserve user manual name entry
       if (currentUser.district && !reportingDistrict) setReportingDistrict(currentUser.district);
     }
   }, [currentUser]);
@@ -265,7 +263,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       if (res.success) {
         setOtpSent(true);
         setOtpTimer(60);
-        setOtpMessage('✅ 6-अंकों का वास्तविक OTP कोड आपके मोबाइल पर भेजा गया है।');
+        if ((res as any).otpCode) { setOtpMessage(`✅ OTP भेजा गया! [सत्यापन कोड: ${(res as any).otpCode}]`); setOtpInput((res as any).otpCode); } else { setOtpMessage('✅ 6-अंकों का वास्तविक OTP कोड आपके मोबाइल पर भेजा गया है।'); }
       } else {
         setOtpError(res.error || 'OTP भेजने में विफलता हुई, पुनः प्रयास करें।');
       }
@@ -319,7 +317,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       if (res.success) {
         setSignupOtpSent(true);
         setSignupOtpTimer(60);
-        setSignupOtpMsg('✅ 6-अंकों का OTP कोड आपके मोबाइल पर भेजा गया है।');
+        if ((res as any).otpCode) { setSignupOtpMsg(`✅ OTP भेजा गया! [सत्यापन कोड: ${(res as any).otpCode}]`); setSignupOtpInput((res as any).otpCode); } else { setSignupOtpMsg('✅ 6-अंकों का OTP कोड आपके मोबाइल पर भेजा गया है।'); }
       } else {
         setSignupOtpErr(res.error || 'OTP भेजने में विफलता हुई, पुनः प्रयास करें।');
       }
@@ -518,20 +516,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
       const googleUser: ReporterUser = {
         username: generatedUsername,
-        name: name || prefix,
+        name: '', // Manual user entry
         role: 'reporter',
         district: 'सेंट्रल डेस्क',
         email: email,
         avatarUrl: picture, // Avatar photo only, NEVER channel logo
       };
 
-      setDetailFullName(name || prefix);
+      setDetailFullName(''); // Manual user entry
       setDetailChannelLogoUrl(''); // PNG Logo = BLANK by default
       setDetailChannelLogoGifUrl(''); // GIF Logo = BLANK by default
       setDetailChannelLogoType('png');
       setDetailChannelNameHi(''); // User manually fills channel branding
       setDetailChannelNameEn('');
-      setUsername(generatedUsername);
+      setUsername(''); // Manual user entry
       setTempRegisteredUser(googleUser);
       setIsGoogleLoggedIn(true);
 

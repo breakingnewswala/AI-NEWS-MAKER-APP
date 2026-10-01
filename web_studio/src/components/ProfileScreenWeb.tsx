@@ -794,7 +794,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
             <div>
               <h1 className="text-xl font-black text-white flex items-center gap-2">
-                <span>{isAdmin ? 'एडमिन कंट्रोल पैनल (Admin Control Panel)' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
+                <span>{isAdmin ? 'एडमिन कंट्रोल पैनल' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
                 {testModeEnabled && isAdmin && (
                   <span className="px-2 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[10px] font-black rounded-full uppercase flex items-center gap-1">
                     <FlaskConical className="w-3 h-3 text-purple-400" />
@@ -2177,7 +2177,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-base font-black text-white">
-                          एडमिन टेस्ट मोड (Admin Test Mode / Sandbox)
+                          एडमिन टेस्ट मोड
                         </h3>
                         <span className="px-2 py-0.5 bg-purple-900 text-purple-200 text-[10px] font-black rounded uppercase border border-purple-500">
                           केवल एडमिन हेतु
@@ -2227,7 +2227,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base font-black text-white">
-                        टेम्पलेट प्लान मैनेजमेंट (Template Plan Manager)
+                        टेम्पलेट प्लान मैनेजमेंट
                       </h3>
                       <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded uppercase">
                         नया फीचर

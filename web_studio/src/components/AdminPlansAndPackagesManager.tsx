@@ -461,104 +461,249 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       {/* ========================================================================= */}
       {/* 6 SYSTEMATIC NUMBERED EXPANDABLE / TAPPABLE ADMIN CONTROL BOXES         */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {[
-          {
-            id: 'plans',
-            num: 1,
-            titleHi: '1. प्लान्स (Plans)',
-            subtitle: '4 वास्तविक प्लान्स (BASIC, ADVANCE, PRO, VIP DESK)',
-            count: `${plans.length} प्लान्स`,
-            icon: Package,
-            color: 'from-blue-600 to-indigo-600',
-          },
-          {
-            id: 'promocodes',
-            num: 2,
-            titleHi: '2. प्रोमो कोड्स (Promo Codes)',
-            subtitle: 'सिंगल-यूज़ प्रोमो कोड जनरेशन व एक्टिवेशन',
-            count: `${promoCodes.length} कोड्स`,
-            icon: Ticket,
-            color: 'from-amber-500 to-yellow-600',
-          },
-          {
-            id: 'users',
-            num: 3,
-            titleHi: '3. यूज़र्स (Users)',
-            subtitle: 'पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर',
-            count: `${planUsers.length} यूज़र्स`,
-            icon: Users,
-            color: 'from-emerald-600 to-teal-600',
-          },
-          {
-            id: 'restricted',
-            num: 4,
-            titleHi: '4. प्रतिबंधित चैनल्स (Restricted)',
-            subtitle: 'राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति',
-            count: `${restrictedList.length} चैनल्स`,
-            icon: ShieldAlert,
-            color: 'from-rose-600 to-red-700',
-          },
-          {
-            id: 'rss',
-            num: 5,
-            titleHi: '5. RSS लिंक्स (Live RSS)',
-            subtitle: 'लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स',
-            count: `${rssSources.filter(s => s.type === 'rss').length} RSS लिंक्स`,
-            icon: Rss,
-            color: 'from-orange-600 to-amber-600',
-          },
-          {
-            id: 'web',
-            num: 6,
-            titleHi: '6. वेब लिंक्स (Live Web Links)',
-            subtitle: 'लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स',
-            count: `${rssSources.filter(s => s.type === 'web').length} वेब लिंक्स`,
-            icon: Globe,
-            color: 'from-cyan-600 to-blue-600',
-          },
-        ].map((box) => {
-          const isSelected = subTab === box.id;
-          const IconComp = box.icon;
-          return (
-            <button
-              key={box.id}
-              type="button"
-              onClick={() => setSubTab(box.id as any)}
-              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 shadow-lg ${
-                isSelected
-                  ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-amber-400 ring-2 ring-amber-400/30'
-                  : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${box.color} flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md`}>
-                  <span>{box.num}</span>
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xs sm:text-sm font-black text-white block truncate">
-                    {box.titleHi}
-                  </span>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {box.subtitle}
-                  </p>
-                </div>
+      {/* ========================================================================= */}
+      {/* 6 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
+      {/* ========================================================================= */}
+      <div className="space-y-3.5">
+        {/* BOX 1: PLANS */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'plans' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'plans' ? '' : 'plans')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'plans' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>1</span>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="px-2 py-0.5 bg-slate-950 text-amber-300 text-[10px] font-mono font-bold rounded-lg border border-slate-800">
-                  {box.count}
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  1. प्लान्स
                 </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isSelected ? 'rotate-180 text-amber-400' : ''}`} />
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  4 वास्तविक प्लान्स (BASIC, ADVANCE, PRO, VIP DESK)
+                </p>
               </div>
-            </button>
-          );
-        })}
-      </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${plans.length} प्लान्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'plans' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'plans' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="space-y-6">
+          {planSaveSuccess && (
+            <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{planSaveSuccess}</span>
+            </div>
+          )}
 
-      {/* ========================================================================= */}
-      {/* SUB-TAB 1: PROMO CODES SYSTEM & MANUAL PAYMENT ACTIVATION WORKFLOW       */}
-      {/* ========================================================================= */}
-      {subTab === 'promocodes' && (
+          {/* Cards Grid for the 4 Plans */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {plans.map((plan) => {
+              const isEditing = editingPlanId === plan.id;
+
+              return (
+                <div
+                  key={plan.id}
+                  className={`bg-slate-900 border rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col justify-between transition-all ${
+                    plan.id === 'ultra'
+                      ? 'border-purple-500/80 shadow-purple-950/40 ring-1 ring-purple-500/40'
+                      : plan.id === 'professional'
+                      ? 'border-amber-500/60 shadow-amber-950/30'
+                      : plan.id === 'advanced'
+                      ? 'border-blue-500/60'
+                      : 'border-slate-800'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    {/* Header: Name & Active Badge */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        {plan.id === 'ultra' ? (
+                          <Crown className="w-5 h-5 text-purple-400" />
+                        ) : plan.id === 'professional' ? (
+                          <Zap className="w-5 h-5 text-amber-400" />
+                        ) : plan.id === 'advanced' ? (
+                          <Star className="w-5 h-5 text-blue-400" />
+                        ) : (
+                          <Package className="w-5 h-5 text-slate-400" />
+                        )}
+                        <span className="font-black text-base text-white">{plan.planKey}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePlanActive(plan.id)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase transition cursor-pointer ${
+                          plan.isActive
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-600'
+                            : 'bg-red-950 text-red-300 border border-red-600'
+                        }`}
+                      >
+                        {plan.isActive ? 'Active' : 'Inactive'}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-400 line-clamp-2">{plan.tagline}</p>
+
+                    {/* Price & Duration */}
+                    <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800/80">
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 block">मूल्य (₹)</label>
+                            <input
+                              type="number"
+                              value={editPriceNum}
+                              onChange={(e) => setEditPriceNum(Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm font-bold text-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 block">वैधता (दिन)</label>
+                            <input
+                              type="number"
+                              value={editDurationDays}
+                              onChange={(e) => setEditDurationDays(Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 block">ग्राफ़िक्स सीमा/दिन</label>
+                            <input
+                              type="number"
+                              value={editMaxGraphics}
+                              onChange={(e) => setEditMaxGraphics(Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                            />
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleSavePlan(plan.id)}
+                              className="flex-1 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <Save className="w-3 h-3" />
+                              <span>सेव</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingPlanId(null)}
+                              className="px-2 py-1 bg-slate-800 text-slate-300 text-xs rounded hover:bg-slate-700 cursor-pointer"
+                            >
+                              रद्द
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline justify-between">
+                          <div>
+                            <span className="text-xl font-black text-white font-mono">{plan.priceDisplay}</span>
+                            <span className="text-[10px] text-slate-400 ml-1">/ {plan.validityLabel}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditPlan(plan)}
+                            className="p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                            title="एडिट करें"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Features List */}
+                    <div className="space-y-1.5 pt-1 text-xs text-slate-300">
+                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
+                        <span>वॉटरमार्क:</span>
+                        <span className={plan.hasWatermark ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                          {plan.hasWatermark ? 'हाँ (रहेगा)' : 'नहीं (No Watermark)'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
+                        <span>क्वालिटी:</span>
+                        <span className="text-white font-bold">{plan.graphicExportResolution}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
+                        <span>वीडियो स्टूडियो:</span>
+                        <span className={plan.hasVideoStudio ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                          {plan.hasVideoStudio ? 'सक्रिय (Unlocked)' : 'लॉक्ड'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
+                        <span>VIP DESK फ्रेम्स:</span>
+                        <span className={plan.hasVipDeskFrames ? 'text-purple-400 font-bold' : 'text-slate-500'}>
+                          {plan.hasVipDeskFrames ? 'विशेष (VIP Only)' : 'लॉक्ड'}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 space-y-1 text-[11px] text-slate-300">
+                        {plan.features.slice(0, 4).map((f, i) => (
+                          <div key={i} className="line-clamp-1">
+                            {f}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer Stats / Action */}
+                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">
+                      दैनिक सीमा: {plan.maxGraphicsPerDay >= 9999 ? 'असीमित' : `${plan.maxGraphicsPerDay} ग्राफिक`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditPlan(plan)}
+                      className="text-xs font-bold text-amber-400 hover:text-amber-300 cursor-pointer"
+                    >
+                      कस्टमाइज़ करें
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+            </div>
+          )}
+        </div>
+
+        {/* BOX 2: PROMOCODES */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'promocodes' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'promocodes' ? '' : 'promocodes')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'promocodes' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>2</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  2. प्रोमो कोड्स
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  सिंगल-यूज़ प्रोमो कोड जनरेशन व एक्टिवेशन
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${promoCodes.length} कोड्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'promocodes' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'promocodes' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">
           {/* Manual Payment Workflow Guide */}
           <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-xs text-slate-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -889,195 +1034,39 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             )}
           </div>
         </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* SUB-TAB 2: PLANS CATALOG (BASIC, ADVANCE, PRO, VIP DESK)                 */}
-      {/* ========================================================================= */}
-      {subTab === 'plans' && (
-        <div className="space-y-6">
-          {planSaveSuccess && (
-            <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>{planSaveSuccess}</span>
             </div>
           )}
-
-          {/* Cards Grid for the 4 Plans */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {plans.map((plan) => {
-              const isEditing = editingPlanId === plan.id;
-
-              return (
-                <div
-                  key={plan.id}
-                  className={`bg-slate-900 border rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col justify-between transition-all ${
-                    plan.id === 'ultra'
-                      ? 'border-purple-500/80 shadow-purple-950/40 ring-1 ring-purple-500/40'
-                      : plan.id === 'professional'
-                      ? 'border-amber-500/60 shadow-amber-950/30'
-                      : plan.id === 'advanced'
-                      ? 'border-blue-500/60'
-                      : 'border-slate-800'
-                  }`}
-                >
-                  <div className="space-y-3">
-                    {/* Header: Name & Active Badge */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        {plan.id === 'ultra' ? (
-                          <Crown className="w-5 h-5 text-purple-400" />
-                        ) : plan.id === 'professional' ? (
-                          <Zap className="w-5 h-5 text-amber-400" />
-                        ) : plan.id === 'advanced' ? (
-                          <Star className="w-5 h-5 text-blue-400" />
-                        ) : (
-                          <Package className="w-5 h-5 text-slate-400" />
-                        )}
-                        <span className="font-black text-base text-white">{plan.planKey}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePlanActive(plan.id)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase transition cursor-pointer ${
-                          plan.isActive
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-600'
-                            : 'bg-red-950 text-red-300 border border-red-600'
-                        }`}
-                      >
-                        {plan.isActive ? 'Active' : 'Inactive'}
-                      </button>
-                    </div>
-
-                    <p className="text-xs text-slate-400 line-clamp-2">{plan.tagline}</p>
-
-                    {/* Price & Duration */}
-                    <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800/80">
-                      {isEditing ? (
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block">मूल्य (₹)</label>
-                            <input
-                              type="number"
-                              value={editPriceNum}
-                              onChange={(e) => setEditPriceNum(Number(e.target.value))}
-                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm font-bold text-amber-400"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block">वैधता (दिन)</label>
-                            <input
-                              type="number"
-                              value={editDurationDays}
-                              onChange={(e) => setEditDurationDays(Number(e.target.value))}
-                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block">ग्राफ़िक्स सीमा/दिन</label>
-                            <input
-                              type="number"
-                              value={editMaxGraphics}
-                              onChange={(e) => setEditMaxGraphics(Number(e.target.value))}
-                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                            />
-                          </div>
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleSavePlan(plan.id)}
-                              className="flex-1 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded flex items-center justify-center gap-1 cursor-pointer"
-                            >
-                              <Save className="w-3 h-3" />
-                              <span>सेव</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingPlanId(null)}
-                              className="px-2 py-1 bg-slate-800 text-slate-300 text-xs rounded hover:bg-slate-700 cursor-pointer"
-                            >
-                              रद्द
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-baseline justify-between">
-                          <div>
-                            <span className="text-xl font-black text-white font-mono">{plan.priceDisplay}</span>
-                            <span className="text-[10px] text-slate-400 ml-1">/ {plan.validityLabel}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditPlan(plan)}
-                            className="p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition cursor-pointer"
-                            title="एडिट करें"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Features List */}
-                    <div className="space-y-1.5 pt-1 text-xs text-slate-300">
-                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
-                        <span>वॉटरमार्क:</span>
-                        <span className={plan.hasWatermark ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
-                          {plan.hasWatermark ? 'हाँ (रहेगा)' : 'नहीं (No Watermark)'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
-                        <span>क्वालिटी:</span>
-                        <span className="text-white font-bold">{plan.graphicExportResolution}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
-                        <span>वीडियो स्टूडियो:</span>
-                        <span className={plan.hasVideoStudio ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          {plan.hasVideoStudio ? 'सक्रिय (Unlocked)' : 'लॉक्ड'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
-                        <span>VIP DESK फ्रेम्स:</span>
-                        <span className={plan.hasVipDeskFrames ? 'text-purple-400 font-bold' : 'text-slate-500'}>
-                          {plan.hasVipDeskFrames ? 'विशेष (VIP Only)' : 'लॉक्ड'}
-                        </span>
-                      </div>
-
-                      <div className="pt-2 space-y-1 text-[11px] text-slate-300">
-                        {plan.features.slice(0, 4).map((f, i) => (
-                          <div key={i} className="line-clamp-1">
-                            {f}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Footer Stats / Action */}
-                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
-                      दैनिक सीमा: {plan.maxGraphicsPerDay >= 9999 ? 'असीमित' : `${plan.maxGraphicsPerDay} ग्राफिक`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleStartEditPlan(plan)}
-                      className="text-xs font-bold text-amber-400 hover:text-amber-300 cursor-pointer"
-                    >
-                      कस्टमाइज़ करें
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
-      )}
 
-      {/* ========================================================================= */}
-      {/* SUB-TAB 3: USER CONTROL & CUSTOM HEADER / FOOTER                          */}
-      {/* ========================================================================= */}
-      {subTab === 'users' && (
+        {/* BOX 3: USERS */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'users' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'users' ? '' : 'users')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'users' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>3</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  3. यूज़र्स
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${planUsers.length} यूज़र्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'users' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'users' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">
           {/* 0. LOGO CHANGE REQUESTS MANAGEMENT CARD */}
           <div className="bg-gradient-to-br from-slate-900 via-amber-950/20 to-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
@@ -1803,15 +1792,367 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
-      )}
+            </div>
+          )}
+        </div>
 
-      {/* ========================================================================= */}
-      {/* SUB-TAB 4: RSS FEEDS & WEB LINKS SOURCE MANAGEMENT                       */}
-      {/* ========================================================================= */}
-      {/* ========================================================================= */}
-      {/* BOX 5: RSS लिंक्स (LIVE PRODUCTION RSS FEEDS)                             */}
-      {/* ========================================================================= */}
-      {subTab === 'rss' && (
+        {/* BOX 4: RESTRICTED */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'restricted' ? '' : 'restricted')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'restricted' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>4</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  4. प्रतिबंधित चैनल सुरक्षा सूची
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${restrictedList.length} चैनल्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'restricted' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'restricted' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="space-y-6">
+          {/* Top Explanation Banner */}
+          <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-amber-600 flex items-center justify-center text-white font-black shadow-lg shrink-0">
+                  <ShieldAlert className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-black text-white">
+                      प्रतिबंधित चैनल सुरक्षा सूची
+                    </h3>
+                    <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
+                      ब्रांड सुरक्षा
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    बड़े राष्ट्रीय मीडिया नेटवर्क्स (आज तक, एबीपी न्यूज़, एनडीटीवी, ज़ी न्यूज़ आदि) के नाम, वेबसाइट व लोगो अनधिकृत उपयोग से सुरक्षित हैं। कोई भी यूज़र इन चैनलों के नाम, वेबसाइट या यूज़रनेम से खाता नहीं बना सकता।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-bold text-red-300 bg-red-950/60 px-3 py-1.5 rounded-xl border border-red-500/40">
+                <span>सुरक्षित चैनल्स: {restrictedList.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Feedback Message */}
+          {restrictedMsg && (
+            <div
+              className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                restrictedMsg.type === 'success'
+                  ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-300'
+                  : 'bg-red-950/80 border border-red-500/80 text-red-300'
+              }`}
+            >
+              {restrictedMsg.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              )}
+              <span>{restrictedMsg.text}</span>
+            </div>
+          )}
+
+          {/* Add New Restricted Channel Card */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+            <div className="flex items-center gap-2 text-sm font-black text-amber-300 border-b border-slate-800 pb-2.5">
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>नया चैनल प्रतिबंधित सूची में जोड़ें</span>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newRestrictedName.trim()) {
+                  setRestrictedMsg({ type: 'error', text: 'कृपया चैनल का नाम दर्ज करें' });
+                  return;
+                }
+                if (!newRestrictedWebsite.trim() && !newRestrictedUsername.trim()) {
+                  setRestrictedMsg({ type: 'error', text: 'कृपया वेबसाइट या यूज़रनेम दर्ज करें' });
+                  return;
+                }
+                const added = addRestrictedChannel({
+                  channelName: newRestrictedName.trim(),
+                  websiteUrl: newRestrictedWebsite.trim(),
+                  username: newRestrictedUsername.trim() || newRestrictedName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16),
+                  logoUrl: newRestrictedLogo.trim() || undefined,
+                  reason: newRestrictedReason.trim() || 'राष्ट्रीय/आधिकारिक समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित',
+                });
+                setRestrictedList(getRestrictedChannels());
+                setNewRestrictedName('');
+                setNewRestrictedWebsite('');
+                setNewRestrictedUsername('');
+                setNewRestrictedLogo('');
+                setNewRestrictedReason('');
+                setRestrictedMsg({
+                  type: 'success',
+                  text: `✅ चैनल "${added.channelName}" सफलतापूर्वक प्रतिबंधित सूची में जोड़ दिया गया।`,
+                });
+                setTimeout(() => setRestrictedMsg(null), 5000);
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  1. चैनल का नाम *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newRestrictedName}
+                  onChange={(e) => setNewRestrictedName(e.target.value)}
+                  placeholder="उदा. आज तक (Aaj Tak)"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  2. वेबसाइट का पता (डोमेन) *
+                </label>
+                <input
+                  type="text"
+                  value={newRestrictedWebsite}
+                  onChange={(e) => setNewRestrictedWebsite(e.target.value)}
+                  placeholder="उदा. aajtak.in (बिना https:// के)"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  3. यूज़रनेम
+                </label>
+                <input
+                  type="text"
+                  value={newRestrictedUsername}
+                  onChange={(e) => setNewRestrictedUsername(e.target.value)}
+                  placeholder="उदा. aajtak"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  4. चैनल लोगो (फोटो चुनें या URL)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="restricted-logo-file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (typeof reader.result === 'string') {
+                            setNewRestrictedLogo(reader.result);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="restricted-logo-file"
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 transition active:scale-95 shrink-0"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-amber-400" />
+                    <span>📁 फोटो चुनें</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newRestrictedLogo}
+                    onChange={(e) => setNewRestrictedLogo(e.target.value)}
+                    placeholder="या लोगो इमेज लिंक पेस्ट करें..."
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                  />
+                  {newRestrictedLogo && (
+                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-amber-400/50 bg-black shrink-0 flex items-center justify-center">
+                      <img src={newRestrictedLogo} alt="Logo" className="w-full h-full object-contain" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-2">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  5. प्रतिबंध का कारण
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newRestrictedReason}
+                    onChange={(e) => setNewRestrictedReason(e.target.value)}
+                    placeholder="उदा. राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित"
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                  />
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>सूची में जोड़ें</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          {/* Search & Channels Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-3 p-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={restrictedSearch}
+                  onChange={(e) => setRestrictedSearch(e.target.value)}
+                  placeholder="चैनल नाम, वेबसाइट या यूज़रनेम खोजें..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+              <span className="text-xs text-slate-400 font-semibold self-center">
+                कुल प्रतिबंधित ब्रांड्स: {restrictedList.length}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
+                  <tr>
+                    <th className="p-3">लोगो</th>
+                    <th className="p-3">चैनल का नाम</th>
+                    <th className="p-3">वेबसाइट</th>
+                    <th className="p-3">यूज़रनेम</th>
+                    <th className="p-3">कारण / सुरक्षा</th>
+                    <th className="p-3 text-right">कार्रवाई</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 font-medium">
+                  {restrictedList
+                    .filter((c) => {
+                      if (!restrictedSearch) return true;
+                      const q = restrictedSearch.toLowerCase();
+                      return (
+                        c.channelName.toLowerCase().includes(q) ||
+                        c.websiteUrl.toLowerCase().includes(q) ||
+                        c.username.toLowerCase().includes(q) ||
+                        (c.reason && c.reason.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-850/50 transition">
+                        <td className="p-3 whitespace-nowrap">
+                          {item.logoUrl ? (
+                            <img
+                              src={item.logoUrl}
+                              alt={item.channelName}
+                              className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-[10px] font-black flex items-center justify-center">
+                              🛡️
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="font-bold text-white text-xs">{item.channelName}</span>
+                        </td>
+                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-blue-300">
+                          {item.websiteUrl}
+                        </td>
+                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-amber-300">
+                          @{item.username}
+                        </td>
+                        <td className="p-3 text-[11px] text-slate-300">
+                          <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 text-[10px] font-bold">
+                            {item.reason || 'प्रतिबंधित चैनल'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
+                                deleteRestrictedChannel(item.id);
+                                setRestrictedList(getRestrictedChannels());
+                                setRestrictedMsg({
+                                  type: 'success',
+                                  text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।`,
+                                });
+                              }
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer"
+                            title="प्रतिबंध हटाएं"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+            </div>
+          )}
+        </div>
+
+        {/* BOX 5: RSS */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rss' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'rss' ? '' : 'rss')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'rss' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>5</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  5. RSS लिंक्स
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${rssSources.filter(s => s.type === "rss").length} RSS लिंक्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'rss' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'rss' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">
           {/* Header Info Banner */}
           <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
@@ -2040,12 +2381,39 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
-      )}
+            </div>
+          )}
+        </div>
 
-      {/* ========================================================================= */}
-      {/* BOX 6: वेब लिंक्स (LIVE WEB ARTICLE SCRAPING SOURCES)                      */}
-      {/* ========================================================================= */}
-      {subTab === 'web' && (
+        {/* BOX 6: WEB */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'web' ? '' : 'web')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'web' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>6</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  6. वेब लिंक्स
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${rssSources.filter(s => s.type === "web").length} वेब लिंक्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'web' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'web' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">
           {/* Header Info Banner */}
           <div className="bg-gradient-to-r from-cyan-950/40 via-slate-900 to-blue-950/40 border-2 border-cyan-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
@@ -2245,276 +2613,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
-      )}
-
-      {/* SUB-TAB 5: RESTRICTED CHANNELS MANAGER (प्रतिबंधित चैनल सुरक्षा प्रणाली)    */}
-      {/* ========================================================================= */}
-      {subTab === 'restricted' && (
-        <div className="space-y-6">
-          {/* Top Explanation Banner */}
-          <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-amber-600 flex items-center justify-center text-white font-black shadow-lg shrink-0">
-                  <ShieldAlert className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base sm:text-lg font-black text-white">
-                      प्रतिबंधित चैनल सुरक्षा सूची (Restricted News Brands)
-                    </h3>
-                    <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
-                      Brand Protection
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    बड़े राष्ट्रीय मीडिया नेटवर्क्स (आज तक, एबीपी न्यूज़, एनडीटीवी, ज़ी न्यूज़ आदि) के नाम, वेबसाइट व लोगो अनधिकृत उपयोग से सुरक्षित हैं। कोई भी यूज़र इन चैनलों के नाम, वेबसाइट या यूज़रनेम से खाता नहीं बना सकता।
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs font-bold text-red-300 bg-red-950/60 px-3 py-1.5 rounded-xl border border-red-500/40">
-                <span>सुरक्षित चैनल्स: {restrictedList.length}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Feedback Message */}
-          {restrictedMsg && (
-            <div
-              className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
-                restrictedMsg.type === 'success'
-                  ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-300'
-                  : 'bg-red-950/80 border border-red-500/80 text-red-300'
-              }`}
-            >
-              {restrictedMsg.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              )}
-              <span>{restrictedMsg.text}</span>
             </div>
           )}
-
-          {/* Add New Restricted Channel Card */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
-            <div className="flex items-center gap-2 text-sm font-black text-amber-300 border-b border-slate-800 pb-2.5">
-              <Plus className="w-4 h-4 text-amber-400" />
-              <span>नया चैनल प्रतिबंधित सूची में जोड़ें (Add Restricted Channel)</span>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!newRestrictedName.trim()) {
-                  setRestrictedMsg({ type: 'error', text: 'कृपया चैनल का नाम दर्ज करें' });
-                  return;
-                }
-                if (!newRestrictedWebsite.trim() && !newRestrictedUsername.trim()) {
-                  setRestrictedMsg({ type: 'error', text: 'कृपया वेबसाइट या यूज़रनेम दर्ज करें' });
-                  return;
-                }
-                const added = addRestrictedChannel({
-                  channelName: newRestrictedName.trim(),
-                  websiteUrl: newRestrictedWebsite.trim(),
-                  username: newRestrictedUsername.trim() || newRestrictedName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16),
-                  logoUrl: newRestrictedLogo.trim() || undefined,
-                  reason: newRestrictedReason.trim() || 'राष्ट्रीय/आधिकारिक समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित',
-                });
-                setRestrictedList(getRestrictedChannels());
-                setNewRestrictedName('');
-                setNewRestrictedWebsite('');
-                setNewRestrictedUsername('');
-                setNewRestrictedLogo('');
-                setNewRestrictedReason('');
-                setRestrictedMsg({
-                  type: 'success',
-                  text: `✅ चैनल "${added.channelName}" सफलतापूर्वक प्रतिबंधित सूची में जोड़ दिया गया।`,
-                });
-                setTimeout(() => setRestrictedMsg(null), 5000);
-              }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  1. चैनल का नाम (Channel Name) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newRestrictedName}
-                  onChange={(e) => setNewRestrictedName(e.target.value)}
-                  placeholder="उदा. आज तक (Aaj Tak)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  2. वेबसाइट एड्रेस (Domain) *
-                </label>
-                <input
-                  type="text"
-                  value={newRestrictedWebsite}
-                  onChange={(e) => setNewRestrictedWebsite(e.target.value)}
-                  placeholder="उदा. aajtak.in (बिना https:// के)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  3. यूज़रनेम (Username)
-                </label>
-                <input
-                  type="text"
-                  value={newRestrictedUsername}
-                  onChange={(e) => setNewRestrictedUsername(e.target.value)}
-                  placeholder="उदा. aajtak"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  4. चैनल लोगो इमेज URL
-                </label>
-                <input
-                  type="url"
-                  value={newRestrictedLogo}
-                  onChange={(e) => setNewRestrictedLogo(e.target.value)}
-                  placeholder="उदा. https://example.com/logo.png"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="sm:col-span-2 lg:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  5. प्रतिबंध का कारण (Reason / Notes)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newRestrictedReason}
-                    onChange={(e) => setNewRestrictedReason(e.target.value)}
-                    placeholder="उदा. राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित"
-                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                  />
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>प्रतिबंधित करें</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-
-          {/* Search & Channels Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-3 p-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                <input
-                  type="text"
-                  value={restrictedSearch}
-                  onChange={(e) => setRestrictedSearch(e.target.value)}
-                  placeholder="चैनल नाम, वेबसाइट या यूज़रनेम खोजें..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-              <span className="text-xs text-slate-400 font-semibold self-center">
-                कुल प्रतिबंधित ब्रांड्स: {restrictedList.length}
-              </span>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
-                  <tr>
-                    <th className="p-3">लोगो</th>
-                    <th className="p-3">चैनल का नाम</th>
-                    <th className="p-3">वेबसाइट</th>
-                    <th className="p-3">यूज़रनेम</th>
-                    <th className="p-3">कारण / सुरक्षा</th>
-                    <th className="p-3 text-right">कार्रवाई</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/80 font-medium">
-                  {restrictedList
-                    .filter((c) => {
-                      if (!restrictedSearch) return true;
-                      const q = restrictedSearch.toLowerCase();
-                      return (
-                        c.channelName.toLowerCase().includes(q) ||
-                        c.websiteUrl.toLowerCase().includes(q) ||
-                        c.username.toLowerCase().includes(q) ||
-                        (c.reason && c.reason.toLowerCase().includes(q))
-                      );
-                    })
-                    .map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-850/50 transition">
-                        <td className="p-3 whitespace-nowrap">
-                          {item.logoUrl ? (
-                            <img
-                              src={item.logoUrl}
-                              alt={item.channelName}
-                              className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-[10px] font-black flex items-center justify-center">
-                              🛡️
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span className="font-bold text-white text-xs">{item.channelName}</span>
-                        </td>
-                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-blue-300">
-                          {item.websiteUrl}
-                        </td>
-                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-amber-300">
-                          @{item.username}
-                        </td>
-                        <td className="p-3 text-[11px] text-slate-300">
-                          <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 text-[10px] font-bold">
-                            {item.reason || 'प्रतिबंधित चैनल'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
-                                deleteRestrictedChannel(item.id);
-                                setRestrictedList(getRestrictedChannels());
-                                setRestrictedMsg({
-                                  type: 'success',
-                                  text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।`,
-                                });
-                              }
-                            }}
-                            className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer"
-                            title="प्रतिबंध हटाएं"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
-      )}
 
-          </div>
+      </div>
+    </div>
   );
 };

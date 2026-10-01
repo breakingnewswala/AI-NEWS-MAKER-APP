@@ -176,11 +176,13 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 </div>
 
                 {/* Subtitle line: Smart Digital News Studio | Plan Name (Shown only once) */}
-                <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5">
-                  <span className="hidden sm:inline">Smart Digital News Studio</span>
-                  <span className="text-slate-600 hidden sm:inline">|</span>
-                  <span className="px-1.5 py-0.2 bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-bold rounded whitespace-nowrap shadow-xs">
-                    {planDisplay}
+                <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
+                  <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
+                    {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
+                  </span>
+                  <span className="text-slate-600">•</span>
+                  <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[9px] font-black rounded whitespace-nowrap shadow-xs">
+                    {planDisplay === 'Admin' ? 'एडमिन' : planDisplay}
                   </span>
                 </div>
               </div>
