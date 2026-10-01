@@ -46,6 +46,7 @@ import {
   checkAccountUniqueness,
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
+import { sendTwilioOtp, verifyTwilioOtp } from '../lib/twilioService';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -96,18 +97,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return initialStep === 2 ? 2 : 1;
   });
 
-  // Step 1 Auth Mode: 'login' or 'signup'
-  const [authTab, setAuthTab] = useState<'login' | 'signup'>('signup');
 
-  // Sign Up Form States
-  const [signupName, setSignupName] = useState<string>('');
-  const [signupMobile, setSignupMobile] = useState<string>('');
-  const [signupEmail, setSignupEmail] = useState<string>('');
-  const [signupPassword, setSignupPassword] = useState<string>('');
-  const [showSignupPassword, setShowSignupPassword] = useState<boolean>(false);
-  const [signupChannelName, setSignupChannelName] = useState<string>('एआई न्यूज़ मेकर');
-  const [signupDistrict, setSignupDistrict] = useState<string>('');
-  const [signupErrorMsg, setSignupErrorMsg] = useState<string>('');
 
   // Login Form States (Step 1 is unified Login / Sign Up)
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -115,6 +105,17 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [signupName, setSignupName] = useState<string>('');
+  const [signupEmail, setSignupEmail] = useState<string>('');
+  const [signupMobile, setSignupMobile] = useState<string>('');
+  const [signupOtpSent, setSignupOtpSent] = useState<boolean>(false);
+  const [signupOtpInput, setSignupOtpInput] = useState<string>('');
+  const [signupOtpVerified, setSignupOtpVerified] = useState<boolean>(false);
+  const [signupOtpTimer, setSignupOtpTimer] = useState<number>(0);
+  const [signupOtpMsg, setSignupOtpMsg] = useState<string>('');
+  const [signupOtpErr, setSignupOtpErr] = useState<string>('');
+  const [isSigningUp, setIsSigningUp] = useState<boolean>(false);
 
   // Step 2: Channel & Reporter Details States
   const savedProfileStr = typeof window !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
@@ -241,31 +242,57 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return () => clearInterval(timer);
   }, [otpTimer]);
 
-  const handleSendOtp = () => {
+  useEffect(() => {
+    let timer: any;
+    if (signupOtpTimer > 0) {
+      timer = setInterval(() => {
+        setSignupOtpTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [signupOtpTimer]);
+
+  const handleSendOtp = async () => {
     setOtpError('');
     const cleanNumber = primaryMobileNumber.trim().replace(/[^0-9]/g, '');
     if (cleanNumber.length !== 10) {
       setOtpError('कृपया वैध 10 अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
       return;
     }
-    setOtpSent(true);
-    setOtpTimer(45);
-    setOtpMessage('✅ 6-अंकों का OTP कोड आपके नंबर पर भेजा गया है (परीक्षण OTP: 123456)');
+    setOtpMessage('⏳ OTP कोड भेजा जा रहा है...');
+    try {
+      const res = await sendTwilioOtp(cleanNumber);
+      if (res.success) {
+        setOtpSent(true);
+        setOtpTimer(60);
+        setOtpMessage('✅ 6-अंकों का वास्तविक OTP कोड आपके मोबाइल पर भेजा गया है।');
+      } else {
+        setOtpError(res.error || 'OTP भेजने में विफलता हुई, पुनः प्रयास करें।');
+      }
+    } catch (e) {
+      setOtpError('नेटवर्क त्रुटि: OTP नहीं भेजा जा सका।');
+    }
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     setOtpError('');
     const cleanOtp = otpInput.trim();
-    if (!cleanOtp || cleanOtp.length < 4) {
-      setOtpError('कृपया 6 अंकों का OTP दर्ज करें');
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setOtpError('कृपया 6 अंकों का सही OTP दर्ज करें');
       return;
     }
-    if (cleanOtp === '123456' || cleanOtp.length === 6) {
-      setOtpVerified(true);
-      setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
-      savePrimaryMobileNumber(primaryMobileNumber.trim());
-    } else {
-      setOtpError('अमान्य OTP कोड! कृपया 123456 दर्ज करें या नीचे 1-क्लिक बटन दबाएं।');
+    const cleanNumber = primaryMobileNumber.trim().replace(/[^0-9]/g, '');
+    try {
+      const res = await verifyTwilioOtp(cleanNumber, cleanOtp);
+      if (res.success || res.valid) {
+        setOtpVerified(true);
+        setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
+        savePrimaryMobileNumber(primaryMobileNumber.trim());
+      } else {
+        setOtpError(res.error || 'अमान्य अथवा समाप्त OTP कोड! कृपया सही कोड दर्ज करें।');
+      }
+    } catch (e) {
+      setOtpError('OTP सत्यापन में त्रुटि हुई, पुनः प्रयास करें।');
     }
   };
 
@@ -277,6 +304,101 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     if (primaryMobileNumber.trim()) {
       savePrimaryMobileNumber(primaryMobileNumber.trim());
     }
+  };
+
+  const handleSendSignupOtp = async () => {
+    setSignupOtpErr('');
+    const cleanNumber = signupMobile.trim().replace(/[^0-9]/g, '');
+    if (cleanNumber.length !== 10) {
+      setSignupOtpErr('कृपया वैध 10 अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
+      return;
+    }
+    setSignupOtpMsg('⏳ OTP भेजा जा रहा है...');
+    try {
+      const res = await sendTwilioOtp(cleanNumber);
+      if (res.success) {
+        setSignupOtpSent(true);
+        setSignupOtpTimer(60);
+        setSignupOtpMsg('✅ 6-अंकों का OTP कोड आपके मोबाइल पर भेजा गया है।');
+      } else {
+        setSignupOtpErr(res.error || 'OTP भेजने में विफलता हुई, पुनः प्रयास करें।');
+      }
+    } catch (e) {
+      setSignupOtpErr('नेटवर्क त्रुटि: OTP नहीं भेजा जा सका।');
+    }
+  };
+
+  const handleVerifySignupOtp = async () => {
+    setSignupOtpErr('');
+    const cleanOtp = signupOtpInput.trim();
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setSignupOtpErr('कृपया 6 अंकों का सही OTP कोड दर्ज करें');
+      return;
+    }
+    const cleanNumber = signupMobile.trim().replace(/[^0-9]/g, '');
+    try {
+      const res = await verifyTwilioOtp(cleanNumber, cleanOtp);
+      if (res.success || res.valid) {
+        setSignupOtpVerified(true);
+        setSignupOtpMsg('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित (Verified)!');
+      } else {
+        setSignupOtpErr(res.error || 'अमान्य अथवा समाप्त OTP कोड! कृपया सही कोड दर्ज करें।');
+      }
+    } catch (e) {
+      setSignupOtpErr('सत्यापन में त्रुटि हुई, पुनः प्रयास करें।');
+    }
+  };
+
+  const handleCompleteSignup = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignupOtpErr('');
+    if (!signupName.trim()) {
+      setSignupOtpErr('कृपया अपना नाम दर्ज करें');
+      return;
+    }
+    if (!signupEmail.trim() || !signupEmail.includes('@')) {
+      setSignupOtpErr('कृपया वैध ईमेल पता दर्ज करें');
+      return;
+    }
+    if (!signupOtpVerified) {
+      setSignupOtpErr('कृपया पहले मोबाइल नंबर का OTP सत्यापन पूरा करें');
+      return;
+    }
+
+    setIsSigningUp(true);
+    const cleanEmail = signupEmail.trim().toLowerCase();
+    const cleanMobile = signupMobile.trim();
+    const prefix = cleanEmail.split('@')[0] || 'user';
+    const generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
+
+    const newUser: ReporterUser = {
+      username: generatedUsername,
+      name: signupName.trim(),
+      role: 'reporter',
+      district: 'सेंट्रल डेस्क',
+      email: cleanEmail,
+    };
+
+    registerOrUpdateUser({
+      email: cleanEmail,
+      username: generatedUsername,
+      name: newUser.name,
+      mobile: cleanMobile,
+      mobileVerified: true,
+      tier: 'basic',
+      role: 'reporter',
+      isLocked: false,
+    });
+
+    localStorage.setItem('reporter_auth_session', JSON.stringify(newUser));
+    setDetailFullName(newUser.name);
+    setPrimaryMobileNumber(cleanMobile);
+    setOtpVerified(true);
+    savePrimaryMobileNumber(cleanMobile);
+    setIsSigningUp(false);
+
+    // Transition to Step 2 for Channel Branding setup
+    setCurrentStep(2);
   };
 
   // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
@@ -448,9 +570,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         isLocked: true,
       });
 
-      // Direct entry: lands directly on Home Feed without popup
-      onCompleteDetails(baseProfile, googleUser);
+      // Transition to Step 2 so user can configure Channel Name, PNG Logo, WhatsApp, Website, Socials
+      setDetailFullName(googleUser.name);
+      setPrimaryMobileNumber('');
+      setOtpVerified(false);
       setIsLoggingIn(false);
+      setCurrentStep(2);
     }
   };
 
@@ -535,73 +660,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     setIsLoggingIn(false);
     setLoginErrorMsg('Google लॉगिन विंडो लोड नहीं हो सकी। कृपया पेज रिफ्रेश (Ctrl+F5) करें।');
-  };
-
-  // 2. Sign Up Handler (Registers new user & starts 7-day trial)
-  const handleSignupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSignupErrorMsg('');
-
-    if (!signupName.trim()) {
-      setSignupErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
-      return;
-    }
-    const cleanMobile = signupMobile.trim().replace(/[^0-9]/g, '');
-    if (cleanMobile.length !== 10) {
-      setSignupErrorMsg('कृपया 10 अंकों का वैध मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
-      return;
-    }
-    if (!signupEmail.trim() || !signupEmail.includes('@')) {
-      setSignupErrorMsg('कृपया वैध ईमेल एड्रेस दर्ज करें');
-      return;
-    }
-    if (!signupPassword.trim() || signupPassword.length < 4) {
-      setSignupErrorMsg('पासवर्ड कम से कम 4 अक्षरों का होना चाहिए');
-      return;
-    }
-
-    const emailClean = signupEmail.trim().toLowerCase();
-    const desiredUser = emailClean.split('@')[0] || 'reporter';
-
-    // Uniqueness & Restricted Brands Check
-    const uniqCheck = checkAccountUniqueness({
-      username: desiredUser,
-      channelName: signupChannelName.trim(),
-      currentEmail: emailClean,
-    });
-    if (!uniqCheck.valid) {
-      setSignupErrorMsg(uniqCheck.error || 'यह चैनल नाम या यूज़रनेम प्रतिबंधित अथवा पहले से पंजीकृत है');
-      return;
-    }
-
-    activateFreeTrial();
-    savePrimaryMobileNumber(cleanMobile);
-
-    const newUser: ReporterUser = {
-      username: desiredUser,
-      name: signupName.trim(),
-      role: 'reporter',
-      district: signupDistrict.trim() || 'सेंट्रल डेस्क',
-      email: emailClean,
-      mobileNumber: cleanMobile,
-    };
-
-    localStorage.setItem('reporter_auth_session', JSON.stringify(newUser));
-    localStorage.setItem('user_profile_data', JSON.stringify(newUser));
-
-    setDetailFullName(newUser.name);
-    setPrimaryMobileNumber(cleanMobile);
-    setGraphicContactNumber(cleanMobile);
-    if (signupChannelName.trim()) {
-      setDetailChannelNameHi(signupChannelName.trim());
-      setDetailChannelNameEn(signupChannelName.trim());
-    }
-    if (signupDistrict.trim()) {
-      setReportingDistrict(signupDistrict.trim());
-    }
-
-    onLoginSuccess(newUser);
-    setCurrentStep(2);
   };
 
   // 3. Email & Password Login Handler
@@ -916,6 +974,34 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
             {/* Single Unified Card Box for Google Login & Admin Login */}
             <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl text-left space-y-4">
+              {/* Login vs Sign Up Mode Switcher Tabs */}
+              <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-950 rounded-xl border border-slate-800 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('login')}
+                  className={`py-2.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    authMode === 'login'
+                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md font-black scale-101'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>लॉगिन (Login)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('signup')}
+                  className={`py-2.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    authMode === 'signup'
+                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md font-black scale-101'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>नया खाता (Sign Up)</span>
+                </button>
+              </div>
+
               {loginErrorMsg && (
                 <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />

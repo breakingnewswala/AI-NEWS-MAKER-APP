@@ -1,11 +1,15 @@
 {
   "hosting": {
-    "site": "ainewsmakerapp",
+    "site": "ai-news-maker-app",
     "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "*.zip",
+      "*.apk",
+      "server.cjs*",
+      "**/*.map"
     ],
     "headers": [
       {

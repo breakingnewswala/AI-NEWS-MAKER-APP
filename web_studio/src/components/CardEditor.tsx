@@ -324,10 +324,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       2: 'step-ai',
       3: 'step-headline',
       4: 'step-photo',
-      5: 'step-location',
-      6: 'step-date-watermark',
-      7: 'step-header-footer',
-      8: 'step-download',
+      5: 'step-location-date-watermark',
+      6: 'step-header-footer',
+      7: 'step-download',
     };
     const id = targetId || stepMap[newStep];
     if (id) {
@@ -347,10 +346,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     { step: 2, id: 'step-ai', label: '2. एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '🤖' },
     { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
     { step: 4, id: 'step-photo', label: '4. फोटो', shortLabel: 'फोटो', icon: '📷' },
-    { step: 5, id: 'step-location', label: '5. लोकेशन', shortLabel: 'लोकेशन', icon: '📍' },
-    { step: 6, id: 'step-date-watermark', label: '6. तारीख व वॉटरमार्क', shortLabel: 'तारीख-वॉटरमार्क', icon: '📅' },
-    { step: 7, id: 'step-header-footer', label: '7. हैडर व फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
-    { step: 8, id: 'step-download', label: '8. डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
+    { step: 5, id: 'step-location-date-watermark', label: '5. लोकेशन, तारीख और वॉटरमार्क', shortLabel: 'लोकेशन-तारीख', icon: '📍' },
+    { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
+    { step: 7, id: 'step-download', label: '7. डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
   ];
 
   const activeHeaderPng = getActiveHeaderPng(card);
@@ -2671,22 +2669,22 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* STEP 5: लोकेशन (Location & District) */}
+      {/* STEP 5: लोकेशन, तारीख और वॉटरमार्क (Location, Date & Watermark)           */}
       {/* ========================================================================= */}
       <div
-        id="step-location"
+        id="step-location-date-watermark"
         style={{ scrollMarginTop: '120px' }}
-        className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
+        className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-5 scroll-mt-28 ${
           mobileViewMode === 'steps' && activeStep !== 5 ? 'hidden' : 'block'
         }`}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <MapPin className="w-4 h-4 text-red-500" />
-            स्टेप 5: लोकेशन (Location)
+            स्टेप 5: लोकेशन, तारीख और वॉटरमार्क (Location, Date & Watermark)
           </span>
           <span className="text-[11px] text-neutral-400">
-            स्थान व जिला • लोकेशन शो/हाइड
+            स्थान, दिनांक शो/हाइड • वॉटरमार्क नियंत्रण
           </span>
         </div>
 
@@ -2732,48 +2730,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           </p>
         </div>
 
-        {/* Step 5 Mobile Nav Buttons */}
-        {mobileViewMode === 'steps' && (
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-            <button
-              type="button"
-              onClick={() => handleGoToStep(4)}
-              className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: फोटो</span>
-            </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 5 / {STEPS.length}</span>
-            <button
-              type="button"
-              onClick={() => handleGoToStep(6)}
-              className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-            >
-              <span>अगला: तारीख और वॉटरमार्क</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+        {/* तारीख व वॉटरमार्क अनुभाग */}
+        <div className="pt-2 border-t border-neutral-800/80">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-amber-400" />
+              <span>तारीख व वॉटरमार्क (Date & Watermark)</span>
+            </span>
+            <span className="text-[11px] text-neutral-400">
+              दिनांक शो/हाइड • वॉटरमार्क
+            </span>
           </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* STEP 6: तारीख और वॉटरमार्क (Date & Watermark) */}
-      {/* ========================================================================= */}
-      <div
-        id="step-date-watermark"
-        style={{ scrollMarginTop: '120px' }}
-        className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-          mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-amber-400" />
-            स्टेप 6: तारीख व वॉटरमार्क (Date & Watermark)
-          </span>
-          <span className="text-[11px] text-neutral-400">
-            दिनांक शो/हाइड • वॉटरमार्क (ऑफ / प्रतीकात्मक फोटो / AI जनरेटेड)
-          </span>
         </div>
 
         {/* Date Stamp */}
@@ -2920,21 +2887,21 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           )}
         </div>
 
-        {/* Step 6 Mobile Nav Buttons */}
+        {/* Step 5 Mobile Nav Buttons */}
         {mobileViewMode === 'steps' && (
           <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
             <button
               type="button"
-              onClick={() => handleGoToStep(5)}
+              onClick={() => handleGoToStep(4)}
               className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: लोकेशन</span>
+              <span>पिछला: फोटो</span>
             </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 6 / {STEPS.length}</span>
+            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 5 / {STEPS.length}</span>
             <button
               type="button"
-              onClick={() => handleGoToStep(7)}
+              onClick={() => handleGoToStep(5)}
               className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
             >
               <span>अगला: हैडर और फुटर</span>
@@ -2945,19 +2912,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       </div>
 
       {/* ========================================================================= */}
-          {/* STEP 7: हैडर और फुटर (Header & Footer) */}
+          {/* STEP 6: हैडर और फुटर (Header & Footer) */}
           {/* ========================================================================= */}
           <div
             id="step-header-footer"
             style={{ scrollMarginTop: '120px' }}
             className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-              mobileViewMode === 'steps' && activeStep !== 7 ? 'hidden' : 'block'
+              mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-                स्टेप 7: हैडर और फुटर (Header & Footer)
+                स्टेप 6: हैडर और फुटर (Header & Footer)
               </span>
               <span className="text-xs text-neutral-400 font-medium">
                 टॉप हेडर व बॉटम फुटर स्ट्रिप
@@ -3336,7 +3303,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 8 / {STEPS.length}</span>
                 <button
                   type="button"
-                  onClick={() => handleGoToStep(8)}
+                  onClick={() => handleGoToStep(7)}
                   className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
                 >
                   <span>अगला: डाउनलोड</span>
@@ -3349,9 +3316,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           
 
       {/* ========================================================================= */}
-      {/* STEP 8: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
+      {/* STEP 7: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
       {/* ========================================================================= */}
-      {(mobileViewMode === 'all' || activeStep === 8) && (
+      {(mobileViewMode === 'all' || activeStep === 7) && (
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}

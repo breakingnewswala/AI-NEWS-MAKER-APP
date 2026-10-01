@@ -41,11 +41,30 @@ object TemplateConfigManager {
     }
 
     fun isApplyToAll(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_APPLY_ALL, false)
+        return getPrefs(context).getBoolean(KEY_APPLY_ALL, true)
     }
 
     fun setApplyToAll(context: Context, applyToAll: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_APPLY_ALL, applyToAll).apply()
+    }
+
+    fun syncWithAuthProfile(
+        context: Context,
+        channelName: String,
+        logoUrl: String,
+        whatsapp: String = "",
+        website: String = ""
+    ) {
+        setApplyToAll(context, true)
+        val config = TemplateHeaderFooter(
+            templateId = "graphic_001",
+            brandName = channelName,
+            customLogoUrl = logoUrl,
+            whatsappNumber = whatsapp,
+            socialHandle = website,
+            isConfigured = true
+        )
+        saveTemplateConfig(context, config, applyToAll = true)
     }
 
     fun clearAllConfigs(context: Context) {

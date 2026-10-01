@@ -450,6 +450,200 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
     return res.status(500).send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${err.message}</description></channel></rss>`);
   }
 });
+function stripXmlHtmlTags(text) {
+  if (!text) return "";
+  return text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").trim();
+}
+function mapSourceCategory(catName) {
+  const c = (catName || "").trim().toLowerCase();
+  if (c.includes("\u0930\u093E\u091C") || c.includes("politic")) return { key: "politics", name: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" };
+  if (c.includes("\u0916\u0947\u0932") || c.includes("sport")) return { key: "sports", name: "\u0916\u0947\u0932" };
+  if (c.includes("\u092E\u0928\u094B\u0930\u0902\u091C\u0928") || c.includes("entertain") || c.includes("bolly")) return { key: "entertainment", name: "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" };
+  if (c.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930") || c.includes("\u0915\u093E\u0930\u094B\u092C\u093E\u0930") || c.includes("business")) return { key: "business", name: "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" };
+  if (c.includes("\u091F\u0947\u0915") || c.includes("\u0935\u093F\u091C\u094D\u091E\u093E\u0928") || c.includes("tech")) return { key: "tech", name: "\u091F\u0947\u0915\u094D\u0928\u094B\u0932\u0949\u091C\u0940" };
+  if (c.includes("\u0905\u092A\u0930\u093E\u0927") || c.includes("crime")) return { key: "crime", name: "\u0905\u092A\u0930\u093E\u0927" };
+  if (c.includes("\u0930\u093E\u091C\u094D\u092F") || c.includes("state")) return { key: "state", name: "\u0930\u093E\u091C\u094D\u092F" };
+  return { key: "national", name: "\u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F" };
+}
+async function fetchLiveRssSource(url, sourceName, category) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*"
+      },
+      signal: AbortSignal.timeout(12e3)
+    });
+    if (!res.ok) {
+      return { success: false, count: 0, totalFetched: 0, error: `HTTP ${res.status} ${res.statusText}`, newPosts: [] };
+    }
+    const xml = await res.text();
+    const items = [];
+    const itemRegex = /<(item|entry)[\s\S]*?<\/\1>/gi;
+    let match;
+    const { key: catKey, name: catName } = mapSourceCategory(category);
+    let idx = 0;
+    while ((match = itemRegex.exec(xml)) !== null) {
+      const block = match[0];
+      const titleM = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const title = stripXmlHtmlTags(titleM ? titleM[1] : "");
+      if (!title || title.length < 5) continue;
+      const linkM = block.match(/<link[^>]*>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)/i) || block.match(/<link[^>]*href=["'](https?:\/\/[^\s"']+)["']/i);
+      const link = linkM ? linkM[1].replace(/&amp;/g, "&") : url;
+      const descM = block.match(/<(description|summary|content)[^>]*>([\s\S]*?)<\/\1>/i);
+      const summary = stripXmlHtmlTags(descM ? descM[2] : "").slice(0, 340);
+      const imgM = block.match(/<enclosure[^>]*url=["'](https?:\/\/[^\s"']+)["'][^>]*type=["']image/i) || block.match(/<media:(?:content|thumbnail)[^>]*url=["'](https?:\/\/[^\s"']+)["']/i) || descM && descM[2].match(/<img[^>]*src=["'](https?:\/\/[^\s"']+)["']/i);
+      const imageUrl = imgM ? imgM[1].replace(/&amp;/g, "&") : "";
+      const dateM = block.match(/<(pubDate|published|updated|lastmod)[^>]*>([\s\S]*?)<\/\1>/i);
+      let timestamp = Date.now() - idx * 6e4;
+      if (dateM && dateM[2]) {
+        const parsedDate = new Date(stripXmlHtmlTags(dateM[2])).getTime();
+        if (!isNaN(parsedDate) && parsedDate > 0) timestamp = parsedDate;
+      }
+      idx++;
+      items.push({
+        id: `rss_${sourceName.toLowerCase().replace(/[^a-z0-9]/g, "")}_${timestamp}_${idx}`,
+        title,
+        summary: summary || title,
+        sourceChannel: sourceName || "Live RSS Feed",
+        sourceUrl: link,
+        category: catKey,
+        categoryName: catName,
+        publishedTime: formatRelativeTime(timestamp),
+        imageUrl: imageUrl || "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
+        breaking: idx <= 2,
+        isExclusive: false,
+        timestamp,
+        fullContent: summary || title,
+        location: "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940"
+      });
+    }
+    if (items.length === 0) {
+      return { success: false, count: 0, totalFetched: 0, error: "\u092B\u093C\u0940\u0921 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u0948\u0927 \u0938\u092E\u093E\u091A\u093E\u0930 \u0906\u0907\u091F\u092E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E", newPosts: [] };
+    }
+    const currentDb = loadNewsDatabase();
+    const existingTitles = new Set(currentDb.map((p) => p.title.trim().toLowerCase()));
+    const toInsert = items.filter((item) => !existingTitles.has(item.title.trim().toLowerCase()));
+    const merged = [...toInsert, ...currentDb].slice(0, 150);
+    saveNewsDatabase(merged);
+    return {
+      success: true,
+      count: toInsert.length,
+      totalFetched: items.length,
+      newPosts: toInsert
+    };
+  } catch (err) {
+    return { success: false, count: 0, totalFetched: 0, error: err.message || "RSS \u092B\u0947\u091A \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932", newPosts: [] };
+  }
+}
+async function scrapeLiveWebLink(url, sourceName, category) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      signal: AbortSignal.timeout(12e3)
+    });
+    if (!res.ok) {
+      return { success: false, error: `\u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0928\u0947 HTTP ${res.status} \u0924\u094D\u0930\u0941\u091F\u093F \u0926\u0940` };
+    }
+    const html = await res.text();
+    const ogTitleM = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']twitter:title["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = stripXmlHtmlTags(ogTitleM ? ogTitleM[1] : "");
+    if (!title || title.length < 5) {
+      return { success: false, error: "\u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u0947 \u0938\u092E\u093E\u091A\u093E\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0928\u0939\u0940\u0902 \u0928\u093F\u0915\u093E\u0932\u093E \u091C\u093E \u0938\u0915\u093E" };
+    }
+    const ogDescM = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']twitter:description["'][^>]*content=["']([\s\S]*?)["']/i);
+    const summary = stripXmlHtmlTags(ogDescM ? ogDescM[1] : "").slice(0, 360);
+    const ogImgM = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([\s\S]*?)["']/i);
+    const imageUrl = ogImgM ? ogImgM[1].replace(/&amp;/g, "&") : "";
+    const ogSiteM = html.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([\s\S]*?)["']/i);
+    const detectedSite = ogSiteM ? stripXmlHtmlTags(ogSiteM[1]) : "";
+    let hostname = "";
+    try {
+      hostname = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+    }
+    const channel = sourceName?.trim() || detectedSite || hostname || "Web Link Source";
+    const { key: catKey, name: catName } = mapSourceCategory(category || "");
+    const newPost = {
+      id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title,
+      summary: summary || title,
+      sourceChannel: channel,
+      sourceUrl: url,
+      category: catKey,
+      categoryName: catName,
+      publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
+      imageUrl: imageUrl || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: false,
+      timestamp: Date.now(),
+      fullContent: summary || title,
+      location: "\u0935\u093F\u0936\u0947\u0937 \u0938\u0902\u0935\u093E\u0926\u0926\u093E\u0924\u093E"
+    };
+    const currentDb = loadNewsDatabase();
+    const merged = [newPost, ...currentDb.filter((p) => p.title.trim().toLowerCase() !== title.trim().toLowerCase())].slice(0, 150);
+    saveNewsDatabase(merged);
+    return { success: true, post: newPost };
+  } catch (err) {
+    return { success: false, error: err.message || "\u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0915\u094D\u0930\u0948\u092A \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932" };
+  }
+}
+app.post("/api/rss/fetch-live", async (req, res) => {
+  try {
+    const { url, name, category } = req.body;
+    if (!url) return res.status(400).json({ success: false, error: "RSS URL \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    const result = await fetchLiveRssSource(String(url).trim(), String(name || "RSS Source").trim(), String(category || "national").trim());
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/web/scrape-link", async (req, res) => {
+  try {
+    const { url, name, category } = req.body;
+    if (!url) return res.status(400).json({ success: false, error: "Web link URL \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    const result = await scrapeLiveWebLink(String(url).trim(), String(name || "").trim(), String(category || "").trim());
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/sources/sync-all", async (req, res) => {
+  try {
+    const { sources } = req.body;
+    const list = Array.isArray(sources) && sources.length > 0 ? sources : [
+      { url: "https://www.aajtak.in/rssfeeds/?id=home", name: "\u0906\u091C \u0924\u0915 (Aaj Tak)", category: "\u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", type: "rss", isActive: true },
+      { url: "https://feeds.bbci.co.uk/hindi/rss.xml", name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)", category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", type: "rss", isActive: true },
+      { url: "https://www.amarujala.com/rss/breaking-news.xml", name: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala)", category: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C", type: "rss", isActive: true },
+      { url: "https://pib.gov.in/PressReleasePage.aspx", name: "PIB \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0921\u0947\u0938\u094D\u0915", category: "\u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", type: "web", isActive: true }
+    ];
+    let totalNew = 0;
+    const sourceResults = [];
+    for (const src of list) {
+      if (!src.isActive) continue;
+      if (src.type === "web") {
+        const r = await scrapeLiveWebLink(src.url, src.name, src.category);
+        if (r.success) totalNew += 1;
+        sourceResults.push({ id: src.id, name: src.name, success: r.success, count: r.success ? 1 : 0, error: r.error });
+      } else {
+        const r = await fetchLiveRssSource(src.url, src.name, src.category);
+        if (r.success) totalNew += r.count;
+        sourceResults.push({ id: src.id, name: src.name, success: r.success, count: r.count, totalFetched: r.totalFetched, error: r.error });
+      }
+    }
+    return res.json({
+      success: true,
+      totalNewItems: totalNew,
+      sourceResults,
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 var ACCOUNT_DELETIONS_FILE = import_path.default.join(process.cwd(), "account_deletion_requests.json");
 function loadAccountDeletionRequests() {
   try {

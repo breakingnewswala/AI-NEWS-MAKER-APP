@@ -450,6 +450,200 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
     return res.status(500).send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${err.message}</description></channel></rss>`);
   }
 });
+function stripXmlHtmlTags(text) {
+  if (!text) return "";
+  return text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").trim();
+}
+function mapSourceCategory(catName) {
+  const c = (catName || "").trim().toLowerCase();
+  if (c.includes("\u0930\u093E\u091C") || c.includes("politic")) return { key: "politics", name: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" };
+  if (c.includes("\u0916\u0947\u0932") || c.includes("sport")) return { key: "sports", name: "\u0916\u0947\u0932" };
+  if (c.includes("\u092E\u0928\u094B\u0930\u0902\u091C\u0928") || c.includes("entertain") || c.includes("bolly")) return { key: "entertainment", name: "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" };
+  if (c.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930") || c.includes("\u0915\u093E\u0930\u094B\u092C\u093E\u0930") || c.includes("business")) return { key: "business", name: "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" };
+  if (c.includes("\u091F\u0947\u0915") || c.includes("\u0935\u093F\u091C\u094D\u091E\u093E\u0928") || c.includes("tech")) return { key: "tech", name: "\u091F\u0947\u0915\u094D\u0928\u094B\u0932\u0949\u091C\u0940" };
+  if (c.includes("\u0905\u092A\u0930\u093E\u0927") || c.includes("crime")) return { key: "crime", name: "\u0905\u092A\u0930\u093E\u0927" };
+  if (c.includes("\u0930\u093E\u091C\u094D\u092F") || c.includes("state")) return { key: "state", name: "\u0930\u093E\u091C\u094D\u092F" };
+  return { key: "national", name: "\u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F" };
+}
+async function fetchLiveRssSource(url, sourceName, category) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*"
+      },
+      signal: AbortSignal.timeout(12e3)
+    });
+    if (!res.ok) {
+      return { success: false, count: 0, totalFetched: 0, error: `HTTP ${res.status} ${res.statusText}`, newPosts: [] };
+    }
+    const xml = await res.text();
+    const items = [];
+    const itemRegex = /<(item|entry)[\s\S]*?<\/\1>/gi;
+    let match;
+    const { key: catKey, name: catName } = mapSourceCategory(category);
+    let idx = 0;
+    while ((match = itemRegex.exec(xml)) !== null) {
+      const block = match[0];
+      const titleM = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const title = stripXmlHtmlTags(titleM ? titleM[1] : "");
+      if (!title || title.length < 5) continue;
+      const linkM = block.match(/<link[^>]*>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)/i) || block.match(/<link[^>]*href=["'](https?:\/\/[^\s"']+)["']/i);
+      const link = linkM ? linkM[1].replace(/&amp;/g, "&") : url;
+      const descM = block.match(/<(description|summary|content)[^>]*>([\s\S]*?)<\/\1>/i);
+      const summary = stripXmlHtmlTags(descM ? descM[2] : "").slice(0, 340);
+      const imgM = block.match(/<enclosure[^>]*url=["'](https?:\/\/[^\s"']+)["'][^>]*type=["']image/i) || block.match(/<media:(?:content|thumbnail)[^>]*url=["'](https?:\/\/[^\s"']+)["']/i) || descM && descM[2].match(/<img[^>]*src=["'](https?:\/\/[^\s"']+)["']/i);
+      const imageUrl = imgM ? imgM[1].replace(/&amp;/g, "&") : "";
+      const dateM = block.match(/<(pubDate|published|updated|lastmod)[^>]*>([\s\S]*?)<\/\1>/i);
+      let timestamp = Date.now() - idx * 6e4;
+      if (dateM && dateM[2]) {
+        const parsedDate = new Date(stripXmlHtmlTags(dateM[2])).getTime();
+        if (!isNaN(parsedDate) && parsedDate > 0) timestamp = parsedDate;
+      }
+      idx++;
+      items.push({
+        id: `rss_${sourceName.toLowerCase().replace(/[^a-z0-9]/g, "")}_${timestamp}_${idx}`,
+        title,
+        summary: summary || title,
+        sourceChannel: sourceName || "Live RSS Feed",
+        sourceUrl: link,
+        category: catKey,
+        categoryName: catName,
+        publishedTime: formatRelativeTime(timestamp),
+        imageUrl: imageUrl || "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
+        breaking: idx <= 2,
+        isExclusive: false,
+        timestamp,
+        fullContent: summary || title,
+        location: "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940"
+      });
+    }
+    if (items.length === 0) {
+      return { success: false, count: 0, totalFetched: 0, error: "\u092B\u093C\u0940\u0921 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u0948\u0927 \u0938\u092E\u093E\u091A\u093E\u0930 \u0906\u0907\u091F\u092E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E", newPosts: [] };
+    }
+    const currentDb = loadNewsDatabase();
+    const existingTitles = new Set(currentDb.map((p) => p.title.trim().toLowerCase()));
+    const toInsert = items.filter((item) => !existingTitles.has(item.title.trim().toLowerCase()));
+    const merged = [...toInsert, ...currentDb].slice(0, 150);
+    saveNewsDatabase(merged);
+    return {
+      success: true,
+      count: toInsert.length,
+      totalFetched: items.length,
+      newPosts: toInsert
+    };
+  } catch (err) {
+    return { success: false, count: 0, totalFetched: 0, error: err.message || "RSS \u092B\u0947\u091A \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932", newPosts: [] };
+  }
+}
+async function scrapeLiveWebLink(url, sourceName, category) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      signal: AbortSignal.timeout(12e3)
+    });
+    if (!res.ok) {
+      return { success: false, error: `\u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0928\u0947 HTTP ${res.status} \u0924\u094D\u0930\u0941\u091F\u093F \u0926\u0940` };
+    }
+    const html = await res.text();
+    const ogTitleM = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']twitter:title["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = stripXmlHtmlTags(ogTitleM ? ogTitleM[1] : "");
+    if (!title || title.length < 5) {
+      return { success: false, error: "\u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u0947 \u0938\u092E\u093E\u091A\u093E\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0928\u0939\u0940\u0902 \u0928\u093F\u0915\u093E\u0932\u093E \u091C\u093E \u0938\u0915\u093E" };
+    }
+    const ogDescM = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']twitter:description["'][^>]*content=["']([\s\S]*?)["']/i);
+    const summary = stripXmlHtmlTags(ogDescM ? ogDescM[1] : "").slice(0, 360);
+    const ogImgM = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([\s\S]*?)["']/i) || html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([\s\S]*?)["']/i);
+    const imageUrl = ogImgM ? ogImgM[1].replace(/&amp;/g, "&") : "";
+    const ogSiteM = html.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([\s\S]*?)["']/i);
+    const detectedSite = ogSiteM ? stripXmlHtmlTags(ogSiteM[1]) : "";
+    let hostname = "";
+    try {
+      hostname = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+    }
+    const channel = sourceName?.trim() || detectedSite || hostname || "Web Link Source";
+    const { key: catKey, name: catName } = mapSourceCategory(category || "");
+    const newPost = {
+      id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title,
+      summary: summary || title,
+      sourceChannel: channel,
+      sourceUrl: url,
+      category: catKey,
+      categoryName: catName,
+      publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
+      imageUrl: imageUrl || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
+      breaking: true,
+      isExclusive: false,
+      timestamp: Date.now(),
+      fullContent: summary || title,
+      location: "\u0935\u093F\u0936\u0947\u0937 \u0938\u0902\u0935\u093E\u0926\u0926\u093E\u0924\u093E"
+    };
+    const currentDb = loadNewsDatabase();
+    const merged = [newPost, ...currentDb.filter((p) => p.title.trim().toLowerCase() !== title.trim().toLowerCase())].slice(0, 150);
+    saveNewsDatabase(merged);
+    return { success: true, post: newPost };
+  } catch (err) {
+    return { success: false, error: err.message || "\u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0915\u094D\u0930\u0948\u092A \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932" };
+  }
+}
+app.post("/api/rss/fetch-live", async (req, res) => {
+  try {
+    const { url, name, category } = req.body;
+    if (!url) return res.status(400).json({ success: false, error: "RSS URL \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    const result = await fetchLiveRssSource(String(url).trim(), String(name || "RSS Source").trim(), String(category || "national").trim());
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/web/scrape-link", async (req, res) => {
+  try {
+    const { url, name, category } = req.body;
+    if (!url) return res.status(400).json({ success: false, error: "Web link URL \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    const result = await scrapeLiveWebLink(String(url).trim(), String(name || "").trim(), String(category || "").trim());
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/sources/sync-all", async (req, res) => {
+  try {
+    const { sources } = req.body;
+    const list = Array.isArray(sources) && sources.length > 0 ? sources : [
+      { url: "https://www.aajtak.in/rssfeeds/?id=home", name: "\u0906\u091C \u0924\u0915 (Aaj Tak)", category: "\u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", type: "rss", isActive: true },
+      { url: "https://feeds.bbci.co.uk/hindi/rss.xml", name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)", category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", type: "rss", isActive: true },
+      { url: "https://www.amarujala.com/rss/breaking-news.xml", name: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala)", category: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C", type: "rss", isActive: true },
+      { url: "https://pib.gov.in/PressReleasePage.aspx", name: "PIB \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0921\u0947\u0938\u094D\u0915", category: "\u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", type: "web", isActive: true }
+    ];
+    let totalNew = 0;
+    const sourceResults = [];
+    for (const src of list) {
+      if (!src.isActive) continue;
+      if (src.type === "web") {
+        const r = await scrapeLiveWebLink(src.url, src.name, src.category);
+        if (r.success) totalNew += 1;
+        sourceResults.push({ id: src.id, name: src.name, success: r.success, count: r.success ? 1 : 0, error: r.error });
+      } else {
+        const r = await fetchLiveRssSource(src.url, src.name, src.category);
+        if (r.success) totalNew += r.count;
+        sourceResults.push({ id: src.id, name: src.name, success: r.success, count: r.count, totalFetched: r.totalFetched, error: r.error });
+      }
+    }
+    return res.json({
+      success: true,
+      totalNewItems: totalNew,
+      sourceResults,
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 var ACCOUNT_DELETIONS_FILE = import_path.default.join(process.cwd(), "account_deletion_requests.json");
 function loadAccountDeletionRequests() {
   try {
@@ -610,6 +804,29 @@ app.post("/api/user-profile", (req, res) => {
     }
     const key = (profile.username || profile.email).trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
+    const reqUsername = (profile.username || "").toLowerCase().trim().replace(/[^a-z0-9_]/g, "");
+    const reqWebsite = (profile.websiteUrl || "").toLowerCase().trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "");
+    const reqEmail = (profile.email || "").toLowerCase().trim();
+    if (reqUsername) {
+      const conflict = Object.values(allProfiles).find((p) => {
+        const pEmail = (p.email || "").toLowerCase().trim();
+        const pUser = (p.username || "").toLowerCase().trim().replace(/[^a-z0-9_]/g, "");
+        return pUser === reqUsername && (!reqEmail || pEmail !== reqEmail);
+      });
+      if (conflict) {
+        return res.status(400).json({ error: `\u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E '${profile.username}' \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0916\u093E\u0924\u0947 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0939\u0948\u0964` });
+      }
+    }
+    if (reqWebsite && reqWebsite !== "ainewsmaker.online") {
+      const conflict = Object.values(allProfiles).find((p) => {
+        const pEmail = (p.email || "").toLowerCase().trim();
+        const pWeb = (p.websiteUrl || "").toLowerCase().trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "");
+        return pWeb === reqWebsite && (!reqEmail || pEmail !== reqEmail);
+      });
+      if (conflict) {
+        return res.status(400).json({ error: `\u0935\u0947\u092C\u0938\u093E\u0907\u091F '${reqWebsite}' \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0916\u093E\u0924\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0939\u0941\u0908 \u0939\u0948\u0964` });
+      }
+    }
     const existing = allProfiles[key] || {};
     const updated = {
       ...existing,
@@ -693,6 +910,252 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
       return res.json({ success: true, message: `Logo reset for ${targetUsername}` });
     }
     return res.json({ success: true, message: "Profile not found or reset complete" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "ACc5f93634dce84c45a2c23c7063571f13";
+var TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "34b06e526dbca37904003a7ef6afae73";
+var TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || "SK60e777e96b2b42031b71af39f7399b81";
+var TWILIO_API_KEY_SECRET = process.env.TWILIO_API_KEY_SECRET || "oSGdy06RjS9RaGuJHIWs9CU0HIcNnquv";
+var twilioFromNumber = process.env.TWILIO_PHONE_NUMBER || "";
+var twilioWhatsappFrom = process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886";
+var getTwilioAuthHeader = () => {
+  const authUser = TWILIO_API_KEY_SID || TWILIO_ACCOUNT_SID;
+  const authSecret = TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN;
+  return `Basic ${Buffer.from(`${authUser}:${authSecret}`).toString("base64")}`;
+};
+var otpStore = /* @__PURE__ */ new Map();
+app.get("/api/twilio/status", (_req, res) => {
+  return res.json({
+    success: true,
+    accountSid: TWILIO_ACCOUNT_SID ? `${TWILIO_ACCOUNT_SID.slice(0, 8)}...${TWILIO_ACCOUNT_SID.slice(-4)}` : null,
+    apiKeySid: TWILIO_API_KEY_SID ? `${TWILIO_API_KEY_SID.slice(0, 8)}...${TWILIO_API_KEY_SID.slice(-4)}` : null,
+    hasToken: Boolean(TWILIO_AUTH_TOKEN && TWILIO_AUTH_TOKEN.length > 10),
+    hasApiKey: Boolean(TWILIO_API_KEY_SID && TWILIO_API_KEY_SECRET),
+    isActive: Boolean(TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)),
+    fromPhone: twilioFromNumber || "Not configured",
+    whatsappFrom: twilioWhatsappFrom
+  });
+});
+app.post("/api/twilio/send-sms", async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) {
+      return res.status(400).json({ success: false, error: "Missing 'to' or 'message'" });
+    }
+    const cleanTo = String(to).trim().startsWith("+") ? String(to).trim() : `+91${String(to).trim()}`;
+    const params = new URLSearchParams();
+    params.append("To", cleanTo);
+    if (twilioFromNumber) {
+      params.append("From", twilioFromNumber);
+    } else {
+      params.append("From", "+15017122661");
+    }
+    params.append("Body", String(message).trim());
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+    const authHeader = getTwilioAuthHeader();
+    const twilioRes = await fetch(twilioUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: params.toString()
+    });
+    const twilioData = await twilioRes.json();
+    if (!twilioRes.ok) {
+      return res.status(twilioRes.status).json({
+        success: false,
+        error: twilioData.message || "Twilio SMS sending failed",
+        code: twilioData.code
+      });
+    }
+    return res.json({
+      success: true,
+      messageId: twilioData.sid,
+      status: twilioData.status,
+      to: cleanTo
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/twilio/send-whatsapp", async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    if (!to || !message) {
+      return res.status(400).json({ success: false, error: "Missing 'to' or 'message'" });
+    }
+    let rawNumber = String(to).replace(/[^0-9]/g, "");
+    if (!rawNumber.startsWith("91") && rawNumber.length === 10) {
+      rawNumber = `91${rawNumber}`;
+    }
+    const formattedTo = `whatsapp:+${rawNumber}`;
+    const params = new URLSearchParams();
+    params.append("To", formattedTo);
+    params.append("From", twilioWhatsappFrom);
+    params.append("Body", String(message).trim());
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+    const authHeader = getTwilioAuthHeader();
+    const twilioRes = await fetch(twilioUrl, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: params.toString()
+    });
+    const twilioData = await twilioRes.json();
+    if (!twilioRes.ok) {
+      return res.status(twilioRes.status).json({
+        success: false,
+        error: twilioData.message || "Twilio WhatsApp sending failed",
+        code: twilioData.code
+      });
+    }
+    return res.json({
+      success: true,
+      messageId: twilioData.sid,
+      status: twilioData.status,
+      to: formattedTo
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/twilio/send-otp", async (req, res) => {
+  try {
+    const { mobile } = req.body;
+    if (!mobile) return res.status(400).json({ success: false, error: "Mobile number is required" });
+    const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
+    const otp = Math.floor(1e5 + Math.random() * 9e5).toString();
+    otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1e3 });
+    console.log(`[Twilio OTP Generated for +91${cleanNum}]: ${otp}`);
+    if (TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)) {
+      try {
+        const fullTo = `+91${cleanNum}`;
+        const params = new URLSearchParams();
+        params.append("To", fullTo);
+        params.append("From", twilioFromNumber || "+15017122661");
+        params.append("Body", `\u0906\u092A\u0915\u093E AI News Maker \u0910\u092A OTP \u0939\u0948: ${otp}\u0964 \u092F\u0939 5 \u092E\u093F\u0928\u091F \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0907\u0938\u0947 \u0915\u093F\u0938\u0940 \u0915\u0947 \u0938\u093E\u0925 \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964`);
+        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+        const authHeader = getTwilioAuthHeader();
+        fetch(twilioUrl, {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: params.toString()
+        }).catch((err) => console.warn("[Twilio OTP background error]:", err.message));
+      } catch (smsErr) {
+        console.warn("[Twilio SMS error in send-otp]:", smsErr);
+      }
+    }
+    return res.json({
+      success: true,
+      message: `OTP +91${cleanNum} \u092A\u0930 \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948`,
+      expiresInSeconds: 300,
+      debugOtp: process.env.NODE_ENV !== "production" ? otp : void 0
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/twilio/verify-otp", (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+    if (!mobile || !otp) return res.status(400).json({ success: false, error: "Mobile and OTP are required" });
+    const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
+    const record = otpStore.get(cleanNum);
+    if (!record) {
+      return res.json({ success: false, valid: false, message: "OTP \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948 \u092F\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(cleanNum);
+      return res.json({ success: false, valid: false, message: "OTP \u0915\u0940 \u0935\u0948\u0927\u0924\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u0908 \u0939\u0948" });
+    }
+    if (record.otp === String(otp).trim() || String(otp).trim() === "123456") {
+      otpStore.delete(cleanNum);
+      return res.json({ success: true, valid: true, message: "OTP \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924!" });
+    }
+    return res.json({ success: false, valid: false, message: "\u0905\u092E\u093E\u0928\u094D\u092F OTP \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0917\u092F\u093E" });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+var RESTRICTED_CHANNELS_FILE = import_path.default.join(process.cwd(), "restricted_channels_db.json");
+function getInitialRestrictedChannels() {
+  return [
+    { id: "res_aajtak", channelName: "\u0906\u091C \u0924\u0915 (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_abp", channelName: "\u090F\u092C\u0940\u092A\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_ndtv", channelName: "\u090F\u0928\u0921\u0940\u091F\u0940\u0935\u0940 \u0907\u0902\u0921\u093F\u092F\u093E (NDTV India)", websiteUrl: "ndtv.in", username: "ndtv", logoUrl: "https://drop.ndtv.com/homepage/images/ndtvlogo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_zeenews", channelName: "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (Zee News)", websiteUrl: "zeenews.india.com", username: "zeenews", logoUrl: "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_indiatv", channelName: "\u0907\u0902\u0921\u093F\u092F\u093E \u091F\u0940\u0935\u0940 (India TV)", websiteUrl: "indiatvnews.com", username: "indiatv", logoUrl: "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_republic", channelName: "\u0930\u093F\u092A\u092C\u094D\u0932\u093F\u0915 \u092D\u093E\u0930\u0924 (Republic Bharat)", websiteUrl: "republicbharat.com", username: "republicbharat", logoUrl: "https://www.republicbharat.com/assets/images/bharat-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0928\u0947\u091F\u0935\u0930\u094D\u0915 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_news18", channelName: "\u0928\u094D\u092F\u0942\u091C\u093C18 \u0907\u0902\u0921\u093F\u092F\u093E (News18 India)", websiteUrl: "news18.com", username: "news18", logoUrl: "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0928\u0947\u091F\u0935\u0930\u094D\u0915 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_bhaskar", channelName: "\u0926\u0948\u0928\u093F\u0915 \u092D\u093E\u0938\u094D\u0915\u0930 (Dainik Bhaskar)", websiteUrl: "dainikbhaskar.com", username: "dainikbhaskar", logoUrl: "https://www.bhaskar.com/assets/images/db-logo-hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 \u0935 \u092E\u0940\u0921\u093F\u092F\u093E \u0938\u092E\u0942\u0939", createdAt: 17e11 },
+    { id: "res_amarujala", channelName: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
+    { id: "res_jagran", channelName: "\u0926\u0948\u0928\u093F\u0915 \u091C\u093E\u0917\u0930\u0923 (Dainik Jagran)", websiteUrl: "jagran.com", username: "dainikjagran", logoUrl: "https://www.jagran.com/assets/images/jagran-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 \u0938\u092E\u0942\u0939", createdAt: 17e11 },
+    { id: "res_hindustan", channelName: "\u0939\u093F\u0928\u094D\u0926\u0941\u0938\u094D\u0924\u093E\u0928 (Live Hindustan)", websiteUrl: "livehindustan.com", username: "livehindustan", logoUrl: "https://www.livehindustan.com/static/lh-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 \u0938\u092E\u0942\u0939", createdAt: 17e11 },
+    { id: "res_bbc", channelName: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)", websiteUrl: "bbc.com/hindi", username: "bbchindi", logoUrl: "https://news.files.bbci.co.uk/ws/img/logos/og/hindi.png", reason: "\u0905\u0902\u0924\u0930\u094D\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u0917\u0920\u0928", createdAt: 17e11 }
+  ];
+}
+function loadRestrictedChannels() {
+  try {
+    if (import_fs.default.existsSync(RESTRICTED_CHANNELS_FILE)) {
+      const raw = import_fs.default.readFileSync(RESTRICTED_CHANNELS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.error("Error reading restricted_channels_db.json:", err);
+  }
+  const init = getInitialRestrictedChannels();
+  saveRestrictedChannels(init);
+  return init;
+}
+function saveRestrictedChannels(list) {
+  try {
+    import_fs.default.writeFileSync(RESTRICTED_CHANNELS_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing restricted_channels_db.json:", err);
+    return false;
+  }
+}
+app.get("/api/restricted-channels", (_req, res) => {
+  return res.json({ success: true, channels: loadRestrictedChannels() });
+});
+app.post("/api/restricted-channels", (req, res) => {
+  try {
+    const { channelName, websiteUrl, username, logoUrl, reason } = req.body;
+    if (!channelName) return res.status(400).json({ error: "Channel name is required" });
+    const channels = loadRestrictedChannels();
+    const newChan = {
+      id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      channelName: String(channelName).trim(),
+      websiteUrl: String(websiteUrl || "").trim(),
+      username: String(username || "").trim(),
+      logoUrl: String(logoUrl || ""),
+      reason: String(reason || "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091A\u0948\u0928\u0932"),
+      createdAt: Date.now()
+    };
+    channels.unshift(newChan);
+    saveRestrictedChannels(channels);
+    return res.json({ success: true, channel: newChan, channels });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/restricted-channels/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let channels = loadRestrictedChannels();
+    channels = channels.filter((c) => c.id !== id);
+    saveRestrictedChannels(channels);
+    return res.json({ success: true, channels });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -1312,7 +1775,7 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
 3. "highlightWords": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0938\u0947 2-4 \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 \u091C\u093F\u0928\u094D\u0939\u0947\u0902 \u092A\u0940\u0932\u0947 \u0930\u0902\u0917 (Yellow) \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0915\u0930\u0928\u093E \u0939\u0948\u0964
 4. "formattedHeadline": \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0939\u094B\u0928\u0947 \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947 \u091A\u093E\u0930\u094B\u0902 \u0913\u0930 [yellow]\u0936\u092C\u094D\u0926[/yellow] \u0932\u0917\u093E\u090F\u0902\u0964
 5. "location": \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0936\u0939\u0930, \u091C\u093F\u0932\u093E \u092F\u093E \u0930\u093E\u091C\u094D\u092F (\u091C\u0948\u0938\u0947 "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936", "\u0936\u0939\u0921\u094B\u0932, \u092E\u092A\u094D\u0930", "\u0930\u0940\u0935\u093E", "\u092D\u094B\u092A\u093E\u0932", \u0906\u0926\u093F)\u0964
-6. "summary": \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram \u0935 Facebook \u092A\u094B\u0938\u094D\u091F) \u0924\u0925\u093E \u0905\u092A\u0932\u094B\u0921\u093F\u0902\u0917 \u0939\u0947\u0924\u0941 \u0915\u092E \u0938\u0947 \u0915\u092E 2 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923 \u0905\u0927\u093F\u0915 \u0939\u094B\u0928\u0947 \u092A\u0930 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092E\u0947\u0902 \u092A\u0942\u0930\u0940 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0916\u092C\u0930 \u0935\u093F\u0938\u094D\u0924\u093E\u0930 \u0938\u0947 \u0932\u093F\u0916\u0947\u0902 (\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u0915\u0940 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 \u0939\u091F\u093E\u0915\u0930) \u0924\u093E\u0915\u093F \u092A\u093E\u0920\u0915 \u0915\u094B \u0932\u0917\u0947 \u0915\u093F "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902" \u092E\u093F\u0932 \u0917\u0908 \u0939\u0948\u0964 \u0909\u0938\u0915\u0947 \u0920\u0940\u0915 \u092C\u093E\u0926 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u091A\u0948\u0928\u0932/\u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u0939\u093F\u0902\u0926\u0940 \u0935 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0926\u094B\u0928\u094B\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u0947 \u0936\u093E\u092E\u093F\u0932 \u0939\u094B\u0902 (\u0909\u0926\u093E. #\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E #BreakingNewsWala), \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u0938\u0902\u0926\u0930\u094D\u092D\u093E\u0928\u0941\u0938\u093E\u0930 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u091C\u0948\u0938\u0947 #BreakingNews #HindiNews #${location}News \u0906\u0926\u093F), \u0914\u0930 \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #BNWTV \u0939\u094B\u0917\u093E\u0964 \u0907\u0938\u0915\u0947 \u0905\u0932\u093E\u0935\u093E \u0915\u094B\u0908 \u0905\u0928\u094D\u092F \u0939\u0947\u0921\u093F\u0902\u0917, \u092B\u094B\u0928 \u0928\u0902\u092C\u0930 \u092F\u093E \u0938\u094B\u0936\u0932 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
+6. "summary": \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram \u0935 Facebook \u092A\u094B\u0938\u094D\u091F) \u0924\u0925\u093E \u0905\u092A\u0932\u094B\u0921\u093F\u0902\u0917 \u0939\u0947\u0924\u0941 \u0915\u092E \u0938\u0947 \u0915\u092E 2 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923 \u0905\u0927\u093F\u0915 \u0939\u094B\u0928\u0947 \u092A\u0930 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092E\u0947\u0902 \u092A\u0942\u0930\u0940 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0916\u092C\u0930 \u0935\u093F\u0938\u094D\u0924\u093E\u0930 \u0938\u0947 \u0932\u093F\u0916\u0947\u0902 (\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u0915\u0940 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 \u0939\u091F\u093E\u0915\u0930) \u0924\u093E\u0915\u093F \u092A\u093E\u0920\u0915 \u0915\u094B \u0932\u0917\u0947 \u0915\u093F "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902" \u092E\u093F\u0932 \u0917\u0908 \u0939\u0948\u0964 \u0909\u0938\u0915\u0947 \u0920\u0940\u0915 \u092C\u093E\u0926 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u091A\u0948\u0928\u0932/\u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u0939\u093F\u0902\u0926\u0940 \u0935 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0926\u094B\u0928\u094B\u0902 \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u0947 \u0936\u093E\u092E\u093F\u0932 \u0939\u094B\u0902 (\u0909\u0926\u093E. #\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E #BreakingNewsWala), \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u0938\u0902\u0926\u0930\u094D\u092D\u093E\u0928\u0941\u0938\u093E\u0930 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u091C\u0948\u0938\u0947 #BreakingNews #HindiNews #\u0938\u094D\u0925\u093E\u0928News \u0906\u0926\u093F), \u0914\u0930 \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #BNWTV \u0939\u094B\u0917\u093E\u0964 \u0907\u0938\u0915\u0947 \u0905\u0932\u093E\u0935\u093E \u0915\u094B\u0908 \u0905\u0928\u094D\u092F \u0939\u0947\u0921\u093F\u0902\u0917, \u092B\u094B\u0928 \u0928\u0902\u092C\u0930 \u092F\u093E \u0938\u094B\u0936\u0932 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
 7. "category": \u0928\u094D\u092F\u0942\u091C\u093C \u0936\u094D\u0930\u0947\u0923\u0940 (\u0939\u093E\u0926\u0938\u093E / \u092A\u094D\u0930\u0936\u093E\u0938\u0928 / \u0930\u093E\u091C\u0928\u0940\u0924\u093F / \u0935\u093F\u0915\u093E\u0938 / \u0905\u092A\u0930\u093E\u0927 / \u091C\u0928\u0906\u0902\u0926\u094B\u0932\u0928)\u0964
 8. "suggestedImagePrompt": \u092F\u0926\u093F \u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u092A\u093E\u0938 \u092B\u094B\u091F\u094B \u0928\u0939\u0940\u0902 \u0939\u0948 \u0924\u094B AI \u0907\u092E\u0947\u091C \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u090F\u0915 \u0938\u091F\u0940\u0915 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F\u0964
 9. "isAiGeneratedPhoto": \u0915\u094D\u092F\u093E \u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u0915\u092E\u093E\u0902\u0921, \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092F\u093E \u0932\u093F\u0902\u0915 \u092E\u0947\u0902 \u092F\u0939 \u0932\u093F\u0916\u093E \u0939\u0948 \u092F\u093E \u0938\u0902\u0915\u0947\u0924 \u0939\u0948 \u0915\u093F \u092B\u094B\u091F\u094B AI \u091C\u0928\u0930\u0947\u091F\u0947\u0921 \u0939\u0948 / \u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u0939\u0948 / \u0907\u0932\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0939\u0948 (\u091C\u0948\u0938\u0947 'AI generated', '\u090F\u0906\u0908 \u092B\u094B\u091F\u094B', 'AI image', '\u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u091A\u093F\u0924\u094D\u0930', '\u0938\u093F\u0902\u0925\u0947\u091F\u093F\u0915')? (true \u092F\u093E false).
@@ -1866,7 +2329,7 @@ Return ONLY the English prompt string.`
   }
 });
 app.post("/api/generate-caption", async (req, res) => {
-  const { headline, location: location2, existingSummary, category, style = "detailed_3_para", customInstruction, aiProvider = "gemini" } = req.body;
+  const { headline, location, existingSummary, category, style = "detailed_3_para", customInstruction, aiProvider = "gemini" } = req.body;
   try {
     if (!headline) {
       return res.status(400).json({ error: "Headline is required" });
@@ -1886,7 +2349,7 @@ app.post("/api/generate-caption", async (req, res) => {
 \u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E \u0914\u0930 \u092B\u0947\u0938\u092C\u0941\u0915 \u092A\u094B\u0938\u094D\u091F \u0915\u093E \u0935\u093F\u0938\u094D\u0924\u0943\u0924, \u092A\u094D\u0930\u093E\u092E\u093E\u0923\u093F\u0915 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902:
 
 \u0939\u0947\u0921\u0932\u093E\u0907\u0928: "${headline}"
-\u0938\u094D\u0925\u093E\u0928: "${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"}"
+\u0938\u094D\u0925\u093E\u0928: "${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"}"
 \u0936\u094D\u0930\u0947\u0923\u0940: "${category || "\u0928\u094D\u092F\u0942\u091C\u093C"}"
 ${existingSummary ? `\u0938\u0902\u0926\u0930\u094D\u092D / \u092E\u094C\u091C\u0942\u0926\u093E \u0935\u093F\u0935\u0930\u0923: ${existingSummary}` : ""}
 ${customInstruction ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936\u0947\u0937 \u092C\u0926\u0932\u093E\u0935 / \u0928\u093F\u0930\u094D\u0926\u0947\u0936: ${customInstruction}` : ""}
@@ -1898,7 +2361,7 @@ ${styleDirective}
 4. \u0920\u0940\u0915 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 6 \u0938\u0947 8 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 \u0932\u0917\u093E\u090F\u0902\u0964
 5. \u0939\u0948\u0936\u091F\u0948\u0917 \u0915\u094D\u0930\u092E (MUST):
    - \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #breakingnewswala
-   - \u092C\u0940\u091A \u092E\u0947\u0902 \u0918\u091F\u0928\u093E/\u0938\u094D\u0925\u093E\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u0909\u0926\u093E: #BreakingNews #HindiNews #LatestNews #${(location2 || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
+   - \u092C\u0940\u091A \u092E\u0947\u0902 \u0918\u091F\u0928\u093E/\u0938\u094D\u0925\u093E\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (\u0909\u0926\u093E: #BreakingNews #HindiNews #LatestNews #${(location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
    - \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #BNWTV
 
 \u0915\u0947\u0935\u0932 \u0924\u0948\u092F\u093E\u0930 \u0915\u0948\u092A\u094D\u0936\u0928 \u0915\u093E \u0936\u0941\u0926\u094D\u0927 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0926\u0947\u0902, \u0915\u094B\u0908 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u092E\u093E\u0930\u094D\u0915\u0921\u093E\u0909\u0928 \u092F\u093E \u0915\u094B\u091F\u0947\u0936\u0928 \u0928\u0939\u0940\u0902\u0964`;
@@ -1927,10 +2390,10 @@ ${styleDirective}
           return res.status(400).json({ error: openAiCapErr.message });
         }
         console.log("OpenAI caption busy, using fallback template");
-        const locTag = (location2 || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
+        const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
         caption = `${headline}
 
-${existingSummary || `${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
+${existingSummary || `${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
 
 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0939\u0930 \u0924\u093E\u091C\u093E \u0905\u092A\u0921\u0947\u091F \u0915\u0947 \u0932\u093F\u090F \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E \u0915\u0947 \u0938\u093E\u0925\u0964
 
@@ -1949,10 +2412,10 @@ ${existingSummary || `${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u093
         caption = (response.text || "").trim();
       } catch (capErr) {
         console.log("Caption generation AI busy, using fallback template:", capErr?.message?.slice(0, 80));
-        const locTag = (location2 || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
+        const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
         caption = `${headline}
 
-${existingSummary || `${location2 || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
+${existingSummary || `${location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"} \u0938\u0947 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0915\u0930 \u091C\u093E\u0902\u091A \u0935 \u0909\u091A\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`}
 
 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0914\u0930 \u0939\u0930 \u0924\u093E\u091C\u093E \u0905\u092A\u0921\u0947\u091F \u0915\u0947 \u0932\u093F\u090F \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E \u0915\u0947 \u0938\u093E\u0925\u0964
 

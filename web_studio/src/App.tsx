@@ -76,10 +76,9 @@ export const STUDIO_STEPS = [
   { step: 2, id: 'step-ai', label: '2. एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'स्टेप 2: AI ऑटोमेशन टूल्स (Automated News & Photo)' },
   { step: 3, id: 'step-headline', label: '3. हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'स्टेप 3: मुख्य हेडलाइन व टेक्स्ट' },
   { step: 4, id: 'step-photo', label: '4. फोटो', name: 'फोटो', icon: '📷', title: 'स्टेप 4: फोटो लेआउट व ग्रिड' },
-  { step: 5, id: 'step-location', label: '5. लोकेशन', name: 'लोकेशन', icon: '📍', title: 'स्टेप 5: स्थान व जिला' },
-  { step: 6, id: 'step-date-watermark', label: '6. तारीख व वॉटरमार्क', name: 'तारीख-वॉटरमार्क', icon: '📅', title: 'स्टेप 6: तारीख व वॉटरमार्क' },
-  { step: 7, id: 'step-header-footer', label: '7. हैडर व फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'स्टेप 7: लोगो, हेडर व फुटर PNG' },
-  { step: 8, id: 'step-download', label: '8. डाउनलोड', name: 'डाउनलोड', icon: '⬇️', title: 'स्टेप 8: डाउनलोड व एक्सपोर्ट' },
+  { step: 5, id: 'step-location-date-watermark', label: '5. लोकेशन, तारीख और वॉटरमार्क', name: 'लोकेशन-तारीख', icon: '📍', title: 'स्टेप 5: स्थान, तारीख व वॉटरमार्क' },
+  { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'स्टेप 6: लोगो, हेडर व फुटर PNG' },
+  { step: 7, id: 'step-download', label: '7. डाउनलोड', name: 'डाउनलोड', icon: '⬇️', title: 'स्टेप 7: डाउनलोड व एक्सपोर्ट' },
 ];
 
 const DEFAULT_REPORTER_USER: ReporterUser = {
@@ -354,6 +353,20 @@ export default function App() {
   const [loginModalMode, setLoginModalMode] = useState<'user' | 'admin' | 'signup'>('user');
   const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpeg'>('jpeg');
   const [downloadProgressText, setDownloadProgressText] = useState<string>('');
+
+  // Mobile detection & Screen Hide/Show state for Graphic Studio
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  );
+  const [isMobilePreviewHidden, setIsMobilePreviewHidden] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Studio mode: Graphic Design vs Video Design (Web parity with Android)
   const [studioMode, setStudioMode] = useState<'graphic' | 'video'>('graphic');
@@ -1379,7 +1392,178 @@ export default function App() {
                 onBackToGraphic={() => updateStudioMode('graphic')}
               />
             </div>
+          ) : isMobileScreen ? (
+            /* ============================================================== */
+            /* MOBILE ONLY 65% / 35% FROZEN WORKSPACE STUDIO LAYOUT           */
+            /* ============================================================== */
+            <div className="w-full flex flex-col min-h-screen">
+              {/* Top Compact Selector */}
+              <div className="sticky top-0 z-30 bg-slate-950 border-b border-slate-800 p-1.5 flex items-center justify-center gap-1.5 shadow-md">
+                <button
+                  type="button"
+                  onClick={() => updateStudioMode('graphic')}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    studioMode !== 'video'
+                      ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                      : 'bg-slate-900 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>📸</span>
+                  <span>ग्राफिक फोटो न्यूज़</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStudioMode('video')}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    studioMode === 'video'
+                      ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                      : 'bg-slate-900 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>🎬</span>
+                  <span>वीडियो न्यूज़</span>
+                </button>
+              </div>
+
+              {/* Frozen Workspace Header: Screen Hide/Show Control & Quick Actions */}
+              <div className="sticky top-[42px] z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-2.5 py-1.5 flex items-center justify-between gap-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => setIsMobilePreviewHidden(!isMobilePreviewHidden)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[11px] font-black flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                >
+                  {isMobilePreviewHidden ? (
+                    <>
+                      <Eye className="w-3.5 h-3.5 text-amber-400" />
+                      <span>स्क्रीन दिखाएँ</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                      <span>स्क्रीन छिपाएँ</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleDownload('jpeg')}
+                    disabled={downloading}
+                    className="px-2.5 py-1 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-[11px] font-black rounded-lg shadow flex items-center gap-1 cursor-pointer transition active:scale-95 disabled:opacity-50"
+                  >
+                    <Download className="w-3 h-3 text-slate-950" />
+                    <span>{downloading ? 'डाउनलोड...' : 'JPG डाउनलोड'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetCard}
+                    className="px-2 py-1 bg-slate-800 text-slate-300 text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer"
+                    title="रिफ्रेश"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Frozen Workspace: 65% Live Preview + 35% Editor Steps */}
+              {!isMobilePreviewHidden ? (
+                <div className="sticky top-[78px] z-20 bg-slate-950 border-b border-slate-800 p-2 shadow-2xl">
+                  <div className="flex items-stretch gap-2 h-[260px] max-h-[36vh]">
+                    {/* LEFT: 65% Live Graphic Preview */}
+                    <div className="w-[65%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
+                      <CardPreview
+                        card={card}
+                        className="w-full h-full object-contain"
+                        showSafeZone={showSafeZone}
+                        onChange={handleUpdateCard}
+                      />
+                    </div>
+
+                    {/* RIGHT: 35% Editor Steps */}
+                    <div className="w-[35%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
+                      {STUDIO_STEPS.map((s) => {
+                        const isActive = activeStep === s.step;
+                        return (
+                          <button
+                            key={s.step}
+                            type="button"
+                            onClick={() => {
+                              setActiveStep(s.step);
+                              scrollToStepById(s.id);
+                            }}
+                            className={`w-full py-1.5 px-2 rounded-lg text-[11px] font-black transition-all text-left flex items-center gap-1.5 cursor-pointer ${
+                              isActive
+                                ? 'bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 font-black scale-101'
+                                : 'bg-slate-900/90 hover:bg-slate-850 text-slate-300 border border-slate-800'
+                            }`}
+                          >
+                            <span className="text-xs shrink-0">{s.icon}</span>
+                            <span className="truncate leading-tight">{s.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* When Preview Hidden: Compact Editor Steps Bar so All 7 Steps Remain Accessible */
+                <div className="sticky top-[78px] z-20 bg-slate-950 border-b border-slate-800 p-2 shadow-md">
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+                    {STUDIO_STEPS.map((s) => {
+                      const isActive = activeStep === s.step;
+                      return (
+                        <button
+                          key={s.step}
+                          type="button"
+                          onClick={() => {
+                            setActiveStep(s.step);
+                            scrollToStepById(s.id);
+                          }}
+                          className={`py-1.5 px-1 rounded-lg text-[10px] font-black transition-all text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                            isActive
+                              ? 'bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 font-black'
+                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                          }`}
+                        >
+                          <span className="text-xs">{s.icon}</span>
+                          <span className="truncate w-full">{s.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Lower Remaining Screen Space: Selected Step Control Panel */}
+              <div className="flex-1 w-full bg-slate-900/95 p-3 overflow-y-auto">
+                <CardEditor
+                  card={card}
+                  onChange={handleUpdateCard}
+                  onOpenAIAnalyze={() => setIsAIAnalyzeOpen(true)}
+                  onOpenCommandModal={(tab = 'link') => {
+                    setCommandModalInitialTab(tab);
+                    setIsCommandModalOpen(true);
+                  }}
+                  onOpenCaptionModal={() => setIsCaptionModalOpen(true)}
+                  onResetAI={handleResetCard}
+                  onDownload={() => handleDownload('jpeg')}
+                  downloading={downloading}
+                  activeStep={activeStep}
+                  onStepChange={setActiveStep}
+                  currentUser={currentUser}
+                  mobileViewMode="steps"
+                  onToggleMobileViewMode={setMobileViewMode}
+                  onOpenCloudSettings={() => setIsCloudModalOpen(true)}
+                  onLogout={handleLogout}
+                  autoFillNews={autoFillNews}
+                />
+              </div>
+            </div>
           ) : (
+            /* ============================================================== */
+            /* DESKTOP STUDIO LAYOUT - PRESERVED 100% UNCHANGED               */
+            /* ============================================================== */
             <div className="w-full flex flex-col lg:flex-row items-start gap-4 xl:gap-6">
               {/* ==================================================
                   LEFT COLUMN: LOCKED / FREEZE (Larger Live Preview + 3 Action Buttons below)

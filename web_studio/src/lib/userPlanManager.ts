@@ -499,6 +499,7 @@ export interface PlanUserRecord {
   assignedHeaderUrl?: string;
   assignedFooterUrl?: string;
   assignedCustomActive?: boolean;
+  mobileVerified?: boolean;
 }
 
 const INITIAL_PLAN_USERS: PlanUserRecord[] = [
@@ -586,6 +587,7 @@ export function registerOrUpdateUser(params: {
   activatedVia?: string;
   role?: string;
   isLocked?: boolean;
+  mobileVerified?: boolean;
 }): void {
   if (!params.email) return;
   const cleanEmail = params.email.trim().toLowerCase();
@@ -626,6 +628,7 @@ export function registerOrUpdateUser(params: {
     assignedHeaderUrl: found?.assignedHeaderUrl,
     assignedFooterUrl: found?.assignedFooterUrl,
     assignedCustomActive: found?.assignedCustomActive,
+    mobileVerified: params.mobileVerified !== undefined ? params.mobileVerified : (found?.mobileVerified || false),
   };
 
   const filtered = existing.filter((u) => u.email.toLowerCase() !== cleanEmail);
