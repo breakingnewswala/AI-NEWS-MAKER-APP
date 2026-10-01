@@ -213,9 +213,9 @@ export default function App() {
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
 
-  // Cloud Live Data URLs
-  const CLOUD_STORAGE_NEWS_URL = 'https://firebasestorage.googleapis.com/v0/b/ainewsmakerapp.firebasestorage.app/o/news_database.json?alt=media';
-  const CLOUD_STORAGE_UPLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/ainewsmakerapp.firebasestorage.app/o?name=news_database.json';
+  // Cloud Live Data URLs (Firebase Storage for ai-news-maker-app)
+  const CLOUD_STORAGE_NEWS_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o/news_database.json?alt=media';
+  const CLOUD_STORAGE_UPLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o?name=news_database.json';
 
   // Sync news posts with cloud database (Firebase Storage + Backend API + Static fallback)
   const fetchLiveNews = async () => {
@@ -1380,147 +1380,148 @@ export default function App() {
               />
             </div>
           ) : (
-            <div className="w-full flex flex-col lg:flex-row items-start gap-4 xl:gap-6">
+            <>
               {/* ==================================================
-                  LEFT COLUMN: LOCKED / FREEZE (Larger Live Preview + 3 Action Buttons below)
+                  1. MOBILE & TABLET STUDIO LAYOUT (< 1024px)
+                  Unified Sticky Workspace (65% Live Preview Left | 35% Editor Steps Right)
+                  Selected Step Controls unfold below in remaining space
                   ================================================== */}
-              <div className="w-full lg:w-[420px] xl:w-[460px] 2xl:w-[490px] shrink-0 lg:sticky lg:top-[100px] z-20 flex flex-col gap-3 self-start">
-                {/* 1. LARGE LIVE 4:5 GRAPHIC PREVIEW CARD */}
-                <div className="w-full bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col">
-                  {/* Top Status Bar on Preview */}
-                  <div className="flex items-center justify-between px-1 mb-2 shrink-0">
-                    <div className="flex items-center gap-1.5 text-xs text-amber-400 font-black">
-                      <span className="text-amber-400">✳️</span>
-                      <span>लाइव कार्ड प्रीव्यू (1080X1350)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-neutral-400 font-bold">
-                        4:5 Portrait HD
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowSafeZone(!showSafeZone)}
-                        title="सेफ-ज़ोन गाइड"
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                          showSafeZone
-                            ? 'bg-sky-500/30 border border-sky-400 text-sky-200'
-                            : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 border border-neutral-800'
-                        }`}
-                      >
-                        <Layers className="w-3 h-3 text-sky-400" />
-                        <span>{showSafeZone ? 'सेफ-ज़ोन: ऑन' : 'सेफ-ज़ोन'}</span>
-                      </button>
-                    </div>
-                  </div>
+              <div className="flex lg:hidden w-full flex-col">
+                {/* 🔒 UNIFIED STICKY / FROZEN WORKSPACE BOX */}
+                <div
+                  id="mobile-studio-sticky-workspace"
+                  className={`sticky ${
+                    isAndroidEnvironment ? 'top-0' : 'top-[52px]'
+                  } z-30 w-full bg-slate-950/98 backdrop-blur-md pt-1 pb-2 border-b border-slate-800 shadow-2xl`}
+                >
+                  <div className="w-full flex items-stretch gap-2 bg-neutral-950 p-2 sm:p-2.5 rounded-2xl border border-neutral-800 shadow-xl">
+                    {/* ─── LEFT SIDE = 65% LIVE PREVIEW ─── */}
+                    <div className="w-[65%] flex flex-col justify-between shrink-0 min-w-0">
+                      {/* Top Status Bar on Preview */}
+                      <div className="flex items-center justify-between px-1 mb-1.5 shrink-0">
+                        <div className="flex items-center gap-1 text-[11px] text-amber-400 font-black truncate">
+                          <span>✳️</span>
+                          <span className="truncate">लाइव प्रीव्यू</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] text-neutral-400 font-bold hidden sm:inline">
+                            4:5 HD
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowSafeZone(!showSafeZone)}
+                            title="सेफ-ज़ोन गाइड"
+                            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                              showSafeZone
+                                ? 'bg-sky-500/30 border border-sky-400 text-sky-200'
+                                : 'bg-neutral-900 text-neutral-400 border border-neutral-800'
+                            }`}
+                          >
+                            <Layers className="w-2.5 h-2.5 text-sky-400" />
+                            <span>{showSafeZone ? 'गाइड' : 'गाइड'}</span>
+                          </button>
+                        </div>
+                      </div>
 
-                  {/* Neatly Scaled 4:5 Preview Box */}
-                  <div className="w-full flex items-center justify-center py-1">
-                    <div className="w-full max-w-[420px] aspect-[4/5] rounded-xl overflow-hidden shadow-2xl ring-1 ring-neutral-800 flex items-center justify-center bg-black">
-                      <CardPreview
-                        card={card}
-                        className="w-full h-full object-contain"
-                        showSafeZone={showSafeZone}
-                        onChange={handleUpdateCard}
-                      />
-                    </div>
-                  </div>
+                      {/* 4:5 Scaled Live Preview Container */}
+                      <div className="w-full flex-1 flex items-center justify-center min-h-[190px] max-h-[250px] sm:max-h-[290px] aspect-[4/5] mx-auto rounded-xl overflow-hidden shadow-md ring-1 ring-neutral-800 bg-black relative">
+                        <CardPreview
+                          card={card}
+                          className="w-full h-full object-contain"
+                          showSafeZone={showSafeZone}
+                          onChange={handleUpdateCard}
+                        />
+                      </div>
 
-                  {/* Action Bar below Preview: 3 Buttons Row */}
-                  <div className="grid grid-cols-3 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleDownload('jpeg')}
-                      disabled={downloading}
-                      className="py-2.5 px-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                      title="कार्ड को HD JPG इमेज में डाउनलोड करें"
-                    >
-                      <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
-                      <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'डाउनलोड (JPG)'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleResetCard}
-                      className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                      title="कार्ड रीसेट करें"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-                      <span>रिफ्रेश</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsCaptionModalOpen(true)}
-                      className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                      title="कैप्शन और शेयर"
-                    >
-                      <Share2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">कैप्शन एंड शेयर</span>
-                    </button>
-                  </div>
-
-                  {/* Informative Note Card below Buttons */}
-                  <div className="mt-3 p-3 bg-neutral-900/70 border border-neutral-800/80 rounded-xl flex items-start gap-2">
-                    <span className="text-amber-400 text-sm mt-0.5">ℹ️</span>
-                    <p className="text-[11px] text-neutral-400 leading-relaxed">
-                      यह कार्ड विशुद्ध आपकी "{card.channelNameHi || 'एआई न्यूज़ मेकर'}" थीम के अनुसार डिज़ाइन किया गया है। बैकग्राउंड फोटो, पोस्टर ओवरले, हेडलाइन का स्मार्ट रिज़म मोड, और फुटर बार पूरी तरह कस्टमाइज़ेबल हैं।
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* ==================================================
-                  RIGHT COLUMN: TOP STEP TABS BAR + COMMANDS AREA FOR ACTIVE STEP
-                  ================================================== */}
-              <div className="flex-1 w-full min-w-0 flex flex-col space-y-3">
-                {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar */}
-                <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
-                  {/* Top Bar Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5">
-                        <span>🎛️</span>
-                        <span>एडिटर स्टेप्स (स्टेप {activeStep} / {STUDIO_STEPS.length})</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black shadow-sm flex items-center gap-1">
-                        <span>⚡</span> लाइव मोड
-                      </span>
-                      <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-bold flex items-center gap-1">
-                        <span>📱</span> 4:5 पोर्ट्रेट
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Horizontal Scrollable Tabs: Step 1 to 8 */}
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
-                    {STUDIO_STEPS.map((s) => {
-                      const isActive = activeStep === s.step;
-                      return (
+                      {/* Action Bar below Preview: 3 Compact Buttons */}
+                      <div className="grid grid-cols-3 gap-1.5 w-full mt-2 pt-1.5 border-t border-neutral-800/80 shrink-0">
                         <button
-                          key={s.step}
                           type="button"
-                          onClick={() => {
-                            setActiveStep(s.step);
-                            setMobileViewMode('steps');
-                            scrollToStepById(s.id);
-                          }}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                            isActive
-                              ? 'bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 scale-102 font-black'
-                              : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:text-white'
-                          }`}
+                          onClick={() => handleDownload('jpeg')}
+                          disabled={downloading}
+                          className="py-1.5 px-1 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-[10px] rounded-lg shadow flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                          title="कार्ड डाउनलोड करें"
                         >
-                          <span>{s.label}</span>
+                          <Download className="w-3 h-3 text-slate-950 shrink-0" />
+                          <span className="truncate">{downloading ? '...' : 'JPG'}</span>
                         </button>
-                      );
-                    })}
+
+                        <button
+                          type="button"
+                          onClick={handleResetCard}
+                          className="py-1.5 px-1 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg border border-neutral-800 flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95"
+                          title="रीसेट करें"
+                        >
+                          <RefreshCw className="w-3 h-3 shrink-0" />
+                          <span className="truncate">रीसेट</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsCaptionModalOpen(true)}
+                          className="py-1.5 px-1 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg border border-neutral-800 flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95"
+                          title="कैप्शन और शेयर"
+                        >
+                          <Share2 className="w-3 h-3 shrink-0" />
+                          <span className="truncate">शेयर</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ─── RIGHT SIDE = 35% EDITOR STEPS ─── */}
+                    <div className="w-[35%] flex flex-col justify-between shrink-0 min-w-0 pl-1 border-l border-neutral-800/70">
+                      <div className="text-[11px] font-black text-amber-400 mb-1 px-1 flex items-center justify-between">
+                        <span className="truncate">एडिटर स्टेप्स</span>
+                        <span className="text-[10px] text-neutral-400 font-bold">{activeStep}/8</span>
+                      </div>
+
+                      {/* 8 Compact Step Buttons */}
+                      <div className="flex-1 flex flex-col justify-between gap-1">
+                        {STUDIO_STEPS.map((s) => {
+                          const isActive = activeStep === s.step;
+                          return (
+                            <button
+                              key={s.step}
+                              type="button"
+                              onClick={() => {
+                                setActiveStep(s.step);
+                                setMobileViewMode('steps');
+                              }}
+                              className={`w-full py-1 sm:py-1.5 px-1.5 rounded-lg text-[10px] sm:text-[11px] font-black transition-all flex items-center gap-1.5 cursor-pointer text-left truncate ${
+                                isActive
+                                  ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300 scale-[1.02]'
+                                  : 'bg-neutral-900/90 hover:bg-neutral-800 text-slate-300 border border-neutral-800/80 hover:text-white'
+                              }`}
+                              title={s.title}
+                            >
+                              <span className="shrink-0 text-xs">{s.icon}</span>
+                              <span className="truncate">{s.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Commands Area */}
-                <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl">
+                {/* ─── SELECTED STEP CONTROLS (Remaining Space Below) ─── */}
+                <div className="w-full mt-2.5 bg-slate-900/95 p-3 sm:p-4 rounded-2xl border border-slate-800 shadow-2xl">
+                  {/* Active Step Indicator Banner */}
+                  <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base sm:text-lg">
+                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.icon}
+                      </span>
+                      <span className="text-xs sm:text-sm font-black text-amber-400">
+                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.title || `स्टेप ${activeStep} कंट्रोल्स`}
+                      </span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold shrink-0">
+                      स्टेप {activeStep} एक्टिव
+                    </span>
+                  </div>
+
+                  {/* CardEditor renders ONLY the active step controls when mobileViewMode="steps" */}
                   <CardEditor
                     card={card}
                     onChange={handleUpdateCard}
@@ -1544,7 +1545,177 @@ export default function App() {
                   />
                 </div>
               </div>
-            </div>
+
+              {/* ==================================================
+                  2. DESKTOP / PC FULL-SCREEN WEB LAYOUT (>= 1024px)
+                  UNCHANGED: Existing finalized two-column layout
+                  ================================================== */}
+              <div className="hidden lg:flex w-full flex-row items-start gap-4 xl:gap-6">
+                {/* ==================================================
+                    LEFT COLUMN: LOCKED / FREEZE (Larger Live Preview + 3 Action Buttons below)
+                    ================================================== */}
+                <div className="w-full lg:w-[420px] xl:w-[460px] 2xl:w-[490px] shrink-0 lg:sticky lg:top-[100px] z-20 flex flex-col gap-3 self-start">
+                  {/* 1. LARGE LIVE 4:5 GRAPHIC PREVIEW CARD */}
+                  <div className="w-full bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col">
+                    {/* Top Status Bar on Preview */}
+                    <div className="flex items-center justify-between px-1 mb-2 shrink-0">
+                      <div className="flex items-center gap-1.5 text-xs text-amber-400 font-black">
+                        <span className="text-amber-400">✳️</span>
+                        <span>लाइव कार्ड प्रीव्यू (1080X1350)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-neutral-400 font-bold">
+                          4:5 Portrait HD
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowSafeZone(!showSafeZone)}
+                          title="सेफ-ज़ोन गाइड"
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            showSafeZone
+                              ? 'bg-sky-500/30 border border-sky-400 text-sky-200'
+                              : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 border border-neutral-800'
+                          }`}
+                        >
+                          <Layers className="w-3 h-3 text-sky-400" />
+                          <span>{showSafeZone ? 'सेफ-ज़ोन: ऑन' : 'सेफ-ज़ोन'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Neatly Scaled 4:5 Preview Box */}
+                    <div className="w-full flex items-center justify-center py-1">
+                      <div className="w-full max-w-[420px] aspect-[4/5] rounded-xl overflow-hidden shadow-2xl ring-1 ring-neutral-800 flex items-center justify-center bg-black">
+                        <CardPreview
+                          card={card}
+                          className="w-full h-full object-contain"
+                          showSafeZone={showSafeZone}
+                          onChange={handleUpdateCard}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action Bar below Preview: 3 Buttons Row */}
+                    <div className="grid grid-cols-3 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleDownload('jpeg')}
+                        disabled={downloading}
+                        className="py-2.5 px-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                        title="कार्ड को HD JPG इमेज में डाउनलोड करें"
+                      >
+                        <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
+                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'डाउनलोड (JPG)'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetCard}
+                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title="कार्ड रीसेट करें"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                        <span>रिफ्रेश</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCaptionModalOpen(true)}
+                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title="कैप्शन और शेयर"
+                      >
+                        <Share2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">कैप्शन एंड शेयर</span>
+                      </button>
+                    </div>
+
+                    {/* Informative Note Card below Buttons */}
+                    <div className="mt-3 p-3 bg-neutral-900/70 border border-neutral-800/80 rounded-xl flex items-start gap-2">
+                      <span className="text-amber-400 text-sm mt-0.5">ℹ️</span>
+                      <p className="text-[11px] text-neutral-400 leading-relaxed">
+                        यह कार्ड विशुद्ध आपकी "{card.channelNameHi || 'एआई न्यूज़ मेकर'}" थीम के अनुसार डिज़ाइन किया गया है। बैकग्राउंड फोटो, पोस्टर ओवरले, हेडलाइन का स्मार्ट रिज़म मोड, और फुटर बार पूरी तरह कस्टमाइज़ेबल हैं।
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ==================================================
+                    RIGHT COLUMN: TOP STEP TABS BAR + COMMANDS AREA FOR ACTIVE STEP
+                    ================================================== */}
+                <div className="flex-1 w-full min-w-0 flex flex-col space-y-3">
+                  {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar */}
+                  <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
+                    {/* Top Bar Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5">
+                          <span>🎛️</span>
+                          <span>एडिटर स्टेप्स (स्टेप {activeStep} / {STUDIO_STEPS.length})</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black shadow-sm flex items-center gap-1">
+                          <span>⚡</span> लाइव मोड
+                        </span>
+                        <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-bold flex items-center gap-1">
+                          <span>📱</span> 4:5 पोर्ट्रेट
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Horizontal Scrollable Tabs: Step 1 to 8 */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
+                      {STUDIO_STEPS.map((s) => {
+                        const isActive = activeStep === s.step;
+                        return (
+                          <button
+                            key={s.step}
+                            type="button"
+                            onClick={() => {
+                              setActiveStep(s.step);
+                              setMobileViewMode('steps');
+                              scrollToStepById(s.id);
+                            }}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                              isActive
+                                ? 'bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 scale-102 font-black'
+                                : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <span>{s.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Commands Area */}
+                  <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl">
+                    <CardEditor
+                      card={card}
+                      onChange={handleUpdateCard}
+                      onOpenAIAnalyze={() => setIsAIAnalyzeOpen(true)}
+                      onOpenCommandModal={(tab = 'link') => {
+                        setCommandModalInitialTab(tab);
+                        setIsCommandModalOpen(true);
+                      }}
+                      onOpenCaptionModal={() => setIsCaptionModalOpen(true)}
+                      onResetAI={handleResetCard}
+                      onDownload={() => handleDownload()}
+                      downloading={downloading}
+                      activeStep={activeStep}
+                      onStepChange={setActiveStep}
+                      currentUser={currentUser}
+                      mobileViewMode="steps"
+                      onToggleMobileViewMode={setMobileViewMode}
+                      onOpenCloudSettings={() => setIsCloudModalOpen(true)}
+                      onLogout={handleLogout}
+                      autoFillNews={autoFillNews}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </main>
       )}
