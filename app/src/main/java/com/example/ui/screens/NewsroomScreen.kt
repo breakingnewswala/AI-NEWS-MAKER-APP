@@ -25,6 +25,10 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.example.model.UserRole
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -150,11 +154,106 @@ fun NewsroomScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            // Permanent Dual Studio Mode Switcher: 1. ग्राफिक फोटो न्यूज़  2. वीडियो न्यूज़
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Slate950,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Option 1: ग्राफिक फोटो न्यूज़
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clickable {
+                                currentMode = NewsroomMode.GRAPHIC_DESIGN
+                                activeStudioWebView?.evaluateJavascript(
+                                    "if (window.setStudioMode) { window.setStudioMode('graphic'); }",
+                                    null
+                                )
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (currentMode == NewsroomMode.GRAPHIC_DESIGN) NewsGold else Color(0xFF1E293B),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (currentMode == NewsroomMode.GRAPHIC_DESIGN) Color(0xFFF59E0B) else Color(0xFF334155)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = if (currentMode == NewsroomMode.GRAPHIC_DESIGN) Color(0xFF0F172A) else Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "ग्राफिक फोटो न्यूज़",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (currentMode == NewsroomMode.GRAPHIC_DESIGN) Color(0xFF0F172A) else Color(0xFFE2E8F0)
+                            )
+                        }
+                    }
+
+                    // Option 2: वीडियो न्यूज़
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clickable {
+                                currentMode = NewsroomMode.VIDEO_DESIGN
+                                activeStudioWebView?.evaluateJavascript(
+                                    "if (window.setStudioMode) { window.setStudioMode('video'); }",
+                                    null
+                                )
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (currentMode == NewsroomMode.VIDEO_DESIGN) Color(0xFFDC2626) else Color(0xFF1E293B),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (currentMode == NewsroomMode.VIDEO_DESIGN) Color(0xFFEF4444) else Color(0xFF334155)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Videocam,
+                                contentDescription = null,
+                                tint = if (currentMode == NewsroomMode.VIDEO_DESIGN) Color.White else Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "वीडियो न्यूज़",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (currentMode == NewsroomMode.VIDEO_DESIGN) Color.White else Color(0xFFE2E8F0)
+                            )
+                        }
+                    }
+                }
+            }
+
             // MAIN CONTENT AREA: Unified Web Studio Engine hosting both Photo News and Video News (exact Web version design)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .weight(1f)
                     .background(Slate950)
             ) {
                 BreakingNewsStudioWebView(
@@ -623,6 +722,54 @@ class NewsStudioBridge(
     fun onStudioModeChanged(mode: String) {
         (context as? android.app.Activity)?.runOnUiThread {
             onStudioModeChanged?.invoke(mode)
+        }
+    }
+
+    @JavascriptInterface
+    fun signInWithGoogle() {
+        val activity = context as? android.app.Activity ?: return
+        activity.runOnUiThread {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                try {
+                    val credentialManager = androidx.credentials.CredentialManager.create(context)
+                    val googleIdOption = com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(false)
+                        .setServerClientId(com.example.data.AuthManager.DEFAULT_GOOGLE_CLIENT_ID)
+                        .setAutoSelectEnabled(true)
+                        .build()
+
+                    val request = androidx.credentials.GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+
+                    val result = credentialManager.getCredential(activity, request)
+                    val credential = result.credential
+                    if (credential is androidx.credentials.CustomCredential && credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                        val googleIdToken = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
+                        val displayName = googleIdToken.displayName ?: "Google User"
+                        val email = googleIdToken.id
+
+                        val assignedRole = if (com.example.data.AuthManager.isReviewerEmail(email)) UserRole.ADMIN else UserRole.USER
+                        com.example.data.AuthManager.login(
+                            context = context,
+                            name = displayName,
+                            email = email,
+                            role = assignedRole,
+                            district = "डिजिटल डेस्क"
+                        )
+
+                        val cleanName = displayName.replace("'", "\\'")
+                        val cleanEmail = email.replace("'", "\\'")
+                        getWebView()?.evaluateJavascript(
+                            "if (window.handleGoogleUserSuccess) { window.handleGoogleUserSuccess('$cleanEmail', '$cleanName', ''); }",
+                            null
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("GoogleAuthBridge", "Native Google sign-in failed: ${e.message}", e)
+                    Toast.makeText(context, "Google लॉगिन: ${e.localizedMessage ?: "रद्द किया गया"}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
     @JavascriptInterface

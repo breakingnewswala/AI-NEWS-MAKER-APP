@@ -23,6 +23,18 @@ import com.example.ui.theme.*
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    try {
+      android.system.Os.setenv("MESA_LOG_FILE", "/dev/null", true)
+      android.system.Os.setenv("LIBGL_ALWAYS_SOFTWARE", "1", true)
+      android.system.Os.setenv("LIBGL_DRI3_DISABLE", "1", true)
+      android.system.Os.setenv("LIBGL_KVM_DISABLE", "1", true)
+      android.system.Os.setenv("GALLIUM_DRIVER", "llvmpipe", true)
+      android.system.Os.setenv("MESA_LOADER_DRIVER_OVERRIDE", "swrast", true)
+      android.system.Os.setenv("MESA_DEBUG", "0", true)
+      android.system.Os.setenv("MESA_SILENT", "1", true)
+      android.system.Os.setenv("MESA_NO_ERROR", "1", true)
+      android.system.Os.setenv("EGL_LOG_LEVEL", "fatal", true)
+    } catch (_: Throwable) {}
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {

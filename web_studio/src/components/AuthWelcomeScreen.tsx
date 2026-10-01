@@ -505,7 +505,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       onCompleteDetails(finalProfile, googleUser);
       setIsLoggingIn(false);
     } else {
-      // First-Time User: Account created via Google -> Straight to Home Feed (No popup modal!)
+      // First-Time User: Account created via Google -> Show Step 2 Channel Branding Setup Screen
       let generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
       const uniqCheck = checkAccountUniqueness({
         username: generatedUsername,
@@ -526,10 +526,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       };
 
       setDetailFullName(name || prefix);
-      setDetailChannelLogoUrl('');
-      setDetailChannelLogoGifUrl('');
+      setDetailChannelLogoUrl(''); // PNG Logo = BLANK by default
+      setDetailChannelLogoGifUrl(''); // GIF Logo = BLANK by default
       setDetailChannelLogoType('png');
+      setDetailChannelNameHi(''); // User manually fills channel branding
+      setDetailChannelNameEn('');
       setUsername(generatedUsername);
+      setTempRegisteredUser(googleUser);
+      setIsGoogleLoggedIn(true);
 
       const baseProfile: ChannelProfile = {
         fullName: name || prefix,
@@ -578,6 +582,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       setCurrentStep(2);
     }
   };
+
+  // Expose handleGoogleUserSuccess globally for native AndroidBridge
+  React.useEffect(() => {
+    (window as any).handleGoogleUserSuccess = handleGoogleUserSuccess;
+    return () => {
+      delete (window as any).handleGoogleUserSuccess;
+    };
+  }, []);
 
   // Real Google Sign-In Trigger (Opens Google Account Chooser Popup)
   const handleGoogleSignIn = () => {

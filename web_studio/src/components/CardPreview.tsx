@@ -155,15 +155,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
     if (!containerRef.current) return;
     const updateW = () => {
       if (containerRef.current) {
-        const w = containerRef.current.offsetWidth;
-        if (w > 0) setContainerWidth(w);
+        const w = Math.round(containerRef.current.offsetWidth);
+        if (w > 0) {
+          setContainerWidth((prev) => (Math.abs(prev - w) > 2 ? w : prev));
+        }
       }
     };
     updateW();
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentRect.width > 0) {
-          setContainerWidth(entry.contentRect.width);
+        const newW = Math.round(entry.contentRect.width);
+        if (newW > 0) {
+          setContainerWidth((prev) => (Math.abs(prev - newW) > 2 ? newW : prev));
         }
       }
     });
@@ -175,12 +178,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
     if (!isSuperBreaking) return;
     const updateHeight = () => {
       if (bottomPlateRef.current) {
-        const h = bottomPlateRef.current.offsetHeight;
-        if (h > 0) setBottomPlateHeight(h);
+        const h = Math.round(bottomPlateRef.current.offsetHeight);
+        if (h > 0) {
+          setBottomPlateHeight((prev) => (Math.abs(prev - h) > 2 ? h : prev));
+        }
       }
     };
     updateHeight();
-    const timer = setTimeout(updateHeight, 60);
+    const timer = setTimeout(updateHeight, 100);
     return () => clearTimeout(timer);
   }, [
     isSuperBreaking,
