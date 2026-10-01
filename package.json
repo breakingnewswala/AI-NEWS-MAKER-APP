@@ -7,6 +7,7 @@
     "dev": "PORT=3000 NODE_PATH=./web_studio/node_modules:./node_modules node server.cjs",
     "start": "PORT=3000 NODE_PATH=./web_studio/node_modules:./node_modules node server.cjs",
     "build": "PATH=./web_studio/node_modules/.bin:$PATH npm --prefix web_studio run build && mkdir -p public app/src/main/assets/news_studio dist && cp -rf web_studio/dist/* public/ && cp -rf web_studio/dist/* app/src/main/assets/news_studio/ && cp -rf web_studio/dist/* dist/ && cp -f web_studio/dist/server.cjs server.cjs",
+    "sync-apk": "npm --prefix web_studio run build && node -e \"const fs=require('fs'); fs.mkdirSync('app/src/main/assets/news_studio', {recursive:true}); fs.mkdirSync('public', {recursive:true}); fs.mkdirSync('dist', {recursive:true}); fs.cpSync('web_studio/dist', 'app/src/main/assets/news_studio', {recursive:true}); fs.cpSync('web_studio/dist', 'public', {recursive:true}); fs.cpSync('web_studio/dist', 'dist', {recursive:true}); fs.copyFileSync('web_studio/dist/server.cjs', 'server.cjs'); console.log('✅ Mobile APK Assets 100% Synced!');\"",
     "lint": "npm --prefix web_studio run lint"
   },
   "dependencies": {
