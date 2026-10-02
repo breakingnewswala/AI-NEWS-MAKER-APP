@@ -53,7 +53,7 @@ export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
   currentUser?: ReporterUser | null;
   onLoginSuccess: (user: ReporterUser) => void;
-  onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser) => void;
+  onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser, isNewUser?: boolean) => void;
   onOpenGoogleApiGuide?: () => void;
 }
 
@@ -558,8 +558,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
       localStorage.setItem('user_channel_profile', JSON.stringify(baseProfile));
       localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(baseProfile));
-      localStorage.setItem('is_onboarding_completed', 'true');
-      localStorage.setItem('is_channel_profile_locked', 'true');
+      localStorage.removeItem('is_onboarding_completed');
+      localStorage.removeItem('is_channel_profile_locked');
 
       registerOrUpdateUser({
         email: cleanEmail,
@@ -570,12 +570,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         channelLogoUrl: '',
         tier: 'basic',
         role: 'reporter',
-        isLocked: true,
+        isLocked: false,
       });
 
-      // Direct entry: lands directly in app, full access immediately!
+      // New Google User: Must complete Channel & Profile Setup Modal
       setDetailFullName(googleUser.name);
-      onCompleteDetails(baseProfile, googleUser);
+      onCompleteDetails(baseProfile, googleUser, true /* isNewUser */);
       setIsLoggingIn(false);
     }
   };

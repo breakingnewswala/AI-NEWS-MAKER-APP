@@ -2017,10 +2017,10 @@ return (
               </button>
             )}
 
-            {/* Primary Mobile Number - Clean & balanced in same profile information area */}
-            <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
-              <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              {subscription.isMobileLocked ? (
+            {/* Primary Mobile Number Badge - Shown when locked via OTP */}
+            {subscription.isMobileLocked && (
+              <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
+                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
                   <span>+91 {subscription.primaryMobile}</span>
                   <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-800 flex items-center gap-0.5">
@@ -2028,26 +2028,8 @@ return (
                     <span>स्थायी लॉक</span>
                   </span>
                 </div>
-              ) : (
-                <form onSubmit={handleSavePrimaryMobile} className="flex items-center gap-1.5">
-                  <span className="text-amber-300 font-medium">प्राइमरी मोबाइल:</span>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="10 अंक"
-                    value={mobileInput}
-                    onChange={(e) => setMobileInput(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-24 px-1.5 py-0.5 bg-slate-950 border border-slate-700 rounded text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                  />
-                  <button
-                    type="submit"
-                    className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] cursor-pointer"
-                  >
-                    सेव
-                  </button>
-                </form>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -1266,22 +1266,32 @@ export default function App() {
             }
             showToast('लॉगिन सफल!');
           }}
-          onCompleteDetails={(profile, updatedUser) => {
+          onCompleteDetails={(profile, updatedUser, isNewUser) => {
             handleSaveProfile(profile);
             const userToSet = updatedUser || currentUser;
             if (updatedUser) {
               setCurrentUser(updatedUser);
             }
-            localStorage.setItem('is_onboarding_completed', 'true');
-            setIsOnboardingCompleted(true);
 
             const isAdmin = isUserAdmin(userToSet);
             if (isAdmin) {
               setAdminSystemMode('admin');
               setCurrentTab('profile');
               window.location.hash = 'profile';
+              localStorage.setItem('is_onboarding_completed', 'true');
+              setIsOnboardingCompleted(true);
               showToast('👑 मुख्य एडमिन कंट्रोल पैनल में आपका स्वागत है!');
+            } else if (isNewUser) {
+              // New User: Mandatory Channel & Profile Setup Modal MUST be completed!
+              localStorage.removeItem('is_onboarding_completed');
+              setIsOnboardingCompleted(false);
+              setIsOnboardingOpen(true);
+              setCurrentTab('home');
+              window.location.hash = 'home';
+              showToast('🎨 कृपया अपना चैनल नाम, लोगो व प्राइमरी मोबाइल नंबर सेट करें');
             } else {
+              localStorage.setItem('is_onboarding_completed', 'true');
+              setIsOnboardingCompleted(true);
               setCurrentTab('home');
               window.location.hash = 'home';
               showToast('✅ लॉगिन सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
@@ -1769,14 +1779,24 @@ export default function App() {
         />
       )}
 
-      {/* Channel Profile Setup & Branding Modal */}
+      {/* Channel Profile Setup & Branding Modal - Mandatory for new signups */}
       <ChannelOnboardingModal
         isOpen={isOnboardingOpen}
         initialProfile={getSavedChannelProfile() || undefined}
         userName={currentUser?.name}
-        onSaveProfile={handleSaveProfile}
-        onClose={() => setIsOnboardingOpen(false)}
-        isClosable={Boolean(getSavedChannelProfile())}
+        onSaveProfile={(p) => {
+          handleSaveProfile(p);
+          localStorage.setItem('is_onboarding_completed', 'true');
+          setIsOnboardingCompleted(true);
+          setIsOnboardingOpen(false);
+          showToast('🎉 चैनल व प्रोफाइल सेटअप सफलतापूर्वक पूर्ण हुआ!');
+        }}
+        onClose={() => {
+          if (localStorage.getItem('is_onboarding_completed') === 'true') {
+            setIsOnboardingOpen(false);
+          }
+        }}
+        isClosable={localStorage.getItem('is_onboarding_completed') === 'true'}
       />
 
       {/* Cloud, OpenAI & Custom Domain Setup Modal */}
