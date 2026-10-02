@@ -62,6 +62,24 @@ fun ProfileScreen(
     var dashboardSubTab by remember { mutableStateOf(0) } // 0: RSS/वेब लिंक, 1: कैटेगरी प्रबंधन
     var showEditChannelProfileDialog by remember { mutableStateOf(false) }
 
+    // Primary Control Panel Mode: Unified Web Studio Engine loaded with #profile
+    // Delivers 100% parity with live website: Plans & Packages, 6 Accordions, Templates Manager, RSS/Web Links
+    var showLiveWebControlPanel by remember { mutableStateOf(true) }
+
+    if (showLiveWebControlPanel) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Slate950)
+        ) {
+            BreakingNewsStudioWebView(
+                modifier = Modifier.fillMaxSize(),
+                initialTab = "profile"
+            )
+        }
+        return
+    }
+
     // Dialog state for adding RSS / Web link by Admin
     var showAddPostDialog by remember { mutableStateOf(false) }
 

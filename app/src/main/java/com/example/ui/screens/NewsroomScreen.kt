@@ -356,6 +356,7 @@ private fun isEmulatorEnvironment(): Boolean {
 @Composable
 fun BreakingNewsStudioWebView(
     modifier: Modifier = Modifier,
+    initialTab: String = "studio",
     studioMode: NewsroomMode = NewsroomMode.GRAPHIC_DESIGN,
     reloadKey: Int = 0,
     onWebViewCreated: ((WebView) -> Unit)? = null,
@@ -369,6 +370,15 @@ fun BreakingNewsStudioWebView(
     // Software rendering in emulator/container environments lacking hardware render nodes, or upon crash
     var useSoftwareRendering by remember { mutableStateOf(isEmulatorEnvironment()) }
     var isRendererCrashed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialTab, webViewInstance) {
+        if (webViewInstance != null) {
+            webViewInstance?.evaluateJavascript(
+                "(function() { if (window.setAppTab) window.setAppTab('$initialTab'); else window.location.hash = '$initialTab'; })();",
+                null
+            )
+        }
+    }
 
     // Native Android Media Picker launcher triggered when user taps upload in Graphic / Video Studio
     val mediaPickerLauncher = rememberLauncherForActivityResult(
@@ -680,7 +690,7 @@ fun BreakingNewsStudioWebView(
                         }
                     }
 
-                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html#studio")
+                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html#$initialTab")
                     webViewInstance = this
                     onWebViewCreated?.invoke(this)
                 }

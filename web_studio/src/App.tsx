@@ -148,17 +148,14 @@ export default function App() {
     window.location.hostname === 'appassets.androidplatform.net'
   );
 
-  // Active App Tab: In Android WebView it is always 'studio' (Graphic Studio). In browser: check hash, search query or default to 'home'
+  // Active App Tab: Fully responsive across Web and Android APK
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
-      if (isAndroidEnvironment) {
-        return 'studio';
-      }
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
       if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
         return hash as AppTab;
       }
-      // Check query params (e.g. ?tab=studio)
+      // Check query params (e.g. ?tab=profile)
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab')?.toLowerCase();
@@ -168,18 +165,18 @@ export default function App() {
       } catch {}
       // Check path
       const path = window.location.pathname.toLowerCase();
+      if (path.includes('profile') || path.includes('admin') || path.includes('control')) return 'profile';
       if (path.includes('home')) return 'home';
       if (path.includes('video')) return 'videos';
       if (path.includes('epaper')) return 'epaper';
-      if (path.includes('profile') || path.includes('admin')) return 'profile';
       return 'studio';
     }
     return 'studio';
   });
 
-  // Listen to browser hash changes (e.g. back/forward or link clicks) to switch tabs reliably
+  // Listen to browser hash changes & expose setAppTab for Native Android Bridge
   useEffect(() => {
-    if (typeof window === 'undefined' || isAndroidEnvironment) return;
+    if (typeof window === 'undefined') return;
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
       if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
@@ -187,8 +184,14 @@ export default function App() {
       }
     };
     window.addEventListener('hashchange', handleHashChange);
+    (window as any).setAppTab = (tab: AppTab) => {
+      if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(tab)) {
+        setCurrentTab(tab);
+        window.location.hash = tab;
+      }
+    };
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [isAndroidEnvironment]);
+  }, []);
 
   // News feed posts state - auto-migrates from v1 and validates live format
   const [posts, setPosts] = useState<NewsFeedPost[]>(() => {
@@ -1305,21 +1308,19 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Bar Navigation - Always visible on web version */}
-      {!isAndroidEnvironment && (
-        <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
-          <AppTopBarWeb
-            currentTab={currentTab}
-            currentUser={currentUser}
-            onRefresh={() => setToastMessage('फ़ीड रीफ्रेश हो गई है!')}
-            onNavigateToTab={(tab) => {
-              setCurrentTab(tab);
-              window.location.hash = tab;
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        </div>
-      )}
+      {/* Top Bar Navigation - Always visible across Web & Mobile APK */}
+      <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
+        <AppTopBarWeb
+          currentTab={currentTab}
+          currentUser={currentUser}
+          onRefresh={() => setToastMessage('फ़ीड रीफ्रेश हो गई है!')}
+          onNavigateToTab={(tab) => {
+            setCurrentTab(tab);
+            window.location.hash = tab;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      </div>
 
       {/* 1. Home Feed Tab */}
       {currentTab === 'home' && (

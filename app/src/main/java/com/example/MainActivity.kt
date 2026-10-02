@@ -84,7 +84,7 @@ fun MainNewsStudioApp() {
       containerColor = Slate950,
       topBar = {
         AnimatedVisibility(
-          visible = currentTab != AppTab.NEWSROOM,
+          visible = currentTab != AppTab.NEWSROOM && currentTab != AppTab.PROFILE,
           enter = expandVertically() + fadeIn(),
           exit = shrinkVertically() + fadeOut()
         ) {
