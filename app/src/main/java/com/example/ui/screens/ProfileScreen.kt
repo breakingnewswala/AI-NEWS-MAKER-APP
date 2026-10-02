@@ -1,6 +1,13 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.view.ViewGroup
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,6 +59,132 @@ fun ProfileScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+
+    androidx.activity.compose.BackHandler(enabled = webViewInstance?.canGoBack() == true) {
+        webViewInstance?.goBack()
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Slate950)
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        databaseEnabled = true
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                        setSupportZoom(false)
+                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        cacheMode = WebSettings.LOAD_NO_CACHE
+                    }
+
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): WebResourceResponse? {
+                            val uri = request?.url ?: return null
+                            val scheme = uri.scheme ?: ""
+                            val host = uri.host ?: ""
+                            val path = uri.path ?: ""
+
+                            if (host == "appassets.androidplatform.net" || (scheme == "file" && path.contains("android_asset"))) {
+                                val cleanPath = when {
+                                    path.startsWith("/assets/news_studio/") -> path.removePrefix("/assets/")
+                                    path.startsWith("/assets/") -> "news_studio" + path
+                                    path.startsWith("/android_asset/news_studio/") -> path.removePrefix("/android_asset/")
+                                    path.startsWith("/android_asset/") -> "news_studio" + path.removePrefix("/android_asset/")
+                                    path.startsWith("/news_studio/") -> path.removePrefix("/")
+                                    else -> "news_studio" + if (path.startsWith("/")) path else "/$path"
+                                }.trimStart('/')
+
+                                try {
+                                    val inputStream = ctx.assets.open(cleanPath)
+                                    val mimeType = when {
+                                        cleanPath.endsWith(".html") -> "text/html"
+                                        cleanPath.endsWith(".js") || cleanPath.endsWith(".mjs") -> "application/javascript"
+                                        cleanPath.endsWith(".css") -> "text/css"
+                                        cleanPath.endsWith(".svg") -> "image/svg+xml"
+                                        cleanPath.endsWith(".png") -> "image/png"
+                                        cleanPath.endsWith(".jpg") || cleanPath.endsWith(".jpeg") -> "image/jpeg"
+                                        cleanPath.endsWith(".webp") -> "image/webp"
+                                        cleanPath.endsWith(".json") -> "application/json"
+                                        cleanPath.endsWith(".woff2") -> "font/woff2"
+                                        cleanPath.endsWith(".ttf") -> "font/ttf"
+                                        else -> "application/octet-stream"
+                                    }
+                                    val headers = mapOf(
+                                        "Access-Control-Allow-Origin" to "*",
+                                        "Access-Control-Allow-Methods" to "GET, OPTIONS",
+                                        "Access-Control-Allow-Headers" to "*"
+                                    )
+                                    return WebResourceResponse(mimeType, "UTF-8", 200, "OK", headers, inputStream)
+                                } catch (e: Exception) {
+                                    // Fallback
+                                }
+                            }
+                            return super.shouldInterceptRequest(view, request)
+                        }
+
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            val sessionJson = AuthManager.getUserSessionJson()
+                            val sessionEscaped = sessionJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+                            val profileJson = AuthManager.getChannelProfileJson()
+                            val profileEscaped = profileJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+
+                            view?.evaluateJavascript(
+                                "(function() { try { " +
+                                "localStorage.setItem('reporter_auth_session', JSON.stringify(JSON.parse('$sessionEscaped'))); " +
+                                "localStorage.setItem('user_channel_profile', JSON.stringify(JSON.parse('$profileEscaped'))); " +
+                                "localStorage.setItem('is_onboarding_completed', 'true'); " +
+                                "if (window.setAppTab) { window.setAppTab('profile'); } " +
+                                "if (window.setTab) { window.setTab('profile'); } " +
+                                "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(JSON.parse('$profileEscaped')); } " +
+                                "} catch(e) {} })();",
+                                null
+                            )
+                        }
+                    }
+
+                    addJavascriptInterface(object {
+                        @android.webkit.JavascriptInterface
+                        fun openStudio() {
+                            post { onNavigateToNewsroom() }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun logout() {
+                            post { onLogout() }
+                        }
+                    }, "AndroidBridge")
+
+                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html?tab=profile#profile")
+                    webViewInstance = this
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+fun LegacyNativeProfileContent(
+    modifier: Modifier = Modifier,
+    onLogout: () -> Unit = {},
+    onNavigateToHome: () -> Unit = {},
+    onNavigateToNewsroom: () -> Unit = {}
+) {
+    val context = LocalContext.current
     val currentRole by NewsRepository.userRole.collectAsState()
     val categoriesList by NewsRepository.categories.collectAsState()
     val authUser by AuthManager.currentUser.collectAsState()
@@ -59,13 +192,9 @@ fun ProfileScreen(
     val adminViewAsMode by AuthManager.adminViewAsMode.collectAsState()
 
     var activeControlTab by remember { mutableStateOf(ControlPanelTab.PROFILE) }
-    var dashboardSubTab by remember { mutableStateOf(0) } // 0: RSS/वेब लिंक, 1: कैटेगरी प्रबंधन
+    var dashboardSubTab by remember { mutableStateOf(0) }
     var showEditChannelProfileDialog by remember { mutableStateOf(false) }
-
-    // Dialog state for adding RSS / Web link by Admin
     var showAddPostDialog by remember { mutableStateOf(false) }
-
-    // Dialog states for dynamic category management
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var categoryToEdit by remember { mutableStateOf<ManagedCategory?>(null) }
     var planSuccessMsg by remember { mutableStateOf<String?>(null) }

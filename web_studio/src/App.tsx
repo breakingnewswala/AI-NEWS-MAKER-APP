@@ -1483,11 +1483,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 65% Live Preview + 35% Steps Layout or Compact Steps when Hidden */}
+                  {/* 70% Live Preview + 30% Steps Layout (Master 70:30 Ratio) or Compact Steps when Hidden */}
                   {!isMobilePreviewHidden ? (
                     <div className="flex items-stretch gap-2 h-[260px] max-h-[38vh]">
-                      {/* LEFT: 65% Original 4:5 Aspect Ratio Preview */}
-                      <div className="w-[65%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
+                      {/* LEFT: 70% Original 4:5 Aspect Ratio Preview */}
+                      <div className="w-[70%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
                         <CardPreview
                           card={card}
                           className="w-full h-full object-contain"
@@ -1496,8 +1496,8 @@ export default function App() {
                         />
                       </div>
 
-                      {/* RIGHT: 35% Steps Column (Vertical List) */}
-                      <div className="w-[35%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
+                      {/* RIGHT: 30% Steps Column (Vertical List) */}
+                      <div className="w-[30%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
                         {STUDIO_STEPS.map((s) => {
                           const isActive = activeStep === s.step;
                           return (
