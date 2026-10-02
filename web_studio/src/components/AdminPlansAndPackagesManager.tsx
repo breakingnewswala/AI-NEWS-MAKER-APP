@@ -618,17 +618,98 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       </div>
 
       {/* ========================================================================= */}
-      {/* 6 SYSTEMATIC NUMBERED EXPANDABLE / TAPPABLE ADMIN CONTROL BOXES         */}
+      {/* ☰ CONTROL PANEL RESPONSIVE MENU BAR (MOBILE & DESKTOP MASTER REFERENCE)   */}
       {/* ========================================================================= */}
+      <div className="bg-slate-900/95 border-2 border-amber-500/50 rounded-2xl p-3 sm:p-4 shadow-2xl backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md">
+              ☰
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                <span>कंट्रोल पैनल मेन्यू बार</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  9 सेक्शन्स
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400">किसी भी सेक्शन पर टैप करके तुरंत खोलें</p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 shrink-0">
+            {subTab === 'profile' && '1. प्रोफाइल'}
+            {subTab === 'upgrade' && '2. अपग्रेड'}
+            {subTab === 'plans' && '3. प्लान्स'}
+            {subTab === 'templates' && '4. टेम्पलेट्स'}
+            {subTab === 'promocodes' && '5. प्रोमो कोड्स'}
+            {subTab === 'users' && '6. यूजर्स'}
+            {subTab === 'rss' && '7. RSS लिंक्स'}
+            {subTab === 'web' && '8. वेब लिंक्स'}
+            {subTab === 'restricted' && '9. सुरक्षा सूची'}
+            {!subTab && 'सूची बंद है'}
+          </span>
+        </div>
+
+        {/* 9 Touch-Friendly Menu Pills in Exact Final Master Order */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {[
+            { id: 'profile', num: '1', title: 'प्रोफाइल व चैनल विवरण', desc: 'लोगो, नाम, हेडर व सोशल लिंक्स' },
+            { id: 'upgrade', num: '2', title: 'मेंबरशिप प्लान व अपग्रेड', desc: 'वर्तमान प्लान व एक्टिवेशन' },
+            { id: 'plans', num: '3', title: 'प्लान्स मैनेजर', desc: '4 प्लान टियर्स, कीमतें व फीचर्स' },
+            { id: 'templates', num: '4', title: 'टेम्पलेट मैनेजर', desc: 'टेम्पलेट प्लान मैपिंग व एक्टिवेशन' },
+            { id: 'promocodes', num: '5', title: 'प्रोमो कोड्स मैनेजर', desc: 'सिंगल-यूज़ कोड जनरेशन व रिकॉर्ड्स' },
+            { id: 'users', num: '6', title: 'यूजर्स मैनेजर', desc: 'यूज़र लिस्ट, एडिट, रोल व चैनल विवरण' },
+            { id: 'rss', num: '7', title: 'RSS लिंक्स डैशबोर्ड', desc: 'ऑटो लाइव RSS फीड सोर्सेज' },
+            { id: 'web', num: '8', title: 'वेब लिंक्स डैशबोर्ड', desc: 'वेबसाइट लिंक्स व लाइव आर्टिकल्स' },
+            { id: 'restricted', num: '9', title: 'प्रतिबंधित चैनल सुरक्षा सूची', desc: 'अनाधिकृत चैनल्स ब्लैकलिस्ट' },
+          ].map((item) => {
+            const isActive = subTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setSubTab(item.id as any);
+                  setTimeout(() => {
+                    const el = document.getElementById(`section-${item.id}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 100);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-left font-bold transition-all cursor-pointer border flex items-center gap-3 ${
+                  isActive
+                    ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 shadow-lg scale-[1.01]'
+                    : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:text-white'
+                }`}
+              >
+                <span className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                  isActive ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {item.num}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs sm:text-sm font-black block truncate">{item.title}</span>
+                  <span className={`text-[10px] block truncate ${isActive ? 'text-slate-900 font-semibold' : 'text-slate-400'}`}>
+                    {item.desc}
+                  </span>
+                </div>
+                <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isActive ? 'rotate-180 text-slate-950' : 'text-slate-500'}`} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ========================================================================= */}
-      {/* 6 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
+      {/* 9 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
       {/* ========================================================================= */}
       <div className="space-y-3.5">
 
         {/* ========================================================================= */}
         {/* STEP 1: प्रोफाइल व चैनल विवरण (PROFILE & BRANDING)                        */}
         {/* ========================================================================= */}
-        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+        <div id="section-profile" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
             onClick={() => setSubTab(subTab === 'profile' ? '' : 'profile')}

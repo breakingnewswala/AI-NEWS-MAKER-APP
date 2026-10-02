@@ -148,9 +148,9 @@ fun ProfileScreen(
                                 "localStorage.setItem('reporter_auth_session', JSON.stringify(JSON.parse('$sessionEscaped'))); " +
                                 "localStorage.setItem('user_channel_profile', JSON.stringify(JSON.parse('$profileEscaped'))); " +
                                 "localStorage.setItem('is_onboarding_completed', 'true'); " +
-                                "if (window.setAppTab) { window.setAppTab('profile'); } " +
-                                "if (window.setTab) { window.setTab('profile'); } " +
                                 "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(JSON.parse('$profileEscaped')); } " +
+                                "if (window.setAppTab) { window.setAppTab('profile'); } else if (window.setTab) { window.setTab('profile'); } " +
+                                "window.location.hash = 'profile'; " +
                                 "} catch(e) {} })();",
                                 null
                             )

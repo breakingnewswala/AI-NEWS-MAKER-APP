@@ -521,7 +521,7 @@ export default function App() {
   }, []);
 
   // Handle saving channel profile
-  const handleSaveProfile = (profile: ChannelProfile) => {
+  const handleSaveProfile = (profile: ChannelProfile, redirectAfterSave: boolean = false) => {
     localStorage.setItem('user_channel_profile', JSON.stringify(profile));
     localStorage.setItem('app_channel_name', profile.channelNameHi);
     localStorage.setItem('app_channel_name_en', profile.channelNameEn);
@@ -571,11 +571,13 @@ export default function App() {
       );
     }
 
-    setIsOnboardingOpen(false);
-    setCurrentTab('studio');
-    window.location.hash = 'studio';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast('✅ चैनल प्रोफ़ाइल सुरक्षित! ग्राफिक स्टूडियो में स्वागत है');
+    if (redirectAfterSave) {
+      setIsOnboardingOpen(false);
+      setCurrentTab('studio');
+      window.location.hash = 'studio';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('✅ चैनल प्रोफ़ाइल सुरक्षित! ग्राफिक स्टूडियो में स्वागत है');
+    }
   };
 
   const handleLogout = () => {
@@ -720,7 +722,7 @@ export default function App() {
     };
     (window as any).applyAndroidChannelProfile = (profile: any) => {
       if (profile) {
-        handleSaveProfile(profile);
+        handleSaveProfile(profile, false);
       }
     };
     (window as any).onAutoFillNewsLink = (newsData: AutoFillNewsData) => {
@@ -1077,7 +1079,7 @@ export default function App() {
     };
     (window as any).applyAndroidChannelProfile = (profile: ChannelProfile) => {
       if (profile) {
-        handleSaveProfile(profile);
+        handleSaveProfile(profile, false);
       }
     };
     try {
@@ -1085,7 +1087,7 @@ export default function App() {
         const raw = (window as any).AndroidBridge.getChannelProfile();
         if (raw) {
           const parsed = JSON.parse(raw);
-          handleSaveProfile(parsed);
+          handleSaveProfile(parsed, false);
         }
       }
     } catch {
@@ -1377,35 +1379,37 @@ export default function App() {
       {/* 3. Studio Tab */}
       {currentTab === 'studio' && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
-          {/* Studio Type Selector: Permanent top navigation for both Graphic & Video Studio (shown in web; in Android APK the native top mode bar handles this) */}
-          <div className="w-full mb-3">
-            <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
-              <button
-                type="button"
-                onClick={() => updateStudioMode('graphic')}
-                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  studioMode === 'graphic'
-                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
-                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-                }`}
-              >
-                <Palette className="w-4 h-4 text-neutral-950" />
-                <span>ग्राफिक फोटो न्यूज़</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateStudioMode('video')}
-                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  studioMode === 'video'
-                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
-                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-                }`}
-              >
-                <Film className="w-4 h-4 text-white" />
-                <span>वीडियो न्यूज़</span>
-              </button>
+          {/* Studio Type Selector: Shown only in Web; in Android APK the native top mode bar handles this */}
+          {!isAndroidEnvironment && (
+            <div className="w-full mb-3">
+              <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
+                <button
+                  type="button"
+                  onClick={() => updateStudioMode('graphic')}
+                  className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    studioMode === 'graphic'
+                      ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                  }`}
+                >
+                  <Palette className="w-4 h-4 text-neutral-950" />
+                  <span>ग्राफिक फोटो न्यूज़</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStudioMode('video')}
+                  className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    studioMode === 'video'
+                      ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                  }`}
+                >
+                  <Film className="w-4 h-4 text-white" />
+                  <span>वीडियो न्यूज़</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {studioMode === 'video' ? (
             <div className="w-full">
