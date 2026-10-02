@@ -151,6 +151,23 @@ export default function App() {
   // Active App Tab: Fully responsive across Web and Android APK
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
+      const fullUrl = (window.location.href || '').toLowerCase();
+      if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile') || fullUrl.includes('/profile')) {
+        return 'profile';
+      }
+      if (fullUrl.includes('#home') || fullUrl.includes('tab=home') || fullUrl.includes('/home')) {
+        return 'home';
+      }
+      if (fullUrl.includes('#videos') || fullUrl.includes('tab=videos') || fullUrl.includes('/videos')) {
+        return 'videos';
+      }
+      if (fullUrl.includes('#epaper') || fullUrl.includes('tab=epaper') || fullUrl.includes('/epaper')) {
+        return 'epaper';
+      }
+      if (fullUrl.includes('#studio') || fullUrl.includes('tab=studio') || fullUrl.includes('/studio')) {
+        return 'studio';
+      }
+
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
       if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
         return hash as AppTab;
@@ -169,9 +186,9 @@ export default function App() {
       if (path.includes('home')) return 'home';
       if (path.includes('video')) return 'videos';
       if (path.includes('epaper')) return 'epaper';
-      return 'studio';
+      return 'home';
     }
-    return 'studio';
+    return 'home';
   });
 
   // Listen to browser hash changes & expose setAppTab for Native Android Bridge
@@ -1761,15 +1778,17 @@ export default function App() {
         />
       )}
 
-      {/* Persistent Bottom Bar - Always visible across Web & Mobile APK */}
-      <AppBottomBarWeb
-        currentTab={currentTab}
-        onSelectTab={(tab) => {
-          setCurrentTab(tab);
-          window.location.hash = tab;
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-      />
+      {/* Persistent Bottom Bar - Only visible on web browser, hidden in Android APK */}
+      {!isAndroidEnvironment && (
+        <AppBottomBarWeb
+          currentTab={currentTab}
+          onSelectTab={(tab) => {
+            setCurrentTab(tab);
+            window.location.hash = tab;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
 
       {/* Channel Profile Setup & Branding Modal - Mandatory for new signups */}
       <ChannelOnboardingModal

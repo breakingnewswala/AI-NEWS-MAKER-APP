@@ -614,7 +614,7 @@ fun BreakingNewsStudioWebView(
                                 "localStorage.setItem('reporter_auth_session', JSON.stringify(JSON.parse('$sessionEscaped'))); " +
                                 "localStorage.setItem('user_channel_profile', JSON.stringify(JSON.parse('$profileEscaped'))); " +
                                 "localStorage.setItem('is_onboarding_completed', 'true'); " +
-                                "if (window.setTab) { window.setTab('studio'); } " +
+                                "if (window.setAppTab) { window.setAppTab('$initialTab'); } else if (window.setTab) { window.setTab('$initialTab'); } else { window.location.hash = '$initialTab'; } " +
                                 "if (window.setStudioMode) { window.setStudioMode('$initialModeStr'); } " +
                                 "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(JSON.parse('$profileEscaped')); } " +
                                 "} catch(e) {} })();",

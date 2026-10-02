@@ -33,7 +33,14 @@ targets.forEach((target) => {
     if (!fs.existsSync(target)) {
       fs.mkdirSync(target, { recursive: true });
     }
-    fs.cpSync(distDir, target, { recursive: true, force: true });
+    fs.cpSync(distDir, target, {
+      recursive: true,
+      force: true,
+      filter: (src) => !src.endsWith('.apk')
+    });
+    // Never allow an APK inside assets directory
+    const assetApk = path.resolve(rootDir, 'app/src/main/assets/news_studio/app-release.apk');
+    if (fs.existsSync(assetApk)) fs.unlinkSync(assetApk);
     console.log(` ✅ Updated: ${path.relative(rootDir, target)}`);
   } catch (err) {
     console.error(` ❌ Error copying to ${target}:`, err.message);
