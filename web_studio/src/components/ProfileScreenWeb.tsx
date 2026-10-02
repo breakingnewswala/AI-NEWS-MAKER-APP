@@ -93,7 +93,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   // Admin check & Channel Profile Lock check
   const isAdmin = isUserAdmin(currentUser);
   const [isLockedForUserState, setIsLockedForUserState] = useState(() => !isAdmin && isChannelProfileLocked(currentUser));
-  const isLockedForUser = isLockedForUserState;
+  const isLockedForUser = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoGifUrl));
+  const [isLogoReqModalOpen, setIsLogoReqModalOpen] = useState(false);
+  const [logoReqReason, setLogoReqReason] = useState("नया आधिकारिक चैनल लोगो अपडेट करना है");
   const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
     getUserLogoChangeRequestStatus(currentUser?.email || '')
   );
@@ -1367,26 +1369,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           ) : (
                             <button
                               type="button"
-                              onClick={() => {
-                                const reason = window.prompt(
-                                  'लोगो बदलने का कारण लिखें (यह अनुरोध एडमिन को भेजा जाएगा):',
-                                  'नया आधिकारिक चैनल लोगो अपडेट करना है'
-                                );
-                                if (reason !== null) {
-                                  submitLogoChangeRequest(
-                                    currentUser?.email || '',
-                                    channelProfile.channelNameHi || '',
-                                    channelProfile.channelLogoUrl,
-                                    reason
-                                  );
-                                  setLogoReqStatus('pending');
-                                  alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा स्वीकृति मिलते ही आप नया लोगो अपलोड कर सकेंगे।');
-                                }
-                              }}
-                              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                              onClick={() => setIsLogoReqModalOpen(true)}
+                              className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition flex items-center gap-2 active:scale-95 border border-amber-300 ring-2 ring-amber-400/30"
                             >
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                              <span>लोगो बदलने के लिए एडमिन से अनुरोध करें</span>
+                              <ShieldCheck className="w-4 h-4 text-slate-950 shrink-0" />
+                              <span>लोगो बदलने हेतु एडमिन से अनुरोध करें (Request to Admin)</span>
                             </button>
                           )}
                         </div>
@@ -1502,6 +1489,30 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       </div>
                     </div>
 
+                    {/* Dedicated Save Logo Button for Admin */}
+                    <div className="pt-3 pb-1 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+                      <div className="text-xs text-slate-300 flex items-center gap-2 font-medium">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>
+                          {channelProfile.channelLogoType === 'gif'
+                            ? (channelProfile.channelLogoGifUrl ? '✅ सक्रिय: 🎬 GIF लोगो चयनित' : '⚠️ कृपया 🎬 GIF लोगो चुनें')
+                            : (channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl ? '✅ सक्रिय: 📦 PNG लोगो चयनित' : '⚠️ कृपया 📦 PNG लोगो चुनें')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveChannelBranding}
+                        className="px-5 py-2.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-xl flex items-center gap-2 cursor-pointer transition active:scale-95 border border-amber-300 ring-2 ring-amber-400/20"
+                      >
+                        <Save className="w-4 h-4 text-slate-950 shrink-0" />
+                        <span>
+                          {saveSettingsSuccess
+                            ? '✅ लोगो सुरक्षित! स्टूडियो में लागू हो गया'
+                            : '💾 चैनल लोगो सेव करें (Save Logo)'}
+                        </span>
+                      </button>
+                    </div>
+
                     {/* Admin Logo Management Tools */}
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
@@ -1530,6 +1541,102 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </>
                 )}
               </div>
+
+              {/* Request Logo Change to Admin Modal for Normal Users */}
+              {isLogoReqModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                          <ShieldCheck className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-white font-bold text-sm sm:text-base font-['Baloo_2']">
+                            लोगो बदलने हेतु एडमिन से अनुरोध
+                          </h3>
+                          <p className="text-[11px] text-slate-400">Request Logo Change to Admin</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsLogoReqModalOpen(false)}
+                        className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
+                        <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                          <img
+                            src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl || '/assets/breaking_news_wala_logo.png'}
+                            alt="Current Logo"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white">
+                            {channelProfile.channelNameHi || 'वर्तमान चैनल'}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            {currentUser?.email || 'यूज़र'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          लोगो बदलने का कारण (Reason for Logo Change) *
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={logoReqReason}
+                          onChange={(e) => setLogoReqReason(e.target.value)}
+                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें (उदा. चैनल का नया लोगो जारी हुआ है)"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500"
+                        />
+                      </div>
+
+                      <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300/90 leading-relaxed">
+                        ℹ️ अनुरोध सबमिट करने के बाद एडमिन द्वारा स्वीकृति मिलते ही आपका लोगो अनलॉक कर दिया जाएगा और आप नया लोगो अपलोड कर सकेंगे।
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setIsLogoReqModalOpen(false)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition"
+                      >
+                        रद्द करें
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!logoReqReason.trim()) {
+                            alert('कृपया कारण दर्ज करें।');
+                            return;
+                          }
+                          submitLogoChangeRequest(
+                            currentUser?.email || '',
+                            channelProfile.channelNameHi || '',
+                            channelProfile.channelLogoUrl,
+                            logoReqReason.trim()
+                          );
+                          setLogoReqStatus('pending');
+                          setIsLogoReqModalOpen(false);
+                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा स्वीकृति मिलते ही आप नया लोगो अपलोड कर सकेंगे।');
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
+                      >
+                        अनुरोध सबमिट करें (Submit Request)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* JPG to Transparent PNG Modal */}
               {isJpgModalOpen && (
