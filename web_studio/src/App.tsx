@@ -1325,19 +1325,21 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Bar Navigation - Always visible across Web & Mobile APK */}
-      <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
-        <AppTopBarWeb
-          currentTab={currentTab}
-          currentUser={currentUser}
-          onRefresh={() => setToastMessage('फ़ीड रीफ्रेश हो गई है!')}
-          onNavigateToTab={(tab) => {
-            setCurrentTab(tab);
-            window.location.hash = tab;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
-      </div>
+      {/* Top Bar Navigation - Only visible in Web browser, hidden in native Android APK */}
+      {!isAndroidEnvironment && (
+        <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
+          <AppTopBarWeb
+            currentTab={currentTab}
+            currentUser={currentUser}
+            onRefresh={() => setToastMessage('फ़ीड रीफ्रेश हो गई है!')}
+            onNavigateToTab={(tab) => {
+              setCurrentTab(tab);
+              window.location.hash = tab;
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        </div>
+      )}
 
       {/* 1. Home Feed Tab */}
       {currentTab === 'home' && (

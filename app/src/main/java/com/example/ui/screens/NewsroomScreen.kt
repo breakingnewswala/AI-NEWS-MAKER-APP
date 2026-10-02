@@ -694,7 +694,7 @@ fun BreakingNewsStudioWebView(
                         }
                     }
 
-                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html#$initialTab")
+                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html?tab=$initialTab#$initialTab")
                     webViewInstance = this
                     onWebViewCreated?.invoke(this)
                 }
