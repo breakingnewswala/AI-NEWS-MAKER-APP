@@ -148,17 +148,31 @@ export default function App() {
     window.location.hostname === 'appassets.androidplatform.net'
   );
 
-  // Active App Tab: In Android WebView it is always 'studio' (Graphic Studio). In browser: check hash, search query or default to 'home'
+  // Active App Tab: Fully responsive across Web and Android APK
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
-      if (isAndroidEnvironment) {
+      const fullUrl = (window.location.href || '').toLowerCase();
+      if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile') || fullUrl.includes('/profile')) {
+        return 'profile';
+      }
+      if (fullUrl.includes('#home') || fullUrl.includes('tab=home') || fullUrl.includes('/home')) {
+        return 'home';
+      }
+      if (fullUrl.includes('#videos') || fullUrl.includes('tab=videos') || fullUrl.includes('/videos')) {
+        return 'videos';
+      }
+      if (fullUrl.includes('#epaper') || fullUrl.includes('tab=epaper') || fullUrl.includes('/epaper')) {
+        return 'epaper';
+      }
+      if (fullUrl.includes('#studio') || fullUrl.includes('tab=studio') || fullUrl.includes('/studio')) {
         return 'studio';
       }
+
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
       if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
         return hash as AppTab;
       }
-      // Check query params (e.g. ?tab=studio)
+      // Check query params (e.g. ?tab=profile)
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab')?.toLowerCase();
@@ -168,18 +182,18 @@ export default function App() {
       } catch {}
       // Check path
       const path = window.location.pathname.toLowerCase();
+      if (path.includes('profile') || path.includes('admin') || path.includes('control')) return 'profile';
       if (path.includes('home')) return 'home';
       if (path.includes('video')) return 'videos';
       if (path.includes('epaper')) return 'epaper';
-      if (path.includes('profile') || path.includes('admin')) return 'profile';
-      return 'studio';
+      return 'home';
     }
-    return 'studio';
+    return 'home';
   });
 
-  // Listen to browser hash changes (e.g. back/forward or link clicks) to switch tabs reliably
+  // Listen to browser hash changes & expose setAppTab for Native Android Bridge
   useEffect(() => {
-    if (typeof window === 'undefined' || isAndroidEnvironment) return;
+    if (typeof window === 'undefined') return;
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
       if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
@@ -187,8 +201,14 @@ export default function App() {
       }
     };
     window.addEventListener('hashchange', handleHashChange);
+    (window as any).setAppTab = (tab: AppTab) => {
+      if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(tab)) {
+        setCurrentTab(tab);
+        window.location.hash = tab;
+      }
+    };
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [isAndroidEnvironment]);
+  }, []);
 
   // News feed posts state - auto-migrates from v1 and validates live format
   const [posts, setPosts] = useState<NewsFeedPost[]>(() => {
@@ -320,7 +340,7 @@ export default function App() {
       // ignore
     }
     // In native Android WebView environment, allow default reporter user
-    if (typeof window !== 'undefined' && isAndroidEnvironment && (window as any).AndroidBridge) {
+    if (typeof window !== 'undefined' && isAndroidEnvironment) {
       return DEFAULT_REPORTER_USER;
     }
     // Web visitors MUST authenticate via Google / Admin Login first
@@ -331,7 +351,7 @@ export default function App() {
   // Web visitors strictly require an active session and completed onboarding flag
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      if (typeof window !== 'undefined' && isAndroidEnvironment && (window as any).AndroidBridge) {
+      if (typeof window !== 'undefined' && isAndroidEnvironment) {
         return true;
       }
       const savedSession = localStorage.getItem('reporter_auth_session');
@@ -501,7 +521,7 @@ export default function App() {
   }, []);
 
   // Handle saving channel profile
-  const handleSaveProfile = (profile: ChannelProfile) => {
+  const handleSaveProfile = (profile: ChannelProfile, redirectAfterSave: boolean = false) => {
     localStorage.setItem('user_channel_profile', JSON.stringify(profile));
     localStorage.setItem('app_channel_name', profile.channelNameHi);
     localStorage.setItem('app_channel_name_en', profile.channelNameEn);
@@ -551,11 +571,13 @@ export default function App() {
       );
     }
 
-    setIsOnboardingOpen(false);
-    setCurrentTab('studio');
-    window.location.hash = 'studio';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast('✅ चैनल प्रोफ़ाइल सुरक्षित! ग्राफिक स्टूडियो में स्वागत है');
+    if (redirectAfterSave) {
+      setIsOnboardingOpen(false);
+      setCurrentTab('studio');
+      window.location.hash = 'studio';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('✅ चैनल प्रोफ़ाइल सुरक्षित! ग्राफिक स्टूडियो में स्वागत है');
+    }
   };
 
   const handleLogout = () => {
@@ -700,7 +722,7 @@ export default function App() {
     };
     (window as any).applyAndroidChannelProfile = (profile: any) => {
       if (profile) {
-        handleSaveProfile(profile);
+        handleSaveProfile(profile, false);
       }
     };
     (window as any).onAutoFillNewsLink = (newsData: AutoFillNewsData) => {
@@ -1057,7 +1079,7 @@ export default function App() {
     };
     (window as any).applyAndroidChannelProfile = (profile: ChannelProfile) => {
       if (profile) {
-        handleSaveProfile(profile);
+        handleSaveProfile(profile, false);
       }
     };
     try {
@@ -1065,7 +1087,7 @@ export default function App() {
         const raw = (window as any).AndroidBridge.getChannelProfile();
         if (raw) {
           const parsed = JSON.parse(raw);
-          handleSaveProfile(parsed);
+          handleSaveProfile(parsed, false);
         }
       }
     } catch {
@@ -1305,7 +1327,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Bar Navigation - Always visible on web version */}
+      {/* Top Bar Navigation - Only visible in Web browser, hidden in native Android APK */}
       {!isAndroidEnvironment && (
         <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
           <AppTopBarWeb
@@ -1357,35 +1379,37 @@ export default function App() {
       {/* 3. Studio Tab */}
       {currentTab === 'studio' && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
-          {/* Studio Type Selector: Permanent top navigation for both Graphic & Video Studio (shown in web; in Android APK the native top mode bar handles this) */}
-          <div className="w-full mb-3">
-            <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
-              <button
-                type="button"
-                onClick={() => updateStudioMode('graphic')}
-                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  studioMode === 'graphic'
-                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
-                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-                }`}
-              >
-                <Palette className="w-4 h-4 text-neutral-950" />
-                <span>ग्राफिक फोटो न्यूज़</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateStudioMode('video')}
-                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  studioMode === 'video'
-                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
-                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-                }`}
-              >
-                <Film className="w-4 h-4 text-white" />
-                <span>वीडियो न्यूज़</span>
-              </button>
+          {/* Studio Type Selector: Shown only in Web; in Android APK the native top mode bar handles this */}
+          {!isAndroidEnvironment && (
+            <div className="w-full mb-3">
+              <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
+                <button
+                  type="button"
+                  onClick={() => updateStudioMode('graphic')}
+                  className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    studioMode === 'graphic'
+                      ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                  }`}
+                >
+                  <Palette className="w-4 h-4 text-neutral-950" />
+                  <span>ग्राफिक फोटो न्यूज़</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateStudioMode('video')}
+                  className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    studioMode === 'video'
+                      ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                  }`}
+                >
+                  <Film className="w-4 h-4 text-white" />
+                  <span>वीडियो न्यूज़</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {studioMode === 'video' ? (
             <div className="w-full">
@@ -1463,11 +1487,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 65% Live Preview + 35% Steps Layout or Compact Steps when Hidden */}
+                  {/* 70% Live Preview + 30% Steps Layout (Master 70:30 Ratio) or Compact Steps when Hidden */}
                   {!isMobilePreviewHidden ? (
                     <div className="flex items-stretch gap-2 h-[260px] max-h-[38vh]">
-                      {/* LEFT: 65% Original 4:5 Aspect Ratio Preview */}
-                      <div className="w-[65%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
+                      {/* LEFT: 70% Original 4:5 Aspect Ratio Preview */}
+                      <div className="w-[70%] shrink-0 h-full bg-black rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-inner flex items-center justify-center relative">
                         <CardPreview
                           card={card}
                           className="w-full h-full object-contain"
@@ -1476,8 +1500,8 @@ export default function App() {
                         />
                       </div>
 
-                      {/* RIGHT: 35% Steps Column (Vertical List) */}
-                      <div className="w-[35%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
+                      {/* RIGHT: 30% Steps Column (Vertical List) */}
+                      <div className="w-[30%] shrink-0 h-full overflow-y-auto pr-0.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 flex flex-col justify-between">
                         {STUDIO_STEPS.map((s) => {
                           const isActive = activeStep === s.step;
                           return (
@@ -1760,7 +1784,7 @@ export default function App() {
         />
       )}
 
-      {/* Persistent Bottom Bar - hidden when running inside native Android WebView */}
+      {/* Persistent Bottom Bar - Only visible on web browser, hidden in Android APK */}
       {!isAndroidEnvironment && (
         <AppBottomBarWeb
           currentTab={currentTab}

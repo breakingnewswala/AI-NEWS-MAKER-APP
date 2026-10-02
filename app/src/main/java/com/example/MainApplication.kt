@@ -2,6 +2,7 @@ package com.example
 
 import android.app.Application
 import android.system.Os
+import android.system.OsConstants
 import java.io.File
 
 class MainApplication : Application() {
@@ -9,15 +10,18 @@ class MainApplication : Application() {
     companion object {
         init {
             try {
+                // Redirect standard error (fd 2) to /dev/null to silence native MESA driver warnings in virtualized emulators
+                val devNull = Os.open("/dev/null", OsConstants.O_WRONLY, 0)
+                Os.dup2(devNull, 2)
+                Os.close(devNull)
+            } catch (_: Throwable) {}
+
+            try {
                 Os.setenv("MESA_LOG_FILE", "/dev/null", true)
-                Os.setenv("LIBGL_ALWAYS_SOFTWARE", "1", true)
-                Os.setenv("LIBGL_DRI3_DISABLE", "1", true)
-                Os.setenv("LIBGL_KVM_DISABLE", "1", true)
-                Os.setenv("GALLIUM_DRIVER", "llvmpipe", true)
-                Os.setenv("MESA_LOADER_DRIVER_OVERRIDE", "swrast", true)
                 Os.setenv("MESA_DEBUG", "0", true)
                 Os.setenv("MESA_SILENT", "1", true)
                 Os.setenv("MESA_NO_ERROR", "1", true)
+                Os.setenv("LIBGL_DEBUG", "quiet", true)
                 Os.setenv("EGL_LOG_LEVEL", "fatal", true)
             } catch (_: Throwable) {}
         }
@@ -26,15 +30,17 @@ class MainApplication : Application() {
     override fun attachBaseContext(base: android.content.Context?) {
         super.attachBaseContext(base)
         try {
+            val devNull = Os.open("/dev/null", OsConstants.O_WRONLY, 0)
+            Os.dup2(devNull, 2)
+            Os.close(devNull)
+        } catch (_: Throwable) {}
+
+        try {
             Os.setenv("MESA_LOG_FILE", "/dev/null", true)
-            Os.setenv("LIBGL_ALWAYS_SOFTWARE", "1", true)
-            Os.setenv("LIBGL_DRI3_DISABLE", "1", true)
-            Os.setenv("LIBGL_KVM_DISABLE", "1", true)
-            Os.setenv("GALLIUM_DRIVER", "llvmpipe", true)
-            Os.setenv("MESA_LOADER_DRIVER_OVERRIDE", "swrast", true)
             Os.setenv("MESA_DEBUG", "0", true)
             Os.setenv("MESA_SILENT", "1", true)
             Os.setenv("MESA_NO_ERROR", "1", true)
+            Os.setenv("LIBGL_DEBUG", "quiet", true)
             Os.setenv("EGL_LOG_LEVEL", "fatal", true)
         } catch (_: Throwable) {}
     }

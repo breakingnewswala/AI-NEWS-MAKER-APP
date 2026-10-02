@@ -48,6 +48,8 @@ import {
   adminUpdateCloudUser,
   adminDeleteCloudUser,
   UserPlanTier,
+  getUserSubscription,
+  setUserPlanTier,
   PlanKeyName,
   PlanFeatureDetail,
   PromoCodeItem,
@@ -102,8 +104,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onAddCategory,
   onDeleteCategory,
 }) => {
-  // Sub-tabs: 'plans', 'promocodes', 'users', 'rss', 'restricted'
-  const [subTab, setSubTab] = useState<'profile' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | ''>('plans');
+  // Sub-tabs: 9 accordions in exact order
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | ''>('profile');
+  const [userSub, setUserSub] = useState(() => getUserSubscription());
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -615,17 +618,98 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       </div>
 
       {/* ========================================================================= */}
-      {/* 6 SYSTEMATIC NUMBERED EXPANDABLE / TAPPABLE ADMIN CONTROL BOXES         */}
+      {/* ☰ CONTROL PANEL RESPONSIVE MENU BAR (MOBILE & DESKTOP MASTER REFERENCE)   */}
       {/* ========================================================================= */}
+      <div className="bg-slate-900/95 border-2 border-amber-500/50 rounded-2xl p-3 sm:p-4 shadow-2xl backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md">
+              ☰
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                <span>कंट्रोल पैनल मेन्यू बार</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  9 सेक्शन्स
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400">किसी भी सेक्शन पर टैप करके तुरंत खोलें</p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 shrink-0">
+            {subTab === 'profile' && '1. प्रोफाइल'}
+            {subTab === 'upgrade' && '2. अपग्रेड'}
+            {subTab === 'plans' && '3. प्लान्स'}
+            {subTab === 'templates' && '4. टेम्पलेट्स'}
+            {subTab === 'promocodes' && '5. प्रोमो कोड्स'}
+            {subTab === 'users' && '6. यूजर्स'}
+            {subTab === 'rss' && '7. RSS लिंक्स'}
+            {subTab === 'web' && '8. वेब लिंक्स'}
+            {subTab === 'restricted' && '9. सुरक्षा सूची'}
+            {!subTab && 'सूची बंद है'}
+          </span>
+        </div>
+
+        {/* 9 Touch-Friendly Menu Pills in Exact Final Master Order */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {[
+            { id: 'profile', num: '1', title: 'प्रोफाइल व चैनल विवरण', desc: 'लोगो, नाम, हेडर व सोशल लिंक्स' },
+            { id: 'upgrade', num: '2', title: 'मेंबरशिप प्लान व अपग्रेड', desc: 'वर्तमान प्लान व एक्टिवेशन' },
+            { id: 'plans', num: '3', title: 'प्लान्स मैनेजर', desc: '4 प्लान टियर्स, कीमतें व फीचर्स' },
+            { id: 'templates', num: '4', title: 'टेम्पलेट मैनेजर', desc: 'टेम्पलेट प्लान मैपिंग व एक्टिवेशन' },
+            { id: 'promocodes', num: '5', title: 'प्रोमो कोड्स मैनेजर', desc: 'सिंगल-यूज़ कोड जनरेशन व रिकॉर्ड्स' },
+            { id: 'users', num: '6', title: 'यूजर्स मैनेजर', desc: 'यूज़र लिस्ट, एडिट, रोल व चैनल विवरण' },
+            { id: 'rss', num: '7', title: 'RSS लिंक्स डैशबोर्ड', desc: 'ऑटो लाइव RSS फीड सोर्सेज' },
+            { id: 'web', num: '8', title: 'वेब लिंक्स डैशबोर्ड', desc: 'वेबसाइट लिंक्स व लाइव आर्टिकल्स' },
+            { id: 'restricted', num: '9', title: 'प्रतिबंधित चैनल सुरक्षा सूची', desc: 'अनाधिकृत चैनल्स ब्लैकलिस्ट' },
+          ].map((item) => {
+            const isActive = subTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setSubTab(item.id as any);
+                  setTimeout(() => {
+                    const el = document.getElementById(`section-${item.id}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 100);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-left font-bold transition-all cursor-pointer border flex items-center gap-3 ${
+                  isActive
+                    ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 shadow-lg scale-[1.01]'
+                    : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:text-white'
+                }`}
+              >
+                <span className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                  isActive ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {item.num}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs sm:text-sm font-black block truncate">{item.title}</span>
+                  <span className={`text-[10px] block truncate ${isActive ? 'text-slate-900 font-semibold' : 'text-slate-400'}`}>
+                    {item.desc}
+                  </span>
+                </div>
+                <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isActive ? 'rotate-180 text-slate-950' : 'text-slate-500'}`} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ========================================================================= */}
-      {/* 6 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
+      {/* 9 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
       {/* ========================================================================= */}
       <div className="space-y-3.5">
 
         {/* ========================================================================= */}
         {/* STEP 1: प्रोफाइल व चैनल विवरण (PROFILE & BRANDING)                        */}
         {/* ========================================================================= */}
-        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+        <div id="section-profile" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
             onClick={() => setSubTab(subTab === 'profile' ? '' : 'profile')}
@@ -663,7 +747,111 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
 
-        {/* STEP 2: PLANS */}
+        {/* ========================================================================= */}
+        {/* STEP 2: मेंबरशिप प्लान व अपग्रेड (MEMBERSHIP PLANS & UPGRADE)              */}
+        {/* ========================================================================= */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'upgrade' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'upgrade' ? '' : 'upgrade')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'upgrade' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
+                <span>2</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  2. मेंबरशिप प्लान व अपग्रेड
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  वर्तमान प्लान, 4 उपलब्ध टियर्स व 1-क्लिक प्लान एक्टिवेशन
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-emerald-400 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {userSub?.planKey || 'बेसिक'}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'upgrade' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'upgrade' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {plans.map((p) => {
+                  const isCurrent = userSub.tier === p.id || (p.id === 'basic' && (!userSub.tier || userSub.tier === 'trial'));
+                  return (
+                    <div
+                      key={`user-upgrade-${p.id}`}
+                      className={`rounded-xl p-4 border flex flex-col justify-between transition-all ${
+                        isCurrent 
+                          ? 'border-emerald-500/80 bg-emerald-950/20 ring-1 ring-emerald-500/40 shadow-lg' 
+                          : 'border-slate-800 bg-slate-900/90 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-base text-white">{p.planKey}</span>
+                          {isCurrent ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-950 text-emerald-300 border border-emerald-500">
+                              वर्तमान प्लान
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-slate-800 text-slate-300">
+                              उपलब्ध
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xl font-black text-amber-400 font-mono">
+                          {p.priceDisplay} <span className="text-xs text-slate-400 font-normal">/ {p.validityLabel}</span>
+                        </div>
+                        <p className="text-xs text-slate-400">{p.tagline}</p>
+                        <div className="space-y-1 pt-2 text-[11px] text-slate-300">
+                          <div className="flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>{p.hasWatermark ? 'वॉटरमार्क रहेगा' : 'नो वॉटरमार्क'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>{p.hasVideoStudio ? 'वीडियो स्टूडियो अनलॉक' : 'केवल ग्राफिक स्टूडियो'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>{p.graphicExportResolution}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserPlanTier(p.id as UserPlanTier);
+                          setUserSub(getUserSubscription());
+                          if (onPlanChanged) onPlanChanged();
+                          setPlanSaveSuccess(`🎉 ${p.planKey} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
+                          setTimeout(() => setPlanSaveSuccess(null), 4000);
+                        }}
+                        disabled={isCurrent}
+                        className={`mt-4 w-full py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                          isCurrent
+                            ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800 cursor-default'
+                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 shadow-md active:scale-98'
+                        }`}
+                      >
+                        {isCurrent ? 'सक्रिय है' : 'अपग्रेड / एक्टिवेट करें'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+
+        {/* ========================================================================= */}
+        {/* STEP 3: प्लान्स मैनेजर (PLANS MANAGER)                                    */}
+        {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'plans' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -672,18 +860,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>2</span>
+                <span>3</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  2. प्लान्स
+                  3. प्लान्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  4 वास्तविक प्लान्स (BASIC, ADVANCE, PRO, VIP DESK)
+                  एडमिन द्वारा प्लान्स की कीमत, वैधता, सुविधाएं व सक्रिय/निष्क्रिय स्थिति नियंत्रण
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
+                ADMIN
+              </span>
               <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
                 {`${plans.length} प्लान्स`}
               </span>
@@ -875,7 +1066,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 3: टेम्पलेट प्लान मैनेजर (TEMPLATE PLAN MANAGER)                     */}
+        {/* STEP 4: टेम्पलेट मैनेजर (TEMPLATE MANAGER)                                */}
         {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'templates' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
@@ -885,11 +1076,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>3</span>
+                <span>4</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  3. टेम्पलेट प्लान मैनेजर
+                  4. टेम्पलेट मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   ग्राफिक व वीडियो टेम्पलेट्स के एक्सेस टियर (BASIC, ADVANCE, PRO, VIP DESK)
@@ -911,7 +1102,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
 
-        {/* STEP 4: PROMOCODES */}
+        {/* ========================================================================= */}
+        {/* STEP 5: प्रोमो कोड्स मैनेजर (PROMO CODES MANAGER)                          */}
+        {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'promocodes' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -920,11 +1113,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>4</span>
+                <span>5</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  4. प्रोमो कोड्स
+                  5. प्रोमो कोड्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   सिंगल-यूज़ प्रोमो कोड जनरेशन व एक्टिवेशन
@@ -1275,7 +1468,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
 
-        {/* STEP 5: USERS */}
+        {/* ========================================================================= */}
+        {/* STEP 6: यूजर्स मैनेजर (USERS MANAGER)                                      */}
+        {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'users' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1284,14 +1479,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>5</span>
+                <span>6</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  5. यूज़र्स
+                  6. यूजर्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर
+                  पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर (यूज़र डेटा संपादन व सुरक्षा)
                 </p>
               </div>
             </div>
@@ -2190,7 +2385,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
 
 
-        {/* STEP 6: RSS */}
+        {/* ========================================================================= */}
+        {/* STEP 7: RSS लिंक्स डैशबोर्ड (RSS LINKS DASHBOARD)                         */}
+        {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rss' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -2199,14 +2396,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>6</span>
+                <span>7</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  6. RSS लिंक्स
+                  7. RSS लिंक्स डैशबोर्ड
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स
+                  लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स प्रबंधन व लाइव स्टेटस
                 </p>
               </div>
             </div>
@@ -2501,7 +2698,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
 
-        {/* STEP 7: WEB */}
+        {/* ========================================================================= */}
+        {/* STEP 8: वेब लिंक्स डैशबोर्ड (WEB LINKS DASHBOARD)                         */}
+        {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -2510,14 +2709,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>7</span>
+                <span>8</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  7. वेब लिंक्स
+                  8. वेब लिंक्स डैशबोर्ड
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स
+                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स प्रबंधन
                 </p>
               </div>
             </div>
@@ -2734,7 +2933,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
 
-        {/* STEP 8: RESTRICTED */}
+        {/* ========================================================================= */}
+        {/* STEP 9: प्रतिबंधित चैनल सुरक्षा सूची (RESTRICTED CHANNELS SECURITY LIST) */}
+        {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -2743,11 +2944,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>8</span>
+                <span>9</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  8. प्रतिबंधित चैनल सुरक्षा सूची
+                  9. प्रतिबंधित चैनल सुरक्षा सूची
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति

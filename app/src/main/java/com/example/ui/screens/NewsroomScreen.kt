@@ -356,6 +356,7 @@ private fun isEmulatorEnvironment(): Boolean {
 @Composable
 fun BreakingNewsStudioWebView(
     modifier: Modifier = Modifier,
+    initialTab: String = "studio",
     studioMode: NewsroomMode = NewsroomMode.GRAPHIC_DESIGN,
     reloadKey: Int = 0,
     onWebViewCreated: ((WebView) -> Unit)? = null,
@@ -369,6 +370,19 @@ fun BreakingNewsStudioWebView(
     // Software rendering in emulator/container environments lacking hardware render nodes, or upon crash
     var useSoftwareRendering by remember { mutableStateOf(isEmulatorEnvironment()) }
     var isRendererCrashed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialTab, webViewInstance) {
+        if (webViewInstance != null) {
+            webViewInstance?.evaluateJavascript(
+                "(function() { if (window.setAppTab) window.setAppTab('$initialTab'); else window.location.hash = '$initialTab'; })();",
+                null
+            )
+        }
+    }
+
+    androidx.activity.compose.BackHandler(enabled = webViewInstance?.canGoBack() == true) {
+        webViewInstance?.goBack()
+    }
 
     // Native Android Media Picker launcher triggered when user taps upload in Graphic / Video Studio
     val mediaPickerLauncher = rememberLauncherForActivityResult(
@@ -600,7 +614,7 @@ fun BreakingNewsStudioWebView(
                                 "localStorage.setItem('reporter_auth_session', JSON.stringify(JSON.parse('$sessionEscaped'))); " +
                                 "localStorage.setItem('user_channel_profile', JSON.stringify(JSON.parse('$profileEscaped'))); " +
                                 "localStorage.setItem('is_onboarding_completed', 'true'); " +
-                                "if (window.setTab) { window.setTab('studio'); } " +
+                                "if (window.setAppTab) { window.setAppTab('$initialTab'); } else if (window.setTab) { window.setTab('$initialTab'); } else { window.location.hash = '$initialTab'; } " +
                                 "if (window.setStudioMode) { window.setStudioMode('$initialModeStr'); } " +
                                 "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(JSON.parse('$profileEscaped')); } " +
                                 "} catch(e) {} })();",
@@ -680,7 +694,7 @@ fun BreakingNewsStudioWebView(
                         }
                     }
 
-                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html#studio")
+                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html?tab=$initialTab#$initialTab")
                     webViewInstance = this
                     onWebViewCreated?.invoke(this)
                 }

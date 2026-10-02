@@ -25,16 +25,13 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     try {
       android.system.Os.setenv("MESA_LOG_FILE", "/dev/null", true)
-      android.system.Os.setenv("LIBGL_ALWAYS_SOFTWARE", "1", true)
-      android.system.Os.setenv("LIBGL_DRI3_DISABLE", "1", true)
-      android.system.Os.setenv("LIBGL_KVM_DISABLE", "1", true)
-      android.system.Os.setenv("GALLIUM_DRIVER", "llvmpipe", true)
-      android.system.Os.setenv("MESA_LOADER_DRIVER_OVERRIDE", "swrast", true)
       android.system.Os.setenv("MESA_DEBUG", "0", true)
       android.system.Os.setenv("MESA_SILENT", "1", true)
       android.system.Os.setenv("MESA_NO_ERROR", "1", true)
+      android.system.Os.setenv("LIBGL_DEBUG", "quiet", true)
       android.system.Os.setenv("EGL_LOG_LEVEL", "fatal", true)
     } catch (_: Throwable) {}
+
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
@@ -56,6 +53,7 @@ fun MainNewsStudioApp() {
   val isLoggedIn by com.example.data.AuthManager.isLoggedIn.collectAsState()
   val isOnboardingCompleted by com.example.data.AuthManager.isOnboardingCompleted.collectAsState()
 
+  // App defaults strictly to HOME (होम) screen as expected by user
   var currentTab by remember { mutableStateOf(AppTab.HOME) }
   var showNotifications by remember { mutableStateOf(false) }
   var showAdminAddDialog by remember { mutableStateOf(false) }
@@ -64,7 +62,7 @@ fun MainNewsStudioApp() {
   var isStudioTopBarVisible by remember { mutableStateOf(true) }
 
   if (!isLoggedIn || !isOnboardingCompleted) {
-    // 1. Primary Screen of the whole Application
+    // 1. Primary Welcome & Login Screen
     PrimaryAuthWelcomeScreen(
       onLoginSuccess = {
         currentTab = AppTab.HOME
@@ -137,78 +135,60 @@ fun MainNewsStudioApp() {
           .background(Slate950)
           .padding(innerPadding)
       ) {
-        // Tab screens (HOME, VIDEOS, EPAPER, PROFILE)
-        if (currentTab != AppTab.NEWSROOM) {
-          when (currentTab) {
-            AppTab.HOME -> {
-              HomeScreen(
-                onMakeNewsClicked = { post ->
-                  // Automatically redirect to Newsroom with ready-to-use jacket!
-                  com.example.data.NewsRepository.setPendingGraphicNews(post)
-                  currentTab = AppTab.NEWSROOM
-                },
-                onAdminAddPostClicked = {
-                  showAdminAddDialog = true
-                },
-                onOpenAdminConsole = {
-                  showAdminConsole = true
-                }
-              )
-            }
-            AppTab.VIDEOS -> {
-              VideosScreen(
-                onSendToVideoEditor = { video ->
-                  com.example.data.NewsRepository.setPendingVideo(video)
-                  currentTab = AppTab.NEWSROOM
-                }
-              )
-            }
-            AppTab.EPAPER -> {
-              EPaperScreen()
-            }
-            AppTab.PROFILE -> {
-              ProfileScreen(
-                onNavigateToHome = {
-                  currentTab = AppTab.HOME
-                },
-                onOpenAdminConsole = {
-                  showAdminConsole = true
-                },
-                onNavigateToNewsroom = {
-                  currentTab = AppTab.NEWSROOM
-                },
-                onLogout = {
-                  com.example.data.AuthManager.logout(context)
-                  android.widget.Toast.makeText(context, "लॉग आउट सफल", android.widget.Toast.LENGTH_SHORT).show()
-                }
-              )
-            }
-            else -> {}
+        when (currentTab) {
+          AppTab.HOME -> {
+            HomeScreen(
+              onMakeNewsClicked = { post ->
+                // Redirect to Newsroom with ready-to-use jacket
+                com.example.data.NewsRepository.setPendingGraphicNews(post)
+                currentTab = AppTab.NEWSROOM
+              },
+              onAdminAddPostClicked = {
+                showAdminAddDialog = true
+              },
+              onOpenAdminConsole = {
+                showAdminConsole = true
+              }
+            )
           }
-        }
-
-        var hasVisitedNewsroom by remember { mutableStateOf(false) }
-        if (currentTab == AppTab.NEWSROOM) {
-          hasVisitedNewsroom = true
-        }
-
-        // Persistent Newsroom Studio Screen: Kept warm in memory once visited so switching to Studio is instant with ZERO blinking/reloading!
-        if (hasVisitedNewsroom) {
-          Box(
-            modifier = Modifier
-              .fillMaxSize()
-              .zIndex(if (currentTab == AppTab.NEWSROOM) 2f else -1f)
-              .alpha(if (currentTab == AppTab.NEWSROOM) 1f else 0f)
-          ) {
+          AppTab.VIDEOS -> {
+            VideosScreen(
+              onSendToVideoEditor = { video ->
+                com.example.data.NewsRepository.setPendingVideo(video)
+                currentTab = AppTab.NEWSROOM
+              }
+            )
+          }
+          AppTab.NEWSROOM -> {
             NewsroomScreen(
               refreshTrigger = newsroomRefreshKey,
-              isActive = currentTab == AppTab.NEWSROOM,
+              isActive = true,
               onScrollChange = { isDown, scrollY ->
                 if (isDown && scrollY > 20) {
                   isStudioTopBarVisible = false
                 } else if (!isDown || scrollY <= 15) {
                   isStudioTopBarVisible = true
                 }
+              }
+            )
+          }
+          AppTab.EPAPER -> {
+            EPaperScreen()
+          }
+          AppTab.PROFILE -> {
+            ProfileScreen(
+              onNavigateToHome = {
+                currentTab = AppTab.HOME
+              },
+              onOpenAdminConsole = {
+                showAdminConsole = true
+              },
+              onNavigateToNewsroom = {
+                currentTab = AppTab.NEWSROOM
+              },
+              onLogout = {
+                com.example.data.AuthManager.logout(context)
+                android.widget.Toast.makeText(context, "लॉग आउट सफल", android.widget.Toast.LENGTH_SHORT).show()
               }
             )
           }
@@ -234,4 +214,3 @@ fun MainNewsStudioApp() {
     )
   }
 }
-
