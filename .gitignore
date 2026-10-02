@@ -30,3 +30,12 @@ web_studio/.env
 *.apk
 *.tar.gz
 *.log
+
+# Recursive root_dir symlink / copy - ignore entirely
+app/root_dir/
+
+# App web_studio build artifacts
+app/web_studio/dist/
+app/web_studio/node_modules/
+app/web_studio/.env
+

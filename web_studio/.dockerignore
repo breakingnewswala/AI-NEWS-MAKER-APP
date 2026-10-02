@@ -1,0 +1,10 @@
+node_modules
+.env
+*.log
+.git
+.gitignore
+bun.lock
+web_studio
+build_and_sync.js
+sync_news.js
+metadata.json
