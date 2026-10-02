@@ -92,6 +92,34 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 }) => {
   // Admin check & Channel Profile Lock check
   const isAdmin = isUserAdmin(currentUser);
+  // Channel Profile State (Directly synced to Graphic Studio footer)
+  const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
+    try {
+      const saved = localStorage.getItem('user_channel_profile');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      fullName: currentUser?.name || 'मुख्य संपादक',
+      channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
+      channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
+      channelLogoUrl: '/assets/ai_news_maker_logo.png',
+      channelLogoType: 'png',
+      socialIcons: {
+        youtube: true,
+        facebook: true,
+        instagram: true,
+        twitter: false,
+        telegram: false,
+        whatsapp: true,
+      },
+      username: 'ainewsmaker',
+      mobileNumber: '96698-02408',
+      showMobileNumber: true,
+      websiteUrl: 'ainewsmaker.online',
+    };
+  });
+
+
   const [isLockedForUserState, setIsLockedForUserState] = useState(() => !isAdmin && isChannelProfileLocked(currentUser));
   const isLockedForUser = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoGifUrl));
   const [isLogoReqModalOpen, setIsLogoReqModalOpen] = useState(false);
@@ -363,33 +391,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     setRssSuccessMsg(`${source.channelName} का RSS सिंक हो गया और ताज़ा खबर लाइव फ़ीड में पोस्ट हो गई!`);
     setTimeout(() => setRssSuccessMsg(''), 4000);
   };
-
-  // Channel Profile State (Directly synced to Graphic Studio footer)
-  const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
-    try {
-      const saved = localStorage.getItem('user_channel_profile');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
-      fullName: currentUser?.name || 'मुख्य संपादक',
-      channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
-      channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
-      channelLogoUrl: '/assets/ai_news_maker_logo.png',
-      channelLogoType: 'png',
-      socialIcons: {
-        youtube: true,
-        facebook: true,
-        instagram: true,
-        twitter: false,
-        telegram: false,
-        whatsapp: true,
-      },
-      username: 'ainewsmaker',
-      mobileNumber: '96698-02408',
-      showMobileNumber: true,
-      websiteUrl: 'ainewsmaker.online',
-    };
-  });
 
   const [reporterDistrict, setReporterDistrict] = useState<string>(() => currentUser?.district || 'भोपाल / सेंट्रल डेस्क');
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
@@ -785,266 +786,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   // Get active tier badge details
   const activePlanDetail = PLAN_DETAILS.find((p) => p.id === subscription.tier) || PLAN_DETAILS[0];
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white pb-28">
-      {/* Top Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 sticky top-14 z-20 backdrop-blur-md shadow-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg">
-              <Sliders className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-white flex items-center gap-2">
-                <span>{isAdmin ? 'एडमिन कंट्रोल पैनल' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
-                {testModeEnabled && isAdmin && (
-                  <span className="px-2 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[10px] font-black rounded-full uppercase flex items-center gap-1">
-                    <FlaskConical className="w-3 h-3 text-purple-400" />
-                    टेस्ट मोड
-                  </span>
-                )}
-              </h1>
-              <p className="text-xs text-slate-400">
-                {isAdmin
-                  ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
-                  : 'प्रोफाइल विवरण, 7-Day Free Trial Basic व प्रोमो कोड रिडीम'}
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onLogout}
-            className="px-3.5 py-1.5 bg-red-950/60 hover:bg-red-900/80 border border-red-800 text-red-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            लॉगआउट
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
-        {/* User Identity & Active Plan Header Card */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-slate-950 text-2xl font-black shadow-lg">
-              {isAdmin ? '👑' : '📰'}
-            </div>
-            <div className="text-center sm:text-left">
-              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                <h2 className="text-lg font-black text-white">{currentUser?.name || 'मुख्य संपादक'}</h2>
-                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
-                  {isAdmin ? 'चीफ एडमिन' : 'संवाददाता'}
-                </span>
-                {/* Active Plan Tier Badge */}
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-sm ${
-                  subscription.tier === 'basic'
-                    ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
-                    : subscription.tier === 'advanced'
-                    ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
-                    : subscription.tier === 'professional'
-                    ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
-                    : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
-                }`}>
-                  <Crown className="w-3 h-3" />
-                  <span>{activePlanDetail.nameHi}</span>
-                </span>
-              </div>
-
-              {/* Gmail Tracking ID */}
-              <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1 text-xs text-slate-300 font-medium">
-                <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] text-amber-300 font-mono">
-                  Gmail:
-                </span>
-                <span className="text-amber-200 font-mono">
-                  {currentUser?.email || 'breakingnewswala.com@gmail.com'}
-                </span>
-                <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">
-                  सत्यापित ID
-                </span>
-              </div>
-
-              {/* Primary Mobile Status */}
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-1 text-xs text-slate-400">
-                {subscription.isMobileLocked ? (
-                  <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
-                    <Lock className="w-3 h-3" />
-                    <span>प्राइमरी नंबर: {subscription.primaryMobile}</span>
-                  </span>
-                ) : (
-                  <span className="text-amber-400 text-xs flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {onOpenOnboarding && (
-              <button
-                onClick={onOpenOnboarding}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                title="चैनल लोगो, नाम व ब्रांडिंग विवरण एडिट करें"
-              >
-                <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                <span>चैनल व लोगो विवरण</span>
-              </button>
-            )}
-
-            {/* Primary Mobile Number - Clean & balanced in same profile information area */}
-            <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
-              <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              {subscription.isMobileLocked ? (
-                <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
-                  <span>+91 {subscription.primaryMobile}</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-800 flex items-center gap-0.5">
-                    <Lock className="w-2.5 h-2.5" />
-                    <span>स्थायी लॉक</span>
-                  </span>
-                </div>
-              ) : (
-                <form onSubmit={handleSavePrimaryMobile} className="flex items-center gap-1.5">
-                  <span className="text-amber-300 font-medium">प्राइमरी मोबाइल:</span>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="10 अंक"
-                    value={mobileInput}
-                    onChange={(e) => setMobileInput(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-24 px-1.5 py-0.5 bg-slate-950 border border-slate-700 rounded text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                  />
-                  <button
-                    type="submit"
-                    className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] cursor-pointer"
-                  >
-                    सेव
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Global Plan Success Notice */}
-        {planSuccessMsg && (
-          <div className="p-4 bg-emerald-950/90 border border-emerald-500 text-emerald-200 rounded-2xl flex items-center gap-3 shadow-xl animate-in fade-in">
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
-            <div className="text-sm font-bold">{planSuccessMsg}</div>
-          </div>
-        )}
-
-        {/* 7-Day Free Trial Basic Status Banner - Hidden for Admin */}
-        {!isAdmin && (
-          <div className="bg-gradient-to-r from-amber-500/20 via-red-500/15 to-amber-500/20 border border-amber-500/60 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md shrink-0">
-                🎁
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-black text-white">
-                    7-Day Free Trial Basic {subscription.isTrialActive ? 'सक्रिय है' : 'उपलब्ध है'}
-                  </h3>
-                  <span className="px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-black rounded-full uppercase">
-                    {subscription.isTrialActive ? `${subscription.daysRemaining} दिन शेष` : '7 दिन फ्री'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  सभी 50+ रेडी फ्रेम्स, AI हेडलाइन्स और न्यूज़ ग्राफिक्स का निःशुल्क लाभ उठाएं।
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                activateFreeTrial();
-                setSubscription(getUserSubscription());
-                setPlanSuccessMsg('🎉 आपका 7-Day Free Trial Basic सफलतापूर्वक सक्रिय हो गया है!');
-                setTimeout(() => setPlanSuccessMsg(''), 5000);
-              }}
-              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-              <span>7-Day Free Trial Basic के साथ Activate करें</span>
-            </button>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
-        {/* Modes != Plans != Promo Codes                                            */}
-        {/* ========================================================================= */}
-        {isAdmin && (
-          <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 border-2 border-purple-500/80 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-400 flex items-center justify-center text-purple-300 shadow-inner shrink-0">
-                  <FlaskConical className="w-6 h-6 text-purple-300" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base font-black text-white">
-                      सिस्टम मोड्स कंट्रोल (System Modes: Admin Mode vs Test Mode)
-                    </h3>
-                    <span className="px-2 py-0.5 bg-purple-900 text-purple-200 text-[10px] font-black rounded uppercase border border-purple-500">
-                      {adminSystemMode === 'admin' ? '⚡ ADMIN MODE' : '🧪 TEST MODE ACTIVE'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-purple-200/80 mt-0.5">
-                    मोड्स (Modes) प्लान्स (Plans) से पूर्णतः अलग हैं। टेस्ट मोड में आप किसी भी प्लान (BASIC, ADVANCE, PRO, VIP DESK) का वास्तविक यूज़र अनुभव तुरंत टेस्ट कर सकते हैं।
-                  </p>
-                </div>
-              </div>
-
-              {/* Mode Toggle Switch: Admin Mode | Test Mode */}
-              <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-purple-500/50 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleSwitchAdminMode('admin')}
-                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                    adminSystemMode === 'admin'
-                      ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  ⚡ Admin Mode (फुल एडमिन)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchAdminMode('test')}
-                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                    adminSystemMode === 'test'
-                      ? 'bg-purple-500 text-slate-950 shadow-md ring-2 ring-purple-300'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${adminSystemMode === 'test' ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`} />
-                  <span>🧪 Test Mode (प्लान प्रीव्यू)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* If Test Mode is Active: Plan Selector (BASIC, ADVANCE, PRO, VIP DESK) */}
-            {adminSystemMode === 'test' && (
-              <div className="bg-slate-950/90 border border-purple-400/50 rounded-xl p-4 space-y-3 animate-in slide-in-from-top-2">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs font-black text-purple-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>टेस्ट हेतु प्लान चुनें (Select Plan to Preview):</span>
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    वर्तमान टेस्ट अनुभव:{' '}
-                    <strong className="text-amber-400 font-mono text-xs">{PLAN_KEY_MAP[testPlanTier]}</strong>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['basic', 'advanced', 'professional', 'ultra'] as UserPlanTier[]).map((tier) => {
-                    const isSelected = testPlanTier === tier;
-                    const keyName = PLAN_KEY_MAP[tier];
-                    
-
-  const renderProfileSection = () => (
+    const renderProfileSection = () => (
           <div className="space-y-6 animate-in fade-in duration-200">
             {/* PROMO CODE REDEMPTION BOX (USER ONLY - HIDDEN IN ADMIN MODE) */}
             {!isAdmin && (
@@ -2168,8 +1910,266 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
   );
 
-
 return (
+    <div className="min-h-screen bg-slate-950 text-white pb-28">
+      {/* Top Header */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 sticky top-14 z-20 backdrop-blur-md shadow-md">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg">
+              <Sliders className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-white flex items-center gap-2">
+                <span>{isAdmin ? 'एडमिन कंट्रोल पैनल' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
+                {testModeEnabled && isAdmin && (
+                  <span className="px-2 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[10px] font-black rounded-full uppercase flex items-center gap-1">
+                    <FlaskConical className="w-3 h-3 text-purple-400" />
+                    टेस्ट मोड
+                  </span>
+                )}
+              </h1>
+              <p className="text-xs text-slate-400">
+                {isAdmin
+                  ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
+                  : 'प्रोफाइल विवरण, 7-Day Free Trial Basic व प्रोमो कोड रिडीम'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onLogout}
+            className="px-3.5 py-1.5 bg-red-950/60 hover:bg-red-900/80 border border-red-800 text-red-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            लॉगआउट
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+        {/* User Identity & Active Plan Header Card */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-slate-950 text-2xl font-black shadow-lg">
+              {isAdmin ? '👑' : '📰'}
+            </div>
+            <div className="text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                <h2 className="text-lg font-black text-white">{currentUser?.name || 'मुख्य संपादक'}</h2>
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
+                  {isAdmin ? 'चीफ एडमिन' : 'संवाददाता'}
+                </span>
+                {/* Active Plan Tier Badge */}
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-sm ${
+                  subscription.tier === 'basic'
+                    ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                    : subscription.tier === 'advanced'
+                    ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
+                    : subscription.tier === 'professional'
+                    ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
+                    : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                }`}>
+                  <Crown className="w-3 h-3" />
+                  <span>{activePlanDetail.nameHi}</span>
+                </span>
+              </div>
+
+              {/* Gmail Tracking ID */}
+              <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1 text-xs text-slate-300 font-medium">
+                <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] text-amber-300 font-mono">
+                  Gmail:
+                </span>
+                <span className="text-amber-200 font-mono">
+                  {currentUser?.email || 'breakingnewswala.com@gmail.com'}
+                </span>
+                <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">
+                  सत्यापित ID
+                </span>
+              </div>
+
+              {/* Primary Mobile Status */}
+              <div className="flex items-center justify-center sm:justify-start gap-2 mt-1 text-xs text-slate-400">
+                {subscription.isMobileLocked ? (
+                  <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
+                    <Lock className="w-3 h-3" />
+                    <span>प्राइमरी नंबर: {subscription.primaryMobile}</span>
+                  </span>
+                ) : (
+                  <span className="text-amber-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {onOpenOnboarding && (
+              <button
+                onClick={onOpenOnboarding}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                title="चैनल लोगो, नाम व ब्रांडिंग विवरण एडिट करें"
+              >
+                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                <span>चैनल व लोगो विवरण</span>
+              </button>
+            )}
+
+            {/* Primary Mobile Number - Clean & balanced in same profile information area */}
+            <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
+              <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              {subscription.isMobileLocked ? (
+                <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
+                  <span>+91 {subscription.primaryMobile}</span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-800 flex items-center gap-0.5">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>स्थायी लॉक</span>
+                  </span>
+                </div>
+              ) : (
+                <form onSubmit={handleSavePrimaryMobile} className="flex items-center gap-1.5">
+                  <span className="text-amber-300 font-medium">प्राइमरी मोबाइल:</span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="10 अंक"
+                    value={mobileInput}
+                    onChange={(e) => setMobileInput(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-24 px-1.5 py-0.5 bg-slate-950 border border-slate-700 rounded text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                  />
+                  <button
+                    type="submit"
+                    className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] cursor-pointer"
+                  >
+                    सेव
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Global Plan Success Notice */}
+        {planSuccessMsg && (
+          <div className="p-4 bg-emerald-950/90 border border-emerald-500 text-emerald-200 rounded-2xl flex items-center gap-3 shadow-xl animate-in fade-in">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+            <div className="text-sm font-bold">{planSuccessMsg}</div>
+          </div>
+        )}
+
+        {/* 7-Day Free Trial Basic Status Banner - Hidden for Admin */}
+        {!isAdmin && (
+          <div className="bg-gradient-to-r from-amber-500/20 via-red-500/15 to-amber-500/20 border border-amber-500/60 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md shrink-0">
+                🎁
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-black text-white">
+                    7-Day Free Trial Basic {subscription.isTrialActive ? 'सक्रिय है' : 'उपलब्ध है'}
+                  </h3>
+                  <span className="px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-black rounded-full uppercase">
+                    {subscription.isTrialActive ? `${subscription.daysRemaining} दिन शेष` : '7 दिन फ्री'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  सभी 50+ रेडी फ्रेम्स, AI हेडलाइन्स और न्यूज़ ग्राफिक्स का निःशुल्क लाभ उठाएं।
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                activateFreeTrial();
+                setSubscription(getUserSubscription());
+                setPlanSuccessMsg('🎉 आपका 7-Day Free Trial Basic सफलतापूर्वक सक्रिय हो गया है!');
+                setTimeout(() => setPlanSuccessMsg(''), 5000);
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
+            >
+              <Sparkles className="w-4 h-4 text-slate-950" />
+              <span>7-Day Free Trial Basic के साथ Activate करें</span>
+            </button>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
+        {/* Modes != Plans != Promo Codes                                            */}
+        {/* ========================================================================= */}
+        {isAdmin && (
+          <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 border-2 border-purple-500/80 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-400 flex items-center justify-center text-purple-300 shadow-inner shrink-0">
+                  <FlaskConical className="w-6 h-6 text-purple-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-white">
+                      सिस्टम मोड्स कंट्रोल (System Modes: Admin Mode vs Test Mode)
+                    </h3>
+                    <span className="px-2 py-0.5 bg-purple-900 text-purple-200 text-[10px] font-black rounded uppercase border border-purple-500">
+                      {adminSystemMode === 'admin' ? '⚡ ADMIN MODE' : '🧪 TEST MODE ACTIVE'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-200/80 mt-0.5">
+                    मोड्स (Modes) प्लान्स (Plans) से पूर्णतः अलग हैं। टेस्ट मोड में आप किसी भी प्लान (BASIC, ADVANCE, PRO, VIP DESK) का वास्तविक यूज़र अनुभव तुरंत टेस्ट कर सकते हैं।
+                  </p>
+                </div>
+              </div>
+
+              {/* Mode Toggle Switch: Admin Mode | Test Mode */}
+              <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-purple-500/50 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchAdminMode('admin')}
+                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    adminSystemMode === 'admin'
+                      ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ⚡ Admin Mode (फुल एडमिन)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchAdminMode('test')}
+                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                    adminSystemMode === 'test'
+                      ? 'bg-purple-500 text-slate-950 shadow-md ring-2 ring-purple-300'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${adminSystemMode === 'test' ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`} />
+                  <span>🧪 Test Mode (प्लान प्रीव्यू)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* If Test Mode is Active: Plan Selector (BASIC, ADVANCE, PRO, VIP DESK) */}
+            {adminSystemMode === 'test' && (
+              <div className="bg-slate-950/90 border border-purple-400/50 rounded-xl p-4 space-y-3 animate-in slide-in-from-top-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-black text-purple-300 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>टेस्ट हेतु प्लान चुनें (Select Plan to Preview):</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    वर्तमान टेस्ट अनुभव:{' '}
+                    <strong className="text-amber-400 font-mono text-xs">{PLAN_KEY_MAP[testPlanTier]}</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(['basic', 'advanced', 'professional', 'ultra'] as UserPlanTier[]).map((tier) => {
+                    const isSelected = testPlanTier === tier;
+                    const keyName = PLAN_KEY_MAP[tier];
+                    
+
+                    return (
                       <button
                         key={tier}
                         type="button"

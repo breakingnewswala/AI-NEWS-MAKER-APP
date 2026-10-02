@@ -47,6 +47,7 @@ import {
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { sendTwilioOtp, verifyTwilioOtp } from '../lib/twilioService';
+import { loginWithFirebaseGoogle, checkFirebaseRedirectResult } from '../lib/firebaseAuth';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -104,9 +105,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
-  const [showManualGoogleModal, setShowManualGoogleModal] = useState<boolean>(false);
-  const [manualGoogleEmail, setManualGoogleEmail] = useState<string>('');
-  const [manualGoogleName, setManualGoogleName] = useState<string>('');
+
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [signupName, setSignupName] = useState<string>('');
@@ -582,15 +581,27 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   };
 
-  // Expose handleGoogleUserSuccess globally for native AndroidBridge
+  // Expose handleGoogleUserSuccess globally for native AndroidBridge & check Firebase Redirect
   React.useEffect(() => {
     (window as any).handleGoogleUserSuccess = handleGoogleUserSuccess;
+
+    // Check if user returned from Firebase Google Redirect
+    checkFirebaseRedirectResult()
+      .then((redirectUser) => {
+        if (redirectUser && redirectUser.email) {
+          handleGoogleUserSuccess(redirectUser.email, redirectUser.name, redirectUser.photoUrl);
+        }
+      })
+      .catch((err) => {
+        console.warn('Firebase redirect catch err:', err);
+      });
+
     return () => {
       delete (window as any).handleGoogleUserSuccess;
     };
   }, []);
 
-  // Real Google Sign-In Trigger (Opens Google Account Chooser Popup)
+  // Real Google Sign-In Trigger (Firebase Google Auth with AndroidBridge Fallback)
   const handleGoogleSignIn = () => {
     setIsLoggingIn(true);
     setLoginErrorMsg('');
@@ -605,75 +616,23 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
-    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-      try {
-        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
-          scope: 'email profile openid',
-          callback: async (tokenResponse: any) => {
-            if (tokenResponse?.access_token) {
-              try {
-                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-                });
-                const userData = await res.json();
-                if (userData?.email) {
-                  handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
-                  return;
-                }
-              } catch (fetchErr) {
-                console.warn('Google userinfo fetch error:', fetchErr);
-              }
-            }
-            setIsLoggingIn(false);
-          },
-          error_callback: (error: any) => {
-            console.warn('Google auth popup error or closed:', error);
-            setIsLoggingIn(false);
-            setShowManualGoogleModal(true);
-            setLoginErrorMsg('Google पॉपअप ब्लॉक या एरर! कृपया नीचे अपना Gmail दर्ज करके 1-क्लिक में प्रवेश करें:');
-          },
-        });
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
-        return;
-      } catch (oauthErr) {
-        console.warn('OAuth initTokenClient error:', oauthErr);
-      }
-    }
-
-    // 3. Google Identity Services ID fallback (JWT)
-    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-      try {
-        (window as any).google.accounts.id.initialize({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
-          callback: (response: any) => {
-            if (response.credential) {
-              try {
-                const payloadBase64 = response.credential.split('.')[1];
-                const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
-                const decoded = JSON.parse(decodedJson);
-                if (decoded?.email) {
-                  handleGoogleUserSuccess(decoded.email, decoded.name);
-                  return;
-                }
-              } catch (decErr) {
-                console.warn('JWT decode err:', decErr);
-              }
-            }
-            setIsLoggingIn(false);
-          },
-        });
-        (window as any).google.accounts.id.prompt();
-        return;
-      } catch (gsiErr) {
-        console.warn('GSI prompt error:', gsiErr);
-      }
-    }
-
-    setIsLoggingIn(false);
-    setShowManualGoogleModal(true);
-    setLoginErrorMsg('Google पॉपअप लोड नहीं हो सका। कृपया अपना Gmail दर्ज करके सीधे प्रवेश करें:');
+    // 2. Firebase Google Authentication (Handles Web Auth with pre-authorized OAuth handler)
+    loginWithFirebaseGoogle()
+      .then((user) => {
+        if (user && user.email) {
+          handleGoogleUserSuccess(user.email, user.name, user.photoUrl);
+        } else {
+          setIsLoggingIn(false);
+        }
+      })
+      .catch((error: any) => {
+        console.warn('Google sign-in error:', error);
+        setIsLoggingIn(false);
+        const errMsg = error?.message || '';
+        if (!errMsg.includes('रद्द') && !errMsg.includes('closed-by-user') && !errMsg.includes('cancelled')) {
+          setLoginErrorMsg(errMsg || 'Google लॉगिन विफल रहा। कृपया पुनः प्रयास करें।');
+        }
+      });
   };
 
   // 3. Email & Password Login Handler
@@ -1047,29 +1006,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 <p className="text-[11px] text-slate-400 text-center">
                   💡 केवल एक क्लिक में लॉगिन करें। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।
                 </p>
-
-                <div className="flex flex-col items-center gap-1.5 pt-2 border-t border-slate-800/80">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManualGoogleEmail('breakingnewswala.com@gmail.com');
-                      setShowManualGoogleModal(true);
-                    }}
-                    className="text-xs text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer flex items-center gap-1.5 transition py-1"
-                  >
-                    <span>⚡ पॉपअप समस्या? Gmail से सीधा 1-क्लिक लॉगिन करें (Direct Login)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleGoogleUserSuccess('breakingnewswala.com@gmail.com', 'मुख्य संपादक (अमित कुमार)');
-                    }}
-                    className="px-3.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-black rounded-lg border border-amber-400/40 flex items-center gap-1.5 cursor-pointer transition active:scale-95"
-                  >
-                    <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>👑 मुख्य संपादक / एडमिन डायरेक्ट प्रवेश (Admin Instant Entry)</span>
-                  </button>
-                </div>
               </div>
 
               {/* Divider for Admin Login */}
@@ -1140,138 +1076,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         )}
 
         {/* ============================================================== */}
-        {/* Direct Google / Gmail Login Modal (Popup Blocker / Origin Mismatch Fallback) */}
-      {showManualGoogleModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border-2 border-amber-400/80 rounded-2xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/50 flex items-center justify-center text-amber-400 shrink-0">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-white font-bold text-sm sm:text-base font-['Baloo_2']">
-                    Google / Gmail से सीधा प्रवेश
-                  </h3>
-                  <p className="text-[11px] text-slate-400">Direct Google Login (No Popup Required)</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowManualGoogleModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-xs text-slate-300 leading-relaxed">
-                यदि आपके ब्राउज़र में Google का पॉपअप ब्लॉक हो गया है, तो आप अपना Google / Gmail ईमेल दर्ज करके तुरंत वेबसाइट में प्रवेश कर सकते हैं:
-              </p>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  अपना Google / Gmail ईमेल दर्ज करें *
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                  <input
-                    type="email"
-                    required
-                    value={manualGoogleEmail}
-                    onChange={(e) => setManualGoogleEmail(e.target.value)}
-                    placeholder="उदा. yourname@gmail.com या breakingnewswala.com@gmail.com"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  आपका नाम (वैकल्पिक / Optional)
-                </label>
-                <input
-                  type="text"
-                  value={manualGoogleName}
-                  onChange={(e) => setManualGoogleName(e.target.value)}
-                  placeholder="अपना नाम दर्ज करें"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500"
-                />
-              </div>
-
-              {/* 1-Click Fast Accounts */}
-              <div className="pt-2 space-y-1.5">
-                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-                  त्वरित खाता चयन (1-Click Select):
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManualGoogleEmail('breakingnewswala.com@gmail.com');
-                      setManualGoogleName('मुख्य संपादक (अमित कुमार)');
-                    }}
-                    className="p-2 bg-slate-950 hover:bg-slate-850 border border-amber-400/40 rounded-xl text-left cursor-pointer transition text-[11px]"
-                  >
-                    <div className="font-bold text-amber-300 flex items-center gap-1">
-                      <Crown className="w-3 h-3 text-amber-400" />
-                      <span>एडमिन खाता</span>
-                    </div>
-                    <div className="text-slate-400 font-mono truncate text-[10px]">
-                      breakingnewswala.com@gmail.com
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManualGoogleEmail('reporter@ainewsmaker.online');
-                      setManualGoogleName('विशेष संवाददाता');
-                    }}
-                    className="p-2 bg-slate-950 hover:bg-slate-850 border border-slate-700 rounded-xl text-left cursor-pointer transition text-[11px]"
-                  >
-                    <div className="font-bold text-emerald-300 flex items-center gap-1">
-                      <User className="w-3 h-3 text-emerald-400" />
-                      <span>रिपोर्टर खाता</span>
-                    </div>
-                    <div className="text-slate-400 font-mono truncate text-[10px]">
-                      reporter@ainewsmaker.online
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setShowManualGoogleModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition"
-              >
-                रद्द करें
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const clean = manualGoogleEmail.trim().toLowerCase();
-                  if (!clean || !clean.includes('@')) {
-                    alert('कृपया वैध ईमेल दर्ज करें।');
-                    return;
-                  }
-                  setShowManualGoogleModal(false);
-                  handleGoogleUserSuccess(clean, manualGoogleName.trim() || undefined);
-                }}
-                className="px-5 py-2.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg cursor-pointer transition active:scale-95"
-              >
-                वेबसाइट में प्रवेश करें 🚀
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 2: CHANNEL & REPORTER DETAILS SETUP SCREEN                */}
+        {/* STEP 2: CHANNEL & REPORTER DETAILS SETUP SCREEN                */}
         {/* ============================================================== */}
         {currentStep === 2 && (
           <div className="w-full max-w-2xl text-left animate-in fade-in slide-in-from-bottom-4 duration-300">
