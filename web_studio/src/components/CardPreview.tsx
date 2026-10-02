@@ -1060,62 +1060,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             </div>
 
-            {/* Fixed Footer: If Custom Footer PNG is uploaded, display it directly and HIDE default Fixed Yellow Footer */}
-            {card.customFooterPng ? (
-              <div className="relative z-10 w-full pointer-events-auto">
-                <img
-                  src={card.customFooterPng}
-                  alt="Custom Footer"
-                  className="w-full h-auto object-contain object-bottom drop-shadow-md block"
-                />
-              </div>
-            ) : (
-              <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
-                {/* Left Social Icons */}
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                    ▶
-                  </div>
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                    f
-                  </div>
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                    📷
-                  </div>
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                    💬
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="h-5 w-px bg-[#CA8A04]" />
-
-                {/* Handle */}
-                <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
-                  {card.socialHandle || '@BreakingNewsWala'}
-                </span>
-
-                {/* Divider */}
-                <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
-
-                {/* Website */}
-                <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
-                  <span className="text-sky-600 font-bold">🌐</span>
-                  <span>{card.websiteUrl || 'ainewsmaker.online'}</span>
-                </div>
-
-                {/* Contact Number (if enabled by admin/profile) */}
-                {card.showMobileNumber !== false && card.whatsappNumber && (
-                  <>
-                    <div className="h-5 w-px bg-[#CA8A04]" />
-                    <div className="flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] shrink-0">
-                      <span className="text-green-600 font-bold">📞</span>
-                      <span>{card.whatsappNumber}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+            {/* Fixed Footer: Yellow Bar (#FFE600) with Center-Aligned 3-Element Footer */}
+            <div className="relative z-10 w-full pointer-events-auto">
+              <FooterGraphic
+                socialHandle={card.socialHandle}
+                whatsappNumber={card.whatsappNumber}
+                customFooterPng={card.customFooterPng}
+                websiteUrl={card.websiteUrl}
+                showMobileNumber={card.showMobileNumber}
+                activeSocialIcons={card.activeSocialIcons}
+                footerBgColor={card.footerBgColor || '#FFE600'}
+                footerTextColor={card.footerTextColor || '#000000'}
+                footerIconStyle={card.footerIconStyle || 'color'}
+                showMasterBranding={card.showMasterBranding}
+              />
+            </div>
           </div>
         </div>
       ) : card.frameDesign === 'graphic_002' ? (
@@ -1229,54 +1188,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             </div>
 
-            {/* Fixed Footer: Yellow Bar (#FFE600) with Social Icons, Handle, Website and Fixed Footer Badge */}
-            <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
-              {/* Left Social Icons */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  ▶
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                  f
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  📷
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  💬
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04]" />
-
-              {/* Handle */}
-              <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
-                {card.socialHandle || '@YourChannel'}
-              </span>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
-
-              {/* Website */}
-              <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
-                <span className="text-sky-600 font-bold">🌐</span>
-                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04]" />
-
-              {/* Contact Number (if enabled by admin/profile) */}
-              {card.showMobileNumber !== false && card.whatsappNumber && (
-                <>
-                  <div className="h-5 w-px bg-[#CA8A04]" />
-                  <div className="flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] shrink-0">
-                    <span className="text-green-600 font-bold">📞</span>
-                    <span>{card.whatsappNumber}</span>
-                  </div>
-                </>
-              )}
+            {/* Fixed Footer: Yellow Bar (#FFE600) with Center-Aligned 3-Element Footer */}
+            <div className="relative z-10 w-full pointer-events-auto">
+              <FooterGraphic
+                socialHandle={card.socialHandle}
+                whatsappNumber={card.whatsappNumber}
+                customFooterPng={card.customFooterPng}
+                websiteUrl={card.websiteUrl}
+                showMobileNumber={card.showMobileNumber}
+                activeSocialIcons={card.activeSocialIcons}
+                footerBgColor={card.footerBgColor || '#FFE600'}
+                footerTextColor={card.footerTextColor || '#000000'}
+                footerIconStyle={card.footerIconStyle || 'color'}
+                showMasterBranding={card.showMasterBranding}
+              />
             </div>
           </div>
         </div>
@@ -1370,50 +1295,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             </div>
 
             {/* Sleek Dark Fixed Social Footer Bar */}
-            <div className="w-full bg-slate-950/95 backdrop-blur-md border-t-2 border-amber-500 px-3 sm:px-5 py-2.5 flex items-center justify-between pointer-events-auto">
-              {/* Left Social Icons */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  ▶
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                  f
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  📷
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  💬
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-white/20" />
-
-              {/* Handle */}
-              <span className="font-black text-xs sm:text-sm text-white font-['Poppins'] truncate">
-                {card.socialHandle || '@YourChannel'}
-              </span>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-white/20 hidden sm:block" />
-
-              {/* Website */}
-              <div className="hidden sm:flex items-center gap-1 text-slate-200 font-bold text-xs font-['Poppins'] truncate">
-                <span className="text-sky-400 font-bold">🌐</span>
-                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-              </div>
-
-              {/* Contact Number (if enabled by admin/profile) */}
-              {card.showMobileNumber !== false && card.whatsappNumber && (
-                <>
-                  <div className="h-5 w-px bg-white/20" />
-                  <div className="flex items-center gap-1 text-slate-200 font-bold text-xs font-['Poppins'] shrink-0">
-                    <span className="text-green-400 font-bold">📞</span>
-                    <span>{card.whatsappNumber}</span>
-                  </div>
-                </>
-              )}
+            <div className="relative z-10 w-full pointer-events-auto">
+              <FooterGraphic
+                socialHandle={card.socialHandle}
+                whatsappNumber={card.whatsappNumber}
+                customFooterPng={card.customFooterPng}
+                websiteUrl={card.websiteUrl}
+                showMobileNumber={card.showMobileNumber}
+                activeSocialIcons={card.activeSocialIcons}
+                footerBgColor={card.footerBgColor || 'rgba(10, 15, 29, 0.95)'}
+                footerTextColor={card.footerTextColor || '#FFFFFF'}
+                footerIconStyle={card.footerIconStyle || 'color'}
+                showMasterBranding={card.showMasterBranding}
+              />
             </div>
           </div>
         </div>
@@ -1543,10 +1437,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40" />
-
-            {/* Handle in Yellow */}
+            {/* Handle in Yellow (NO divider between icons and handle) */}
             <span className="font-black text-[11px] sm:text-xs text-[#FFE600] font-['Poppins'] truncate">
               {card.socialHandle || '@YourChannel'}
             </span>

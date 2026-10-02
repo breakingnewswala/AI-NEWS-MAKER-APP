@@ -121,13 +121,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   );
   const [logoScale, setLogoScale] = useState<number>(125); // 50% to 180%, default 125%
   const [socialHandle, setSocialHandle] = useState<string>(
-    profile?.username ? (profile.username.startsWith('@') ? profile.username : `@${profile.username}`) : '@BreakingNewsWala'
+    profile?.username ? (profile.username.startsWith('@') ? profile.username : `@${profile.username}`) : ''
   );
   const [websiteUrl, setWebsiteUrl] = useState<string>(
-    profile?.websiteUrl || 'breakingnewswala.com'
+    profile?.websiteUrl || ''
   );
   const [mobileNumber, setMobileNumber] = useState<string>(
-    profile?.mobileNumber || '+91 98765 43210'
+    profile?.mobileNumber || ''
   );
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     profile?.showMobileNumber ?? true
@@ -412,7 +412,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   // Copy Social Media Caption
   const handleCopyCaption = () => {
-    const caption = `🎬 【वीडियो बुलेटिन】\n\n🚨 ${headline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}\n📍 लोकेशन: ${location}\n🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n#BreakingNews #VideoReport #DigitalNews #LiveNews @BreakingNewsWala`;
+    const userTag = channelTag ? (channelTag.startsWith('@') ? channelTag.replace(/^@/, '#') : (channelTag.startsWith('#') ? channelTag : `#${channelTag}`)) : '#AiNews';
+    const caption = `🎬 【वीडियो बुलेटिन】\n\n🚨 ${headline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}\n📍 लोकेशन: ${location}\n🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n${userTag} #BreakingNews #VideoReport #DigitalNews #LiveNews #AiNewsMaker`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(caption);
       setCopiedCaption(true);
@@ -1784,7 +1785,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   type="text"
                   value={socialHandle}
                   onChange={(e) => setSocialHandle(e.target.value)}
-                  placeholder="उदा. @BreakingNewsWala"
+                  placeholder="उदा. @yourchannel"
                   className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold text-xs focus:border-amber-400 focus:outline-hidden"
                 />
               </div>
@@ -1799,7 +1800,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   type="text"
                   value={websiteUrl}
                   onChange={(e) => setWebsiteUrl(e.target.value)}
-                  placeholder="उदा. breakingnewswala.com"
+                  placeholder="उदा. yourwebsite.com"
                   className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
                 />
               </div>

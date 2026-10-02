@@ -2940,11 +2940,14 @@ Return ONLY the English prompt string.`,
 
 // Endpoint: Generate / Expand Instagram & Facebook Caption with strict 2-3 paragraphs and hashtags
 app.post("/api/generate-caption", async (req, res) => {
-  const { headline, location, existingSummary, category, style = 'detailed_3_para', customInstruction, aiProvider = 'gemini' } = req.body;
+  const { headline, location, existingSummary, category, style = 'detailed_3_para', customInstruction, aiProvider = 'gemini', username } = req.body;
   try {
     if (!headline) {
       return res.status(400).json({ error: "Headline is required" });
     }
+
+    const cleanUser = (username || "").replace(/^[@#]/, "").replace(/[^a-zA-Z0-9_]/g, "").trim();
+    const userTag = cleanUser ? `#${cleanUser}` : "#AiNewsMaker";
 
     let styleDirective = `1. समाचार को कम से कम 2 पैराग्राफ, और यदि घटना/मामले में बिंदु या विवरण अधिक हैं तो 3 पूर्ण पैराग्राफ में विस्तार से लिखें।`;
     if (style === 'detailed_3_para') {
@@ -2958,7 +2961,7 @@ app.post("/api/generate-caption", async (req, res) => {
       styleDirective = `1. समाचार को 2 बहुत ही आकर्षक, संक्षिप्त व वायरल पैराग्राफ में लिखें।`;
     }
 
-    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल "ब्रेकिंग न्यूज़ वाला" के वरिष्ठ संपादक हैं।
+    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ संपादक हैं।
 कृपया निम्नलिखित समाचार के लिए इंस्टाग्राम और फेसबुक पोस्ट का विस्तृत, प्रामाणिक और प्रभावशाली कैप्शन तैयार करें:
 
 हेडलाइन: "${headline}"
@@ -2973,9 +2976,9 @@ ${styleDirective}
 3. खबर में कोई फालतू हेडिंग, टाइटल, फोन नंबर, सोशल मीडिया लिंक्स या "पूरी खबर पढ़ें" जैसे निर्देश न जोड़ें।
 4. ठीक एक खाली लाइन छोड़कर अंत में 6 से 8 प्रासंगिक हैशटैग लगाएं।
 5. हैशटैग क्रम (MUST):
-   - सबसे पहला हैशटैग अनिवार्य रूप से: #breakingnewswala
+   - सबसे पहला हैशटैग अनिवार्य रूप से: ${userTag}
    - बीच में घटना/स्थान से संबंधित प्रासंगिक हैशटैग (उदा: #BreakingNews #HindiNews #LatestNews #${(location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
-   - सबसे अंतिम हैशटैग अनिवार्य रूप से: #BNWTV
+   - सबसे अंतिम हैशटैग अनिवार्य रूप से: #AiNewsMaker
 
 केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।`;
 
@@ -2989,7 +2992,7 @@ ${styleDirective}
           messages: [
             {
               role: "system",
-              content: "आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल 'ब्रेकिंग न्यूज़ वाला' के वरिष्ठ संपादक हैं। केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।",
+              content: "आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ संपादक हैं। केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।",
             },
             {
               role: "user",
@@ -3006,7 +3009,7 @@ ${styleDirective}
         }
         console.log("OpenAI caption busy, using fallback template");
         const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
-        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#breakingnewswala #BreakingNews #HindiNews #${locTag}News #LatestUpdate #BNWTV`;
+        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें।\n\n${userTag} #BreakingNews #HindiNews #${locTag}News #LatestUpdate #AiNewsMaker`;
       }
     } else {
       const ai = getGeminiClient();
@@ -3023,7 +3026,7 @@ ${styleDirective}
         console.log("Caption generation AI busy, using fallback template:", capErr?.message?.slice(0, 80));
         // Construct high-quality fallback caption
         const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
-        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#breakingnewswala #BreakingNews #HindiNews #${locTag}News #LatestUpdate #BNWTV`;
+        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें।\n\n${userTag} #BreakingNews #HindiNews #${locTag}News #LatestUpdate #AiNewsMaker`;
       }
     }
 

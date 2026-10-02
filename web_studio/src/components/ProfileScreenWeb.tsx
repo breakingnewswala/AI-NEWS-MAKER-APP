@@ -673,7 +673,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           customLogoUrl: channelProfile.channelLogoUrl,
           customHeaderPng: effectiveHeaderPng,
           customFooterPng: effectiveFooterPng,
-          socialHandle: channelProfile.username ? `@${channelProfile.username}` : '@BreakingNewsWala',
+          socialHandle: channelProfile.username ? (channelProfile.username.startsWith('@') ? channelProfile.username : `@${channelProfile.username}`) : '',
           whatsappNumber: channelProfile.mobileNumber,
           isConfigured: true,
         },

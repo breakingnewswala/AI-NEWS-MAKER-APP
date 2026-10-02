@@ -96,13 +96,13 @@ function getSavedChannelProfile(): ChannelProfile | null {
         const parsed = JSON.parse(nativeJson);
         if (parsed && (parsed.channelLogoUrl || parsed.channelNameHi)) {
           return {
-            channelNameHi: parsed.channelNameHi || 'एआई न्यूज़ मेकर',
-            channelNameEn: parsed.channelNameEn || 'AI News Maker',
+            channelNameHi: parsed.channelNameHi || '',
+            channelNameEn: parsed.channelNameEn || '',
             channelLogoUrl: parsed.channelLogoUrl || '',
             channelLogoType: parsed.channelLogoType || 'png',
-            username: parsed.username || '@BreakingNewsWala',
+            username: parsed.username || '',
             mobileNumber: parsed.mobileNumber || '',
-            websiteUrl: parsed.websiteUrl || 'ainewsmaker.online',
+            websiteUrl: parsed.websiteUrl || '',
             showMobileNumber: true,
             socialIcons: {
               youtube: parsed.socialYoutube !== false,
@@ -127,7 +127,7 @@ function getSavedChannelProfile(): ChannelProfile | null {
           channelLogoType: u.channelLogoType || 'png',
           username: u.username || '',
           mobileNumber: u.mobileNumber || u.mobile || '',
-          websiteUrl: u.websiteUrl || 'ainewsmaker.online',
+          websiteUrl: u.websiteUrl || '',
           showMobileNumber: true,
           socialIcons: { youtube: true, facebook: true, instagram: true, whatsapp: true },
         };
@@ -1231,7 +1231,7 @@ export default function App() {
           </div>
         )}
         <AuthWelcomeScreen
-          initialStep={1}
+          initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
           onLoginSuccess={(user) => {
             const isAdmin = isUserAdmin(user);
@@ -1245,28 +1245,29 @@ export default function App() {
               showToast('👑 एडमिन कंट्रोल पैनल में आपका स्वागत है!');
               return;
             }
-            setCurrentTab('home');
-            window.location.hash = 'home';
-            setIsOnboardingCompleted(true);
-            localStorage.setItem('is_onboarding_completed', 'true');
             try {
               const cleanEmail = user.email?.toLowerCase().trim() || '';
               const userSpecificStr = cleanEmail ? localStorage.getItem(`user_profile_${cleanEmail}`) : null;
               const profileStr = userSpecificStr || localStorage.getItem('user_channel_profile');
-              if (profileStr) {
+              const isOnboardingDone = localStorage.getItem('is_onboarding_completed') === 'true';
+              if (isOnboardingDone && profileStr) {
                 const parsed = JSON.parse(profileStr);
-                if (parsed?.channelNameHi || parsed?.fullName) {
+                if (parsed?.channelNameHi && parsed?.username) {
                   localStorage.setItem('user_channel_profile', JSON.stringify(parsed));
-                  showToast(`स्वागत है, ${user.name}!`);
+                  setIsOnboardingCompleted(true);
+                  setCurrentTab('home');
+                  window.location.hash = 'home';
+                  showToast(`स्वागत है, ${user.name || parsed.fullName || 'रिपोर्टर'}!`);
                   return;
                 }
               }
             } catch {
               // proceed
             }
-            showToast('लॉगिन सफल!');
+            // For new users without completed profile, keep onboarding pending
+            setIsOnboardingCompleted(false);
           }}
-          onCompleteDetails={(profile, updatedUser, isNewUser) => {
+          onCompleteDetails={(profile, updatedUser) => {
             handleSaveProfile(profile);
             const userToSet = updatedUser || currentUser;
             if (updatedUser) {
@@ -1281,20 +1282,12 @@ export default function App() {
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
               showToast('👑 मुख्य एडमिन कंट्रोल पैनल में आपका स्वागत है!');
-            } else if (isNewUser) {
-              // New User: Mandatory Channel & Profile Setup Modal MUST be completed!
-              localStorage.removeItem('is_onboarding_completed');
-              setIsOnboardingCompleted(false);
-              setIsOnboardingOpen(true);
-              setCurrentTab('home');
-              window.location.hash = 'home';
-              showToast('🎨 कृपया अपना चैनल नाम, लोगो व प्राइमरी मोबाइल नंबर सेट करें');
             } else {
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
               setCurrentTab('home');
               window.location.hash = 'home';
-              showToast('✅ लॉगिन सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
+              showToast('✅ लॉगिन व चैनल सेटअप सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
             }
           }}
         />

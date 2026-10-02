@@ -98,6 +98,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return initialStep === 2 ? 2 : 1;
   });
 
+  useEffect(() => {
+    if (initialStep) {
+      setCurrentStep(initialStep);
+    }
+  }, [initialStep]);
+
 
 
   // Login Form States (Step 1 is unified Login / Sign Up)
@@ -189,16 +195,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gifFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-generate username from English channel name unless customized
-  useEffect(() => {
-    if (!isUsernameCustomized && detailChannelNameEn) {
-      const sanitized = detailChannelNameEn
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .slice(0, 16);
-      if (sanitized) setUsername(sanitized);
-    }
-  }, [detailChannelNameEn, isUsernameCustomized]);
+  // Username is filled manually by the user (max 15 characters), no auto-generation
 
   // Sync user details if currentUser updates
   useEffect(() => {
@@ -431,10 +428,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
+    const isOnboardingCompleted = localStorage.getItem('is_onboarding_completed') === 'true';
     const isExistingUser = Boolean(
       knownProfile ||
       isAdmin ||
-      (parsedProfile && (parsedProfile.channelNameHi || parsedProfile.fullName) && (userSpecificProfileStr !== null || cleanEmail in KNOWN_REGISTERED_USERS))
+      (isOnboardingCompleted && userSpecificProfileStr && parsedProfile && parsedProfile.channelNameHi && parsedProfile.username)
     );
 
     // CRITICAL: PNG & GIF logo = BLANK by default. Never use Google profile photo as channel logo!
@@ -460,7 +458,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           telegram: false,
           whatsapp: true,
         },
-        username: knownProfile?.username || parsedProfile?.username || prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'ainewsmaker',
+        username: knownProfile?.username || parsedProfile?.username || prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15) || 'ainewsmaker',
         mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || '9669802408',
         showMobileNumber: true,
         websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
@@ -506,76 +504,48 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       setIsLoggingIn(false);
     } else {
       // First-Time User: Account created via Google -> Show Step 2 Channel Branding Setup Screen
-      let generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
-      const uniqCheck = checkAccountUniqueness({
-        username: generatedUsername,
-        websiteUrl: 'ainewsmaker.online',
-        currentEmail: cleanEmail,
-      });
-      if (!uniqCheck.valid) {
-        generatedUsername = `${generatedUsername}_${Math.floor(100 + Math.random() * 900)}`;
-      }
-
       const googleUser: ReporterUser = {
-        username: generatedUsername,
-        name: '', // Manual user entry
+        username: '', // Must remain BLANK! Do NOT auto-create from email prefix or name!
+        name: '', // Must remain BLANK as requested ("सारे blank होने चाहिए")
         role: 'reporter',
-        district: 'सेंट्रल डेस्क',
-        email: email,
+        district: '',
+        email: cleanEmail,
         avatarUrl: picture, // Avatar photo only, NEVER channel logo
       };
 
-      setDetailFullName(''); // Manual user entry
-      setDetailChannelLogoUrl(''); // PNG Logo = BLANK by default
-      setDetailChannelLogoGifUrl(''); // GIF Logo = BLANK by default
-      setDetailChannelLogoType('png');
-      setDetailChannelNameHi(''); // User manually fills channel branding
+      // Set all form inputs to completely BLANK!
+      setDetailFullName('');
+      setReportingDistrict('');
+      setPrimaryMobileNumber('');
+      setOtpVerified(false);
+      setOtpSent(false);
+      setOtpInput('');
+      setOtpMessage('');
+      setOtpError('');
+      setDetailChannelNameHi('');
       setDetailChannelNameEn('');
-      setUsername(''); // Manual user entry
-      // New Google User initialized cleanly
+      setDetailChannelLogoUrl('');
+      setDetailChannelLogoGifUrl('');
+      setDetailChannelLogoType('png');
+      setUsername('');
+      setIsUsernameCustomized(false);
+      setGraphicContactNumber('');
+      setShowMobileNumber(true);
+      setWebsiteUrl('');
+      setStep2ErrorMsg('');
 
-      const baseProfile: ChannelProfile = {
-        fullName: name || prefix,
-        channelNameHi: 'एआई न्यूज़ मेकर',
-        channelNameEn: 'AI News Maker',
-        channelLogoUrl: '', // PNG Logo = BLANK by default
-        channelLogoType: 'png',
-        socialIcons: {
-          youtube: true,
-          facebook: true,
-          instagram: true,
-          twitter: false,
-          telegram: false,
-          whatsapp: true,
-        },
-        username: generatedUsername,
-        mobileNumber: '',
-        showMobileNumber: true,
-        websiteUrl: 'ainewsmaker.online',
-        isLocked: true,
-      };
-
+      // Set session but remove onboarding completed flag so user must complete Step 2
       localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
-      localStorage.setItem('user_channel_profile', JSON.stringify(baseProfile));
-      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(baseProfile));
       localStorage.removeItem('is_onboarding_completed');
       localStorage.removeItem('is_channel_profile_locked');
+      localStorage.removeItem('user_channel_profile');
+      localStorage.removeItem(`user_profile_${cleanEmail}`);
 
-      registerOrUpdateUser({
-        email: cleanEmail,
-        username: generatedUsername,
-        name: googleUser.name,
-        mobile: '',
-        channelName: baseProfile.channelNameHi,
-        channelLogoUrl: '',
-        tier: 'basic',
-        role: 'reporter',
-        isLocked: false,
-      });
+      // Pass user session to App
+      onLoginSuccess(googleUser);
 
-      // New Google User: Must complete Channel & Profile Setup Modal
-      setDetailFullName(googleUser.name);
-      onCompleteDetails(baseProfile, googleUser, true /* isNewUser */);
+      // Immediately switch to Step 2 Channel & Reporter Details setup!
+      setCurrentStep(2);
       setIsLoggingIn(false);
     }
   };
@@ -783,9 +753,37 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     e.preventDefault();
     setStep2ErrorMsg('');
 
-    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
     const finalWeb = websiteUrl.trim();
     const finalHi = detailChannelNameHi.trim();
+    const finalEn = detailChannelNameEn.trim();
+    const finalName = detailFullName.trim();
+    const finalDist = reportingDistrict.trim();
+
+    if (!finalName) {
+      setStep2ErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
+      return;
+    }
+    if (!finalDist) {
+      setStep2ErrorMsg('कृपया अपना ज़िला / शहर / डेस्क दर्ज करें');
+      return;
+    }
+    if (!finalHi) {
+      setStep2ErrorMsg('कृपया चैनल का नाम (हिन्दी में) दर्ज करें');
+      return;
+    }
+    if (!finalEn) {
+      setStep2ErrorMsg('कृपया चैनल का नाम (English में) दर्ज करें');
+      return;
+    }
+    if (!finalUser) {
+      setStep2ErrorMsg('कृपया अपना यूज़रनेम दर्ज करें (अधिकतम 15 अक्षर)');
+      return;
+    }
+    if (finalUser.length > 15) {
+      setStep2ErrorMsg('यूज़रनेम 15 अक्षरों से अधिक नहीं हो सकता');
+      return;
+    }
 
     // Check account uniqueness & restricted channels list
     const uniqCheck = checkAccountUniqueness({
@@ -821,26 +819,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
 
     const finalProfile: ChannelProfile = {
-      fullName: detailFullName.trim() || 'मुख्य संपादक',
-      channelNameHi: detailChannelNameHi.trim() || 'AI News Maker App',
-      channelNameEn: detailChannelNameEn.trim() || 'AI News Maker',
+      fullName: finalName,
+      channelNameHi: finalHi,
+      channelNameEn: finalEn,
       channelLogoUrl: detailChannelLogoUrl || '',
       channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
       channelLogoType: detailChannelLogoType,
       socialIcons,
-      username: username.replace(/^@/, '').trim() || 'ainewsmaker',
+      username: finalUser,
       mobileNumber: finalContact,
       showMobileNumber,
-      websiteUrl: websiteUrl.trim() || 'ainewsmaker.online',
+      websiteUrl: finalWeb,
       isLocked: !isAdm,
     };
 
     const updatedUser: ReporterUser = {
-      username: currentUser?.username || username.replace(/^@/, '').trim() || 'chief_editor',
-      name: detailFullName.trim() || currentUser?.name || 'मुख्य संपादक',
+      username: finalUser,
+      name: finalName,
       role: isAdm ? 'admin' : (currentUser?.role || 'reporter'),
-      district: reportingDistrict || currentUser?.district || 'सेंट्रल डेस्क',
-      email: currentUser?.email || 'breakingnewswala.com@gmail.com',
+      district: finalDist,
+      email: currentUser?.email || 'reporter@ainewsmaker.online',
     };
 
     localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
@@ -1596,21 +1594,24 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-slate-300">
-                      6. फाइनल यूज़रनेम (चैनल सोशल हैंडल)
+                      6. फाइनल यूज़रनेम (चैनल सोशल हैंडल) *
                     </label>
-                    <span className="text-[10px] text-slate-400">कार्ड फुटर पर @ हैंडल दिखेगा</span>
+                    <span className={`text-[10px] font-mono font-bold ${username.length >= 15 ? 'text-amber-400' : 'text-slate-400'}`}>
+                      {username.length}/15 अक्षर
+                    </span>
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-amber-400 font-bold text-sm">@</span>
                     <input
                       type="text"
                       required
+                      maxLength={15}
                       value={username}
                       onChange={(e) => {
                         setIsUsernameCustomized(true);
-                        setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+                        setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15));
                       }}
-                      placeholder="यहाँ अपना सोशल मीडिया यूज़रनेम दर्ज करें (उदा. yourchannel)"
+                      placeholder="यहाँ अपना सोशल मीडिया यूज़रनेम दर्ज करें (अधिकतम 15 अक्षर)"
                       className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>

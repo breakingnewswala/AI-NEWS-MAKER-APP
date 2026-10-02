@@ -9,107 +9,72 @@ interface CaptionModalProps {
   card: NewsCardData;
 }
 
-// Helper to extract channel name and build Hindi & English channel hashtags
-function getChannelHashtags(card?: NewsCardData): { hindiTag: string; englishTag: string } {
-  let hiName = '';
-  let enName = '';
-
+// Helper to extract user hashtag: First tag is user's username, Last tag is #AiNewsMaker
+function getUserHashtag(card?: NewsCardData): string {
+  let userHandle = '';
   try {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed.channelNameHi) hiName = parsed.channelNameHi;
-      if (parsed.channelNameEn) enName = parsed.channelNameEn;
+      if (parsed.username) userHandle = parsed.username;
     }
   } catch {}
 
-  if (!hiName && typeof localStorage !== 'undefined') {
-    hiName = localStorage.getItem('app_channel_name') || '';
-  }
-  if (!enName && typeof localStorage !== 'undefined') {
-    enName = localStorage.getItem('app_channel_name_en') || '';
+  if (!userHandle && card?.socialHandle) {
+    userHandle = card.socialHandle;
   }
 
-  // Fallbacks
-  if (!hiName && card?.brandName && card.brandName.trim() !== 'योर लोगो') {
-    hiName = card.brandName.trim();
-  }
-  if (!hiName) hiName = 'AI News Maker';
-  if (!enName) enName = 'AI News Maker';
-
-  // Sanitize Hindi hashtag: keep Devanagari and alphanumeric
-  const cleanHi = hiName.replace(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/g, '').replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
-  // Sanitize English hashtag: PascalCase alphanumeric
-  const cleanEn = enName
-    .split(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join('')
-    .replace(/[^a-zA-Z0-9]/g, '');
-
-  return {
-    hindiTag: cleanHi ? `#${cleanHi}` : '#ब्रेकिंगन्यूजवाला',
-    englishTag: cleanEn ? `#${cleanEn}` : '#BreakingNewsWala',
-  };
+  const cleanUser = (userHandle || '').replace(/^[@#]/, '').trim().replace(/[^a-zA-Z0-9_]/g, '');
+  return cleanUser ? `#${cleanUser}` : '#AiNewsMaker';
 }
 
-// Ensure hashtags ALWAYS include both Hindi & English channel hashtags (#ब्रेकिंगन्यूजवाला and #BreakingNewsWala) and end with #BNWTV
+// Ensure hashtags ALWAYS have user's username as the first hashtag and end with #AiNewsMaker
 function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
-  const { hindiTag, englishTag } = getChannelHashtags(card);
+  const userTag = getUserHashtag(card);
 
   const loc = (location || 'MP')
     .split(/[\/,]/)[0]
     .trim()
     .replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
-  const locationTag = loc ? `#${loc}News` : '#MPNews';
+  const locationTag = loc ? `#${loc}News` : '#NewsUpdate';
 
   let tagList: string[] = [];
 
   if (existingTagsString && existingTagsString.trim()) {
     const extracted = existingTagsString.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [];
-    tagList = extracted;
+    tagList = extracted.filter((t) => {
+      const lower = t.toLowerCase();
+      return lower !== '#breakingnewswala' && lower !== '#bnwtv' && lower !== '#ainewsmaker';
+    });
   }
 
   // If no or few existing tags, seed standard tags
-  if (tagList.length < 3) {
+  if (tagList.length < 2) {
     tagList = [
-      hindiTag,
-      englishTag,
       '#BreakingNews',
-      locationTag,
       '#HindiNews',
+      locationTag,
       '#LatestNews',
-      '#NewsUpdate',
-      '#BNWTV',
     ];
-  } else {
-    // Ensure both Hindi and English channel hashtags are present at the beginning
-    if (!tagList.some((t) => t.toLowerCase() === hindiTag.toLowerCase())) {
-      tagList.unshift(hindiTag);
-    }
-    if (!tagList.some((t) => t.toLowerCase() === englishTag.toLowerCase())) {
-      const idx = tagList.findIndex((t) => t.toLowerCase() === hindiTag.toLowerCase());
-      tagList.splice(idx + 1, 0, englishTag);
-    }
   }
 
   // Deduplicate case-insensitively while preserving order
   const seen = new Set<string>();
-  const uniqueTags: string[] = [];
+  const middleTags: string[] = [];
   for (const t of tagList) {
     const lower = t.toLowerCase();
-    if (!seen.has(lower)) {
+    if (lower !== userTag.toLowerCase() && lower !== '#ainewsmaker' && !seen.has(lower)) {
       seen.add(lower);
-      uniqueTags.push(t);
+      middleTags.push(t);
     }
   }
 
-  // Ensure channel hashtags are at index 0 and 1
-  const filtered = uniqueTags.filter(
-    (t) => t.toLowerCase() !== hindiTag.toLowerCase() && t.toLowerCase() !== englishTag.toLowerCase() && t.toLowerCase() !== '#bnwtv'
-  );
+  // First tag is username, last tag is #AiNewsMaker
+  if (userTag.toLowerCase() === '#ainewsmaker') {
+    return ['#AiNewsMaker', ...middleTags].join(' ');
+  }
 
-  return [hindiTag, englishTag, ...filtered, '#BNWTV'].join(' ');
+  return [userTag, ...middleTags, '#AiNewsMaker'].join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({
@@ -187,6 +152,16 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
     setIsExpanding(true);
     const styleToUse = overrideStyle || selectedStyle;
     try {
+      let userHandle = '';
+      try {
+        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.username) userHandle = parsed.username;
+        }
+      } catch {}
+      if (!userHandle && card?.socialHandle) userHandle = card.socialHandle;
+
       const response = await fetch('/api/generate-caption', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -198,12 +173,13 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
           style: styleToUse,
           customInstruction: customInstruction.trim() || undefined,
           aiProvider: aiProvider,
+          username: (userHandle || '').replace(/^[@#]/, '').trim(),
         }),
       });
 
       const data = await response.json();
       if (response.ok && data.caption) {
-        // Enforce the channel hashtags (Hindi & English) ... #BNWTV order on the output
+        // Enforce the user hashtag ... #AiNewsMaker order on the output
         let text = data.caption.trim();
         const tagMatch = text.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
         if (tagMatch) {
@@ -248,7 +224,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
                 इंस्टाग्राम व फेसबुक पोस्ट कैप्शन
               </h3>
               <p className="text-[11px] text-neutral-400">
-                2-3 पैराग्राफ में पूरी खबर • पहला टैग <span className="text-yellow-400 font-mono font-bold">#breakingnewswala</span> • अंतिम टैग <span className="text-yellow-400 font-mono font-bold">#BNWTV</span>
+                2-3 पैराग्राफ में पूरी खबर
               </p>
             </div>
           </div>

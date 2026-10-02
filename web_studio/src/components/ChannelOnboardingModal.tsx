@@ -41,10 +41,10 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState<string>(initialProfile?.fullName || '');
   const [channelNameHi, setChannelNameHi] = useState<string>(
-    initialProfile?.channelNameHi || 'एआई न्यूज़ मेकर'
+    initialProfile?.channelNameHi || ''
   );
   const [channelNameEn, setChannelNameEn] = useState<string>(
-    initialProfile?.channelNameEn || 'AI News Maker'
+    initialProfile?.channelNameEn || ''
   );
   const [channelLogoUrl, setChannelLogoUrl] = useState<string>(
     initialProfile?.channelLogoUrl || ''
@@ -76,7 +76,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
     whatsapp: initialProfile?.socialIcons?.whatsapp ?? true,
   });
 
-  // Username: Auto initialized from English channel name
+  // Username: Entered by user (strictly max 15 chars)
   const [username, setUsername] = useState<string>(initialProfile?.username || '');
   const [isUsernameCustomized, setIsUsernameCustomized] = useState<boolean>(false);
 
@@ -88,7 +88,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
 
   // Website address (strictly clean domain without https:// or www)
   const [websiteUrl, setWebsiteUrl] = useState<string>(
-    initialProfile?.websiteUrl || 'ainewsmaker.online'
+    initialProfile?.websiteUrl || ''
   );
 
   // Logo Cropper Modal State
@@ -163,18 +163,6 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
   };
 
 
-  // Auto-sync username from English Channel name unless customized
-  useEffect(() => {
-    if (!isUsernameCustomized && channelNameEn) {
-      const generated = channelNameEn
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .trim();
-      if (generated) {
-        setUsername(generated);
-      }
-    }
-  }, [channelNameEn, isUsernameCustomized]);
 
   if (!isOpen) return null;
 
@@ -247,15 +235,27 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
       e.preventDefault();
     }
 
-    const finalFullName = (fullName || userName || 'मुख्य संपादक').trim();
-    const finalHi = (channelNameHi || 'एआई न्यूज़ मेकर').trim();
-    const finalEn = (channelNameEn || 'AI News Maker').trim();
-    const finalUser = (username || finalEn).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'ainewsmaker';
+    const finalFullName = (fullName || userName || '').trim();
+    const finalHi = (channelNameHi || '').trim();
+    const finalEn = (channelNameEn || '').trim();
+    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
 
     setErrorMsg('');
 
     if (!finalFullName) {
       setErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
+      return;
+    }
+    if (!finalHi) {
+      setErrorMsg('कृपया चैनल का हिंदी नाम दर्ज करें');
+      return;
+    }
+    if (!finalUser) {
+      setErrorMsg('कृपया 15 अक्षरों तक का एक यूज़रनेम दर्ज करें');
+      return;
+    }
+    if (finalUser.length > 15) {
+      setErrorMsg('यूज़रनेम अधिकतम 15 अक्षरों का होना चाहिए');
       return;
     }
     if (!mobileNumber.trim() || mobileNumber.replace(/[^0-9]/g, '').length !== 10) {
@@ -639,25 +639,31 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
               </div>
             </div>
 
-            {/* 5. Final Username (Auto from English name) */}
+            {/* 5. Final Username */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-neutral-300 font-['Noto_Sans_Devanagari'] flex items-center gap-1">
                   <AtSign className="w-3.5 h-3.5 text-amber-400" />
-                  <span>5. फाइनल यूज़रनेम (चैनल का इंग्लिश नाम)</span>
+                  <span>5. फाइनल यूज़रनेम (अधिकतम 15 अक्षर)</span>
                 </label>
-                <span className="text-[10px] text-neutral-400">कार्ड फुटर पर @ हैंडल दिखेगा</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${username.length > 15 ? 'bg-red-950 text-red-400 border border-red-500' : 'text-neutral-400'}`}>
+                    {username.length}/15 अक्षर
+                  </span>
+                  <span className="text-[10px] text-neutral-400 hidden sm:inline">कार्ड फुटर पर @ हैंडल दिखेगा</span>
+                </div>
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-amber-400 font-bold text-sm">@</span>
                 <input
                   type="text"
+                  maxLength={15}
                   value={username}
                   onChange={(e) => {
                     setIsUsernameCustomized(true);
-                    setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+                    setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15));
                   }}
-                  placeholder="ainewsmaker"
+                  placeholder="उदा. yourname"
                   className="w-full pl-8 pr-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
                 />
               </div>
@@ -763,13 +769,13 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                   <Globe className="w-3.5 h-3.5 text-blue-400" />
                   <span>7. वेबसाइट एड्रेस (बिना https:// या www. के)</span>
                 </label>
-                <span className="text-[10.5px] text-neutral-400">उदा. ainewsmaker.online</span>
+                <span className="text-[10.5px] text-neutral-400">उदा. yourwebsite.com</span>
               </div>
               <input
                 type="text"
                 value={websiteUrl}
                 onChange={(e) => handleWebsiteChange(e.target.value)}
-                placeholder="ainewsmaker.online"
+                placeholder="yourwebsite.com"
                 className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
               />
               <p className="text-[10px] text-neutral-400 mt-1">

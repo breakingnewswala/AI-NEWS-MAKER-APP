@@ -1717,139 +1717,21 @@ async function drawGraphic001Canvas(
     }
   } else {
     // 6. FIXED FOOTER STRIP AT BOTTOM (Y = 1240 to 1350, Height = 110)
-    const footerH = 110;
-    const footerY = height - footerH;
-    ctx.save();
-    ctx.fillStyle = '#FFE600'; // Solid Bright Yellow
-    ctx.fillRect(0, footerY, width, footerH);
-
-    ctx.strokeStyle = '#EAB308';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, footerY);
-    ctx.lineTo(width, footerY);
-    ctx.stroke();
-
-    // Social Media Icons (YouTube, Facebook, Instagram, WhatsApp)
-    const iconY = footerY + footerH / 2;
-    // YouTube
-    ctx.fillStyle = '#FF0000';
-    ctx.beginPath();
-    ctx.arc(60, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.moveTo(56, iconY - 8);
-    ctx.lineTo(68, iconY);
-    ctx.lineTo(56, iconY + 8);
-    ctx.closePath();
-    ctx.fill();
-
-    // Facebook
-    ctx.fillStyle = '#1877F2';
-    ctx.beginPath();
-    ctx.arc(114, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 24px "Poppins", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('f', 114, iconY);
-
-    // Instagram
-    const igGrad = ctx.createLinearGradient(147, iconY - 21, 189, iconY + 21);
-    igGrad.addColorStop(0, '#833AB4');
-    igGrad.addColorStop(0.5, '#FD1D1D');
-    igGrad.addColorStop(1, '#FCB045');
-    ctx.fillStyle = igGrad;
-    ctx.beginPath();
-    ctx.arc(168, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(158, iconY - 10, 20, 20, 5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(168, iconY, 5, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // WhatsApp
-    ctx.fillStyle = '#25D366';
-    ctx.beginPath();
-    ctx.arc(222, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(222, iconY - 1, 9, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#25D366';
-    ctx.beginPath();
-    ctx.arc(222, iconY - 1, 6.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Divider 1
-    ctx.strokeStyle = '#CA8A04';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(260, footerY + 22);
-    ctx.lineTo(260, footerY + footerH - 22);
-    ctx.stroke();
-
-    // Social Handle: @BreakingNewsWala
-    const handleText = card.socialHandle || '@BreakingNewsWala';
-    ctx.fillStyle = '#000000';
-    ctx.font = '800 24px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(handleText, 280, iconY);
-    const handleWidth = ctx.measureText(handleText).width;
-
-    // Divider 2
-    const div2X = Math.max(540, 280 + handleWidth + 24);
-    ctx.beginPath();
-    ctx.moveTo(div2X, footerY + 22);
-    ctx.lineTo(div2X, footerY + footerH - 22);
-    ctx.stroke();
-
-    // Website with Globe icon
-    const siteX = div2X + 24;
-    ctx.strokeStyle = '#0284C7';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.arc(siteX + 14, iconY, 13, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(siteX + 14, iconY, 6, 13, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(siteX + 1, iconY);
-    ctx.lineTo(siteX + 27, iconY);
-    ctx.stroke();
-
-    const siteText = card.websiteUrl || 'ainewsmaker.online';
-    ctx.fillStyle = '#000000';
-    ctx.font = '800 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(siteText, siteX + 36, iconY);
-
-    // Contact Number (if enabled by admin/profile)
-    if (card.showMobileNumber !== false && card.whatsappNumber) {
-      const div3X = width - 260;
-      ctx.beginPath();
-      ctx.moveTo(div3X, footerY + 22);
-      ctx.lineTo(div3X, footerY + footerH - 22);
-      ctx.stroke();
-
-      const phoneText = card.whatsappNumber;
-      ctx.fillStyle = '#000000';
-      ctx.font = '800 22px "Poppins", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`📞 ${phoneText}`, div3X + 16, iconY);
-    }
-    ctx.restore();
+    await drawThemeFooterBar(
+      ctx,
+      width,
+      height,
+      110,
+      card.socialHandle,
+      card.whatsappNumber,
+      undefined,
+      card.websiteUrl,
+      card.activeSocialIcons as any,
+      card.showMobileNumber,
+      card.footerBgColor || '#FFE600',
+      card.footerTextColor || '#000000',
+      card.footerIconStyle || 'color'
+    );
   }
 
   // 7. DESCRIPTION CTA (Y = 1172)
@@ -2196,133 +2078,21 @@ async function drawGraphic002Canvas(
   ctx.restore();
 
   // 5. FIXED FOOTER (110px at bottom: Y = 1240 to 1350)
-  const footerH = 110;
-  const footerY = height - footerH;
-  ctx.save();
-  ctx.fillStyle = '#FFE600';
-  ctx.fillRect(orangeBorderW, footerY, width - orangeBorderW * 2, footerH - orangeBorderW);
-
-  // Top border line of footer
-  ctx.strokeStyle = '#EAB308';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(orangeBorderW, footerY);
-  ctx.lineTo(width - orangeBorderW, footerY);
-  ctx.stroke();
-
-  // Social Icons
-  const iconY = footerY + footerH / 2 - 4;
-  const iconRadius = 18;
-  let curIconX = orangeBorderW + 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = '#CA8A04';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 26);
-  ctx.lineTo(curIconX, footerY + footerH - 30);
-  ctx.stroke();
-
-  // Handle
-  curIconX += 16;
-  ctx.fillStyle = '#000000';
-  ctx.font = '900 25px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = '#CA8A04';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 26);
-  ctx.lineTo(curIconX, footerY + footerH - 30);
-  ctx.stroke();
-
-  // Website
-  curIconX += 16;
-  ctx.fillStyle = '#0284C7';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#000000';
-  ctx.font = '700 24px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Contact Number (if enabled by admin/profile)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const badgeX = width - orangeBorderW - 220;
-    ctx.fillStyle = '#000000';
-    ctx.font = '700 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`📞 ${card.whatsappNumber}`, badgeX, iconY);
-  }
-  ctx.restore();
+  await drawThemeFooterBar(
+    ctx,
+    width,
+    height,
+    110,
+    card.socialHandle,
+    card.whatsappNumber,
+    card.customFooterPng,
+    card.websiteUrl,
+    card.activeSocialIcons as any,
+    card.showMobileNumber,
+    card.footerBgColor || '#FFE600',
+    card.footerTextColor || '#000000',
+    card.footerIconStyle || 'color'
+  );
 
   // 6. DESCRIPTION CTA (Y = 1172)
   // Horizontal Red Line across with centered pill: [📄 पूरी खबर कमेंट बॉक्स में]
@@ -2687,135 +2457,21 @@ async function drawGraphic003Canvas(
   ctx.restore();
 
   // 5. FIXED FOOTER (100px at bottom: Y = 1250 to 1350)
-  const footerH = 100;
-  const footerY = height - footerH;
-
-  ctx.save();
-  // Semi-transparent deep dark background with backdrop feel
-  ctx.fillStyle = 'rgba(10, 15, 29, 0.95)';
-  ctx.fillRect(0, footerY, width, footerH);
-
-  // Top Accent Gold/Amber Line
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, footerY);
-  ctx.lineTo(width, footerY);
-  ctx.stroke();
-
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2;
-  const iconRadius = 18;
-  let curIconX = 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 24);
-  ctx.stroke();
-
-  // Handle
-  curIconX += 16;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 24px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 24);
-  ctx.stroke();
-
-  // Website
-  curIconX += 16;
-  ctx.fillStyle = '#38BDF8';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#E2E8F0';
-  ctx.font = '700 23px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Contact Number (if enabled by admin/profile)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const badgeX = width - 240;
-    ctx.fillStyle = '#F59E0B';
-    ctx.font = '700 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`📞 ${card.whatsappNumber}`, badgeX, iconY);
-  }
-  ctx.restore();
+  await drawThemeFooterBar(
+    ctx,
+    width,
+    height,
+    100,
+    card.socialHandle,
+    card.whatsappNumber,
+    card.customFooterPng,
+    card.websiteUrl,
+    card.activeSocialIcons as any,
+    card.showMobileNumber,
+    card.footerBgColor || 'rgba(10, 15, 29, 0.95)',
+    card.footerTextColor || '#FFFFFF',
+    card.footerIconStyle || 'color'
+  );
 
   // 6. LARGE BOLD HEADLINE DIRECT OVERLAY ON PHOTO (Y = 820 to 1220)
   // Directly on dark gradient overlay, Max 3 Lines, Crisp White with Golden-Yellow Highlight
@@ -3414,16 +3070,7 @@ async function drawGraphic004Canvas(
   ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 26);
-  ctx.stroke();
-
-  // Handle (in Yellow #FFE600)
+  // Handle (in Yellow #FFE600 - NO divider between icons and handle)
   curIconX += 16;
   ctx.fillStyle = '#FFE600';
   ctx.font = '900 25px "Poppins", sans-serif';
@@ -6346,8 +5993,8 @@ async function drawThemeFooterBar(
   width: number,
   height: number,
   barH: number,
-  socialHandle: string = '/BreakingNewsWala',
-  whatsappNumber: string = '+91 96698 02408',
+  socialHandle?: string,
+  whatsappNumber?: string,
   customFooterPng?: string,
   websiteUrl?: string,
   activeSocialIcons?: ('youtube' | 'facebook' | 'instagram' | 'twitter' | 'telegram' | 'whatsapp')[],
@@ -6395,11 +6042,11 @@ async function drawThemeFooterBar(
   const textColor = (footerTextColor && footerTextColor.trim())
     ? footerTextColor
     : (isLightBg ? '#0F172A' : '#FFFFFF');
-  const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.25)' : 'rgba(255, 255, 255, 0.35)';
+  const separatorColor = isLightBg ? 'rgba(0, 0, 0, 0.28)' : 'rgba(255, 255, 255, 0.4)';
 
   // Top subtle border line
-  ctx.strokeStyle = isLightBg ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.18)';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = isLightBg ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
   ctx.moveTo(0, barY);
   ctx.lineTo(width, barY);
@@ -6407,88 +6054,116 @@ async function drawThemeFooterBar(
 
   const iconY = barY + barH / 2;
 
-  // Clean social handle
-  let displayHandle = (socialHandle || '').trim();
-  if (!displayHandle || displayHandle === '/BreakingNewsWala') {
-    displayHandle = '@BreakingNewsWala';
-  } else if (!displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
-    displayHandle = `@${displayHandle}`;
+  // 1. Sanitize social handle (strictly max 15 chars, no fallback to @BreakingNewsWala)
+  let rawHandle = (socialHandle || '').trim();
+  if (rawHandle.startsWith('@') || rawHandle.startsWith('/')) {
+    rawHandle = rawHandle.replace(/^[@/]+/, '').trim();
   }
+  if (rawHandle.length > 15) {
+    rawHandle = rawHandle.slice(0, 15);
+  }
+  const displayHandle = rawHandle ? `@${rawHandle}` : '';
 
-  // Clean website
+  // 2. Sanitize website
   const cleanWebsite = (websiteUrl || '')
     .trim()
     .replace(/^https?:\/\//i, '')
     .replace(/^www\./i, '')
     .replace(/\/$/, '');
 
-  // Clean phone number
+  // 3. Sanitize phone number (only if showMobileNumber !== false)
   const shouldShowPhone = showMobileNumber !== false && Boolean(whatsappNumber && whatsappNumber.trim());
-  const cleanPhone = shouldShowPhone
-    ? whatsappNumber.replace(/^\/+/, '').trim()
-    : '';
+  let cleanPhone = shouldShowPhone ? whatsappNumber.replace(/^\/+/, '').trim() : '';
+  if (cleanPhone && !cleanPhone.startsWith('+') && cleanPhone.length === 10) {
+    cleanPhone = `+91 ${cleanPhone}`;
+  }
 
   // Active social icons to display
   const icons: ('youtube' | 'facebook' | 'instagram' | 'twitter' | 'telegram' | 'whatsapp')[] =
     activeSocialIcons && activeSocialIcons.length > 0
       ? activeSocialIcons
-      : ['youtube', 'facebook', 'instagram', 'twitter'];
+      : ['youtube', 'facebook', 'instagram', 'whatsapp'];
 
-  // Base typography & sizing strictly in Arial
-  let baseFontSize = 19;
-  let iconRadius = 11;
-  const iconDiameter = iconRadius * 2;
-  const iconSpacing = 5;
-  const iconsGroupWidth = icons.length * iconDiameter + Math.max(0, icons.length - 1) * iconSpacing;
+  // Base typography & sizing - prominent and bold
+  let baseFontSize = 24;
+  let iconRadius = 14;
+  let iconSpacing = 6;
+  const dividerMargin = 16;
+  const dividerWidth = 2;
+  const dividerHeight = Math.round(barH * 0.38);
 
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  const handleWidth = ctx.measureText(displayHandle).width;
+  const rawHandleWidth = displayHandle ? ctx.measureText(displayHandle).width : 0;
+  const rawIconsWidth = icons.length > 0
+    ? icons.length * (iconRadius * 2) + Math.max(0, icons.length - 1) * iconSpacing
+    : 0;
 
-  const separatorWidth = ctx.measureText('|').width;
+  // Element 1 Width (Social icons + Handle, strictly NO partition between them)
+  const rawElem1Width = rawIconsWidth + (displayHandle ? (rawIconsWidth > 0 ? 8 : 0) + rawHandleWidth : 0);
 
-  const webIconWidth = cleanWebsite ? 18 : 0;
-  const webTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
-  const webGroupWidth = cleanWebsite ? webIconWidth + 4 + webTextWidth : 0;
+  // Element 2 Width (Globe Icon + Website)
+  const rawGlobeWidth = cleanWebsite ? 24 : 0;
+  const rawWebTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
+  const rawElem2Width = cleanWebsite ? (rawGlobeWidth + 8 + rawWebTextWidth) : 0;
 
-  const phoneIconWidth = cleanPhone ? 18 : 0;
-  const phoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
-  const phoneGroupWidth = cleanPhone ? phoneIconWidth + 4 + phoneTextWidth : 0;
+  // Element 3 Width (Phone Icon + Contact Number)
+  const rawPhoneWidth = cleanPhone ? 24 : 0;
+  const rawPhoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
+  const rawElem3Width = cleanPhone ? (rawPhoneWidth + 8 + rawPhoneTextWidth) : 0;
 
-  // Total raw width
-  let totalWidth = iconsGroupWidth + 8 + handleWidth;
-  if (webGroupWidth > 0) totalWidth += 14 + separatorWidth + 14 + webGroupWidth;
-  if (phoneGroupWidth > 0) totalWidth += 14 + separatorWidth + 14 + phoneGroupWidth;
+  const hasDiv1 = rawElem1Width > 0 && rawElem2Width > 0;
+  const hasDiv2 = rawElem3Width > 0 && (rawElem1Width > 0 || rawElem2Width > 0);
+  const divSpace = dividerMargin * 2 + dividerWidth;
+
+  const rawTotalWidth =
+    rawElem1Width +
+    (hasDiv1 ? divSpace : 0) +
+    rawElem2Width +
+    (hasDiv2 ? divSpace : 0) +
+    rawElem3Width;
 
   // Adaptive scale to strictly fit in one line
   const maxAllowedWidth = width - 48;
-  const scale = totalWidth > maxAllowedWidth ? maxAllowedWidth / totalWidth : 1;
+  const scale = rawTotalWidth > maxAllowedWidth ? Math.max(0.65, maxAllowedWidth / rawTotalWidth) : 1;
 
   if (scale < 1) {
-    baseFontSize = Math.max(13, Math.round(baseFontSize * scale));
-    iconRadius = Math.max(8, Math.round(iconRadius * scale));
+    baseFontSize = Math.max(14, Math.round(baseFontSize * scale));
+    iconRadius = Math.max(9, Math.round(iconRadius * scale));
+    iconSpacing = Math.max(3, Math.round(iconSpacing * scale));
   }
 
-  // Recalculate with scaled values
+  // Recalculate with final scaled values
   const finalIconDiam = iconRadius * 2;
-  const finalIconSpacing = Math.round(iconSpacing * scale);
-  const finalIconsGroupWidth = icons.length * finalIconDiam + Math.max(0, icons.length - 1) * finalIconSpacing;
+  const finalIconsWidth = icons.length > 0
+    ? icons.length * finalIconDiam + Math.max(0, icons.length - 1) * iconSpacing
+    : 0;
 
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  const finalHandleWidth = ctx.measureText(displayHandle).width;
-  const finalSepWidth = ctx.measureText('|').width;
+  const finalHandleWidth = displayHandle ? ctx.measureText(displayHandle).width : 0;
+  const finalElem1Width = finalIconsWidth + (displayHandle ? (finalIconsWidth > 0 ? Math.round(8 * scale) : 0) + finalHandleWidth : 0);
+
+  const finalGlobeWidth = cleanWebsite ? Math.round(24 * scale) : 0;
   const finalWebTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
+  const finalElem2Width = cleanWebsite ? (finalGlobeWidth + Math.round(8 * scale) + finalWebTextWidth) : 0;
+
+  const finalPhoneWidth = cleanPhone ? Math.round(24 * scale) : 0;
   const finalPhoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
-  const finalWebIconWidth = cleanWebsite ? Math.round(18 * scale) : 0;
-  const finalPhoneIconWidth = cleanPhone ? Math.round(18 * scale) : 0;
-  const finalSepMargin = Math.round(12 * scale);
+  const finalElem3Width = cleanPhone ? (finalPhoneWidth + Math.round(8 * scale) + finalPhoneTextWidth) : 0;
 
-  let finalTotalWidth = finalIconsGroupWidth + Math.round(8 * scale) + finalHandleWidth;
-  if (cleanWebsite) finalTotalWidth += finalSepMargin * 2 + finalSepWidth + finalWebIconWidth + 4 + finalWebTextWidth;
-  if (cleanPhone) finalTotalWidth += finalSepMargin * 2 + finalSepWidth + finalPhoneIconWidth + 4 + finalPhoneTextWidth;
+  const finalDivMargin = Math.round(dividerMargin * scale);
+  const finalDivSpace = finalDivMargin * 2 + dividerWidth;
 
-  let curX = Math.max(20, Math.round((width - finalTotalWidth) / 2));
+  const finalTotalWidth =
+    finalElem1Width +
+    (hasDiv1 ? finalDivSpace : 0) +
+    finalElem2Width +
+    (hasDiv2 ? finalDivSpace : 0) +
+    finalElem3Width;
 
-  // Helper to draw circular icon with appropriate style
+  // STRICT CENTER ALIGNMENT: perfectly centered whether 2 or 3 elements are shown
+  let curX = Math.round((width - finalTotalWidth) / 2);
+
+  // Helper to draw circular social icon
   const drawCircleIcon = (x: number, type: string) => {
     ctx.save();
     ctx.beginPath();
@@ -6499,11 +6174,15 @@ async function drawThemeFooterBar(
     } else if (footerIconStyle === 'neutral') {
       ctx.fillStyle = isLightBg ? '#E2E8F0' : 'rgba(255, 255, 255, 0.2)';
     } else {
-      // 'color'
       if (type === 'youtube') ctx.fillStyle = '#FF0000';
       else if (type === 'facebook') ctx.fillStyle = '#1877F2';
-      else if (type === 'instagram') ctx.fillStyle = '#E1306C';
-      else if (type === 'twitter') ctx.fillStyle = '#000000';
+      else if (type === 'instagram') {
+        const igGrad = ctx.createLinearGradient(x, iconY - iconRadius, x + finalIconDiam, iconY + iconRadius);
+        igGrad.addColorStop(0, '#833AB4');
+        igGrad.addColorStop(0.5, '#FD1D1D');
+        igGrad.addColorStop(1, '#FCB045');
+        ctx.fillStyle = igGrad;
+      } else if (type === 'twitter') ctx.fillStyle = '#000000';
       else if (type === 'telegram') ctx.fillStyle = '#24A1DE';
       else if (type === 'whatsapp') ctx.fillStyle = '#25D366';
       else ctx.fillStyle = '#000000';
@@ -6521,16 +6200,18 @@ async function drawThemeFooterBar(
     const sz = iconRadius;
     if (type === 'instagram') {
       ctx.strokeStyle = glyphColor;
-      ctx.lineWidth = Math.max(1, sz * 0.14);
-      ctx.strokeRect(x + iconRadius - sz * 0.5, iconY - sz * 0.5, sz, sz);
+      ctx.lineWidth = Math.max(1.2, sz * 0.16);
+      ctx.beginPath();
+      ctx.roundRect(x + iconRadius - sz * 0.48, iconY - sz * 0.48, sz * 0.96, sz * 0.96, Math.max(2, sz * 0.25));
+      ctx.stroke();
       ctx.beginPath();
       ctx.arc(x + iconRadius, iconY, sz * 0.25, 0, Math.PI * 2);
       ctx.stroke();
     } else if (type === 'facebook') {
-      ctx.font = `bold ${Math.round(sz * 1.3)}px Arial, sans-serif`;
+      ctx.font = `bold ${Math.round(sz * 1.35)}px Arial, sans-serif`;
       ctx.fillText('f', x + iconRadius, iconY + 1);
     } else if (type === 'twitter') {
-      ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
+      ctx.font = `bold ${Math.round(sz * 1.1)}px Arial, sans-serif`;
       ctx.fillText('𝕏', x + iconRadius, iconY);
     } else if (type === 'youtube') {
       ctx.beginPath();
@@ -6540,7 +6221,7 @@ async function drawThemeFooterBar(
       ctx.closePath();
       ctx.fill();
     } else if (type === 'telegram') {
-      ctx.font = `bold ${Math.round(sz * 1.1)}px Arial, sans-serif`;
+      ctx.font = `bold ${Math.round(sz * 1.15)}px Arial, sans-serif`;
       ctx.fillText('✈', x + iconRadius, iconY - 1);
     } else if (type === 'whatsapp') {
       ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
@@ -6549,57 +6230,118 @@ async function drawThemeFooterBar(
     ctx.restore();
   };
 
-  // 1. Draw Social Icons
-  for (const iconType of icons) {
-    drawCircleIcon(curX, iconType);
-    curX += finalIconDiam + finalIconSpacing;
+  // Helper to draw crisp vector globe icon
+  const drawGlobeIcon = (x: number, y: number, size: number) => {
+    ctx.save();
+    const r = size / 2;
+    const cx = x + r;
+    const cy = y;
+    ctx.strokeStyle = isLightBg ? '#0284C7' : '#38BDF8';
+    ctx.lineWidth = Math.max(1.6, size * 0.08);
+
+    // Outer circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner vertical ellipse
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.max(1, r * 0.45), r - 1, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Horizontal equator line
+    ctx.beginPath();
+    ctx.moveTo(cx - r + 1, cy);
+    ctx.lineTo(cx + r - 1, cy);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // Helper to draw phone icon
+  const drawPhonePillIcon = (x: number, y: number, size: number) => {
+    ctx.save();
+    const r = size / 2;
+    const cx = x + r;
+    const cy = y;
+
+    // Green circular badge
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Phone glyph
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${Math.round(size * 0.65)}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('📞', cx, cy);
+    ctx.restore();
+  };
+
+  // Helper to draw crisp vertical partition line
+  const drawPartitionLine = (x: number) => {
+    ctx.save();
+    ctx.strokeStyle = separatorColor;
+    ctx.lineWidth = dividerWidth;
+    ctx.beginPath();
+    ctx.moveTo(x, iconY - dividerHeight / 2);
+    ctx.lineTo(x, iconY + dividerHeight / 2);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // ================= 1. DRAW ELEMENT 1 (Social Icons + Handle, NO Partition inside) =================
+  if (finalElem1Width > 0) {
+    for (const iconType of icons) {
+      drawCircleIcon(curX, iconType);
+      curX += finalIconDiam + iconSpacing;
+    }
+    if (displayHandle) {
+      if (icons.length > 0) curX += Math.round(8 * scale);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = textColor;
+      ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
+      ctx.fillText(displayHandle, curX, iconY);
+      curX += finalHandleWidth;
+    }
   }
-  curX += Math.round(6 * scale);
 
-  // 2. Draw Social Handle
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = textColor;
-  ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  ctx.fillText(displayHandle, curX, iconY);
-  curX += finalHandleWidth;
+  // ================= 2. DRAW PARTITION LINE 1 (Between Social and Website) =================
+  if (hasDiv1) {
+    curX += finalDivMargin;
+    drawPartitionLine(curX);
+    curX += finalDivMargin + dividerWidth;
+  }
 
-  // 3. Draw Separator and Website
-  if (cleanWebsite) {
-    curX += finalSepMargin;
-    ctx.fillStyle = separatorColor;
-    ctx.font = `500 ${baseFontSize}px Arial, sans-serif`;
-    ctx.fillText('|', curX, iconY);
-    curX += finalSepWidth + finalSepMargin;
+  // ================= 3. DRAW ELEMENT 2 (Website Icon + Address) =================
+  if (finalElem2Width > 0) {
+    drawGlobeIcon(curX, iconY, finalGlobeWidth);
+    curX += finalGlobeWidth + Math.round(8 * scale);
 
-    // Globe icon
-    ctx.fillStyle = isLightBg ? '#2563EB' : '#60A5FA';
-    ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
-    ctx.fillText('🌐', curX, iconY);
-    curX += finalWebIconWidth + 4;
-
-    // Website text
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = textColor;
     ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
     ctx.fillText(cleanWebsite, curX, iconY);
     curX += finalWebTextWidth;
   }
 
-  // 4. Draw Separator and Phone Number
-  if (cleanPhone) {
-    curX += finalSepMargin;
-    ctx.fillStyle = separatorColor;
-    ctx.font = `500 ${baseFontSize}px Arial, sans-serif`;
-    ctx.fillText('|', curX, iconY);
-    curX += finalSepWidth + finalSepMargin;
+  // ================= 4. DRAW PARTITION LINE 2 (Between Website and Contact, only if Contact shown) =================
+  if (hasDiv2) {
+    curX += finalDivMargin;
+    drawPartitionLine(curX);
+    curX += finalDivMargin + dividerWidth;
+  }
 
-    // Phone / WhatsApp icon
-    ctx.fillStyle = isLightBg ? '#059669' : '#34D399';
-    ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
-    ctx.fillText('📞', curX, iconY);
-    curX += finalPhoneIconWidth + 4;
+  // ================= 5. DRAW ELEMENT 3 (Contact Icon + Number) =================
+  if (finalElem3Width > 0) {
+    drawPhonePillIcon(curX, iconY, finalPhoneWidth);
+    curX += finalPhoneWidth + Math.round(8 * scale);
 
-    // Phone text
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = textColor;
     ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
     ctx.fillText(cleanPhone, curX, iconY);

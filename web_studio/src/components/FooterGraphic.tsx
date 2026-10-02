@@ -75,9 +75,16 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
 
   const cleanWebsite = websiteUrl ? websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '').trim() : '';
   const cleanPhone = showMobileNumber && whatsappNumber ? whatsappNumber.replace(/^\/+/, '').trim() : '';
-  const displayHandle = socialHandle
-    ? (socialHandle.startsWith('@') ? socialHandle : `@${socialHandle}`)
-    : '';
+
+  // Enforce max 15 characters on username / handle
+  let rawHandle = (socialHandle || '').trim();
+  if (rawHandle.startsWith('@') || rawHandle.startsWith('/')) {
+    rawHandle = rawHandle.replace(/^[@/]+/, '').trim();
+  }
+  if (rawHandle.length > 15) {
+    rawHandle = rawHandle.slice(0, 15);
+  }
+  const displayHandle = rawHandle ? `@${rawHandle}` : '';
 
   // Calculate active items count to adjust responsive font & icon sizes
   const hasSocial = Boolean(displayHandle || (activeSocialIcons && activeSocialIcons.length > 0));
@@ -85,12 +92,15 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const hasContact = Boolean(cleanPhone);
   const totalItemsCount = (hasSocial ? 1 : 0) + (hasWeb ? 1 : 0) + (hasContact ? 1 : 0);
 
-  // Responsive styling variables
+  // Responsive styling variables: larger font, adaptively smaller if username is long
   const isCompact = totalItemsCount >= 3;
-  const textSizeClass = isCompact ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs';
-  const iconContainerSizeClass = isCompact ? 'w-3.5 h-3.5 sm:w-4 sm:h-4' : 'w-4 h-4 sm:w-4.5 sm:h-4.5';
-  const svgSizeClass = isCompact ? 'w-2 h-2 sm:w-2.5 sm:h-2.5' : 'w-2.5 h-2.5 sm:w-3 sm:h-3';
-  const gapClass = isCompact ? 'gap-1 sm:gap-2' : 'gap-1.5 sm:gap-2.5';
+  const isHandleLong = displayHandle.length > 12;
+  const textSizeClass = isCompact
+    ? (isHandleLong ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-[13px]')
+    : (isHandleLong ? 'text-xs sm:text-[13px]' : 'text-[13px] sm:text-sm');
+  const iconContainerSizeClass = isCompact ? 'w-4 h-4 sm:w-4.5 sm:h-4.5' : 'w-4.5 h-4.5 sm:w-5 sm:h-5';
+  const svgSizeClass = isCompact ? 'w-2.5 h-2.5 sm:w-3 sm:h-3' : 'w-3 h-3 sm:w-3.5 sm:h-3.5';
+  const gapClass = isCompact ? 'gap-1.5 sm:gap-2.5' : 'gap-2 sm:gap-3';
   const pyClass = isCompact ? 'py-1.5 sm:py-2' : 'py-2 sm:py-2.5';
 
   // Helper to determine icon style classes
@@ -133,7 +143,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
       className={`w-full border-t border-neutral-200/50 px-2 sm:px-4 ${pyClass} flex items-center justify-center shadow-inner select-none overflow-hidden text-center whitespace-nowrap`}
     >
       {/* Master Branding Active Blocks: Strict order ONE (Social) -> TWO (Website) -> THREE (Contact) */}
-      <div className="flex items-center justify-center gap-2 sm:gap-3.5 max-w-full overflow-hidden flex-wrap text-center">
+      <div className="flex items-center justify-center gap-2 sm:gap-3.5 max-w-full overflow-hidden flex-nowrap text-center">
         {/* Section 1: Social Media Icons + Handle */}
         {hasSocial && (
           <div className="flex items-center justify-center gap-1 sm:gap-1.5 shrink-0">

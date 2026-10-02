@@ -666,13 +666,21 @@ export function checkAccountUniqueness(params: {
     .replace(/\/.*$/, '');
   const cleanEmail = (params.currentEmail || '').toLowerCase().trim();
 
-  // 1. Restricted Channels List check
+  // 1. Username length limit check (strictly maximum 15 characters)
+  if (cleanUser && cleanUser.length > 15) {
+    return {
+      valid: false,
+      error: '❌ यूज़रनेम अधिकतम 15 अक्षरों का हो सकता है।',
+    };
+  }
+
+  // 2. Restricted Channels List check
   const restricted = isChannelRestricted(params.channelName, cleanWeb, cleanUser);
   if (restricted.isBlocked) {
     return { valid: false, error: restricted.reason };
   }
 
-  // 2. Existing Users Database check
+  // 3. Existing Users Database check
   const users = getPlanUsers();
   for (const u of users) {
     if (cleanEmail && u.email.toLowerCase() === cleanEmail) continue;
