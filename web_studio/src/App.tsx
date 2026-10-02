@@ -323,7 +323,7 @@ export default function App() {
       // ignore
     }
     // In native Android WebView environment, allow default reporter user
-    if (typeof window !== 'undefined' && isAndroidEnvironment && (window as any).AndroidBridge) {
+    if (typeof window !== 'undefined' && isAndroidEnvironment) {
       return DEFAULT_REPORTER_USER;
     }
     // Web visitors MUST authenticate via Google / Admin Login first
@@ -334,7 +334,7 @@ export default function App() {
   // Web visitors strictly require an active session and completed onboarding flag
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      if (typeof window !== 'undefined' && isAndroidEnvironment && (window as any).AndroidBridge) {
+      if (typeof window !== 'undefined' && isAndroidEnvironment) {
         return true;
       }
       const savedSession = localStorage.getItem('reporter_auth_session');
@@ -1761,17 +1761,15 @@ export default function App() {
         />
       )}
 
-      {/* Persistent Bottom Bar - hidden when running inside native Android WebView */}
-      {!isAndroidEnvironment && (
-        <AppBottomBarWeb
-          currentTab={currentTab}
-          onSelectTab={(tab) => {
-            setCurrentTab(tab);
-            window.location.hash = tab;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
-      )}
+      {/* Persistent Bottom Bar - Always visible across Web & Mobile APK */}
+      <AppBottomBarWeb
+        currentTab={currentTab}
+        onSelectTab={(tab) => {
+          setCurrentTab(tab);
+          window.location.hash = tab;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {/* Channel Profile Setup & Branding Modal - Mandatory for new signups */}
       <ChannelOnboardingModal

@@ -380,6 +380,10 @@ fun BreakingNewsStudioWebView(
         }
     }
 
+    androidx.activity.compose.BackHandler(enabled = webViewInstance?.canGoBack() == true) {
+        webViewInstance?.goBack()
+    }
+
     // Native Android Media Picker launcher triggered when user taps upload in Graphic / Video Studio
     val mediaPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
