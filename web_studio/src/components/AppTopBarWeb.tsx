@@ -113,7 +113,18 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     setIsRefreshing(true);
     setNotificationsList(getNotifications());
     onRefresh();
-    setTimeout(() => setIsRefreshing(false), 800);
+    if ('caches' in window) {
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.update());
+      });
+    }
+    setTimeout(() => {
+      setIsRefreshing(false);
+      window.location.reload();
+    }, 400);
   };
 
   return (

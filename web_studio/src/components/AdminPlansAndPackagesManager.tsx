@@ -86,11 +86,21 @@ import {
 interface AdminPlansAndPackagesManagerProps {
   currentUser?: any;
   onPlanChanged?: () => void;
+  onOpenStudio?: () => void;
+  renderProfileContent?: () => React.ReactNode;
+  categories?: any[];
+  onAddCategory?: (category: any) => void;
+  onDeleteCategory?: (id: string) => void;
 }
 
 export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManagerProps> = ({
   currentUser,
   onPlanChanged,
+  onOpenStudio,
+  renderProfileContent,
+  categories,
+  onAddCategory,
+  onDeleteCategory,
 }) => {
   // Sub-tabs: 'plans', 'promocodes', 'users', 'rss', 'restricted'
   const [subTab, setSubTab] = useState<'profile' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | ''>('plans');

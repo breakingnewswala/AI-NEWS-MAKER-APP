@@ -500,6 +500,12 @@ export interface PlanUserRecord {
   assignedFooterUrl?: string;
   assignedCustomActive?: boolean;
   mobileVerified?: boolean;
+  customHeaderUrl?: string;
+  customFooterUrl?: string;
+  isCustomHeaderActive?: boolean;
+  isCustomFooterActive?: boolean;
+  planAssignedAt?: number;
+  planExpiresAt?: number;
 }
 
 const INITIAL_PLAN_USERS: PlanUserRecord[] = [
@@ -1235,6 +1241,10 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
             channelLogoUrl: cu.channelLogoUrl || existing?.channelLogoUrl,
             mobile: cu.mobileNumber || existing?.mobile,
             tier: (cu.tier as UserPlanTier) || existing?.tier || 'basic',
+            planName: existing?.planName || PLAN_KEY_MAP[(cu.tier as UserPlanTier) || 'basic'] || 'BASIC',
+            activatedAt: cu.updatedAt || existing?.activatedAt || Date.now(),
+            expiresAt: existing?.expiresAt || Date.now() + 30 * 86400000,
+            activatedVia: existing?.activatedVia || 'cloud_sync',
             planAssignedAt: cu.updatedAt || existing?.planAssignedAt || Date.now(),
             planExpiresAt: existing?.planExpiresAt,
             role: cu.role || existing?.role || (key.includes('admin') ? 'admin' : 'user'),

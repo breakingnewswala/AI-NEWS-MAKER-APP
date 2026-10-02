@@ -532,8 +532,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       setDetailChannelNameHi(''); // User manually fills channel branding
       setDetailChannelNameEn('');
       setUsername(''); // Manual user entry
-      setTempRegisteredUser(googleUser);
-      setIsGoogleLoggedIn(true);
+      // New Google User initialized cleanly
 
       const baseProfile: ChannelProfile = {
         fullName: name || prefix,
