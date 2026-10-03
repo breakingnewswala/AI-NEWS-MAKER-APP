@@ -78,6 +78,11 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
   try {
     localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(sources));
     window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: sources }));
+    fetch('/api/admin/rss-sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sources }),
+    }).catch(() => {});
   } catch {}
 }
 
@@ -99,6 +104,8 @@ export function addAdminRssSource(
   };
   const list = [newSource, ...getAdminRssSources()];
   saveAdminRssSources(list);
+  // Trigger background live sync immediately
+  syncAllSourcesLive().catch(() => {});
   return newSource;
 }
 
@@ -175,9 +182,13 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
     const res = await fetch('/api/admin/rss-sync', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
-      return { success: true, totalNewItems: data.count || data.totalNewItems || 5 };
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      }
+      return { success: true, totalNewItems: data.count || data.totalNewItems || 0 };
     }
   } catch {}
-  return { success: true, totalNewItems: 6 };
+  return { success: true, totalNewItems: 0 };
 }
 

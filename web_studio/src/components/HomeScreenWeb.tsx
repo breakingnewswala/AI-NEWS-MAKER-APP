@@ -156,9 +156,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleRssUpdate = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
     };
+    const handleFeedRefresh = () => {
+      if (onRefreshLiveNews) onRefreshLiveNews();
+    };
     window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
-    return () => window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
-  }, []);
+    window.addEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
+    return () => {
+      window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
+      window.removeEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
+    };
+  }, [onRefreshLiveNews]);
 
   // Merge active RSS/Web posts with database news posts seamlessly
   const combinedPosts = useMemo(() => {

@@ -79,6 +79,7 @@ import {
   syncAllSourcesLive,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
+import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -104,8 +105,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onAddCategory,
   onDeleteCategory,
 }) => {
-  // Sub-tabs: 9 accordions in exact order
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | ''>('profile');
+  // Sub-tabs: 10 main accordions in exact order
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('profile');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
 
   // Restricted Channels Management State
@@ -582,130 +583,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Clarification & Architecture Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-purple-950/60 to-slate-900 border-2 border-purple-500/50 rounded-2xl p-4 sm:p-5 shadow-2xl">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-purple-600 flex items-center justify-center text-slate-950 font-black shadow-lg shrink-0">
-              <Package className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-black text-white">
-                  प्लान्स, पैकेज व प्रोमो कोड सिस्टम (Plans & Packages)
-                </h2>
-                <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
-                  Admin Control
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1">
-                4 वास्तविक प्लान्स (BASIC, ADVANCE, PRO, VIP DESK), सिंगल-यूज़ प्रोमो कोड्स एवं पेमेंट एक्टिवेशन का मास्टर कंट्रोल।
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Distinction Pills */}
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-            <span className="px-2.5 py-1 bg-purple-900/60 text-purple-200 border border-purple-500/40 rounded-lg">
-              🎯 Modes ≠ Plans ≠ Promo Codes
-            </span>
-            <span className="px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/30 rounded-lg">
-              🎟️ Single-Use Promo Code
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* ☰ CONTROL PANEL RESPONSIVE MENU BAR (MOBILE & DESKTOP MASTER REFERENCE)   */}
-      {/* ========================================================================= */}
-      <div className="bg-slate-900/95 border-2 border-amber-500/50 rounded-2xl p-3 sm:p-4 shadow-2xl backdrop-blur-md">
-        <div className="flex items-center justify-between gap-3 mb-3 px-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md">
-              ☰
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                <span>कंट्रोल पैनल मेन्यू बार</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  9 सेक्शन्स
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400">किसी भी सेक्शन पर टैप करके तुरंत खोलें</p>
-            </div>
-          </div>
-          <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 shrink-0">
-            {subTab === 'profile' && '1. प्रोफाइल'}
-            {subTab === 'upgrade' && '2. अपग्रेड'}
-            {subTab === 'plans' && '3. प्लान्स'}
-            {subTab === 'templates' && '4. टेम्पलेट्स'}
-            {subTab === 'promocodes' && '5. प्रोमो कोड्स'}
-            {subTab === 'users' && '6. यूजर्स'}
-            {subTab === 'rss' && '7. RSS लिंक्स'}
-            {subTab === 'web' && '8. वेब लिंक्स'}
-            {subTab === 'restricted' && '9. सुरक्षा सूची'}
-            {!subTab && 'सूची बंद है'}
-          </span>
-        </div>
-
-        {/* 9 Touch-Friendly Menu Pills in Exact Final Master Order */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {[
-            { id: 'profile', num: '1', title: 'प्रोफाइल व चैनल विवरण', desc: 'लोगो, नाम, हेडर व सोशल लिंक्स' },
-            { id: 'upgrade', num: '2', title: 'मेंबरशिप प्लान व अपग्रेड', desc: 'वर्तमान प्लान व एक्टिवेशन' },
-            { id: 'plans', num: '3', title: 'प्लान्स मैनेजर', desc: '4 प्लान टियर्स, कीमतें व फीचर्स' },
-            { id: 'templates', num: '4', title: 'टेम्पलेट मैनेजर', desc: 'टेम्पलेट प्लान मैपिंग व एक्टिवेशन' },
-            { id: 'promocodes', num: '5', title: 'प्रोमो कोड्स मैनेजर', desc: 'सिंगल-यूज़ कोड जनरेशन व रिकॉर्ड्स' },
-            { id: 'users', num: '6', title: 'यूजर्स मैनेजर', desc: 'यूज़र लिस्ट, एडिट, रोल व चैनल विवरण' },
-            { id: 'rss', num: '7', title: 'RSS लिंक्स डैशबोर्ड', desc: 'ऑटो लाइव RSS फीड सोर्सेज' },
-            { id: 'web', num: '8', title: 'वेब लिंक्स डैशबोर्ड', desc: 'वेबसाइट लिंक्स व लाइव आर्टिकल्स' },
-            { id: 'restricted', num: '9', title: 'प्रतिबंधित चैनल सुरक्षा सूची', desc: 'अनाधिकृत चैनल्स ब्लैकलिस्ट' },
-          ].map((item) => {
-            const isActive = subTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setSubTab(item.id as any);
-                  setTimeout(() => {
-                    const el = document.getElementById(`section-${item.id}`);
-                    if (el) {
-                      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  }, 100);
-                }}
-                className={`py-2.5 px-3 rounded-xl text-left font-bold transition-all cursor-pointer border flex items-center gap-3 ${
-                  isActive
-                    ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 shadow-lg scale-[1.01]'
-                    : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:text-white'
-                }`}
-              >
-                <span className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
-                  isActive ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
-                }`}>
-                  {item.num}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs sm:text-sm font-black block truncate">{item.title}</span>
-                  <span className={`text-[10px] block truncate ${isActive ? 'text-slate-900 font-semibold' : 'text-slate-400'}`}>
-                    {item.desc}
-                  </span>
-                </div>
-                <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isActive ? 'rotate-180 text-slate-950' : 'text-slate-500'}`} />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 9 ACCORDION IN-PLACE ADMIN CONTROL BOXES (EXPANDS DIRECTLY UNDER BOX)    */}
-      {/* ========================================================================= */}
-      <div className="space-y-3.5">
-
+    <div className="space-y-3.5">
         {/* ========================================================================= */}
         {/* STEP 1: प्रोफाइल व चैनल विवरण (PROFILE & BRANDING)                        */}
         {/* ========================================================================= */}
@@ -724,7 +602,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   1. प्रोफाइल व चैनल विवरण
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  चैनल लोगो, नाम, प्राइमरी नंबर, कस्टम हेडर/फुटर (PRO/VIP) व प्रोमो कोड रिडीम
+                  चैनल लोगो, नाम, प्राइमरी मोबाइल नंबर, व्हाट्सएप व ब्रांडिंग विवरण
                 </p>
               </div>
             </div>
@@ -2426,7 +2304,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    6. RSS लिंक्स प्रबंधन (Live Production RSS Feeds)
+                    7. RSS लिंक्स डैशबोर्ड (Live Production RSS Feeds)
                   </h3>
                   <p className="text-xs text-slate-300">
                     विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।
@@ -2739,7 +2617,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    7. वेब लिंक्स प्रबंधन (Live Web Scraping Sources)
+                    8. वेब लिंक्स डैशबोर्ड (Live Web Scraping Sources)
                   </h3>
                   <p className="text-xs text-slate-300">
                     वेबसाइट एवं आर्टिकल वेब लिंक्स जोड़ें। बैकएंड प्रोडक्शन स्क्रैपर लाइव आर्टिकल टेक्स्ट व फोटो एक्सट्रैक्ट करके डेटाबेस में सुरक्षित करता है।
@@ -3263,8 +3141,41 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
 
-
-      </div>
+        {/* ========================================================================= */}
+        {/* STEP 10: सहायता एवं नीतियाँ (HELP & POLICIES)                               */}
+        {/* ========================================================================= */}
+        <div id="section-policies" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'policies' ? '' : 'policies')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'policies' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>10</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  10. सहायता एवं नीतियाँ
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                3 नीतियां
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'policies' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'policies' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              <HelpAndPoliciesView />
+            </div>
+          )}
+        </div>
     </div>
   );
 };

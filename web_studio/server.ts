@@ -471,6 +471,384 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 
+// =========================================================================
+// PRODUCTION RSS & WEB LINKS BACKEND DATABASE & LIVE SYNC PIPELINE
+// Flow: Admin -> RSS/Web Link -> Production Backend -> news_database.json -> Home Feed -> Users
+// =========================================================================
+const RSS_SOURCES_FILE = path.join(process.cwd(), "rss_sources_database.json");
+
+interface AdminRssSourceRecord {
+  id: string;
+  name: string;
+  url: string;
+  type: "rss" | "web";
+  category: string;
+  isActive: boolean;
+  createdAt: number;
+  lastFetchedAt?: number;
+  itemsFetchedCount?: number;
+}
+
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
+  {
+    id: "src_aajtak_rss",
+    name: "आज तक (Aaj Tak Hindi News)",
+    url: "https://www.aajtak.in/rssfeeds/?id=home",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: Date.now() - 86400000,
+    itemsFetchedCount: 15,
+  },
+  {
+    id: "src_bbchindi_rss",
+    name: "बीबीसी हिंदी (BBC Hindi News)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "अंतरराष्ट्रीय",
+    isActive: true,
+    createdAt: Date.now() - 43200000,
+    itemsFetchedCount: 10,
+  },
+  {
+    id: "src_ndtv_rss",
+    name: "NDTV इंडिया (NDTV India Live)",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "राजनीति",
+    isActive: true,
+    createdAt: Date.now() - 21600000,
+    itemsFetchedCount: 12,
+  },
+  {
+    id: "src_pib_web",
+    name: "प्रेस सूचना ब्यूरो (PIB National Desk)",
+    url: "https://pib.gov.in/PressReleasePage.aspx",
+    type: "web",
+    category: "देश",
+    isActive: true,
+    createdAt: Date.now() - 10000000,
+    itemsFetchedCount: 5,
+  },
+];
+
+function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
+  try {
+    if (fs.existsSync(RSS_SOURCES_FILE)) {
+      const raw = fs.readFileSync(RSS_SOURCES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err: any) {
+    console.error("Error reading rss_sources_database.json:", err.message);
+  }
+  saveRssSourcesDatabase(DEFAULT_PRODUCTION_RSS_SOURCES);
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
+}
+
+function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
+  try {
+    fs.writeFileSync(RSS_SOURCES_FILE, JSON.stringify(sources, null, 2), "utf-8");
+    return true;
+  } catch (err: any) {
+    console.error("Error writing rss_sources_database.json:", err.message);
+    return false;
+  }
+}
+
+function getCategoryFallbackImage(category: string): string {
+  const cat = (category || "").toLowerCase();
+  if (cat.includes("खेल") || cat.includes("sports")) return "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&auto=format&fit=crop";
+  if (cat.includes("राजनीति") || cat.includes("politic")) return "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop";
+  if (cat.includes("व्यापार") || cat.includes("business")) return "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop";
+  if (cat.includes("मनोरंजन") || cat.includes("entertain")) return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop";
+  if (cat.includes("अपराध") || cat.includes("crime")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&auto=format&fit=crop";
+  if (cat.includes("अंतरराष्ट्रीय") || cat.includes("world")) return "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=800&auto=format&fit=crop";
+  return "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop";
+}
+
+function decodeHtmlEntities(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#([0-9]{1,6});/gi, (_match, numStr) => {
+      const num = parseInt(numStr, 10);
+      return String.fromCharCode(num);
+    })
+    .trim();
+}
+
+function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): StoredNewsPost[] {
+  const posts: StoredNewsPost[] = [];
+  const itemRegex = /<item[\s\S]*?<\/item>/gi;
+  const items = xmlText.match(itemRegex) || [];
+
+  for (const itemXml of items.slice(0, 15)) {
+    const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+    const rawTitle = titleMatch ? (titleMatch[1] || titleMatch[2] || "").trim() : "";
+    if (!rawTitle) continue;
+
+    const cleanTitle = decodeHtmlEntities(rawTitle);
+
+    const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) ||
+                      itemXml.match(/<link\s+href=["']([^"']+)["']/i);
+    const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
+
+    const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) ||
+                      itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
+    const rawDesc = descMatch ? (descMatch[1] || descMatch[2] || "").trim() : "";
+    const cleanDesc = decodeHtmlEntities(rawDesc.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+
+    const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) ||
+                         itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
+    const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
+    let timestamp = Date.now();
+    if (pubDateStr) {
+      const parsedTime = Date.parse(pubDateStr);
+      if (!isNaN(parsedTime)) timestamp = parsedTime;
+    }
+
+    let imageUrl = "";
+    const mediaThumbMatch = itemXml.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
+    const mediaContentMatch = itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i);
+    const enclosureMatch = itemXml.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/i) ||
+                           itemXml.match(/<enclosure[^>]*type=["']image\/[^"']+["'][^>]+url=["']([^"']+)["']/i);
+    const imgInsideDescMatch = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i);
+
+    if (mediaThumbMatch && mediaThumbMatch[1]) {
+      imageUrl = mediaThumbMatch[1];
+    } else if (mediaContentMatch && mediaContentMatch[1]) {
+      imageUrl = mediaContentMatch[1];
+    } else if (enclosureMatch && enclosureMatch[1]) {
+      imageUrl = enclosureMatch[1];
+    } else if (imgInsideDescMatch && imgInsideDescMatch[1]) {
+      imageUrl = imgInsideDescMatch[1];
+    }
+
+    if (!imageUrl) {
+      imageUrl = getCategoryFallbackImage(source.category);
+    }
+
+    const catName = source.category || "देश";
+    const catKey =
+      catName === "देश" ? "national" :
+      catName === "राज्य" ? "state" :
+      catName === "राजनीति" ? "politics" :
+      catName === "व्यापार" ? "business" :
+      catName === "खेल" ? "sports" :
+      catName === "मनोरंजन" ? "entertainment" :
+      catName === "अपराध" ? "crime" : "tech";
+
+    const hashStr = Buffer.from(cleanTitle.slice(0, 30) + link).toString("base64url").slice(0, 14);
+    const postId = `rss-${source.id}-${hashStr}`;
+
+    posts.push({
+      id: postId,
+      title: cleanTitle,
+      summary: cleanDesc || cleanTitle,
+      sourceChannel: source.name,
+      sourceUrl: link,
+      category: catKey,
+      categoryName: catName,
+      publishedTime: formatRelativeTime(timestamp),
+      imageUrl,
+      breaking: cleanTitle.includes("ब्रेकिंग") || cleanTitle.includes("बड़ा") || cleanTitle.includes("लाइव") || cleanTitle.includes("तुरंत"),
+      isExclusive: false,
+      timestamp,
+      fullContent: cleanDesc ? `${cleanTitle}\n\n${cleanDesc}\n\nस्रोतः ${source.name} (${link})` : cleanTitle,
+      location: "विशेष डेस्क",
+    });
+  }
+
+  return posts;
+}
+
+async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<StoredNewsPost[]> {
+  try {
+    const resp = await fetch(source.url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return [];
+    const html = await resp.text();
+
+    const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+                         html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
+                         html.match(/<title>([^<]+)<\/title>/i);
+    const title = ogTitleMatch ? ogTitleMatch[1].trim() : "";
+    if (!title) return [];
+
+    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
+                        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+    const summary = ogDescMatch ? ogDescMatch[1].trim() : `${source.name} का ताज़ा समाचार व आधिकारिक बुलेटिन।`;
+
+    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+                         html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+    let imageUrl = ogImageMatch ? ogImageMatch[1].trim() : "";
+    if (!imageUrl) {
+      imageUrl = getCategoryFallbackImage(source.category);
+    }
+
+    const catName = source.category || "देश";
+    const catKey =
+      catName === "देश" ? "national" :
+      catName === "राज्य" ? "state" :
+      catName === "राजनीति" ? "politics" :
+      catName === "व्यापार" ? "business" :
+      catName === "खेल" ? "sports" :
+      catName === "मनोरंजन" ? "entertainment" :
+      catName === "अपराध" ? "crime" : "tech";
+
+    const hashStr = Buffer.from(title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
+    const postId = `web-${source.id}-${hashStr}`;
+
+    return [{
+      id: postId,
+      title,
+      summary,
+      sourceChannel: source.name,
+      sourceUrl: source.url,
+      category: catKey,
+      categoryName: catName,
+      publishedTime: "अभी-अभी",
+      imageUrl,
+      breaking: false,
+      isExclusive: false,
+      timestamp: Date.now(),
+      fullContent: `${title}\n\n${summary}\n\nवेब लिंक स्रोतः ${source.url}`,
+      location: "वेब डेस्क",
+    }];
+  } catch (err: any) {
+    console.error(`Error fetching web link ${source.url}:`, err.message);
+    return [];
+  }
+}
+
+// 1. GET all admin RSS/Web sources
+app.get("/api/admin/rss-sources", (_req, res) => {
+  const sources = loadRssSourcesDatabase();
+  return res.json({ success: true, sources });
+});
+
+// 2. POST save or update admin RSS/Web sources
+app.post("/api/admin/rss-sources", (req, res) => {
+  try {
+    const payload = req.body;
+    let sources = loadRssSourcesDatabase();
+
+    if (Array.isArray(payload)) {
+      sources = payload;
+    } else if (payload && Array.isArray(payload.sources)) {
+      sources = payload.sources;
+    } else if (payload && payload.url) {
+      const newSource: AdminRssSourceRecord = {
+        id: payload.id || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: (payload.name || "RSS News Source").trim(),
+        url: payload.url.trim(),
+        type: payload.type === "web" ? "web" : "rss",
+        category: payload.category || "देश",
+        isActive: payload.isActive !== false,
+        createdAt: payload.createdAt || Date.now(),
+        itemsFetchedCount: 0,
+      };
+      sources = [newSource, ...sources.filter((s) => s.id !== newSource.id)];
+    }
+
+    saveRssSourcesDatabase(sources);
+    return res.json({ success: true, sources });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 3. POST live sync RSS & Web links -> Production Database (news_database.json)
+app.post("/api/admin/rss-sync", async (_req, res) => {
+  try {
+    const sources = loadRssSourcesDatabase();
+    const activeSources = sources.filter((s) => s.isActive);
+    let totalNewItems = 0;
+    const fetchedPosts: StoredNewsPost[] = [];
+
+    await Promise.allSettled(
+      activeSources.map(async (src) => {
+        try {
+          if (src.type === "rss") {
+            const resp = await fetch(src.url, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
+                Accept: "application/rss+xml, application/xml, text/xml, */*",
+              },
+              signal: AbortSignal.timeout(10000),
+            });
+            if (resp.ok) {
+              const xmlText = await resp.text();
+              const items = parseRssItemsFromXml(xmlText, src);
+              if (items.length > 0) {
+                src.lastFetchedAt = Date.now();
+                src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
+                fetchedPosts.push(...items);
+              }
+            }
+          } else {
+            const items = await fetchAndParseWebLink(src);
+            if (items.length > 0) {
+              src.lastFetchedAt = Date.now();
+              src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
+              fetchedPosts.push(...items);
+            }
+          }
+        } catch (srcErr: any) {
+          console.warn(`Failed to sync source ${src.name} (${src.url}):`, srcErr.message);
+        }
+      })
+    );
+
+    if (fetchedPosts.length > 0) {
+      let existingPosts = loadNewsDatabase();
+      const existingIds = new Set(existingPosts.map((p) => p.id));
+      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+
+      const trulyNew: StoredNewsPost[] = [];
+      for (const p of fetchedPosts) {
+        const titleKey = p.title.trim().toLowerCase().slice(0, 40);
+        if (!existingIds.has(p.id) && !existingTitles.has(titleKey)) {
+          existingIds.add(p.id);
+          existingTitles.add(titleKey);
+          trulyNew.push(p);
+        }
+      }
+
+      if (trulyNew.length > 0) {
+        totalNewItems = trulyNew.length;
+        existingPosts = [...trulyNew, ...existingPosts].slice(0, 200);
+        saveNewsDatabase(existingPosts);
+      }
+
+      saveRssSourcesDatabase(sources);
+    }
+
+    return res.json({
+      success: true,
+      count: totalNewItems,
+      totalSourcesSynced: activeSources.length,
+      timestamp: Date.now(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
 // --- Google Play Data Safety: Account & Associated Data Deletion Endpoints ---
 const ACCOUNT_DELETIONS_FILE = path.join(process.cwd(), "account_deletion_requests.json");
 
@@ -2996,8 +3374,23 @@ async function startServer() {
   const distPath = possibleDistPaths.find((p) => fs.existsSync(path.join(p, "index.html"))) || path.join(process.cwd(), "dist");
 
   console.log(`Serving static studio files from: ${distPath}`);
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        } else if (filePath.includes("/assets/")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    })
+  );
   app.get("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.sendFile(path.join(distPath, "index.html"));
   });
 

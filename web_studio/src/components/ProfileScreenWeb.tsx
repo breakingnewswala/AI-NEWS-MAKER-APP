@@ -68,6 +68,7 @@ import {
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminPlansAndPackagesManager } from './AdminPlansAndPackagesManager';
+import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 
 interface ProfileScreenWebProps {
   currentUser: ReporterUser | null;
@@ -156,6 +157,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   }, [currentUser?.email, isAdmin]);
 
   // Tabs: 'profile', 'plans_packages', 'templates', 'dashboard' (Admin only gets multi-tab access)
+  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'policies' | ''>('profile');
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
     if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
@@ -798,9 +800,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   // Get active tier badge details
   const activePlanDetail = PLAN_DETAILS.find((p) => p.id === subscription.tier) || PLAN_DETAILS[0];
 
-    const renderProfileSection = () => (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            {/* PROMO CODE REDEMPTION BOX (USER ONLY - HIDDEN IN ADMIN MODE) */}
+  const renderMembershipUpgradeSection = () => (
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* PROMO CODE REDEMPTION BOX (USER ONLY - HIDDEN IN ADMIN MODE) */}
             {!isAdmin && (
               <div className="bg-gradient-to-r from-amber-500/15 via-slate-900 to-amber-500/15 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1029,9 +1031,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 })}
               </div>
             </div>
+          </div>
+  );
 
-            {/* SECTION: CHANNEL & LOGO BRANDING */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+  const renderProfileOnlyContent = () => (
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* SECTION: CHANNEL & LOGO BRANDING */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-slate-800 rounded-lg text-amber-400">
@@ -2018,17 +2024,6 @@ return (
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            {onOpenOnboarding && (
-              <button
-                onClick={onOpenOnboarding}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                title="चैनल लोगो, नाम व ब्रांडिंग विवरण एडिट करें"
-              >
-                <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                <span>चैनल व लोगो विवरण</span>
-              </button>
-            )}
-
             {/* Primary Mobile Number Badge - Shown when locked via OTP */}
             {subscription.isMobileLocked && (
               <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
@@ -2053,42 +2048,6 @@ return (
           </div>
         )}
 
-        {/* 7-Day Free Trial Basic Status Banner - Hidden for Admin */}
-        {!isAdmin && (
-          <div className="bg-gradient-to-r from-amber-500/20 via-red-500/15 to-amber-500/20 border border-amber-500/60 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center text-2xl font-black shadow-md shrink-0">
-                🎁
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-black text-white">
-                    7-Day Free Trial Basic {subscription.isTrialActive ? 'सक्रिय है' : 'उपलब्ध है'}
-                  </h3>
-                  <span className="px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-black rounded-full uppercase">
-                    {subscription.isTrialActive ? `${subscription.daysRemaining} दिन शेष` : '7 दिन फ्री'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  सभी 50+ रेडी फ्रेम्स, AI हेडलाइन्स और न्यूज़ ग्राफिक्स का निःशुल्क लाभ उठाएं।
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                activateFreeTrial();
-                setSubscription(getUserSubscription());
-                setPlanSuccessMsg('🎉 आपका 7-Day Free Trial Basic सफलतापूर्वक सक्रिय हो गया है!');
-                setTimeout(() => setPlanSuccessMsg(''), 5000);
-              }}
-              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-              <span>7-Day Free Trial Basic के साथ Activate करें</span>
-            </button>
-          </div>
-        )}
-
         {/* ========================================================================= */}
         {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
         {/* Modes != Plans != Promo Codes                                            */}
@@ -2103,14 +2062,14 @@ return (
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-base font-black text-white">
-                      सिस्टम मोड्स कंट्रोल (System Modes: Admin Mode vs Test Mode)
+                      सिस्टम मोड
                     </h3>
                     <span className="px-2 py-0.5 bg-purple-900 text-purple-200 text-[10px] font-black rounded uppercase border border-purple-500">
-                      {adminSystemMode === 'admin' ? '⚡ ADMIN MODE' : '🧪 TEST MODE ACTIVE'}
+                      {adminSystemMode === 'admin' ? '⚡ एडमिन मोड' : '🧪 टेस्ट मोड'}
                     </span>
                   </div>
                   <p className="text-xs text-purple-200/80 mt-0.5">
-                    मोड्स (Modes) प्लान्स (Plans) से पूर्णतः अलग हैं। टेस्ट मोड में आप किसी भी प्लान (BASIC, ADVANCE, PRO, VIP DESK) का वास्तविक यूज़र अनुभव तुरंत टेस्ट कर सकते हैं।
+                    सिस्टम मोड प्लान्स से अलग हैं। टेस्ट मोड में आप किसी भी प्लान का यूज़र अनुभव सीधे टेस्ट कर सकते हैं।
                   </p>
                 </div>
               </div>
@@ -2126,7 +2085,7 @@ return (
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  ⚡ Admin Mode (फुल एडमिन)
+                  ⚡ एडमिन मोड
                 </button>
                 <button
                   type="button"
@@ -2138,7 +2097,7 @@ return (
                   }`}
                 >
                   <span className={`w-2 h-2 rounded-full ${adminSystemMode === 'test' ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`} />
-                  <span>🧪 Test Mode (प्लान प्रीव्यू)</span>
+                  <span>🧪 टेस्ट मोड</span>
                 </button>
               </div>
             </div>
@@ -2149,7 +2108,7 @@ return (
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-xs font-black text-purple-300 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>टेस्ट हेतु प्लान चुनें (Select Plan to Preview):</span>
+                    <span>टेस्ट हेतु प्लान चुनें:</span>
                   </span>
                   <span className="text-[11px] text-slate-400">
                     वर्तमान टेस्ट अनुभव:{' '}
@@ -2161,7 +2120,6 @@ return (
                   {(['basic', 'advanced', 'professional', 'ultra'] as UserPlanTier[]).map((tier) => {
                     const isSelected = testPlanTier === tier;
                     const keyName = PLAN_KEY_MAP[tier];
-                    
 
                     return (
                       <button
@@ -2179,10 +2137,10 @@ return (
                           {tier === 'basic'
                             ? 'वॉटरमार्क सहित'
                             : tier === 'advanced'
-                            ? '1080p एचडी'
+                            ? 'फुल एचडी'
                             : tier === 'professional'
                             ? 'वीडियो स्टूडियो'
-                            : 'VIP फ्रेम्स 4K'}
+                            : 'वीआईपी फ्रेम्स (4K)'}
                         </span>
                       </button>
                     );
@@ -2199,19 +2157,140 @@ return (
           </div>
         )}
 
-
+        {/* ADMIN vs NORMAL USER RENDER */}
         {isAdmin ? (
           <AdminPlansAndPackagesManager
             currentUser={currentUser}
             onPlanChanged={() => setSubscription(getUserSubscription())}
             onOpenStudio={onOpenStudio}
-            renderProfileContent={renderProfileSection}
+            renderProfileContent={renderProfileOnlyContent}
             categories={categories}
             onAddCategory={onAddCategory}
             onDeleteCategory={onDeleteCategory}
           />
         ) : (
-          renderProfileSection()
+          <div className="space-y-3.5">
+            {/* OPTION 1: प्रोफाइल व चैनल विवरण */}
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+              <button
+                type="button"
+                onClick={() => setNormalUserTab(normalUserTab === 'profile' ? '' : 'profile')}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'profile' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
+                    <span>1</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm sm:text-base font-black text-white block truncate">
+                      1. प्रोफाइल व चैनल विवरण
+                    </span>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      चैनल लोगो, नाम, प्राइमरी नंबर, सोशल लिंक्स व ब्रांडिंग विवरण
+                    </p>
+                  </div>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'profile' ? 'rotate-180 text-amber-400' : ''}`} />
+              </button>
+              {normalUserTab === 'profile' && (
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {renderProfileOnlyContent()}
+                </div>
+              )}
+            </div>
+
+            {/* OPTION 2: मेंबरशिप प्लान व अपग्रेड */}
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'membership' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+              <button
+                type="button"
+                onClick={() => setNormalUserTab(normalUserTab === 'membership' ? '' : 'membership')}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'membership' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
+                    <span>2</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm sm:text-base font-black text-white block truncate">
+                      2. मेंबरशिप प्लान व अपग्रेड
+                    </span>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      वर्तमान प्लान, 7-डे फ्री ट्रायल, प्रोमो कोड रिडीम व अपग्रेड
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                    {activePlanDetail.nameHi}
+                  </span>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'membership' ? 'rotate-180 text-amber-400' : ''}`} />
+                </div>
+              </button>
+              {normalUserTab === 'membership' && (
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {renderMembershipUpgradeSection()}
+                </div>
+              )}
+            </div>
+
+            {/* OPTION 3: सहायता एवं नीतियाँ */}
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+              <button
+                type="button"
+                onClick={() => setNormalUserTab(normalUserTab === 'policies' ? '' : 'policies')}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'policies' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                    <span>3</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm sm:text-base font-black text-white block truncate">
+                      3. सहायता एवं नीतियाँ
+                    </span>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                    3 नीतियां
+                  </span>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'policies' ? 'rotate-180 text-amber-400' : ''}`} />
+                </div>
+              </button>
+              {normalUserTab === 'policies' && (
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <HelpAndPoliciesView />
+                </div>
+              )}
+            </div>
+
+            {/* OPTION 4: लॉगआउट */}
+            <div className="rounded-2xl border border-red-900/60 bg-red-950/20 overflow-hidden shadow-lg">
+              <button
+                type="button"
+                onClick={onLogout}
+                className="w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 hover:bg-red-950/40"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                    <span>4</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm sm:text-base font-black text-red-200 block truncate">
+                      4. लॉगआउट
+                    </span>
+                    <p className="text-xs text-red-400/80 truncate mt-0.5">
+                      सुरक्षित रूप से अपने खाते से बाहर निकलें
+                    </p>
+                  </div>
+                </div>
+                <LogOut className="w-5 h-5 text-red-400 shrink-0" />
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

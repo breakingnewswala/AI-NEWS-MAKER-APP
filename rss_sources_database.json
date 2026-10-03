@@ -1,0 +1,44 @@
+[
+  {
+    "id": "src_aajtak_rss",
+    "name": "आज तक (Aaj Tak Hindi News)",
+    "url": "https://www.aajtak.in/rssfeeds/?id=home",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1790957066741,
+    "itemsFetchedCount": 30,
+    "lastFetchedAt": 1791043475177
+  },
+  {
+    "id": "src_bbchindi_rss",
+    "name": "बीबीसी हिंदी (BBC Hindi News)",
+    "url": "https://feeds.bbci.co.uk/hindi/rss.xml",
+    "type": "rss",
+    "category": "अंतरराष्ट्रीय",
+    "isActive": true,
+    "createdAt": 1791000266741,
+    "itemsFetchedCount": 25,
+    "lastFetchedAt": 1791043475252
+  },
+  {
+    "id": "src_ndtv_rss",
+    "name": "NDTV इंडिया (NDTV India Live)",
+    "url": "https://feeds.feedburner.com/ndtvkhabar",
+    "type": "rss",
+    "category": "राजनीति",
+    "isActive": true,
+    "createdAt": 1791021866741,
+    "itemsFetchedCount": 12
+  },
+  {
+    "id": "src_pib_web",
+    "name": "प्रेस सूचना ब्यूरो (PIB National Desk)",
+    "url": "https://pib.gov.in/PressReleasePage.aspx",
+    "type": "web",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1791033466741,
+    "itemsFetchedCount": 5
+  }
+]
