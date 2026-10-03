@@ -14,6 +14,30 @@
       },
       "oauth_client": [
         {
+          "client_id": "401033199805-8ndnlehu2mqf2ntrbc7vmt5c77icq0eh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.ainewsmaker.dyynbu",
+            "certificate_hash": "e6d46cc2bd1026cbe6f894fcdf43c608625d3ecf"
+          }
+        },
+        {
+          "client_id": "401033199805-gkavgkj9n5e2nquqmjbrasnlekrc1m1o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.ainewsmaker.dyynbu",
+            "certificate_hash": "b3dcb39306c2026954e6f22c25c07cca04f31ef9"
+          }
+        },
+        {
+          "client_id": "401033199805-ljardmqmbdkgnu7ucfsb0l1gkkd4muqv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.ainewsmaker.dyynbu",
+            "certificate_hash": "c79ad9bd20d566e2b65ef17991c8e8c14389f73d"
+          }
+        },
+        {
           "client_id": "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com",
           "client_type": 3
         }
