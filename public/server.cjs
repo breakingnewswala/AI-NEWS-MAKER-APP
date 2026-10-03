@@ -407,6 +407,73 @@ app.post("/api/news-posts/reset", (_req, res) => {
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
 });
+var DRAFTS_DB_FILE = import_path.default.join(process.cwd(), "drafts_database.json");
+function loadDraftsDatabase() {
+  try {
+    if (import_fs.default.existsSync(DRAFTS_DB_FILE)) {
+      const content = import_fs.default.readFileSync(DRAFTS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading drafts_database.json:", e);
+  }
+  return [];
+}
+function saveDraftsDatabase(drafts) {
+  try {
+    import_fs.default.writeFileSync(DRAFTS_DB_FILE, JSON.stringify(drafts, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing drafts_database.json:", e);
+    return false;
+  }
+}
+app.get("/api/drafts", (_req, res) => {
+  const drafts = loadDraftsDatabase();
+  return res.json({ success: true, drafts });
+});
+app.post("/api/drafts", (req, res) => {
+  try {
+    const draft = req.body;
+    if (!draft || !draft.id) {
+      return res.status(400).json({ error: "Invalid draft object" });
+    }
+    const drafts = loadDraftsDatabase();
+    const idx = drafts.findIndex((d) => d.id === draft.id);
+    const now = Date.now();
+    if (idx >= 0) {
+      drafts[idx] = { ...draft, updatedAt: now };
+    } else {
+      drafts.unshift({ ...draft, createdAt: draft.createdAt || now, updatedAt: now });
+    }
+    saveDraftsDatabase(drafts);
+    return res.json({ success: true, draft });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/drafts/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let drafts = loadDraftsDatabase();
+    drafts = drafts.filter((d) => d.id !== id);
+    saveDraftsDatabase(drafts);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/gemini-quota-status", (_req, res) => {
+  return res.json({
+    hasKey: Boolean(process.env.GEMINI_API_KEY),
+    provider: "gemini",
+    models: DEFAULT_FALLBACK_MODELS,
+    isQuotaExceeded: false,
+    status: "active",
+    note: "AI \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u092B\u093C\u0949\u0932\u092C\u0948\u0915 \u0907\u0902\u091C\u0928 \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964 \u092F\u0926\u093F \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u092D\u0940 \u0939\u094B \u091C\u093E\u090F, \u0924\u094B \u092D\u0940 \u0906\u092A\u0915\u093E \u0915\u093E\u092E \u0915\u092D\u0940 \u0928\u0939\u0940\u0902 \u0930\u0941\u0915\u0924\u093E\u0964"
+  });
+});
 function generateRssFeedXml(posts, baseUrl = "https://www.ainewsmaker.online") {
   const cleanSiteUrl = baseUrl.replace(/\/+$/, "");
   const itemsXml = posts.map((post) => {
@@ -1482,10 +1549,10 @@ function getTemplateConfig(templateId) {
   };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
+  "gemini-3.5-flash",
   "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-2.5-flash"
+  "gemini-2.5-flash",
+  "gemini-3.1-flash-lite-preview"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -1543,6 +1610,8 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3) {
     "\u0905\u0928\u0942\u092A\u092A\u0941\u0930",
     "\u0909\u092E\u0930\u093F\u092F\u093E",
     "\u0938\u093F\u0902\u0917\u0930\u094C\u0932\u0940",
+    "\u0928\u093F\u0935\u093E\u0921\u093C\u0940",
+    "\u091F\u0940\u0915\u092E\u0917\u0922\u093C",
     "\u0926\u093F\u0932\u094D\u0932\u0940",
     "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940",
     "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936",
@@ -1585,6 +1654,37 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3) {
   }
   const cleanHeadlinePure = headline.replace(/[^a-zA-Z0-9\u0900-\u097F\s]/g, "");
   const locTag = detectedLocation.replace(/\s+/g, "");
+  let category = "\u0924\u093E\u091C\u093C\u093E \u0916\u093C\u092C\u0930";
+  const categories = ["\u0924\u093E\u091C\u093C\u093E"];
+  if (/हादसा|दुर्घटना|टक्कर|पलटी|घायल|मौत/.test(clean)) {
+    category = "\u0939\u093E\u0926\u0938\u093E";
+    categories.push("\u0939\u093E\u0926\u0938\u093E", "\u0938\u0921\u093C\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093E");
+  } else if (/अपराध|गिरफ्तार|पुलिस|हत्या|चोरी|रेड/.test(clean)) {
+    category = "\u0915\u094D\u0930\u093E\u0907\u092E";
+    categories.push("\u0905\u092A\u0930\u093E\u0927", "\u092A\u0941\u0932\u093F\u0938 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908");
+  } else if (/राजनीति|चुनाव|कांग्रेस|बीजेपी|भाजपा|संसद|विधानसभा/.test(clean)) {
+    category = "\u0938\u093F\u092F\u093E\u0938\u0924";
+    categories.push("\u0930\u093E\u091C\u0928\u0940\u0924\u093F", "\u0935\u093F\u0927\u093E\u0928\u0938\u092D\u093E");
+  } else if (/मौसम|बारिश|ओलावृष्टि|ठंड|गर्मी/.test(clean)) {
+    category = "\u092E\u094C\u0938\u092E";
+    categories.push("\u092E\u094C\u0938\u092E \u0905\u092A\u0921\u0947\u091F", "\u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923");
+  } else if (/विकास|योजना|सड़क|पुल|उद्घाटन|बजट/.test(clean)) {
+    category = "\u0935\u093F\u0915\u093E\u0938";
+    categories.push("\u0935\u093F\u0915\u093E\u0938 \u0915\u093E\u0930\u094D\u092F", "\u0938\u0930\u0915\u093E\u0930\u0940 \u092F\u094B\u091C\u0928\u093E");
+  } else {
+    categories.push("\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936");
+  }
+  if (detectedLocation && !categories.includes(detectedLocation)) {
+    categories.push(detectedLocation);
+  }
+  const tags = [
+    "#BreakingNews",
+    "#HindiNews",
+    `#${locTag}News`,
+    `#${category.replace(/\s+/g, "")}`,
+    "#BNWTV"
+  ];
+  const anchorScript = `\u0928\u092E\u0938\u094D\u0915\u093E\u0930, \u092E\u0948\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u0947\u0964 \u0907\u0938 \u0938\u092E\u092F \u0915\u0940 \u092C\u0921\u093C\u0940 \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0916\u092C\u0930 ${detectedLocation} \u0938\u0947 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 ${headline}\u0964 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0914\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0928\u0947 \u0907\u0938 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0924\u0924\u094D\u0915\u093E\u0932 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0924\u0947 \u0939\u0941\u090F \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u093F\u090F \u0939\u0948\u0902\u0964 \u0906\u0907\u090F \u0926\u0947\u0916\u0924\u0947 \u0939\u0948\u0902 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0964`;
   let speakerName = "";
   let speakerTitle = "";
   if (/दिग्विजय/.test(clean)) {
@@ -1621,13 +1721,16 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3) {
     formattedHeadline,
     location: detectedLocation,
     summary,
-    category: "\u0924\u093E\u091C\u093C\u093E \u0916\u093C\u092C\u0930",
+    anchorScript,
+    categories,
+    tags,
+    category,
     suggestedImagePrompt: `Journalistic news press photo depicting ${headline}, realistic news photography, India`,
     isAiGeneratedPhoto: false,
     speakerName,
     speakerTitle,
     isLocalFallback: true,
-    warning: "AI \u092E\u0949\u0921\u0932 \u092A\u0930 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0932\u094B\u0921 \u0915\u0947 \u0915\u093E\u0930\u0923 \u0906\u092A\u0915\u0940 \u0907\u0928\u092A\u0941\u091F \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0924\u0948\u092F\u093E\u0930 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0906\u092A \u0907\u0938\u0947 \u0938\u0940\u0927\u0947 \u0932\u093E\u0917\u0942 \u092F\u093E \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+    warning: "AI \u092E\u0949\u0921\u0932 \u092A\u0930 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0932\u094B\u0921 \u092F\u093E \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E \u0915\u0947 \u0915\u093E\u0930\u0923 \u0906\u092A\u0915\u0940 \u0907\u0928\u092A\u0941\u091F \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u0930\u091A\u093F\u0924 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0924\u0948\u092F\u093E\u0930 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0906\u092A \u0907\u0938\u0947 \u0938\u0940\u0927\u0947 \u0932\u093E\u0917\u0942 \u092F\u093E \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
   };
 }
 app.get("/api/health", (_req, res) => {
@@ -1886,6 +1989,9 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
 9. "isAiGeneratedPhoto": \u0915\u094D\u092F\u093E \u092F\u0942\u091C\u093C\u0930 \u0915\u0947 \u0915\u092E\u093E\u0902\u0921, \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092F\u093E \u0932\u093F\u0902\u0915 \u092E\u0947\u0902 \u092F\u0939 \u0932\u093F\u0916\u093E \u0939\u0948 \u092F\u093E \u0938\u0902\u0915\u0947\u0924 \u0939\u0948 \u0915\u093F \u092B\u094B\u091F\u094B AI \u091C\u0928\u0930\u0947\u091F\u0947\u0921 \u0939\u0948 / \u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u0939\u0948 / \u0907\u0932\u0938\u094D\u091F\u094D\u0930\u0947\u0936\u0928 \u0939\u0948 (\u091C\u0948\u0938\u0947 'AI generated', '\u090F\u0906\u0908 \u092B\u094B\u091F\u094B', 'AI image', '\u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u091A\u093F\u0924\u094D\u0930', '\u0938\u093F\u0902\u0925\u0947\u091F\u093F\u0915')? (true \u092F\u093E false).
 10. "speakerName": \u092F\u0926\u093F \u092F\u0939 \u0915\u093F\u0938\u0940 \u0928\u0947\u0924\u093E, \u092E\u0902\u0924\u094D\u0930\u0940 \u092F\u093E \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u093E \u092C\u092F\u093E\u0928/\u0915\u094B\u091F\u0947\u0936\u0928 \u0939\u0948 \u0924\u094B \u0909\u0928\u0915\u093E \u0928\u093E\u092E (\u0909\u0926\u093E. "\u0926\u093F\u0917\u094D\u0935\u093F\u091C\u092F \u0938\u093F\u0902\u0939", "\u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935"), \u0905\u0928\u094D\u092F\u0925\u093E \u0916\u093E\u0932\u0940 \u0938\u094D\u091F\u094D\u0930\u093F\u0902\u0917 ("")\u0964
 11. "speakerTitle": \u0909\u0928\u0915\u093E \u092A\u0926 \u092F\u093E \u092A\u0926\u0935\u0940 (\u0909\u0926\u093E. "\u092A\u0942\u0930\u094D\u0935 \u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940", "\u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940, \u092E\u092A\u094D\u0930"), \u0905\u0928\u094D\u092F\u0925\u093E \u0916\u093E\u0932\u0940 \u0938\u094D\u091F\u094D\u0930\u093F\u0902\u0917 ("")\u0964
+12. "anchorScript": \u092A\u0947\u0936\u0947\u0935\u0930 \u0939\u093F\u0902\u0926\u0940 \u091F\u0940\u0935\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0902\u0915\u0930 / \u091F\u0947\u0932\u0940\u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F\u0930 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F (\u091C\u0948\u0938\u0947: "\u0928\u092E\u0938\u094D\u0915\u093E\u0930, \u0907\u0938 \u0938\u092E\u092F \u0915\u0940 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930..."), 2-3 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u092E\u0947\u0902 \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u0927\u093E\u0930\u093E\u092A\u094D\u0930\u0935\u093E\u0939 \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u090F\u0902\u0915\u0930\u093F\u0902\u0917\u0964
+13. "categories": 2 \u0938\u0947 4 \u0938\u091F\u0940\u0915 \u0936\u094D\u0930\u0947\u0923\u093F\u092F\u094B\u0902 \u0915\u0940 \u0938\u0942\u091A\u0940 (Array of strings, \u091C\u0948\u0938\u0947: ["\u0939\u093E\u0926\u0938\u093E", "\u0938\u0921\u093C\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093E", "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"])\u0964
+14. "tags": 4 \u0938\u0947 6 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0915\u0940 \u0938\u0942\u091A\u0940 (Array of strings, \u091C\u0948\u0938\u0947: ["#BreakingNews", "#HindiNews", "#BNWTV"])\u0964
 `;
     let parsedData = null;
     const aiProvider = (req.body.aiProvider || "gemini").toLowerCase();
@@ -1952,6 +2058,15 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
                     formattedHeadline: { type: import_genai.Type.STRING },
                     location: { type: import_genai.Type.STRING },
                     summary: { type: import_genai.Type.STRING },
+                    anchorScript: { type: import_genai.Type.STRING },
+                    categories: {
+                      type: import_genai.Type.ARRAY,
+                      items: { type: import_genai.Type.STRING }
+                    },
+                    tags: {
+                      type: import_genai.Type.ARRAY,
+                      items: { type: import_genai.Type.STRING }
+                    },
                     category: { type: import_genai.Type.STRING },
                     suggestedImagePrompt: { type: import_genai.Type.STRING },
                     isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
@@ -1971,9 +2086,14 @@ ${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936
           );
           parsedData = JSON.parse(response.text || "{}");
         } catch (geminiError) {
-          console.log("All Gemini models busy in process-news-command, generating instant fallback:", geminiError?.message?.slice(0, 80));
+          const errMsg = String(geminiError?.message || "");
+          const isQuota = geminiError?.status === 429 || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota");
+          console.log(`All Gemini models busy in process-news-command (${isQuota ? "Quota exceeded/Rate limit" : "Fallback"}), generating instant structured fallback:`, errMsg.slice(0, 80));
           const fallbackSource = rawInputText || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
           parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines);
+          if (isQuota) {
+            parsedData.quotaNotice = "Gemini API \u092B\u094D\u0930\u0940 \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E \u0935\u094D\u092F\u0938\u094D\u0924 \u0939\u0948\u0964 \u0938\u0902\u0930\u091A\u093F\u0924 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0907\u0902\u091C\u0928 \u0928\u0947 \u0906\u092A\u0915\u0940 \u0916\u092C\u0930 \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930 \u0926\u0940 \u0939\u0948!";
+          }
         }
       }
     }

@@ -48,6 +48,7 @@ import {
   Newspaper,
   Eye,
   EyeOff,
+  FolderOpen,
 } from 'lucide-react';
 import { VideoStudioWeb } from './components/VideoStudioWeb';
 import { FRAME_OPTIONS } from './lib/HeaderDesigns';
@@ -58,6 +59,10 @@ import { HomeScreenWeb } from './components/HomeScreenWeb';
 import { VideosScreenWeb } from './components/VideosScreenWeb';
 import { EPaperScreenWeb } from './components/EPaperScreenWeb';
 import { ProfileScreenWeb } from './components/ProfileScreenWeb';
+import { DraftsScreenWeb } from './components/DraftsScreenWeb';
+import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
+import { ExportScreenWeb } from './components/ExportScreenWeb';
+import { saveDraft } from './lib/draftsManager';
 import { isUserAdmin, setAdminSystemMode } from './lib/userPlanManager';
 import {
   NewsFeedPost,
@@ -67,7 +72,7 @@ import {
   INITIAL_CATEGORIES,
 } from './data/newsFeedData';
 
-type AppTab = 'home' | 'videos' | 'studio' | 'epaper' | 'profile';
+export type AppTab = 'home' | 'generator' | 'drafts' | 'categories' | 'export' | 'studio' | 'videos' | 'epaper' | 'profile';
 
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
@@ -152,40 +157,33 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
       const fullUrl = (window.location.href || '').toLowerCase();
-      if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile') || fullUrl.includes('/profile')) {
-        return 'profile';
-      }
-      if (fullUrl.includes('#home') || fullUrl.includes('tab=home') || fullUrl.includes('/home')) {
-        return 'home';
-      }
-      if (fullUrl.includes('#videos') || fullUrl.includes('tab=videos') || fullUrl.includes('/videos')) {
-        return 'videos';
-      }
-      if (fullUrl.includes('#epaper') || fullUrl.includes('tab=epaper') || fullUrl.includes('/epaper')) {
-        return 'epaper';
-      }
-      if (fullUrl.includes('#studio') || fullUrl.includes('tab=studio') || fullUrl.includes('/studio')) {
-        return 'studio';
-      }
+      if (fullUrl.includes('#drafts') || fullUrl.includes('tab=drafts')) return 'drafts';
+      if (fullUrl.includes('#categories') || fullUrl.includes('tab=categories')) return 'categories';
+      if (fullUrl.includes('#export') || fullUrl.includes('tab=export')) return 'export';
+      if (fullUrl.includes('#generator') || fullUrl.includes('tab=generator')) return 'generator';
+      if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile')) return 'export';
+      if (fullUrl.includes('#studio') || fullUrl.includes('tab=studio')) return 'generator';
+      if (fullUrl.includes('#videos') || fullUrl.includes('tab=videos')) return 'categories';
+      if (fullUrl.includes('#epaper') || fullUrl.includes('tab=epaper')) return 'categories';
+      if (fullUrl.includes('#home') || fullUrl.includes('tab=home')) return 'home';
 
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
-      if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
-        return hash as AppTab;
-      }
-      // Check query params (e.g. ?tab=profile)
+      if (hash === 'generator' || hash === 'studio') return 'generator';
+      if (hash === 'drafts') return 'drafts';
+      if (hash === 'categories' || hash === 'videos' || hash === 'epaper') return 'categories';
+      if (hash === 'export' || hash === 'profile') return 'export';
+      if (hash === 'home') return 'home';
+
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab')?.toLowerCase();
-        if (tabParam && ['home', 'videos', 'studio', 'epaper', 'profile'].includes(tabParam)) {
-          return tabParam as AppTab;
-        }
+        if (tabParam === 'generator' || tabParam === 'studio') return 'generator';
+        if (tabParam === 'drafts') return 'drafts';
+        if (tabParam === 'categories' || tabParam === 'videos' || tabParam === 'epaper') return 'categories';
+        if (tabParam === 'export' || tabParam === 'profile') return 'export';
+        if (tabParam === 'home') return 'home';
       } catch {}
-      // Check path
-      const path = window.location.pathname.toLowerCase();
-      if (path.includes('profile') || path.includes('admin') || path.includes('control')) return 'profile';
-      if (path.includes('home')) return 'home';
-      if (path.includes('video')) return 'videos';
-      if (path.includes('epaper')) return 'epaper';
+
       return 'home';
     }
     return 'home';
@@ -196,15 +194,30 @@ export default function App() {
     if (typeof window === 'undefined') return;
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
-      if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(hash)) {
-        setCurrentTab(hash as AppTab);
-      }
+      if (hash === 'generator' || hash === 'studio') setCurrentTab('generator');
+      else if (hash === 'drafts') setCurrentTab('drafts');
+      else if (hash === 'categories' || hash === 'videos' || hash === 'epaper') setCurrentTab('categories');
+      else if (hash === 'export' || hash === 'profile') setCurrentTab('export');
+      else if (hash === 'home') setCurrentTab('home');
     };
     window.addEventListener('hashchange', handleHashChange);
-    (window as any).setAppTab = (tab: AppTab) => {
-      if (['home', 'videos', 'studio', 'epaper', 'profile'].includes(tab)) {
-        setCurrentTab(tab);
-        window.location.hash = tab;
+    (window as any).setAppTab = (tab: string) => {
+      const t = (tab || '').toLowerCase();
+      if (t === 'generator' || t === 'studio') {
+        setCurrentTab('generator');
+        window.location.hash = 'generator';
+      } else if (t === 'drafts') {
+        setCurrentTab('drafts');
+        window.location.hash = 'drafts';
+      } else if (t === 'categories' || t === 'videos' || t === 'epaper') {
+        setCurrentTab('categories');
+        window.location.hash = 'categories';
+      } else if (t === 'export' || t === 'profile') {
+        setCurrentTab('export');
+        window.location.hash = 'export';
+      } else if (t === 'home') {
+        setCurrentTab('home');
+        window.location.hash = 'home';
       }
     };
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -598,9 +611,9 @@ export default function App() {
     }
   }, [card]);
 
-  // Synchronize card with saved channel profile whenever opening studio tab
+  // Synchronize card with saved channel profile whenever opening generator/studio tab
   useEffect(() => {
-    if (currentTab === 'studio') {
+    if (currentTab === 'studio' || currentTab === 'generator') {
       const savedProfile = getSavedChannelProfile();
       if (savedProfile) {
         const activeSocialKeys = Object.entries(savedProfile.socialIcons || {})
@@ -982,6 +995,12 @@ export default function App() {
       showAiGenerated: true,
     }));
     showToast('✨ AI जनरेटेड फोटो कार्ड के बैकग्राउंड में सेट हो गई!');
+  };
+
+  // Save current card into Drafts manager
+  const handleSaveCurrentCardAsDraft = () => {
+    saveDraft(card);
+    showToast('💾 न्यूज़ कार्ड ड्राफ्ट्स में सुरक्षित कर लिया गया!');
   };
 
   // Export card to High-Res PNG or JPG (with full status, progress & robust blob downloading)
@@ -1368,16 +1387,8 @@ export default function App() {
         />
       )}
 
-      {/* 2. Videos Feed Tab */}
-      {currentTab === 'videos' && (
-        <VideosScreenWeb
-          videos={videos}
-          onOpenStudioWithVideo={handleOpenStudioWithVideo}
-        />
-      )}
-
-      {/* 3. Studio Tab */}
-      {currentTab === 'studio' && (
+      {/* 2. News Generator / Studio Tab */}
+      {(currentTab === 'generator' || currentTab === 'studio') && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
           {/* Studio Type Selector: Shown only in Web; in Android APK the native top mode bar handles this */}
           {!isAndroidEnvironment && (
@@ -1453,6 +1464,16 @@ export default function App() {
                             <span>स्क्रीन छिपाएँ</span>
                           </>
                         )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveCurrentCardAsDraft}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold rounded-lg border border-amber-500/30 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        title="ड्राफ्ट में सहेजें"
+                      >
+                        <FolderOpen className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span>ड्राफ्ट सेव</span>
                       </button>
 
                       <button
@@ -1634,8 +1655,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 3 Buttons Row */}
-                    <div className="grid grid-cols-3 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
+                    {/* Action Bar below Preview: 4 Responsive Buttons Row */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleDownload('jpeg')}
@@ -1645,6 +1666,16 @@ export default function App() {
                       >
                         <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
                         <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'डाउनलोड (JPG)'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveCurrentCardAsDraft}
+                        className="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <span className="truncate">ड्राफ्ट सेव</span>
                       </button>
 
                       <button
@@ -1664,7 +1695,7 @@ export default function App() {
                         title="कैप्शन और शेयर"
                       >
                         <Share2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">कैप्शन एंड शेयर</span>
+                        <span className="truncate">कैप्शन शेयर</span>
                       </button>
                     </div>
 
@@ -1759,28 +1790,78 @@ export default function App() {
         </main>
       )}
 
-      {/* 4. E-Paper Tab */}
-      {currentTab === 'epaper' && (
-        <EPaperScreenWeb
-          onOpenStudioWithEPaper={handleOpenStudioWithEPaper}
+      {/* 3. Drafts Tab */}
+      {currentTab === 'drafts' && (
+        <DraftsScreenWeb
+          onOpenStudioWithDraft={(draft) => {
+            setCard(draft.cardData);
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            showToast('📂 ड्राफ्ट जनरेटर में लोड हो गया!');
+          }}
+          onOpenExportWithDraft={(draft) => {
+            setCard(draft.cardData);
+            setCurrentTab('export');
+            window.location.hash = 'export';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateToGenerator={() => {
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
         />
       )}
 
-      {/* 5. Profile & Control Panel Tab */}
-      {currentTab === 'profile' && (
-        <ProfileScreenWeb
+      {/* 4. Categories Tab (Categories + E-Paper + Video Feed) */}
+      {(currentTab === 'categories' || currentTab === 'videos' || currentTab === 'epaper') && (
+        <CategoriesScreenWeb
+          posts={posts}
+          videos={videos}
+          onOpenStudioWithNews={(post) => {
+            handleOpenStudioWithNews(post);
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onOpenStudioWithVideo={(video) => {
+            handleOpenStudioWithVideo(video);
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onOpenStudioWithEPaper={(edition) => {
+            handleOpenStudioWithEPaper(edition);
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
+
+      {/* 5. Export Tab (Multi-Format Export + Caption + Settings) */}
+      {(currentTab === 'export' || currentTab === 'profile') && (
+        <ExportScreenWeb
+          card={card}
+          onDownload={handleDownload}
+          downloading={downloading}
+          onCopyImage={handleCopyToClipboard}
+          copied={copied}
+          onOpenCaptionModal={() => setIsCaptionModalOpen(true)}
           currentUser={currentUser}
           onLogout={handleLogout}
           onAddNewPost={handleAddNewPost}
           onOpenStudio={() => {
-            setCurrentTab('studio');
-            window.location.hash = 'studio';
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          onOpenOnboarding={() => setIsOnboardingOpen(true)}
-          categories={categories}
-          onAddCategory={handleAddCategory}
-          onDeleteCategory={handleDeleteCategory}
+          onNavigateToGenerator={() => {
+            setCurrentTab('generator');
+            window.location.hash = 'generator';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
         />
       )}
 

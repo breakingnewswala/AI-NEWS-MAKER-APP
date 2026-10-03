@@ -338,6 +338,9 @@ export interface AIAnalysisResult {
   formattedHeadline: string;
   location: string;
   summary: string;
+  anchorScript?: string; // Structured TV anchor script
+  categories?: string[]; // Structured category tags
+  tags?: string[]; // Social hashtags
   category?: string;
   hasPerson?: boolean;
   description?: string;
@@ -350,6 +353,22 @@ export interface AIAnalysisResult {
   speakerName?: string;
   speakerTitle?: string;
   isLocalFallback?: boolean;
+  quotaNotice?: string;
+}
+
+export interface NewsDraft {
+  id: string;
+  title: string;
+  headline: string;
+  category: string;
+  location: string;
+  summary: string;
+  anchorScript?: string;
+  tags?: string[];
+  cardData: NewsCardData;
+  thumbnailUrl?: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface ChannelProfile {

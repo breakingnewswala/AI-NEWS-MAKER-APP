@@ -130,19 +130,43 @@ export function processNewsLocally(
     speakerTitle = 'पीठाधीश्वर';
   }
 
-  // Detect Category
+  // Detect Category and Categories array
   let category = 'ताज़ा ख़बर';
+  const categories: string[] = ['ताज़ा'];
   if (/हादसा|दुर्घटना|टक्कर|पलटी|घायल|मौत/.test(clean)) {
     category = 'हादसा';
+    categories.push('हादसा', 'सड़क सुरक्षा');
   } else if (/अपराध|गिरफ्तार|पुलिस|हत्या|चोरी|रेड/.test(clean)) {
     category = 'क्राइम';
+    categories.push('अपराध', 'पुलिस कार्रवाई');
   } else if (/राजनीति|चुनाव|कांग्रेस|बीजेपी|भाजपा|संसद|विधानसभा/.test(clean)) {
     category = 'सियासत';
+    categories.push('राजनीति', 'विधानसभा');
   } else if (/मौसम|बारिश|ओलावृष्टि|ठंड|गर्मी/.test(clean)) {
     category = 'मौसम';
+    categories.push('मौसम अपडेट', 'पर्यावरण');
+  } else if (/विकास|योजना|सड़क|पुल|उद्घाटन|बजट/.test(clean)) {
+    category = 'विकास';
+    categories.push('विकास कार्य', 'सरकारी योजना');
+  } else {
+    categories.push('राष्ट्रीय', 'मध्य प्रदेश');
+  }
+  if (detectedLocation && !categories.includes(detectedLocation)) {
+    categories.push(detectedLocation);
   }
 
-  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए हमारे साथ बने रहें।\n\n#BreakingNews #HindiNews #${locTag}News #${cleanHeadlinePure.slice(0, 15).replace(/\s+/g, '')} #AINewsMaker`;
+  const tags = [
+    '#BreakingNews',
+    '#HindiNews',
+    `#${locTag}News`,
+    `#${category.replace(/\s+/g, '')}`,
+    '#BNWTV',
+  ];
+
+  // Professional Hindi TV News Anchor Script
+  const anchorScript = `नमस्कार, मैं ब्रेकिंग न्यूज़ से। इस समय की बड़ी और महत्वपूर्ण खबर ${detectedLocation} से सामने आ रही है। ${headline}। प्रशासनिक अधिकारियों और संबंधित विभाग ने इस मामले में तत्काल संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी किए हैं। आइए देखते हैं इस पूरे घटनाक्रम पर ग्राउंड रिपोर्ट।`;
+
+  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए हमारे साथ बने रहें।\n\n${tags.join(' ')}`;
 
   return {
     headline,
@@ -151,6 +175,9 @@ export function processNewsLocally(
     formattedHeadline,
     location: detectedLocation,
     summary,
+    anchorScript,
+    categories,
+    tags,
     category,
     suggestedImagePrompt: `Journalistic news press photo depicting ${headline}, realistic news photography, India`,
     isAiGeneratedPhoto: false,

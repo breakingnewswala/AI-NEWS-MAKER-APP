@@ -33,11 +33,11 @@ import {
 } from '../lib/notificationManager';
 
 interface AppTopBarWebProps {
-  currentTab: 'home' | 'videos' | 'studio' | 'epaper' | 'profile';
+  currentTab: string;
   currentUser: ReporterUser | null;
   onOpenAdminConsole?: () => void;
   onRefresh: () => void;
-  onNavigateToTab: (tab: 'home' | 'videos' | 'studio' | 'epaper' | 'profile') => void;
+  onNavigateToTab: (tab: any) => void;
 }
 
 export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
@@ -58,6 +58,12 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const [notifPermission, setNotifPermission] = useState(() => getNotificationPermissionStatus());
 
   const isAdminUser = isUserAdmin(currentUser);
+
+  const isHome = currentTab === 'home';
+  const isGenerator = currentTab === 'generator' || currentTab === 'studio';
+  const isDrafts = currentTab === 'drafts';
+  const isCategories = currentTab === 'categories' || currentTab === 'videos' || currentTab === 'epaper';
+  const isExport = currentTab === 'export' || currentTab === 'profile';
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -204,7 +210,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             <button
               onClick={() => onNavigateToTab('home')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                currentTab === 'home'
+                isHome
                   ? 'bg-red-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
@@ -212,44 +218,44 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               🏠 होम
             </button>
             <button
-              onClick={() => onNavigateToTab('videos')}
+              onClick={() => onNavigateToTab('generator')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                currentTab === 'videos'
-                  ? 'bg-red-600 text-white shadow-md'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              🎥 वीडियो फ़ीड
-            </button>
-            <button
-              onClick={() => onNavigateToTab('studio')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                currentTab === 'studio'
+                isGenerator
                   ? 'bg-gradient-to-r from-amber-500 to-red-600 text-slate-950 font-black shadow-md'
                   : 'text-amber-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              🎬 स्टूडियो
+              ✨ न्यूज़ जनरेटर
             </button>
             <button
-              onClick={() => onNavigateToTab('epaper')}
+              onClick={() => onNavigateToTab('drafts')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                currentTab === 'epaper'
+                isDrafts
                   ? 'bg-red-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              📰 ई-पेपर
+              📑 ड्राफ्ट्स
             </button>
             <button
-              onClick={() => onNavigateToTab('profile')}
+              onClick={() => onNavigateToTab('categories')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                currentTab === 'profile'
+                isCategories
                   ? 'bg-red-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              {isAdminUser ? '⚙️ कंट्रोल पैनल' : '👤 प्रोफाइल'}
+              🗂️ कैटेगरीज़
+            </button>
+            <button
+              onClick={() => onNavigateToTab('export')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                isExport
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              ⬇️ एक्सपोर्ट
             </button>
           </nav>
 
