@@ -1,5 +1,4 @@
 // AI News Maker App - User Tier & Plan Management
-import { isChannelRestricted } from './restrictedChannelsManager';
 
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
@@ -478,332 +477,39 @@ export function redeemPromoCode(codeStr: string, userInfo?: any): RedeemResult {
 export interface PlanUserRecord {
   userId: string;
   email: string;
-  username?: string;
-  name?: string;
   mobile?: string;
   channelName?: string;
-  channelLogoUrl?: string;
-  channelLogoPngUrl?: string;
-  channelLogoGifUrl?: string;
-  websiteUrl?: string;
-  socialIcons?: Record<string, boolean>;
   tier: UserPlanTier;
   planName: PlanKeyName;
   activatedAt: number;
   expiresAt: number;
   activatedVia: string;
-  isLocked?: boolean;
-  role?: string;
-  lastLoginAt?: number;
-  // Custom Header & Footer assignment (PRO & VIP DESK)
-  assignedHeaderUrl?: string;
-  assignedFooterUrl?: string;
-  assignedCustomActive?: boolean;
-  mobileVerified?: boolean;
-  customHeaderUrl?: string;
-  customFooterUrl?: string;
-  isCustomHeaderActive?: boolean;
-  isCustomFooterActive?: boolean;
-  planAssignedAt?: number;
-  planExpiresAt?: number;
 }
 
-const INITIAL_PLAN_USERS: PlanUserRecord[] = [
-  {
-    userId: 'user-admin-master',
-    email: 'breakingnewswala.com@gmail.com',
-    name: 'मुख्य संपादक (Chief Editor)',
-    mobile: '9669802408',
-    channelName: 'एआई न्यूज़ मेकर',
-    channelLogoUrl: '/assets/breaking_news_wala_logo.png',
-    channelLogoPngUrl: '/assets/breaking_news_wala_logo.png',
-    websiteUrl: 'breakingnewswala.com',
-    tier: 'ultra',
-    planName: 'VIP DESK',
-    activatedAt: Date.now() - 30 * 24 * 3600 * 1000,
-    expiresAt: Date.now() + 365 * 24 * 3600 * 1000,
-    activatedVia: 'Chief Admin Master Account',
-    isLocked: false,
-    role: 'admin',
-    lastLoginAt: Date.now(),
-  },
-  {
-    userId: 'user-sample-reporter',
-    email: 'reporter@dainiknews.com',
-    name: 'रमेश कुमार (संवाददाता)',
-    mobile: '9826012345',
-    channelName: 'दैनिक संदेश न्यूज़',
-    channelLogoUrl: '', // PNG/GIF logo blank by default
-    channelLogoPngUrl: '',
-    channelLogoGifUrl: '',
-    websiteUrl: '',
-    tier: 'basic',
-    planName: 'BASIC',
-    activatedAt: Date.now() - 2 * 24 * 3600 * 1000,
-    expiresAt: Date.now() + 5 * 24 * 3600 * 1000,
-    activatedVia: '7-Day Free Trial (Basic)',
-    isLocked: true, // Default locked
-    role: 'reporter',
-    lastLoginAt: Date.now() - 3600000,
-  },
-];
-
 export function getPlanUsers(): PlanUserRecord[] {
-  if (typeof window === 'undefined') return INITIAL_PLAN_USERS;
+  if (typeof window === 'undefined') return [];
   try {
     const saved = localStorage.getItem(STORAGE_KEY_ASSIGNED_USERS);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn('Error reading plan users:', e);
   }
-  return INITIAL_PLAN_USERS;
+  return [];
 }
 
 export function recordUserPlanAssignment(record: PlanUserRecord): void {
   if (typeof window === 'undefined') return;
   try {
     const existing = getPlanUsers();
-    const filtered = existing.filter((u) => u.email.toLowerCase() !== record.email.toLowerCase());
+    const filtered = existing.filter((u) => u.email !== record.email);
     const updated = [record, ...filtered];
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('ai_news_plan_users_changed'));
   } catch (e) {
     console.warn('Error saving plan user:', e);
   }
-}
-
-/**
- * Automatically registers or updates any logged-in user in Admin Control Panel directory
- */
-export function registerOrUpdateUser(params: {
-  email: string;
-  username?: string;
-  name?: string;
-  mobile?: string;
-  channelName?: string;
-  channelLogoUrl?: string;
-  channelLogoPngUrl?: string;
-  channelLogoGifUrl?: string;
-  websiteUrl?: string;
-  socialIcons?: Record<string, boolean>;
-  tier?: UserPlanTier;
-  activatedVia?: string;
-  role?: string;
-  isLocked?: boolean;
-  mobileVerified?: boolean;
-}): void {
-  if (!params.email) return;
-  const cleanEmail = params.email.trim().toLowerCase();
-  const existing = getPlanUsers();
-  const found = existing.find((u) => u.email.toLowerCase() === cleanEmail);
-
-  const tier: UserPlanTier = params.tier || found?.tier || 'basic';
-  const planDetail = getPlanDetail(tier);
-  const now = Date.now();
-  const expiresAt = found?.expiresAt && found.expiresAt > now
-    ? found.expiresAt
-    : now + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000;
-
-  const isAdm = isUserAdmin({ email: cleanEmail, role: params.role });
-
-  const updatedRecord: PlanUserRecord = {
-    userId: found?.userId || `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    email: cleanEmail,
-    username: params.username || found?.username || cleanEmail.split('@')[0],
-    name: params.name || found?.name || cleanEmail.split('@')[0],
-    mobile: params.mobile || found?.mobile || '',
-    channelName: params.channelName || found?.channelName || '',
-    channelLogoUrl: params.channelLogoUrl || found?.channelLogoUrl || '',
-    channelLogoPngUrl: params.channelLogoPngUrl || found?.channelLogoPngUrl || '',
-    channelLogoGifUrl: params.channelLogoGifUrl || found?.channelLogoGifUrl || '',
-    websiteUrl: params.websiteUrl || found?.websiteUrl || '',
-    socialIcons: params.socialIcons || found?.socialIcons,
-    tier,
-    planName: planDetail.planKey,
-    activatedAt: found?.activatedAt || now,
-    expiresAt,
-    activatedVia: params.activatedVia || found?.activatedVia || (isAdm ? 'Admin Master' : '7-Day Free Trial (Basic)'),
-    role: isAdm ? 'admin' : (params.role || found?.role || 'reporter'),
-    // If Admin previously unlocked this specific user (found.isLocked === false), keep it unlocked!
-    // Otherwise default to locked (true) for regular users.
-    isLocked: isAdm ? false : (found?.isLocked !== undefined ? found.isLocked : (params.isLocked !== undefined ? params.isLocked : true)),
-    lastLoginAt: now,
-    assignedHeaderUrl: found?.assignedHeaderUrl,
-    assignedFooterUrl: found?.assignedFooterUrl,
-    assignedCustomActive: found?.assignedCustomActive,
-    mobileVerified: params.mobileVerified !== undefined ? params.mobileVerified : (found?.mobileVerified || false),
-  };
-
-  const filtered = existing.filter((u) => u.email.toLowerCase() !== cleanEmail);
-  const nextList = [updatedRecord, ...filtered];
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(nextList));
-    window.dispatchEvent(new CustomEvent('ai_news_plan_users_changed'));
-  }
-}
-
-/**
- * Checks if a username or website is already registered or restricted in the system.
- * Prevents account duplication and unauthorized imitation.
- */
-export function checkAccountUniqueness(params: {
-  username?: string;
-  websiteUrl?: string;
-  channelName?: string;
-  currentEmail?: string;
-}): { valid: boolean; error?: string } {
-  if (typeof window === 'undefined') return { valid: true };
-
-  const cleanUser = (params.username || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-  const cleanWeb = (params.websiteUrl || '')
-    .toLowerCase()
-    .trim()
-    .replace(/^https?:\/\//i, '')
-    .replace(/^www\./i, '')
-    .replace(/\/.*$/, '');
-  const cleanEmail = (params.currentEmail || '').toLowerCase().trim();
-
-  // 1. Username length limit check (strictly maximum 15 characters)
-  if (cleanUser && cleanUser.length > 15) {
-    return {
-      valid: false,
-      error: '❌ यूज़रनेम अधिकतम 15 अक्षरों का हो सकता है।',
-    };
-  }
-
-  // 2. Restricted Channels List check
-  const restricted = isChannelRestricted(params.channelName, cleanWeb, cleanUser);
-  if (restricted.isBlocked) {
-    return { valid: false, error: restricted.reason };
-  }
-
-  // 3. Existing Users Database check
-  const users = getPlanUsers();
-  for (const u of users) {
-    if (cleanEmail && u.email.toLowerCase() === cleanEmail) continue;
-
-    // Check Username Uniqueness
-    if (cleanUser && u.username) {
-      const existingUser = u.username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-      if (existingUser && existingUser === cleanUser) {
-        return {
-          valid: false,
-          error: `❌ यूज़रनेम '${params.username}' पहले से किसी अन्य खाते द्वारा पंजीकृत है। कृपया कोई दूसरा यूज़रनेम चुनें।`,
-        };
-      }
-    }
-
-    // Check Website Uniqueness (ignore default common portal url)
-    if (cleanWeb && u.websiteUrl && cleanWeb !== 'ainewsmaker.online') {
-      const existingWeb = u.websiteUrl
-        .toLowerCase()
-        .trim()
-        .replace(/^https?:\/\//i, '')
-        .replace(/^www\./i, '')
-        .replace(/\/.*$/, '');
-      if (existingWeb && existingWeb === cleanWeb) {
-        return {
-          valid: false,
-          error: `❌ वेबसाइट '${cleanWeb}' पहले से किसी अन्य खाते से जुड़ी हुई है। एक वेबसाइट केवल एक खाते से लिंक हो सकती है।`,
-        };
-      }
-    }
-  }
-
-  // 3. Stored Profiles in localStorage
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('user_profile_')) {
-        const pEmail = key.replace('user_profile_', '').toLowerCase().trim();
-        if (cleanEmail && pEmail === cleanEmail) continue;
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const prof = JSON.parse(raw);
-          if (cleanUser && prof.username) {
-            const existingUser = prof.username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-            if (existingUser && existingUser === cleanUser) {
-              return {
-                valid: false,
-                error: `❌ यूज़रनेम '${params.username}' पहले से किसी अन्य खाते द्वारा पंजीकृत है। कृपया कोई दूसरा यूज़रनेम चुनें।`,
-              };
-            }
-          }
-          if (cleanWeb && prof.websiteUrl && cleanWeb !== 'ainewsmaker.online') {
-            const existingWeb = prof.websiteUrl
-              .toLowerCase()
-              .trim()
-              .replace(/^https?:\/\//i, '')
-              .replace(/^www\./i, '')
-              .replace(/\/.*$/, '');
-            if (existingWeb && existingWeb === cleanWeb) {
-              return {
-                valid: false,
-                error: `❌ वेबसाइट '${cleanWeb}' पहले से किसी अन्य खाते से जुड़ी हुई है। एक वेबसाइट केवल एक खाते से लिंक हो सकती है।`,
-              };
-            }
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('Error reading profiles in uniqueness check:', e);
-  }
-
-  return { valid: true };
-}
-
-/**
- * Admin action: Manually change a registered user's tier, expiry, or lock status
- */
-export function adminUpdateUserRecord(
-  userEmail: string,
-  updates: Partial<PlanUserRecord>
-): boolean {
-  if (typeof window === 'undefined') return false;
-  const cleanEmail = userEmail.toLowerCase().trim();
-  const existing = getPlanUsers();
-  const index = existing.findIndex((u) => u.email.toLowerCase() === cleanEmail);
-  if (index === -1) return false;
-
-  const current = existing[index];
-  const newTier = updates.tier || current.tier;
-  const planDetail = getPlanDetail(newTier);
-
-  existing[index] = {
-    ...current,
-    ...updates,
-    tier: newTier,
-    planName: planDetail.planKey,
-  };
-
-  // If unlock state was changed, also sync user-specific profile if this user is active locally
-  if (updates.isLocked !== undefined) {
-    try {
-      const activeEmail = (localStorage.getItem('reporter_current_user_email') || '').toLowerCase().trim();
-      if (activeEmail === cleanEmail) {
-        if (updates.isLocked === false) {
-          localStorage.removeItem('is_channel_profile_locked');
-        } else {
-          localStorage.setItem('is_channel_profile_locked', 'true');
-        }
-      }
-      const userProfileKey = `user_profile_${cleanEmail}`;
-      const savedProf = localStorage.getItem(userProfileKey);
-      if (savedProf) {
-        const parsed = JSON.parse(savedProf);
-        parsed.isLocked = updates.isLocked;
-        localStorage.setItem(userProfileKey, JSON.stringify(parsed));
-      }
-    } catch {}
-  }
-
-  localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify([...existing]));
-  window.dispatchEvent(new CustomEvent('ai_news_plan_users_changed'));
-  return true;
 }
 
 export function assignPlanToUserManually(userEmail: string, tier: UserPlanTier, durationDays: number = 30): void {
@@ -818,96 +524,68 @@ export function assignPlanToUserManually(userEmail: string, tier: UserPlanTier, 
     activatedAt: now,
     expiresAt,
     activatedVia: 'Admin Manual Assignment',
-    lastLoginAt: now,
-    isLocked: !isUserAdmin({ email: userEmail }),
   });
 }
 
-/**
- * Custom Header/Footer assignment getters and setters
- */
-export function getAssignedCustomHeaderFooter(userEmail?: string): {
-  headerUrl?: string;
-  footerUrl?: string;
-  active: boolean;
-} | null {
-  if (typeof window === 'undefined') return null;
-  let cleanEmail = (userEmail || '').toLowerCase().trim();
-  if (!cleanEmail) {
-    cleanEmail = (localStorage.getItem('reporter_current_user_email') || '').toLowerCase().trim();
-  }
-  if (!cleanEmail) {
-    try {
-      const sess = localStorage.getItem('reporter_auth_session');
-      if (sess) {
-        const parsed = JSON.parse(sess);
-        cleanEmail = (parsed.email || parsed.user?.email || '').toLowerCase().trim();
+export function adminUpdateUserRecord(
+  email: string,
+  updates: Partial<PlanUserRecord> & { isLocked?: boolean }
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const users = getPlanUsers();
+    const cleanEmail = email.toLowerCase().trim();
+    const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    if (idx >= 0) {
+      const current = users[idx];
+      const newTier = updates.tier || current.tier;
+      const planDetail = getPlanDetail(newTier);
+      users[idx] = {
+        ...current,
+        ...updates,
+        tier: newTier,
+        planName: planDetail.planKey,
+      };
+      if (updates.isLocked !== undefined) {
+        users[idx].isProfileLocked = updates.isLocked;
+        if (updates.isLocked) {
+          localStorage.setItem(`channel_profile_locked_${cleanEmail}`, 'true');
+        } else {
+          localStorage.removeItem(`channel_profile_locked_${cleanEmail}`);
+          let unlocked: string[] = [];
+          try {
+            const raw = localStorage.getItem('unlocked_channel_profiles');
+            if (raw) unlocked = JSON.parse(raw);
+          } catch {}
+          if (!unlocked.includes(cleanEmail)) {
+            unlocked.push(cleanEmail);
+            localStorage.setItem('unlocked_channel_profiles', JSON.stringify(unlocked));
+          }
+        }
       }
-    } catch {}
+      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    }
+  } catch (e) {
+    console.warn('Error in adminUpdateUserRecord:', e);
   }
-  if (!cleanEmail) return null;
-  const users = getPlanUsers();
-  const u = users.find((x) => (x.email || '').toLowerCase().trim() === cleanEmail);
-  if (!u) return null;
-  if (u.assignedCustomActive && (u.assignedHeaderUrl || u.assignedFooterUrl)) {
-    return {
-      headerUrl: u.assignedHeaderUrl,
-      footerUrl: u.assignedFooterUrl,
-      active: !!u.assignedCustomActive,
-    };
-  }
-  return null;
 }
 
 export function assignCustomHeaderFooterToUser(
   userEmail: string,
-  params: { headerUrl?: string; footerUrl?: string; active: boolean }
+  data: { active: boolean; headerUrl?: string; footerUrl?: string }
 ): boolean {
-  return adminUpdateUserRecord(userEmail, {
-    assignedHeaderUrl: params.headerUrl || '',
-    assignedFooterUrl: params.footerUrl || '',
-    assignedCustomActive: params.active,
-  });
-}
-
-/**
- * Checks whether channel logo and details are locked for the user
- * Rule: Normal users can only set channel details & logo ONCE. Default is LOCKED.
- * Admin can unlock a specific user.
- * Admin is NEVER locked.
- */
-export function isChannelProfileLocked(currentUser?: any): boolean {
-  if (isUserAdmin(currentUser)) return false; // Admin is NEVER locked
   if (typeof window === 'undefined') return false;
-
-  const email = (currentUser?.email || localStorage.getItem('reporter_current_user_email') || '').toLowerCase().trim();
-  if (email) {
-    try {
-      const usersStr = localStorage.getItem(STORAGE_KEY_ASSIGNED_USERS);
-      if (usersStr) {
-        const users: PlanUserRecord[] = JSON.parse(usersStr);
-        const u = users.find((x) => (x.email || '').toLowerCase().trim() === email);
-        if (u && typeof u.isLocked === 'boolean') {
-          return u.isLocked; // Directly respect individual admin lock / unlock status!
-        }
-      }
-    } catch {}
-  }
-
-  if (localStorage.getItem('is_channel_profile_locked') === 'true') return true;
   try {
-    const saved = localStorage.getItem('user_channel_profile');
-    if (saved) {
-      const p = JSON.parse(saved);
-      if (typeof p.isLocked === 'boolean') {
-        return p.isLocked;
-      }
-      if (p.channelNameHi && p.channelLogoUrl) {
-        return true;
-      }
-    }
-  } catch {}
-  return true; // Default locked for security
+    const cleanEmail = userEmail.toLowerCase().trim();
+    if (!cleanEmail) return false;
+    localStorage.setItem(`user_custom_hf_${cleanEmail}`, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent('custom_header_footer_assigned', { detail: { email: cleanEmail, data } }));
+    return true;
+  } catch (e) {
+    console.warn('Error in assignCustomHeaderFooterToUser:', e);
+    return false;
+  }
 }
 
 // ==========================================
@@ -946,17 +624,10 @@ export function getUserSubscription(): UserSubscriptionInfo {
   const now = Date.now();
   const msRemaining = Math.max(0, expiresAt - now);
   const daysRemaining = Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
-  // If user is on trial, tier is strictly BASIC (7-Day Free Trial)
-  const isTrialFlag = localStorage.getItem('ai_news_maker_is_trial') === 'true';
-  if (isTrialFlag && storedTier === 'ultra') {
-    storedTier = 'basic';
-    localStorage.setItem(STORAGE_KEY_TIER, 'basic');
-  }
+  const isTrialActive = msRemaining > 0 && (localStorage.getItem('ai_news_maker_is_trial') === 'true' || storedTier === 'ultra');
 
-  const isTrialActive = msRemaining > 0 && isTrialFlag;
-
-  // If trial has expired, revert to basic or assigned plan
-  if (msRemaining === 0 && isTrialFlag) {
+  // If trial has expired, revert to basic or assigned plan as per Rule 33
+  if (msRemaining === 0 && localStorage.getItem('ai_news_maker_is_trial') === 'true') {
     storedTier = 'basic';
     localStorage.setItem(STORAGE_KEY_TIER, 'basic');
     localStorage.removeItem('ai_news_maker_is_trial');
@@ -1111,233 +782,322 @@ export function savePrimaryMobileNumber(phone: string): boolean {
   return false;
 }
 
-// Activate 7-Day Free Trial (Trial Plan = BASIC Plan - 7 Days)
+// Activate 7-Day Free Trial (Trial Plan = VIP DESK as per MASTER SPECIFICATION Rule 32)
 export function activateFreeTrial(): UserSubscriptionInfo {
   if (typeof window !== 'undefined') {
     const now = Date.now();
     const expiry = now + 7 * 24 * 60 * 60 * 1000;
-    localStorage.setItem(STORAGE_KEY_TIER, 'basic');
+    localStorage.setItem(STORAGE_KEY_TIER, 'ultra');
     localStorage.setItem('ai_news_maker_is_trial', 'true');
     localStorage.setItem(STORAGE_KEY_TRIAL_START, now.toString());
     localStorage.setItem('ai_news_maker_plan_expires_at', expiry.toString());
-    window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: { tier: 'basic' } }));
   }
   return getUserSubscription();
 }
 
-// ==========================================
-// 8. LOGO CHANGE REQUEST MANAGEMENT
-// ==========================================
+export interface CustomHeaderFooterAssignment {
+  active: boolean;
+  headerUrl?: string;
+  footerUrl?: string;
+}
+
+export function getAssignedCustomHeaderFooter(userEmail?: string): CustomHeaderFooterAssignment | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const email = userEmail || (() => {
+      try {
+        const saved = localStorage.getItem('reporter_auth_session');
+        if (saved) {
+          const user = JSON.parse(saved);
+          return user?.email || '';
+        }
+      } catch {}
+      return '';
+    })();
+
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      const saved = localStorage.getItem(`user_custom_hf_${cleanEmail}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    }
+
+    const globalSaved = localStorage.getItem('global_custom_header_footer');
+    if (globalSaved) {
+      const parsedGlobal = JSON.parse(globalSaved);
+      if (parsedGlobal && typeof parsedGlobal === 'object') {
+        return parsedGlobal;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+// Channel Profile Lock Check
+export function isChannelProfileLocked(user?: any): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!user) return false;
+  if (isEffectiveAdmin(user)) return false;
+  try {
+    const userEmail = (user.email || '').toLowerCase().trim();
+    if (!userEmail) return false;
+
+    // Check if user is in unlocked list
+    const unlockedListRaw = localStorage.getItem('unlocked_channel_profiles');
+    if (unlockedListRaw) {
+      const unlockedList = JSON.parse(unlockedListRaw);
+      if (Array.isArray(unlockedList) && unlockedList.includes(userEmail)) {
+        return false;
+      }
+    }
+
+    const explicitLock = localStorage.getItem(`channel_profile_locked_${userEmail}`);
+    if (explicitLock === 'true') return true;
+    if (explicitLock === 'false') return false;
+
+    const generalLock = localStorage.getItem('is_channel_profile_locked');
+    if (generalLock === 'true') return true;
+
+    const savedProfile = localStorage.getItem('user_channel_profile');
+    if (savedProfile) {
+      const profile = JSON.parse(savedProfile);
+      if (profile && (profile.channelLogoUrl || profile.channelNameHi)) {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+// Account Uniqueness Validation
+export interface AccountUniquenessInput {
+  username?: string;
+  websiteUrl?: string;
+  channelName?: string;
+  currentEmail?: string;
+}
+
+export function checkAccountUniqueness(input: AccountUniquenessInput): { valid: boolean; error?: string } {
+  const cleanChannel = (input.channelName || '').trim().toLowerCase();
+  const cleanUsername = (input.username || '').trim().toLowerCase().replace(/^@/, '');
+
+  const reservedNames = ['admin', 'official', 'breakingnewswala', 'ainewsmaker', 'superadmin'];
+  if (reservedNames.includes(cleanChannel) || reservedNames.includes(cleanUsername)) {
+    return { valid: false, error: 'यह नाम सिस्टम द्वारा आरक्षित है।' };
+  }
+
+  try {
+    const users = getPlanUsers();
+    for (const u of users) {
+      if (input.currentEmail && u.email.toLowerCase() === input.currentEmail.toLowerCase()) {
+        continue;
+      }
+      if (cleanChannel && u.channelName && u.channelName.toLowerCase() === cleanChannel) {
+        return { valid: false, error: 'यह चैनल नाम किसी अन्य सदस्य द्वारा पहले से पंजीकृत है।' };
+      }
+    }
+  } catch {}
+
+  return { valid: true };
+}
+
+// Register or Update User
+export function registerOrUpdateUser(userData: {
+  name: string;
+  email: string;
+  channelName?: string;
+  channelLogoUrl?: string;
+  mobile?: string;
+  isLocked?: boolean;
+}): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const users = getPlanUsers();
+    const cleanEmail = userData.email.toLowerCase().trim();
+    const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    if (idx >= 0) {
+      users[idx] = {
+        ...users[idx],
+        email: cleanEmail,
+        name: userData.name || users[idx].name,
+        channelName: userData.channelName || users[idx].channelName,
+        channelLogoUrl: userData.channelLogoUrl || users[idx].channelLogoUrl,
+        mobile: userData.mobile || users[idx].mobile,
+        isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : users[idx].isProfileLocked,
+      };
+    } else {
+      users.push({
+        userId: `user-${Date.now()}`,
+        email: cleanEmail,
+        name: userData.name,
+        tier: 'basic',
+        planName: 'BASIC',
+        channelName: userData.channelName,
+        channelLogoUrl: userData.channelLogoUrl,
+        mobile: userData.mobile,
+        isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : true,
+        activatedAt: Date.now(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        activatedVia: 'Profile Registration',
+      });
+    }
+    localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
+    window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+  } catch (e) {
+    console.warn('Error in registerOrUpdateUser:', e);
+  }
+}
+
+// Logo Change Requests Management
 export interface LogoChangeRequest {
   id: string;
   userEmail: string;
-  username: string;
+  channelName: string;
   currentLogoUrl?: string;
-  reason?: string;
+  reason: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: number;
 }
 
-const STORAGE_KEY_LOGO_REQUESTS = 'ai_news_logo_change_requests_v1';
-
 export function getLogoChangeRequests(): LogoChangeRequest[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_LOGO_REQUESTS);
-    if (!raw) return [];
-    return JSON.parse(raw) || [];
-  } catch {
-    return [];
-  }
+    const saved = localStorage.getItem('logo_change_requests');
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
 }
 
 export function submitLogoChangeRequest(
   userEmail: string,
-  username: string,
-  currentLogoUrl?: string,
-  reason?: string
+  channelName: string,
+  currentLogoUrl: string | undefined,
+  reason: string
 ): LogoChangeRequest {
-  const cleanEmail = userEmail.toLowerCase().trim();
-  const existing = getLogoChangeRequests();
+  const reqs = getLogoChangeRequests();
   const newReq: LogoChangeRequest = {
-    id: `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    userEmail: cleanEmail,
-    username: username || cleanEmail.split('@')[0],
+    id: `req_${Date.now()}`,
+    userEmail: userEmail.toLowerCase().trim(),
+    channelName,
     currentLogoUrl,
-    reason: reason || 'चैनल लोगो अपडेट हेतु अनुरोध',
+    reason,
     status: 'pending',
     createdAt: Date.now(),
   };
-
-  const updated = [newReq, ...existing.filter((r) => r.userEmail !== cleanEmail || r.status !== 'pending')];
+  reqs.unshift(newReq);
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_LOGO_REQUESTS, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('ai_news_logo_requests_updated'));
+    localStorage.setItem('logo_change_requests', JSON.stringify(reqs));
+    window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
   }
   return newReq;
 }
 
-export function approveLogoChangeRequest(requestId: string): boolean {
-  if (typeof window === 'undefined') return false;
-  const list = getLogoChangeRequests();
-  const req = list.find((r) => r.id === requestId);
-  if (!req) return false;
-
-  req.status = 'approved';
-  // Unlock logo upload for this specific user
-  adminUpdateUserRecord(req.userEmail, { isLocked: false });
-
-  localStorage.setItem(STORAGE_KEY_LOGO_REQUESTS, JSON.stringify([...list]));
-  window.dispatchEvent(new CustomEvent('ai_news_logo_requests_updated'));
-  window.dispatchEvent(new CustomEvent('ai_news_channel_profile_unlocked', { detail: { email: req.userEmail } }));
-  return true;
-}
-
-export function rejectLogoChangeRequest(requestId: string): boolean {
-  if (typeof window === 'undefined') return false;
-  const list = getLogoChangeRequests();
-  const req = list.find((r) => r.id === requestId);
-  if (!req) return false;
-
-  req.status = 'rejected';
-  localStorage.setItem(STORAGE_KEY_LOGO_REQUESTS, JSON.stringify([...list]));
-  window.dispatchEvent(new CustomEvent('ai_news_logo_requests_updated'));
-  return true;
-}
-
 export function getUserLogoChangeRequestStatus(userEmail: string): 'none' | 'pending' | 'approved' | 'rejected' {
   if (!userEmail) return 'none';
-  const cleanEmail = userEmail.toLowerCase().trim();
-  const list = getLogoChangeRequests();
-  const found = list.find((r) => r.userEmail === cleanEmail);
-  return found ? found.status : 'none';
+  const reqs = getLogoChangeRequests();
+  const clean = userEmail.toLowerCase().trim();
+  const userReq = reqs.find((r) => r.userEmail === clean);
+  return userReq ? userReq.status : 'none';
 }
 
+export function approveLogoChangeRequest(requestId: string): void {
+  const reqs = getLogoChangeRequests();
+  const req = reqs.find((r) => r.id === requestId);
+  if (req) {
+    req.status = 'approved';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('logo_change_requests', JSON.stringify(reqs));
 
+      const cleanEmail = req.userEmail.toLowerCase().trim();
+      localStorage.removeItem(`channel_profile_locked_${cleanEmail}`);
+      localStorage.removeItem('is_channel_profile_locked');
 
+      let unlocked: string[] = [];
+      try {
+        const raw = localStorage.getItem('unlocked_channel_profiles');
+        if (raw) unlocked = JSON.parse(raw);
+      } catch {}
+      if (!unlocked.includes(cleanEmail)) {
+        unlocked.push(cleanEmail);
+        localStorage.setItem('unlocked_channel_profiles', JSON.stringify(unlocked));
+      }
 
-// ==========================================
-// CLOUD USER SYNC & ADMIN USER MANAGEMENT
-// ==========================================
+      try {
+        const users = getPlanUsers();
+        const u = users.find((x) => x.email.toLowerCase() === cleanEmail);
+        if (u) {
+          u.isProfileLocked = false;
+          localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
+        }
+      } catch {}
+
+      window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
+      window.dispatchEvent(new Event('ai_news_channel_profile_unlocked'));
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    }
+  }
+}
+
+// Cloud Users Sync & Admin Operations
 export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
-  if (typeof window === 'undefined') return getPlanUsers();
   try {
     const res = await fetch('/api/admin/users');
     if (res.ok) {
       const data = await res.json();
-      if (data.success && Array.isArray(data.users)) {
-        const localList = getPlanUsers();
-        const mergedMap = new Map<string, PlanUserRecord>();
-
-        // Seed with local users
-        localList.forEach((u) => {
-          const key = (u.email || u.userId || u.name).toLowerCase().trim();
-          mergedMap.set(key, u);
-        });
-
-        // Merge cloud users
-        data.users.forEach((cu: any) => {
-          const key = (cu.email || cu.username || '').toLowerCase().trim();
-          if (!key) return;
-
-          const existing = mergedMap.get(key);
-          const mapped: PlanUserRecord = {
-            userId: cu.username || existing?.userId || key,
-            email: cu.email || existing?.email || `${cu.username}@user.com`,
-            name: cu.fullName || cu.name || existing?.name || cu.username,
-            channelName: cu.channelNameHi || cu.channelNameEn || existing?.channelName || '',
-            channelLogoUrl: cu.channelLogoUrl || existing?.channelLogoUrl,
-            mobile: cu.mobileNumber || existing?.mobile,
-            tier: (cu.tier as UserPlanTier) || existing?.tier || 'basic',
-            planName: existing?.planName || PLAN_KEY_MAP[(cu.tier as UserPlanTier) || 'basic'] || 'BASIC',
-            activatedAt: cu.updatedAt || existing?.activatedAt || Date.now(),
-            expiresAt: existing?.expiresAt || Date.now() + 30 * 86400000,
-            activatedVia: existing?.activatedVia || 'cloud_sync',
-            planAssignedAt: cu.updatedAt || existing?.planAssignedAt || Date.now(),
-            planExpiresAt: existing?.planExpiresAt,
-            role: cu.role || existing?.role || (key.includes('admin') ? 'admin' : 'user'),
-            isLocked: cu.isLocked !== undefined ? cu.isLocked : (existing?.isLocked ?? true),
-            customHeaderUrl: cu.customHeaderUrl || existing?.customHeaderUrl,
-            customFooterUrl: cu.customFooterUrl || existing?.customFooterUrl,
-            isCustomHeaderActive: cu.isCustomHeaderActive !== undefined ? cu.isCustomHeaderActive : existing?.isCustomHeaderActive,
-            isCustomFooterActive: cu.isCustomFooterActive !== undefined ? cu.isCustomFooterActive : existing?.isCustomFooterActive,
-            websiteUrl: cu.websiteUrl || existing?.websiteUrl,
-          };
-          mergedMap.set(key, mapped);
-        });
-
-        const merged = Array.from(mergedMap.values());
-        localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(merged));
-        window.dispatchEvent(new CustomEvent('ai_news_plan_users_updated'));
-        return merged;
+      if (Array.isArray(data.users)) {
+        localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(data.users));
+        return data.users;
       }
     }
-  } catch (err) {
-    console.warn('[syncCloudUsers background notice]:', err);
-  }
+  } catch {}
   return getPlanUsers();
 }
 
 export async function adminUpdateCloudUser(
-  identifier: string,
-  updates: Partial<PlanUserRecord> & { username?: string }
+  userId: string,
+  updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // 1. Update on server
-    const res = await fetch(`/api/admin/users/${encodeURIComponent(identifier)}`, {
-      method: 'PUT',
+    const res = await fetch('/api/admin/update-user', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...updates,
-        fullName: updates.name,
-        mobileNumber: updates.mobile,
-      }),
+      body: JSON.stringify({ userId, updates }),
     });
-    const cType = res.headers.get('content-type') || '';
-    if (res.ok && cType.includes('application/json')) {
-      const data = await res.json();
-      if (!data.success && data.error) {
-        return { success: false, error: data.error };
-      }
+    if (res.ok) {
+      const json = await res.json();
+      return json;
     }
-  } catch (err: any) {
-    console.warn('[adminUpdateCloudUser error, saving locally]:', err.message);
-  }
-
-  // 2. Always update locally
-  adminUpdateUserRecord(identifier, updates);
-
-  // If username was changed, update record key locally
-  if (updates.username && updates.username !== identifier) {
-    const list = getPlanUsers();
-    const found = list.find(
-      (u) =>
-        u.email.toLowerCase() === identifier.toLowerCase() ||
-        u.userId.toLowerCase() === identifier.toLowerCase()
-    );
-    if (found) {
-      found.userId = updates.username;
-      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify([...list]));
-      window.dispatchEvent(new CustomEvent('ai_news_plan_users_updated'));
-    }
-  }
-
+  } catch {}
+  adminUpdateUserRecord(userId, updates);
   return { success: true };
 }
 
-export async function adminDeleteCloudUser(identifier: string): Promise<boolean> {
+export async function adminDeleteCloudUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await fetch(`/api/admin/users/${encodeURIComponent(identifier)}`, {
-      method: 'DELETE',
+    const res = await fetch('/api/admin/delete-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
     });
+    if (res.ok) return await res.json();
   } catch {}
-
-  const list = getPlanUsers().filter(
-    (u) =>
-      u.email.toLowerCase() !== identifier.toLowerCase() &&
-      u.userId.toLowerCase() !== identifier.toLowerCase()
-  );
-  localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(list));
-  window.dispatchEvent(new CustomEvent('ai_news_plan_users_updated'));
-  return true;
+  return { success: true };
 }
+
+export function rejectLogoChangeRequest(requestId: string): void {
+  const reqs = getLogoChangeRequests();
+  const req = reqs.find((r) => r.id === requestId);
+  if (req) {
+    req.status = 'rejected';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('logo_change_requests', JSON.stringify(reqs));
+      window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
+    }
+  }
+}
+
+

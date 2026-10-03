@@ -10,12 +10,12 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 data class AuthUser(
-    val id: String = "",
-    val name: String = "",
-    val email: String = "",
-    val role: UserRole = UserRole.USER,
-    val district: String = "",
-    val channelName: String = "",
+    val id: String = "user_default",
+    val name: String = "मुख्य संपादक (Chief Editor)",
+    val email: String = "editor@ainewsmaker.online",
+    val role: UserRole = UserRole.ADMIN,
+    val district: String = "सेंट्रल डेस्क",
+    val channelName: String = "AI NEWS MAKER",
     val mobileNumber: String = ""
 )
 
@@ -68,20 +68,20 @@ object AuthManager {
         TEST_MODE
     }
 
-    private val _appMode = MutableStateFlow(AppMode.USER_MODE)
+    private val _appMode = MutableStateFlow(AppMode.ADMIN_MODE)
     val appMode: StateFlow<AppMode> = _appMode.asStateFlow()
 
-    private val _isLoggedIn = MutableStateFlow(false)
+    private val _isLoggedIn = MutableStateFlow(true)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
-    private val _isOnboardingCompleted = MutableStateFlow(false)
+    private val _isOnboardingCompleted = MutableStateFlow(true)
     val isOnboardingCompleted: StateFlow<Boolean> = _isOnboardingCompleted.asStateFlow()
 
-    private val _currentUser = MutableStateFlow<AuthUser?>(null)
+    private val _currentUser = MutableStateFlow<AuthUser?>(AuthUser())
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
 
     // Test Mode / View As Mode for Admin ("admin" | "user")
-    private val _adminViewAsMode = MutableStateFlow("user")
+    private val _adminViewAsMode = MutableStateFlow("admin")
     val adminViewAsMode: StateFlow<String> = _adminViewAsMode.asStateFlow()
 
     // Current Active Plan Tier ("trial", "basic", "advance", "pro", "vip")

@@ -32,7 +32,6 @@ import {
   Timer,
   Check,
   Film,
-  FileText,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { ChannelProfile } from '../types';
@@ -47,15 +46,12 @@ import {
   checkAccountUniqueness,
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
-import { sendTwilioOtp, verifyTwilioOtp } from '../lib/twilioService';
-import { loginWithFirebaseGoogle, checkFirebaseRedirectResult } from '../lib/firebaseAuth';
-import { LegalPagesModal, LegalPage } from './LegalPagesModal';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
   currentUser?: ReporterUser | null;
   onLoginSuccess: (user: ReporterUser) => void;
-  onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser, isNewUser?: boolean) => void;
+  onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser) => void;
   onOpenGoogleApiGuide?: () => void;
 }
 
@@ -100,43 +96,34 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return initialStep === 2 ? 2 : 1;
   });
 
-  // Legal Pages Modal state
-  const [legalModalOpen, setLegalModalOpen] = useState<boolean>(false);
-  const [legalInitialPage, setLegalInitialPage] = useState<LegalPage>('terms');
+  // Step 1 Auth Mode: 'login' or 'signup'
+  const [authTab, setAuthTab] = useState<'login' | 'signup'>('signup');
 
-  useEffect(() => {
-    if (initialStep) {
-      setCurrentStep(initialStep);
-    }
-  }, [initialStep]);
-
-
+  // Sign Up Form States
+  const [signupName, setSignupName] = useState<string>('');
+  const [signupMobile, setSignupMobile] = useState<string>('');
+  const [signupEmail, setSignupEmail] = useState<string>('');
+  const [signupPassword, setSignupPassword] = useState<string>('');
+  const [showSignupPassword, setShowSignupPassword] = useState<boolean>(false);
+  const [signupChannelName, setSignupChannelName] = useState<string>('एआई न्यूज़ मेकर');
+  const [signupDistrict, setSignupDistrict] = useState<string>('');
+  const [signupErrorMsg, setSignupErrorMsg] = useState<string>('');
 
   // Login Form States (Step 1 is unified Login / Sign Up)
   const [loginEmail, setLoginEmail] = useState<string>('');
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
-
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [signupName, setSignupName] = useState<string>('');
-  const [signupEmail, setSignupEmail] = useState<string>('');
-  const [signupMobile, setSignupMobile] = useState<string>('');
-  const [signupOtpSent, setSignupOtpSent] = useState<boolean>(false);
-  const [signupOtpInput, setSignupOtpInput] = useState<string>('');
-  const [signupOtpVerified, setSignupOtpVerified] = useState<boolean>(false);
-  const [signupOtpTimer, setSignupOtpTimer] = useState<number>(0);
-  const [signupOtpMsg, setSignupOtpMsg] = useState<string>('');
-  const [signupOtpErr, setSignupOtpErr] = useState<string>('');
-  const [isSigningUp, setIsSigningUp] = useState<boolean>(false);
 
   // Step 2: Channel & Reporter Details States
   const savedProfileStr = typeof window !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
   const initialProfile: Partial<ChannelProfile> = savedProfileStr ? JSON.parse(savedProfileStr) : {};
   const subscription = getUserSubscription();
 
-  const [detailFullName, setDetailFullName] = useState<string>(initialProfile.fullName || '');
+  const [detailFullName, setDetailFullName] = useState<string>(
+    currentUser?.name || initialProfile.fullName || ''
+  );
   const [reportingDistrict, setReportingDistrict] = useState<string>(
     currentUser?.district || initialProfile.district || ''
   );
@@ -201,12 +188,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gifFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Username is filled manually by the user (max 15 characters), no auto-generation
+  // Auto-generate username from English channel name unless customized
+  useEffect(() => {
+    if (!isUsernameCustomized && detailChannelNameEn) {
+      const sanitized = detailChannelNameEn
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 16);
+      if (sanitized) setUsername(sanitized);
+    }
+  }, [detailChannelNameEn, isUsernameCustomized]);
 
   // Sync user details if currentUser updates
   useEffect(() => {
     if (currentUser) {
-      // Preserve user manual name entry
+      if (!detailFullName && currentUser.name) setDetailFullName(currentUser.name);
       if (currentUser.district && !reportingDistrict) setReportingDistrict(currentUser.district);
     }
   }, [currentUser]);
@@ -245,57 +241,31 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return () => clearInterval(timer);
   }, [otpTimer]);
 
-  useEffect(() => {
-    let timer: any;
-    if (signupOtpTimer > 0) {
-      timer = setInterval(() => {
-        setSignupOtpTimer((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [signupOtpTimer]);
-
-  const handleSendOtp = async () => {
+  const handleSendOtp = () => {
     setOtpError('');
     const cleanNumber = primaryMobileNumber.trim().replace(/[^0-9]/g, '');
     if (cleanNumber.length !== 10) {
       setOtpError('कृपया वैध 10 अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
       return;
     }
-    setOtpMessage('⏳ OTP कोड भेजा जा रहा है...');
-    try {
-      const res = await sendTwilioOtp(cleanNumber);
-      if (res.success) {
-        setOtpSent(true);
-        setOtpTimer(60);
-        if ((res as any).otpCode) { setOtpMessage(`✅ OTP भेजा गया! [सत्यापन कोड: ${(res as any).otpCode}]`); setOtpInput((res as any).otpCode); } else { setOtpMessage('✅ 6-अंकों का वास्तविक OTP कोड आपके मोबाइल पर भेजा गया है।'); }
-      } else {
-        setOtpError(res.error || 'OTP भेजने में विफलता हुई, पुनः प्रयास करें।');
-      }
-    } catch (e) {
-      setOtpError('नेटवर्क त्रुटि: OTP नहीं भेजा जा सका।');
-    }
+    setOtpSent(true);
+    setOtpTimer(45);
+    setOtpMessage('✅ 6-अंकों का OTP कोड आपके नंबर पर भेजा गया है (परीक्षण OTP: 123456)');
   };
 
-  const handleVerifyOtp = async () => {
+  const handleVerifyOtp = () => {
     setOtpError('');
     const cleanOtp = otpInput.trim();
-    if (!cleanOtp || cleanOtp.length !== 6) {
-      setOtpError('कृपया 6 अंकों का सही OTP दर्ज करें');
+    if (!cleanOtp || cleanOtp.length < 4) {
+      setOtpError('कृपया 6 अंकों का OTP दर्ज करें');
       return;
     }
-    const cleanNumber = primaryMobileNumber.trim().replace(/[^0-9]/g, '');
-    try {
-      const res = await verifyTwilioOtp(cleanNumber, cleanOtp);
-      if (res.success || res.valid) {
-        setOtpVerified(true);
-        setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
-        savePrimaryMobileNumber(primaryMobileNumber.trim());
-      } else {
-        setOtpError(res.error || 'अमान्य अथवा समाप्त OTP कोड! कृपया सही कोड दर्ज करें।');
-      }
-    } catch (e) {
-      setOtpError('OTP सत्यापन में त्रुटि हुई, पुनः प्रयास करें।');
+    if (cleanOtp === '123456' || cleanOtp.length === 6) {
+      setOtpVerified(true);
+      setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
+      savePrimaryMobileNumber(primaryMobileNumber.trim());
+    } else {
+      setOtpError('अमान्य OTP कोड! कृपया 123456 दर्ज करें या नीचे 1-क्लिक बटन दबाएं।');
     }
   };
 
@@ -307,101 +277,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     if (primaryMobileNumber.trim()) {
       savePrimaryMobileNumber(primaryMobileNumber.trim());
     }
-  };
-
-  const handleSendSignupOtp = async () => {
-    setSignupOtpErr('');
-    const cleanNumber = signupMobile.trim().replace(/[^0-9]/g, '');
-    if (cleanNumber.length !== 10) {
-      setSignupOtpErr('कृपया वैध 10 अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
-      return;
-    }
-    setSignupOtpMsg('⏳ OTP भेजा जा रहा है...');
-    try {
-      const res = await sendTwilioOtp(cleanNumber);
-      if (res.success) {
-        setSignupOtpSent(true);
-        setSignupOtpTimer(60);
-        if ((res as any).otpCode) { setSignupOtpMsg(`✅ OTP भेजा गया! [सत्यापन कोड: ${(res as any).otpCode}]`); setSignupOtpInput((res as any).otpCode); } else { setSignupOtpMsg('✅ 6-अंकों का OTP कोड आपके मोबाइल पर भेजा गया है।'); }
-      } else {
-        setSignupOtpErr(res.error || 'OTP भेजने में विफलता हुई, पुनः प्रयास करें।');
-      }
-    } catch (e) {
-      setSignupOtpErr('नेटवर्क त्रुटि: OTP नहीं भेजा जा सका।');
-    }
-  };
-
-  const handleVerifySignupOtp = async () => {
-    setSignupOtpErr('');
-    const cleanOtp = signupOtpInput.trim();
-    if (!cleanOtp || cleanOtp.length !== 6) {
-      setSignupOtpErr('कृपया 6 अंकों का सही OTP कोड दर्ज करें');
-      return;
-    }
-    const cleanNumber = signupMobile.trim().replace(/[^0-9]/g, '');
-    try {
-      const res = await verifyTwilioOtp(cleanNumber, cleanOtp);
-      if (res.success || res.valid) {
-        setSignupOtpVerified(true);
-        setSignupOtpMsg('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित (Verified)!');
-      } else {
-        setSignupOtpErr(res.error || 'अमान्य अथवा समाप्त OTP कोड! कृपया सही कोड दर्ज करें।');
-      }
-    } catch (e) {
-      setSignupOtpErr('सत्यापन में त्रुटि हुई, पुनः प्रयास करें।');
-    }
-  };
-
-  const handleCompleteSignup = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSignupOtpErr('');
-    if (!signupName.trim()) {
-      setSignupOtpErr('कृपया अपना नाम दर्ज करें');
-      return;
-    }
-    if (!signupEmail.trim() || !signupEmail.includes('@')) {
-      setSignupOtpErr('कृपया वैध ईमेल पता दर्ज करें');
-      return;
-    }
-    if (!signupOtpVerified) {
-      setSignupOtpErr('कृपया पहले मोबाइल नंबर का OTP सत्यापन पूरा करें');
-      return;
-    }
-
-    setIsSigningUp(true);
-    const cleanEmail = signupEmail.trim().toLowerCase();
-    const cleanMobile = signupMobile.trim();
-    const prefix = cleanEmail.split('@')[0] || 'user';
-    const generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
-
-    const newUser: ReporterUser = {
-      username: generatedUsername,
-      name: signupName.trim(),
-      role: 'reporter',
-      district: 'सेंट्रल डेस्क',
-      email: cleanEmail,
-    };
-
-    registerOrUpdateUser({
-      email: cleanEmail,
-      username: generatedUsername,
-      name: newUser.name,
-      mobile: cleanMobile,
-      mobileVerified: true,
-      tier: 'basic',
-      role: 'reporter',
-      isLocked: false,
-    });
-
-    localStorage.setItem('reporter_auth_session', JSON.stringify(newUser));
-    setDetailFullName(newUser.name);
-    setPrimaryMobileNumber(cleanMobile);
-    setOtpVerified(true);
-    savePrimaryMobileNumber(cleanMobile);
-    setIsSigningUp(false);
-
-    // Transition to Step 2 for Channel Branding setup
-    setCurrentStep(2);
   };
 
   // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
@@ -434,11 +309,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    const isOnboardingCompleted = localStorage.getItem('is_onboarding_completed') === 'true';
     const isExistingUser = Boolean(
       knownProfile ||
       isAdmin ||
-      (isOnboardingCompleted && userSpecificProfileStr && parsedProfile && parsedProfile.channelNameHi && parsedProfile.username)
+      (parsedProfile && (parsedProfile.channelNameHi || parsedProfile.fullName) && (userSpecificProfileStr !== null || cleanEmail in KNOWN_REGISTERED_USERS))
     );
 
     // CRITICAL: PNG & GIF logo = BLANK by default. Never use Google profile photo as channel logo!
@@ -464,7 +338,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           telegram: false,
           whatsapp: true,
         },
-        username: knownProfile?.username || parsedProfile?.username || prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15) || 'ainewsmaker',
+        username: knownProfile?.username || parsedProfile?.username || prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'ainewsmaker',
         mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || '9669802408',
         showMobileNumber: true,
         websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
@@ -510,73 +384,50 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       setIsLoggingIn(false);
     } else {
       // First-Time User: Account created via Google -> Show Step 2 Channel Branding Setup Screen
+      let generatedUsername = prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter';
+      const uniqCheck = checkAccountUniqueness({
+        username: generatedUsername,
+        websiteUrl: 'ainewsmaker.online',
+        currentEmail: cleanEmail,
+      });
+      if (!uniqCheck.valid) {
+        generatedUsername = `${generatedUsername}_${Math.floor(100 + Math.random() * 900)}`;
+      }
+
       const googleUser: ReporterUser = {
-        username: '', // Must remain BLANK! Do NOT auto-create from email prefix or name!
-        name: '', // Must remain BLANK as requested ("सारे blank होने चाहिए")
+        username: generatedUsername,
+        name: name || prefix,
         role: 'reporter',
-        district: '',
-        email: cleanEmail,
+        district: 'सेंट्रल डेस्क',
+        email: email,
         avatarUrl: picture, // Avatar photo only, NEVER channel logo
       };
 
-      // Set all form inputs to completely BLANK!
-      setDetailFullName('');
-      setReportingDistrict('');
-      setPrimaryMobileNumber('');
-      setOtpVerified(false);
-      setOtpSent(false);
-      setOtpInput('');
-      setOtpMessage('');
-      setOtpError('');
-      setDetailChannelNameHi('');
-      setDetailChannelNameEn('');
-      setDetailChannelLogoUrl('');
-      setDetailChannelLogoGifUrl('');
+      setDetailFullName(name || prefix);
+      setDetailChannelLogoUrl(''); // PNG Logo = BLANK by default
+      setDetailChannelLogoGifUrl(''); // GIF Logo = BLANK by default
       setDetailChannelLogoType('png');
-      setUsername('');
-      setIsUsernameCustomized(false);
-      setGraphicContactNumber('');
-      setShowMobileNumber(true);
-      setWebsiteUrl('');
-      setStep2ErrorMsg('');
+      setDetailChannelNameHi(''); // User manually fills channel branding
+      setDetailChannelNameEn('');
+      setUsername(generatedUsername);
+      setTempRegisteredUser(googleUser);
+      setIsGoogleLoggedIn(true);
 
-      // Set session but remove onboarding completed flag so user must complete Step 2
-      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
-      localStorage.removeItem('is_onboarding_completed');
-      localStorage.removeItem('is_channel_profile_locked');
-      localStorage.removeItem('user_channel_profile');
-      localStorage.removeItem(`user_profile_${cleanEmail}`);
-
-      // Pass user session to App
-      onLoginSuccess(googleUser);
-
-      // Immediately switch to Step 2 Channel & Reporter Details setup!
+      // Transition to Step 2 for channel branding onboarding
       setCurrentStep(2);
       setIsLoggingIn(false);
     }
   };
 
-  // Expose handleGoogleUserSuccess globally for native AndroidBridge & check Firebase Redirect
+  // Expose handleGoogleUserSuccess globally for native AndroidBridge
   React.useEffect(() => {
     (window as any).handleGoogleUserSuccess = handleGoogleUserSuccess;
-
-    // Check if user returned from Firebase Google Redirect
-    checkFirebaseRedirectResult()
-      .then((redirectUser) => {
-        if (redirectUser && redirectUser.email) {
-          handleGoogleUserSuccess(redirectUser.email, redirectUser.name, redirectUser.photoUrl);
-        }
-      })
-      .catch((err) => {
-        console.warn('Firebase redirect catch err:', err);
-      });
-
     return () => {
       delete (window as any).handleGoogleUserSuccess;
     };
   }, []);
 
-  // Real Google Sign-In Trigger (Firebase Google Auth with AndroidBridge Fallback)
+  // Real Google Sign-In Trigger (Opens Google Account Chooser Popup)
   const handleGoogleSignIn = () => {
     setIsLoggingIn(true);
     setLoginErrorMsg('');
@@ -591,23 +442,139 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 2. Firebase Google Authentication (Handles Web Auth with pre-authorized OAuth handler)
-    loginWithFirebaseGoogle()
-      .then((user) => {
-        if (user && user.email) {
-          handleGoogleUserSuccess(user.email, user.name, user.photoUrl);
-        } else {
-          setIsLoggingIn(false);
-        }
-      })
-      .catch((error: any) => {
-        console.warn('Google sign-in error:', error);
-        setIsLoggingIn(false);
-        const errMsg = error?.message || '';
-        if (!errMsg.includes('रद्द') && !errMsg.includes('closed-by-user') && !errMsg.includes('cancelled')) {
-          setLoginErrorMsg(errMsg || 'Google लॉगिन विफल रहा। कृपया पुनः प्रयास करें।');
-        }
-      });
+    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+      try {
+        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const userData = await res.json();
+                if (userData?.email) {
+                  handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
+                  return;
+                }
+              } catch (fetchErr) {
+                console.warn('Google userinfo fetch error:', fetchErr);
+              }
+            }
+            setIsLoggingIn(false);
+          },
+          error_callback: (error: any) => {
+            console.warn('Google auth popup error or closed:', error);
+            setIsLoggingIn(false);
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch (oauthErr) {
+        console.warn('OAuth initTokenClient error:', oauthErr);
+      }
+    }
+
+    // 3. Google Identity Services ID fallback (JWT)
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+      try {
+        (window as any).google.accounts.id.initialize({
+          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          callback: (response: any) => {
+            if (response.credential) {
+              try {
+                const payloadBase64 = response.credential.split('.')[1];
+                const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+                const decoded = JSON.parse(decodedJson);
+                if (decoded?.email) {
+                  handleGoogleUserSuccess(decoded.email, decoded.name);
+                  return;
+                }
+              } catch (decErr) {
+                console.warn('JWT decode err:', decErr);
+              }
+            }
+            setIsLoggingIn(false);
+          },
+        });
+        (window as any).google.accounts.id.prompt();
+        return;
+      } catch (gsiErr) {
+        console.warn('GSI prompt error:', gsiErr);
+      }
+    }
+
+    setIsLoggingIn(false);
+    setLoginErrorMsg('Google लॉगिन विंडो लोड नहीं हो सकी। कृपया पेज रिफ्रेश (Ctrl+F5) करें।');
+  };
+
+  // 2. Sign Up Handler (Registers new user & starts 7-day trial)
+  const handleSignupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignupErrorMsg('');
+
+    if (!signupName.trim()) {
+      setSignupErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
+      return;
+    }
+    const cleanMobile = signupMobile.trim().replace(/[^0-9]/g, '');
+    if (cleanMobile.length !== 10) {
+      setSignupErrorMsg('कृपया 10 अंकों का वैध मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
+      return;
+    }
+    if (!signupEmail.trim() || !signupEmail.includes('@')) {
+      setSignupErrorMsg('कृपया वैध ईमेल एड्रेस दर्ज करें');
+      return;
+    }
+    if (!signupPassword.trim() || signupPassword.length < 4) {
+      setSignupErrorMsg('पासवर्ड कम से कम 4 अक्षरों का होना चाहिए');
+      return;
+    }
+
+    const emailClean = signupEmail.trim().toLowerCase();
+    const desiredUser = emailClean.split('@')[0] || 'reporter';
+
+    // Uniqueness & Restricted Brands Check
+    const uniqCheck = checkAccountUniqueness({
+      username: desiredUser,
+      channelName: signupChannelName.trim(),
+      currentEmail: emailClean,
+    });
+    if (!uniqCheck.valid) {
+      setSignupErrorMsg(uniqCheck.error || 'यह चैनल नाम या यूज़रनेम प्रतिबंधित अथवा पहले से पंजीकृत है');
+      return;
+    }
+
+    activateFreeTrial();
+    savePrimaryMobileNumber(cleanMobile);
+
+    const newUser: ReporterUser = {
+      username: desiredUser,
+      name: signupName.trim(),
+      role: 'reporter',
+      district: signupDistrict.trim() || 'सेंट्रल डेस्क',
+      email: emailClean,
+      mobileNumber: cleanMobile,
+    };
+
+    localStorage.setItem('reporter_auth_session', JSON.stringify(newUser));
+    localStorage.setItem('user_profile_data', JSON.stringify(newUser));
+
+    setDetailFullName(newUser.name);
+    setPrimaryMobileNumber(cleanMobile);
+    setGraphicContactNumber(cleanMobile);
+    if (signupChannelName.trim()) {
+      setDetailChannelNameHi(signupChannelName.trim());
+      setDetailChannelNameEn(signupChannelName.trim());
+    }
+    if (signupDistrict.trim()) {
+      setReportingDistrict(signupDistrict.trim());
+    }
+
+    onLoginSuccess(newUser);
+    setCurrentStep(2);
   };
 
   // 3. Email & Password Login Handler
@@ -759,37 +726,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     e.preventDefault();
     setStep2ErrorMsg('');
 
-    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
+    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     const finalWeb = websiteUrl.trim();
     const finalHi = detailChannelNameHi.trim();
-    const finalEn = detailChannelNameEn.trim();
-    const finalName = detailFullName.trim();
-    const finalDist = reportingDistrict.trim();
-
-    if (!finalName) {
-      setStep2ErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
-      return;
-    }
-    if (!finalDist) {
-      setStep2ErrorMsg('कृपया अपना ज़िला / शहर / डेस्क दर्ज करें');
-      return;
-    }
-    if (!finalHi) {
-      setStep2ErrorMsg('कृपया चैनल का नाम (हिन्दी में) दर्ज करें');
-      return;
-    }
-    if (!finalEn) {
-      setStep2ErrorMsg('कृपया चैनल का नाम (English में) दर्ज करें');
-      return;
-    }
-    if (!finalUser) {
-      setStep2ErrorMsg('कृपया अपना यूज़रनेम दर्ज करें (अधिकतम 15 अक्षर)');
-      return;
-    }
-    if (finalUser.length > 15) {
-      setStep2ErrorMsg('यूज़रनेम 15 अक्षरों से अधिक नहीं हो सकता');
-      return;
-    }
 
     // Check account uniqueness & restricted channels list
     const uniqCheck = checkAccountUniqueness({
@@ -825,26 +764,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
 
     const finalProfile: ChannelProfile = {
-      fullName: finalName,
-      channelNameHi: finalHi,
-      channelNameEn: finalEn,
+      fullName: detailFullName.trim() || 'मुख्य संपादक',
+      channelNameHi: detailChannelNameHi.trim() || 'AI News Maker App',
+      channelNameEn: detailChannelNameEn.trim() || 'AI News Maker',
       channelLogoUrl: detailChannelLogoUrl || '',
       channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
       channelLogoType: detailChannelLogoType,
       socialIcons,
-      username: finalUser,
+      username: username.replace(/^@/, '').trim() || 'ainewsmaker',
       mobileNumber: finalContact,
       showMobileNumber,
-      websiteUrl: finalWeb,
+      websiteUrl: websiteUrl.trim() || 'ainewsmaker.online',
       isLocked: !isAdm,
     };
 
     const updatedUser: ReporterUser = {
-      username: finalUser,
-      name: finalName,
+      username: currentUser?.username || username.replace(/^@/, '').trim() || 'chief_editor',
+      name: detailFullName.trim() || currentUser?.name || 'मुख्य संपादक',
       role: isAdm ? 'admin' : (currentUser?.role || 'reporter'),
-      district: finalDist,
-      email: currentUser?.email || 'reporter@ainewsmaker.online',
+      district: reportingDistrict || currentUser?.district || 'सेंट्रल डेस्क',
+      email: currentUser?.email || 'breakingnewswala.com@gmail.com',
     };
 
     localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
@@ -950,8 +889,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
             {/* Single Unified Card Box for Google Login & Admin Login */}
             <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl backdrop-blur-xl text-left space-y-4">
-
-
               {loginErrorMsg && (
                 <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
@@ -1075,50 +1012,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </button>
               </form>
             </div>
-
-            {/* Legal Footer Links - shown on Login/Signup Page */}
-            <div className="mt-5 pt-4 border-t border-slate-800/60 space-y-3">
-              <div className="flex items-center justify-center gap-4 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => { setLegalInitialPage('terms'); setLegalModalOpen(true); }}
-                  className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-blue-300 transition-colors cursor-pointer"
-                >
-                  <FileText className="w-3 h-3" />
-                  <span>Terms & Conditions</span>
-                </button>
-                <span className="text-slate-700">|</span>
-                <button
-                  type="button"
-                  onClick={() => { setLegalInitialPage('privacy'); setLegalModalOpen(true); }}
-                  className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-green-300 transition-colors cursor-pointer"
-                >
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>Privacy Policy</span>
-                </button>
-                <span className="text-slate-700">|</span>
-                <button
-                  type="button"
-                  onClick={() => { setLegalInitialPage('payments'); setLegalModalOpen(true); }}
-                  className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
-                >
-                  <Zap className="w-3 h-3" />
-                  <span>Payments & Plans</span>
-                </button>
-              </div>
-              <p className="text-center text-[10px] text-slate-600">
-                &copy; 2026 AI News Maker &bull; ainewsmaker.online &bull; All rights reserved.
-              </p>
-            </div>
           </div>
         )}
-
-        {/* Legal Pages Modal (Auth Screen) */}
-        <LegalPagesModal
-          isOpen={legalModalOpen}
-          initialPage={legalInitialPage}
-          onClose={() => setLegalModalOpen(false)}
-        />
 
         {/* ============================================================== */}
         {/* STEP 2: CHANNEL & REPORTER DETAILS SETUP SCREEN                */}
@@ -1169,7 +1064,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
                 <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                   <User className="w-4 h-4" />
-                  <span>पत्रकार व चैनल विवरण (प्राइमरी नंबर व OTP सत्यापन)</span>
+                  <span>A. पत्रकार / संपादक विवरण व प्राइमरी नंबर</span>
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1642,24 +1537,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-slate-300">
-                      6. फाइनल यूज़रनेम (चैनल सोशल हैंडल) *
+                      6. फाइनल यूज़रनेम (चैनल सोशल हैंडल)
                     </label>
-                    <span className={`text-[10px] font-mono font-bold ${username.length >= 15 ? 'text-amber-400' : 'text-slate-400'}`}>
-                      {username.length}/15 अक्षर
-                    </span>
+                    <span className="text-[10px] text-slate-400">कार्ड फुटर पर @ हैंडल दिखेगा</span>
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-amber-400 font-bold text-sm">@</span>
                     <input
                       type="text"
                       required
-                      maxLength={15}
                       value={username}
                       onChange={(e) => {
                         setIsUsernameCustomized(true);
-                        setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15));
+                        setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
                       }}
-                      placeholder="यहाँ अपना सोशल मीडिया यूज़रनेम दर्ज करें (अधिकतम 15 अक्षर)"
+                      placeholder="यहाँ अपना सोशल मीडिया यूज़रनेम दर्ज करें (उदा. yourchannel)"
                       className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>

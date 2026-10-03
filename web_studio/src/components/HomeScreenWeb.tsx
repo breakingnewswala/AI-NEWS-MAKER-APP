@@ -30,12 +30,7 @@ import {
   Save,
   RefreshCw,
   Lock,
-  Shield,
-  CreditCard,
-  ExternalLink,
-  Globe,
 } from 'lucide-react';
-import { LegalPagesModal, LegalPage } from './LegalPagesModal';
 import { NewsFeedPost, INITIAL_CATEGORIES } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
@@ -153,10 +148,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const canModerate = isEffectiveAdmin(currentUser);
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
-
-  // Legal Pages Modal state
-  const [legalModalOpen, setLegalModalOpen] = useState<boolean>(false);
-  const [legalInitialPage, setLegalInitialPage] = useState<LegalPage>('terms');
 
   // Active Admin RSS & Web Link Sources News Integration
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
@@ -411,7 +402,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-400 animate-pulse" />
                 <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide">
-                  विशेष सूचना बोर्ड
+                  विशेष नोटिफिकेशन बोर्ड (HIGHLIGHTS)
                 </span>
               </div>
 
@@ -906,137 +897,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         </div>
       )}
-
-      {/* ===== WEBSITE FOOTER (Home Page) ===== */}
-      <footer className="mt-12 pb-28 border-t border-slate-800/70">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 space-y-8">
-
-          {/* Legal Pages Preview Cards (Screenshot-style) */}
-          <div className="text-center mb-6">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Legal & Policies</h3>
-            <p className="text-[11px] text-slate-600 mt-1">ainewsmaker.online — Transparency & Trust</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Terms Card */}
-            <button
-              type="button"
-              onClick={() => { setLegalInitialPage('terms'); setLegalModalOpen(true); }}
-              className="group relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-950/30 to-slate-900 border border-slate-800 hover:border-blue-500/60 rounded-2xl p-5 text-left transition-all duration-300 hover:shadow-xl hover:shadow-blue-950/40 hover:-translate-y-0.5 cursor-pointer"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              {/* Mini preview lines */}
-              <div className="mb-4 space-y-1.5 opacity-40">
-                {[100, 80, 95, 70, 85, 60].map((w, i) => (
-                  <div key={i} className={`h-1.5 bg-blue-400 rounded-full`} style={{ width: `${w}%` }} />
-                ))}
-              </div>
-              <div className="flex items-center gap-2.5 mb-1.5">
-                <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center shrink-0">
-                  <FileText className="w-3.5 h-3.5 text-blue-400" />
-                </div>
-                <span className="text-xs font-black text-white">Terms & Conditions</span>
-              </div>
-              <p className="text-[11px] text-slate-400 pl-9 leading-relaxed">
-                Usage rules, IP rights, user responsibilities & governing law.
-              </p>
-              <div className="mt-3 pl-9 flex items-center gap-1 text-[11px] text-blue-400 font-bold group-hover:gap-2 transition-all">
-                <span>Read Terms</span>
-                <ChevronRight className="w-3 h-3" />
-              </div>
-            </button>
-
-            {/* Privacy Card */}
-            <button
-              type="button"
-              onClick={() => { setLegalInitialPage('privacy'); setLegalModalOpen(true); }}
-              className="group relative overflow-hidden bg-gradient-to-br from-slate-900 via-green-950/30 to-slate-900 border border-slate-800 hover:border-green-500/60 rounded-2xl p-5 text-left transition-all duration-300 hover:shadow-xl hover:shadow-green-950/40 hover:-translate-y-0.5 cursor-pointer"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-green-600/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="mb-4 space-y-1.5 opacity-40">
-                {[90, 100, 75, 85, 65, 90].map((w, i) => (
-                  <div key={i} className="h-1.5 bg-green-400 rounded-full" style={{ width: `${w}%` }} />
-                ))}
-              </div>
-              <div className="flex items-center gap-2.5 mb-1.5">
-                <div className="w-7 h-7 rounded-lg bg-green-600/20 border border-green-500/40 flex items-center justify-center shrink-0">
-                  <Shield className="w-3.5 h-3.5 text-green-400" />
-                </div>
-                <span className="text-xs font-black text-white">Privacy Policy</span>
-              </div>
-              <p className="text-[11px] text-slate-400 pl-9 leading-relaxed">
-                Data collection, storage, security & your rights under GDPR & IT Act.
-              </p>
-              <div className="mt-3 pl-9 flex items-center gap-1 text-[11px] text-green-400 font-bold group-hover:gap-2 transition-all">
-                <span>Read Policy</span>
-                <ChevronRight className="w-3 h-3" />
-              </div>
-            </button>
-
-            {/* Payments Card */}
-            <button
-              type="button"
-              onClick={() => { setLegalInitialPage('payments'); setLegalModalOpen(true); }}
-              className="group relative overflow-hidden bg-gradient-to-br from-slate-900 via-amber-950/30 to-slate-900 border border-slate-800 hover:border-amber-500/60 rounded-2xl p-5 text-left transition-all duration-300 hover:shadow-xl hover:shadow-amber-950/40 hover:-translate-y-0.5 cursor-pointer"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-600/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="mb-4 space-y-1.5 opacity-40">
-                {[85, 70, 100, 80, 90, 75].map((w, i) => (
-                  <div key={i} className="h-1.5 bg-amber-400 rounded-full" style={{ width: `${w}%` }} />
-                ))}
-              </div>
-              <div className="flex items-center gap-2.5 mb-1.5">
-                <div className="w-7 h-7 rounded-lg bg-amber-600/20 border border-amber-500/40 flex items-center justify-center shrink-0">
-                  <CreditCard className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <span className="text-xs font-black text-white">Payments & Billing</span>
-              </div>
-              <p className="text-[11px] text-slate-400 pl-9 leading-relaxed">
-                Subscription plans, pricing, refund policy & payment methods.
-              </p>
-              <div className="mt-3 pl-9 flex items-center gap-1 text-[11px] text-amber-400 font-bold group-hover:gap-2 transition-all">
-                <span>View Plans</span>
-                <ChevronRight className="w-3 h-3" />
-              </div>
-            </button>
-          </div>
-
-          {/* Bottom copyright bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6 border-t border-slate-800/60">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-400 to-red-500 p-[1.5px] shadow">
-                <img src="/assets/ai_news_maker_logo.png" alt="AI News Maker" className="w-full h-full rounded-full object-cover" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }} />
-              </div>
-              <span className="text-[11px] font-black text-slate-400">AI News Maker</span>
-              <span className="text-slate-700">•</span>
-              <a href="https://ainewsmaker.online" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
-                <Globe className="w-3 h-3" /> ainewsmaker.online
-              </a>
-            </div>
-            <div className="flex items-center gap-4">
-              <button type="button" onClick={() => { setLegalInitialPage('terms'); setLegalModalOpen(true); }} className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
-                Terms
-              </button>
-              <span className="text-slate-700">|</span>
-              <button type="button" onClick={() => { setLegalInitialPage('privacy'); setLegalModalOpen(true); }} className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
-                Privacy
-              </button>
-              <span className="text-slate-700">|</span>
-              <button type="button" onClick={() => { setLegalInitialPage('payments'); setLegalModalOpen(true); }} className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
-                Payments
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-600">&copy; 2026 Breaking News Wala. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
-
-      {/* Legal Pages Modal */}
-      <LegalPagesModal
-        isOpen={legalModalOpen}
-        initialPage={legalInitialPage}
-        onClose={() => setLegalModalOpen(false)}
-      />
     </div>
   );
 };

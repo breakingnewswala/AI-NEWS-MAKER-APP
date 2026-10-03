@@ -1,11 +1,11 @@
 {
-  "projectId": "gen-lang-client-0130460668",
-  "appId": "1:83006158623:web:1e9e7771ad619177e8222a",
-  "apiKey": "AIzaSyAJ0cpKePFrHPGwqk0-O2VbqxYypJ-ckJ4",
-  "authDomain": "gen-lang-client-0130460668.firebaseapp.com",
-  "storageBucket": "gen-lang-client-0130460668.firebasestorage.app",
-  "messagingSenderId": "83006158623",
+  "projectId": "ai-news-maker-app",
+  "appId": "1:401033199805:android:cd2e59b0be2ae43bf5b7d4",
+  "apiKey": "AIzaSyDs4k9_UXdPIN2KPP83XfQwwotl934fvec",
+  "authDomain": "ai-news-maker-app.firebaseapp.com",
+  "storageBucket": "ai-news-maker-app.firebasestorage.app",
+  "messagingSenderId": "401033199805",
   "measurementId": "",
-  "oAuthClientId": "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com",
+  "oAuthClientId": "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

@@ -1,32 +1,36 @@
 {
   "project_info": {
-    "project_id": "gen-lang-client-0130460668",
-    "project_number": "83006158623",
-    "firebase_url": "https://gen-lang-client-0130460668.firebaseio.com",
-    "storage_bucket": "gen-lang-client-0130460668.firebasestorage.app"
+    "project_number": "401033199805",
+    "project_id": "ai-news-maker-app",
+    "storage_bucket": "ai-news-maker-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:83006158623:android:1e9e7771ad619177e8222a",
+        "mobilesdk_app_id": "1:401033199805:android:cd2e59b0be2ae43bf5b7d4",
         "android_client_info": {
           "package_name": "com.aistudio.ainewsmaker.dyynbu"
         }
       },
       "oauth_client": [
         {
-          "client_id": "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com",
+          "client_id": "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAJ0cpKePFrHPGwqk0-O2VbqxYypJ-ckJ4"
+          "current_key": "AIzaSyDs4k9_UXdPIN2KPP83XfQwwotl934fvec"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -20,7 +20,6 @@ import {
 import { ChannelProfile } from '../types';
 import { LogoCropperModal } from './LogoCropperModal';
 import { checkAccountUniqueness } from '../lib/userPlanManager';
-import { sendTwilioOtp, verifyTwilioOtp } from '../lib/twilioService';
 
 interface ChannelOnboardingModalProps {
   isOpen: boolean;
@@ -39,12 +38,12 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
   onClose,
   isClosable = false,
 }) => {
-  const [fullName, setFullName] = useState<string>(initialProfile?.fullName || '');
+  const [fullName, setFullName] = useState<string>(initialProfile?.fullName || userName || '');
   const [channelNameHi, setChannelNameHi] = useState<string>(
-    initialProfile?.channelNameHi || ''
+    initialProfile?.channelNameHi || 'एआई न्यूज़ मेकर'
   );
   const [channelNameEn, setChannelNameEn] = useState<string>(
-    initialProfile?.channelNameEn || ''
+    initialProfile?.channelNameEn || 'AI News Maker'
   );
   const [channelLogoUrl, setChannelLogoUrl] = useState<string>(
     initialProfile?.channelLogoUrl || ''
@@ -76,19 +75,23 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
     whatsapp: initialProfile?.socialIcons?.whatsapp ?? true,
   });
 
-  // Username: Entered by user (strictly max 15 chars)
-  const [username, setUsername] = useState<string>(initialProfile?.username || '');
+  // Username: Auto initialized from English channel name
+  const [username, setUsername] = useState<string>(
+    initialProfile?.username || 'ainewsmaker'
+  );
   const [isUsernameCustomized, setIsUsernameCustomized] = useState<boolean>(false);
 
   // Mobile number & visibility
-  const [mobileNumber, setMobileNumber] = useState<string>(initialProfile?.mobileNumber || '');
+  const [mobileNumber, setMobileNumber] = useState<string>(
+    initialProfile?.mobileNumber || '9669802408'
+  );
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     initialProfile?.showMobileNumber ?? true
   );
 
   // Website address (strictly clean domain without https:// or www)
   const [websiteUrl, setWebsiteUrl] = useState<string>(
-    initialProfile?.websiteUrl || ''
+    initialProfile?.websiteUrl || 'ainewsmaker.online'
   );
 
   // Logo Cropper Modal State
@@ -96,73 +99,18 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
   const [isCropperOpen, setIsCropperOpen] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
-  // OTP Verification for Primary Mobile Number
-  const [isMobileVerified, setIsMobileVerified] = useState<boolean>(() => {
-    return Boolean(initialProfile?.mobileNumber && initialProfile?.mobileNumber.length === 10);
-  });
-  const [isOtpSent, setIsOtpSent] = useState<boolean>(false);
-  const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
-  const [otpInput, setOtpInput] = useState<string>('');
-  const [otpFeedbackMsg, setOtpFeedbackMsg] = useState<string>('');
-
-  const handleSendOtp = async () => {
-    const clean = mobileNumber.replace(/[^0-9]/g, '').slice(-10);
-    if (!clean || clean.length !== 10) {
-      setErrorMsg('कृपया वैध 10 अंकों का मोबाइल नंबर दर्ज करें');
-      return;
-    }
-    setErrorMsg('');
-    setIsSendingOtp(true);
-    try {
-      const res = await sendTwilioOtp(clean);
-      if (res.success) {
-        setIsOtpSent(true);
-        if (res.otpCode) {
-          setOtpInput(res.otpCode);
-          setOtpFeedbackMsg(`OTP भेजा गया: ${res.otpCode}`);
-        } else {
-          setOtpFeedbackMsg(res.message || 'OTP कोड भेजा जा चुका है');
-        }
-      } else {
-        setErrorMsg(res.error || 'OTP भेजने में विफल');
+  // Auto-sync username from English Channel name unless customized
+  useEffect(() => {
+    if (!isUsernameCustomized && channelNameEn) {
+      const generated = channelNameEn
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+      if (generated) {
+        setUsername(generated);
       }
-    } catch (e: any) {
-      setErrorMsg(e.message || 'OTP भेजने में त्रुटि');
-    } finally {
-      setIsSendingOtp(false);
     }
-  };
-
-  const handleVerifyOtp = async () => {
-    const clean = mobileNumber.replace(/[^0-9]/g, '').slice(-10);
-    if (!clean || clean.length !== 10) {
-      setErrorMsg('कृपया पहले 10 अंकों का मोबाइल नंबर दर्ज करें');
-      return;
-    }
-    if (!otpInput || otpInput.trim().length !== 6) {
-      setErrorMsg('कृपया 6-अंकों का OTP कोड दर्ज करें');
-      return;
-    }
-    setErrorMsg('');
-    setIsVerifyingOtp(true);
-    try {
-      const res = await verifyTwilioOtp(clean, otpInput.trim());
-      if (res.success && res.valid) {
-        setIsMobileVerified(true);
-        setIsOtpSent(false);
-        setOtpFeedbackMsg('प्राइमरी नंबर सफलतापूर्वक सत्यापित हो गया!');
-      } else {
-        setErrorMsg(res.message || 'अमान्य OTP कोड! कृपया पुनः प्रयास करें।');
-      }
-    } catch (e: any) {
-      setErrorMsg(e.message || 'OTP सत्यापन में त्रुटि');
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
-
-
+  }, [channelNameEn, isUsernameCustomized]);
 
   if (!isOpen) return null;
 
@@ -235,37 +183,12 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
       e.preventDefault();
     }
 
-    const finalFullName = (fullName || userName || '').trim();
-    const finalHi = (channelNameHi || '').trim();
-    const finalEn = (channelNameEn || '').trim();
-    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const finalFullName = (fullName || userName || 'मुख्य संपादक').trim();
+    const finalHi = (channelNameHi || 'एआई न्यूज़ मेकर').trim();
+    const finalEn = (channelNameEn || 'AI News Maker').trim();
+    const finalUser = (username || finalEn).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'ainewsmaker';
 
     setErrorMsg('');
-
-    if (!finalFullName) {
-      setErrorMsg('कृपया अपना पूरा नाम दर्ज करें');
-      return;
-    }
-    if (!finalHi) {
-      setErrorMsg('कृपया चैनल का हिंदी नाम दर्ज करें');
-      return;
-    }
-    if (!finalUser) {
-      setErrorMsg('कृपया 15 अक्षरों तक का एक यूज़रनेम दर्ज करें');
-      return;
-    }
-    if (finalUser.length > 15) {
-      setErrorMsg('यूज़रनेम अधिकतम 15 अक्षरों का होना चाहिए');
-      return;
-    }
-    if (!mobileNumber.trim() || mobileNumber.replace(/[^0-9]/g, '').length !== 10) {
-      setErrorMsg('कृपया वैध 10-अंकों का प्राइमरी मोबाइल नंबर दर्ज करें');
-      return;
-    }
-    if (!isMobileVerified) {
-      setErrorMsg('⚠️ कृपया आगे बढ़ने के लिए अपने प्राइमरी मोबाइल नंबर को OTP से सत्यापित करें। बिना OTP के प्राइमरी नंबर लॉक नहीं होगा।');
-      return;
-    }
 
     // Check account uniqueness and restricted brands
     const uniqCheck = checkAccountUniqueness({
@@ -639,115 +562,45 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
               </div>
             </div>
 
-            {/* 5. Final Username */}
+            {/* 5. Final Username (Auto from English name) */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-neutral-300 font-['Noto_Sans_Devanagari'] flex items-center gap-1">
                   <AtSign className="w-3.5 h-3.5 text-amber-400" />
-                  <span>5. फाइनल यूज़रनेम (अधिकतम 15 अक्षर)</span>
+                  <span>5. फाइनल यूज़रनेम (चैनल का इंग्लिश नाम)</span>
                 </label>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${username.length > 15 ? 'bg-red-950 text-red-400 border border-red-500' : 'text-neutral-400'}`}>
-                    {username.length}/15 अक्षर
-                  </span>
-                  <span className="text-[10px] text-neutral-400 hidden sm:inline">कार्ड फुटर पर @ हैंडल दिखेगा</span>
-                </div>
+                <span className="text-[10px] text-neutral-400">कार्ड फुटर पर @ हैंडल दिखेगा</span>
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-amber-400 font-bold text-sm">@</span>
                 <input
                   type="text"
-                  maxLength={15}
                   value={username}
                   onChange={(e) => {
                     setIsUsernameCustomized(true);
-                    setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15));
+                    setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
                   }}
-                  placeholder="उदा. yourname"
+                  placeholder="ainewsmaker"
                   className="w-full pl-8 pr-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
                 />
               </div>
             </div>
 
-            {/* 6. Primary Mobile Number + Mandatory OTP Verification */}
-            <div className="bg-neutral-800/40 p-3.5 rounded-xl border border-neutral-700/60 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-neutral-300 font-['Noto_Sans_Devanagari'] flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-amber-400" />
-                  <span>6. प्राइमरी मोबाइल नंबर (Primary Number) * - OTP सत्यापन अनिवार्य</span>
-                </label>
-                {isMobileVerified && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[10px] font-black flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    <span>सत्यापित (Verified) 🔒</span>
-                  </span>
-                )}
+            {/* 6. Mobile Number + Visible or Not checkbox */}
+            <div className="bg-neutral-800/40 p-3 rounded-xl border border-neutral-700/60 space-y-2">
+              <label className="block text-xs font-bold text-neutral-300 font-['Noto_Sans_Devanagari']">
+                6. मोबाइल नंबर (संपर्क / व्हाट्सएप)
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-2.5 w-4 h-4 text-neutral-400" />
+                <input
+                  type="tel"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  placeholder="96698-02408"
+                  className="w-full pl-9 pr-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                />
               </div>
-
-              {/* Mandatory Warning */}
-              <div className="p-2.5 bg-red-950/60 border border-red-500/50 rounded-lg text-red-200 text-[11px] flex items-center gap-2">
-                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                <span>महत्वपूर्ण: यह प्राइमरी नंबर लॉक हो जाएगा। OTP से सत्यापन अनिवार्य है।</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-2.5 text-xs text-neutral-400 font-bold">+91</span>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    value={mobileNumber}
-                    disabled={isMobileVerified}
-                    onChange={(e) => {
-                      setMobileNumber(e.target.value.replace(/[^0-9]/g, ''));
-                      setIsMobileVerified(false);
-                      setIsOtpSent(false);
-                    }}
-                    placeholder="10 अंकों का मोबाइल नंबर दर्ज करें"
-                    className="w-full pl-11 pr-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono disabled:opacity-75 disabled:bg-neutral-900"
-                  />
-                </div>
-
-                {!isMobileVerified && (
-                  <button
-                    type="button"
-                    onClick={handleSendOtp}
-                    disabled={isSendingOtp || mobileNumber.replace(/[^0-9]/g, '').length !== 10}
-                    className="px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-lg shadow cursor-pointer transition active:scale-95 disabled:opacity-50 shrink-0"
-                  >
-                    <span>{isSendingOtp ? 'भेजा जा रहा है...' : (isOtpSent ? 'पुनः भेजें' : 'OTP प्राप्त करें')}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* OTP Input Row */}
-              {!isMobileVerified && isOtpSent && (
-                <div className="p-3 bg-neutral-900/90 rounded-xl border border-amber-500/50 space-y-2">
-                  <div className="text-[11px] text-amber-300 font-bold flex items-center justify-between">
-                    <span>6-अंकों का OTP कोड दर्ज करें:</span>
-                    {otpFeedbackMsg && <span className="text-emerald-400">{otpFeedbackMsg}</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={otpInput}
-                      onChange={(e) => setOtpInput(e.target.value.replace(/[^0-9]/g, ''))}
-                      placeholder="उदा. 123456"
-                      className="flex-1 px-3 py-2 bg-neutral-950 border border-neutral-700 rounded-lg text-white text-center text-sm font-mono tracking-widest focus:border-amber-400 focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleVerifyOtp}
-                      disabled={isVerifyingOtp || otpInput.trim().length !== 6}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg shadow cursor-pointer transition active:scale-95 disabled:opacity-50 shrink-0"
-                    >
-                      <span>{isVerifyingOtp ? 'जांच जारी...' : 'OTP सत्यापित करें'}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Checkbox: Visible or Not */}
               <label className="flex items-center gap-2 cursor-pointer pt-1 select-none">
                 <input
@@ -769,13 +622,13 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                   <Globe className="w-3.5 h-3.5 text-blue-400" />
                   <span>7. वेबसाइट एड्रेस (बिना https:// या www. के)</span>
                 </label>
-                <span className="text-[10.5px] text-neutral-400">उदा. yourwebsite.com</span>
+                <span className="text-[10.5px] text-neutral-400">उदा. ainewsmaker.online</span>
               </div>
               <input
                 type="text"
                 value={websiteUrl}
                 onChange={(e) => handleWebsiteChange(e.target.value)}
-                placeholder="yourwebsite.com"
+                placeholder="ainewsmaker.online"
                 className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
               />
               <p className="text-[10px] text-neutral-400 mt-1">

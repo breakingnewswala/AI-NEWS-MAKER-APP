@@ -12,7 +12,8 @@ const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(
 dotenv.config();
 
 const app = express();
-const PORT = parseInt(process.env.APP_PORT || process.env.PORT || "3000", 10);
+const isAIStudio = Boolean(process.env.APPLET_ID || fs.existsSync('/app/control-plane-api') || process.env.DEFAULT_APP_PORT || fs.existsSync('/etc/nginx/nginx.conf'));
+const PORT = isAIStudio ? 3000 : parseInt(process.env.PORT || process.env.APP_PORT || "8080", 10);
 
 // Enable CORS for web apps, custom domains (ainewsmaker.online), and dev endpoints
 app.use((req, res, next) => {
@@ -470,254 +471,6 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 
-// --- Live Production RSS & Web Source Scraping Pipelines ---
-function stripXmlHtmlTags(text: string): string {
-  if (!text) return "";
-  return text
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .trim();
-}
-
-function mapSourceCategory(catName: string): { key: string; name: string } {
-  const c = (catName || "").trim().toLowerCase();
-  if (c.includes("राज") || c.includes("politic")) return { key: "politics", name: "राजनीति" };
-  if (c.includes("खेल") || c.includes("sport")) return { key: "sports", name: "खेल" };
-  if (c.includes("मनोरंजन") || c.includes("entertain") || c.includes("bolly")) return { key: "entertainment", name: "मनोरंजन" };
-  if (c.includes("व्यापार") || c.includes("कारोबार") || c.includes("business")) return { key: "business", name: "व्यापार" };
-  if (c.includes("टेक") || c.includes("विज्ञान") || c.includes("tech")) return { key: "tech", name: "टेक्नोलॉजी" };
-  if (c.includes("अपराध") || c.includes("crime")) return { key: "crime", name: "अपराध" };
-  if (c.includes("राज्य") || c.includes("state")) return { key: "state", name: "राज्य" };
-  return { key: "national", name: "देश / राष्ट्रीय" };
-}
-
-async function fetchLiveRssSource(url: string, sourceName: string, category: string): Promise<{ success: boolean; count: number; totalFetched: number; error?: string; newPosts: StoredNewsPost[] }> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/rss+xml, application/xml, text/xml, */*"
-      },
-      signal: AbortSignal.timeout(12000),
-    });
-
-    if (!res.ok) {
-      return { success: false, count: 0, totalFetched: 0, error: `HTTP ${res.status} ${res.statusText}`, newPosts: [] };
-    }
-
-    const xml = await res.text();
-    const items: StoredNewsPost[] = [];
-    const itemRegex = /<(item|entry)[\s\S]*?<\/\1>/gi;
-    let match: RegExpExecArray | null;
-
-    const { key: catKey, name: catName } = mapSourceCategory(category);
-    let idx = 0;
-
-    while ((match = itemRegex.exec(xml)) !== null) {
-      const block = match[0];
-      const titleM = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-      const title = stripXmlHtmlTags(titleM ? titleM[1] : "");
-      if (!title || title.length < 5) continue;
-
-      const linkM = block.match(/<link[^>]*>(?:<!\[CDATA\[)?(https?:\/\/[^\s<\]]+)/i) || block.match(/<link[^>]*href=["'](https?:\/\/[^\s"']+)["']/i);
-      const link = linkM ? linkM[1].replace(/&amp;/g, "&") : url;
-
-      const descM = block.match(/<(description|summary|content)[^>]*>([\s\S]*?)<\/\1>/i);
-      const summary = stripXmlHtmlTags(descM ? descM[2] : "").slice(0, 340);
-
-      // Extract image: enclosure, media:content, media:thumbnail, or img tag inside description
-      const imgM = block.match(/<enclosure[^>]*url=["'](https?:\/\/[^\s"']+)["'][^>]*type=["']image/i) ||
-                   block.match(/<media:(?:content|thumbnail)[^>]*url=["'](https?:\/\/[^\s"']+)["']/i) ||
-                   (descM && descM[2].match(/<img[^>]*src=["'](https?:\/\/[^\s"']+)["']/i));
-      const imageUrl = imgM ? imgM[1].replace(/&amp;/g, "&") : "";
-
-      // Extract pubDate
-      const dateM = block.match(/<(pubDate|published|updated|lastmod)[^>]*>([\s\S]*?)<\/\1>/i);
-      let timestamp = Date.now() - idx * 60000;
-      if (dateM && dateM[2]) {
-        const parsedDate = new Date(stripXmlHtmlTags(dateM[2])).getTime();
-        if (!isNaN(parsedDate) && parsedDate > 0) timestamp = parsedDate;
-      }
-
-      idx++;
-      items.push({
-        id: `rss_${sourceName.toLowerCase().replace(/[^a-z0-9]/g, "")}_${timestamp}_${idx}`,
-        title,
-        summary: summary || title,
-        sourceChannel: sourceName || "Live RSS Feed",
-        sourceUrl: link,
-        category: catKey,
-        categoryName: catName,
-        publishedTime: formatRelativeTime(timestamp),
-        imageUrl: imageUrl || "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
-        breaking: idx <= 2,
-        isExclusive: false,
-        timestamp,
-        fullContent: summary || title,
-        location: "नई दिल्ली",
-      });
-    }
-
-    if (items.length === 0) {
-      return { success: false, count: 0, totalFetched: 0, error: "फ़ीड में कोई वैध समाचार आइटम नहीं मिला", newPosts: [] };
-    }
-
-    const currentDb = loadNewsDatabase();
-    const existingTitles = new Set(currentDb.map((p) => p.title.trim().toLowerCase()));
-    const toInsert = items.filter((item) => !existingTitles.has(item.title.trim().toLowerCase()));
-
-    const merged = [...toInsert, ...currentDb].slice(0, 150);
-    saveNewsDatabase(merged);
-
-    return {
-      success: true,
-      count: toInsert.length,
-      totalFetched: items.length,
-      newPosts: toInsert,
-    };
-  } catch (err: any) {
-    return { success: false, count: 0, totalFetched: 0, error: err.message || "RSS फेच करने में विफल", newPosts: [] };
-  }
-}
-
-async function scrapeLiveWebLink(url: string, sourceName?: string, category?: string): Promise<{ success: boolean; post?: StoredNewsPost; error?: string }> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-      },
-      signal: AbortSignal.timeout(12000),
-    });
-
-    if (!res.ok) {
-      return { success: false, error: `वेबसाइट ने HTTP ${res.status} त्रुटि दी` };
-    }
-
-    const html = await res.text();
-
-    const ogTitleM = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([\s\S]*?)["']/i) ||
-                     html.match(/<meta[^>]*name=["']twitter:title["'][^>]*content=["']([\s\S]*?)["']/i) ||
-                     html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const title = stripXmlHtmlTags(ogTitleM ? ogTitleM[1] : "");
-
-    if (!title || title.length < 5) {
-      return { success: false, error: "वेब लिंक से समाचार शीर्षक नहीं निकाला जा सका" };
-    }
-
-    const ogDescM = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([\s\S]*?)["']/i) ||
-                    html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["']/i) ||
-                    html.match(/<meta[^>]*name=["']twitter:description["'][^>]*content=["']([\s\S]*?)["']/i);
-    const summary = stripXmlHtmlTags(ogDescM ? ogDescM[1] : "").slice(0, 360);
-
-    const ogImgM = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([\s\S]*?)["']/i) ||
-                   html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([\s\S]*?)["']/i);
-    const imageUrl = ogImgM ? ogImgM[1].replace(/&amp;/g, "&") : "";
-
-    const ogSiteM = html.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([\s\S]*?)["']/i);
-    const detectedSite = ogSiteM ? stripXmlHtmlTags(ogSiteM[1]) : "";
-
-    let hostname = "";
-    try {
-      hostname = new URL(url).hostname.replace(/^www\./, "");
-    } catch {}
-
-    const channel = sourceName?.trim() || detectedSite || hostname || "Web Link Source";
-    const { key: catKey, name: catName } = mapSourceCategory(category || "");
-
-    const newPost: StoredNewsPost = {
-      id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      title,
-      summary: summary || title,
-      sourceChannel: channel,
-      sourceUrl: url,
-      category: catKey,
-      categoryName: catName,
-      publishedTime: "अभी-अभी",
-      imageUrl: imageUrl || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
-      breaking: true,
-      isExclusive: false,
-      timestamp: Date.now(),
-      fullContent: summary || title,
-      location: "विशेष संवाददाता",
-    };
-
-    const currentDb = loadNewsDatabase();
-    const merged = [newPost, ...currentDb.filter((p) => p.title.trim().toLowerCase() !== title.trim().toLowerCase())].slice(0, 150);
-    saveNewsDatabase(merged);
-
-    return { success: true, post: newPost };
-  } catch (err: any) {
-    return { success: false, error: err.message || "वेब लिंक स्क्रैप करने में विफल" };
-  }
-}
-
-app.post("/api/rss/fetch-live", async (req, res) => {
-  try {
-    const { url, name, category } = req.body;
-    if (!url) return res.status(400).json({ success: false, error: "RSS URL आवश्यक है" });
-    const result = await fetchLiveRssSource(String(url).trim(), String(name || "RSS Source").trim(), String(category || "national").trim());
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
-
-app.post("/api/web/scrape-link", async (req, res) => {
-  try {
-    const { url, name, category } = req.body;
-    if (!url) return res.status(400).json({ success: false, error: "Web link URL आवश्यक है" });
-    const result = await scrapeLiveWebLink(String(url).trim(), String(name || "").trim(), String(category || "").trim());
-    return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
-
-app.post("/api/sources/sync-all", async (req, res) => {
-  try {
-    const { sources } = req.body;
-    const list = Array.isArray(sources) && sources.length > 0 ? sources : [
-      { url: "https://www.aajtak.in/rssfeeds/?id=home", name: "आज तक (Aaj Tak)", category: "देश / राष्ट्रीय", type: "rss", isActive: true },
-      { url: "https://feeds.bbci.co.uk/hindi/rss.xml", name: "बीबीसी हिंदी (BBC Hindi)", category: "अंतरराष्ट्रीय", type: "rss", isActive: true },
-      { url: "https://www.amarujala.com/rss/breaking-news.xml", name: "अमर उजाला (Amar Ujala)", category: "ब्रेकिंग न्यूज़", type: "rss", isActive: true },
-      { url: "https://pib.gov.in/PressReleasePage.aspx", name: "PIB राष्ट्रीय डेस्क", category: "देश / राष्ट्रीय", type: "web", isActive: true },
-    ];
-
-    let totalNew = 0;
-    const sourceResults: any[] = [];
-
-    for (const src of list) {
-      if (!src.isActive) continue;
-      if (src.type === "web") {
-        const r = await scrapeLiveWebLink(src.url, src.name, src.category);
-        if (r.success) totalNew += 1;
-        sourceResults.push({ id: src.id, name: src.name, success: r.success, count: r.success ? 1 : 0, error: r.error });
-      } else {
-        const r = await fetchLiveRssSource(src.url, src.name, src.category);
-        if (r.success) totalNew += r.count;
-        sourceResults.push({ id: src.id, name: src.name, success: r.success, count: r.count, totalFetched: r.totalFetched, error: r.error });
-      }
-    }
-
-    return res.json({
-      success: true,
-      totalNewItems: totalNew,
-      sourceResults,
-      timestamp: Date.now(),
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
-
-
 // --- Google Play Data Safety: Account & Associated Data Deletion Endpoints ---
 const ACCOUNT_DELETIONS_FILE = path.join(process.cwd(), "account_deletion_requests.json");
 
@@ -1060,126 +813,6 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
   }
 });
 
-// 5. GET All Users (Admin Cloud Synced User Control)
-app.get("/api/admin/users", (req, res) => {
-  try {
-    const allProfiles = loadProfilesDatabase();
-    // Ensure default admin exists
-    if (!allProfiles["admin"] && !allProfiles["breakingnewswala.com@gmail.com"]) {
-      allProfiles["admin"] = {
-        username: "admin",
-        fullName: "मुख्य संपादक",
-        role: "admin",
-        email: "breakingnewswala.com@gmail.com",
-        district: "सेंट्रल डेस्क",
-        channelNameHi: "एआई न्यूज़ मेकर",
-        channelNameEn: "AI News Maker",
-        channelLogoUrl: "/assets/ai_news_maker_logo.png",
-        channelLogoType: "png",
-        mobileNumber: "9669802408",
-        showMobileNumber: true,
-        websiteUrl: "ainewsmaker.online",
-        tier: "ultra",
-        updatedAt: Date.now(),
-      };
-      saveProfilesDatabase(allProfiles);
-    }
-    const usersList = Object.values(allProfiles);
-    return res.json({ success: true, users: usersList });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// 6. PUT Admin Update User Record (Allows changing Username, Tier, Name, Mobile, Status, etc.)
-app.put("/api/admin/users/:username", (req, res) => {
-  try {
-    const origUsername = req.params.username.trim().toLowerCase();
-    const updates = req.body;
-    const allProfiles = loadProfilesDatabase();
-
-    // Find user by username or email
-    let foundKey = Object.keys(allProfiles).find(
-      (k) => k.toLowerCase() === origUsername || (allProfiles[k].username && allProfiles[k].username.toLowerCase() === origUsername) || (allProfiles[k].email && allProfiles[k].email.toLowerCase() === origUsername)
-    );
-
-    if (!foundKey) {
-      foundKey = origUsername;
-      allProfiles[foundKey] = {
-        username: origUsername,
-        fullName: updates.fullName || updates.name || origUsername,
-        channelNameHi: updates.channelNameHi || "एआई न्यूज़ मेकर",
-        channelNameEn: updates.channelNameEn || "AI News Maker",
-        channelLogoUrl: updates.channelLogoUrl || "/assets/ai_news_maker_logo.png",
-        channelLogoType: "png",
-        updatedAt: Date.now(),
-      };
-    }
-
-    const currentProfile = allProfiles[foundKey];
-    const newUsername = (updates.username || '').trim().replace(/[^a-zA-Z0-9_]/g, '');
-
-    // If changing username, check uniqueness and rekey
-    if (newUsername && newUsername.toLowerCase() !== currentProfile.username.toLowerCase()) {
-      const lowerNew = newUsername.toLowerCase();
-      const conflict = Object.values(allProfiles).find(
-        (p) => p.username.toLowerCase() === lowerNew && p !== currentProfile
-      );
-      if (conflict) {
-        return res.status(400).json({ error: `यूज़रनेम '${newUsername}' पहले से किसी अन्य खाते द्वारा पंजीकृत है।` });
-      }
-
-      delete allProfiles[foundKey];
-      currentProfile.username = newUsername;
-      foundKey = lowerNew;
-    }
-
-    // Apply updates
-    if (updates.fullName !== undefined) currentProfile.fullName = updates.fullName;
-    if (updates.name !== undefined) currentProfile.fullName = updates.name;
-    if (updates.mobileNumber !== undefined) currentProfile.mobileNumber = updates.mobileNumber;
-    if (updates.mobile !== undefined) currentProfile.mobileNumber = updates.mobile;
-    if (updates.district !== undefined) currentProfile.district = updates.district;
-    if (updates.channelNameHi !== undefined) currentProfile.channelNameHi = updates.channelNameHi;
-    if (updates.channelNameEn !== undefined) currentProfile.channelNameEn = updates.channelNameEn;
-    if (updates.tier !== undefined) currentProfile.tier = updates.tier;
-    if (updates.role !== undefined) currentProfile.role = updates.role;
-    if (updates.status !== undefined) currentProfile.status = updates.status;
-    if (updates.isLocked !== undefined) currentProfile.isLocked = updates.isLocked;
-    if (updates.channelLogoUrl !== undefined) currentProfile.channelLogoUrl = updates.channelLogoUrl;
-    if (updates.customHeaderUrl !== undefined) currentProfile.customHeaderUrl = updates.customHeaderUrl;
-    if (updates.customFooterUrl !== undefined) currentProfile.customFooterUrl = updates.customFooterUrl;
-    if (updates.isCustomHeaderActive !== undefined) currentProfile.isCustomHeaderActive = updates.isCustomHeaderActive;
-    if (updates.isCustomFooterActive !== undefined) currentProfile.isCustomFooterActive = updates.isCustomFooterActive;
-    currentProfile.updatedAt = Date.now();
-
-    allProfiles[foundKey] = currentProfile;
-    saveProfilesDatabase(allProfiles);
-
-    return res.json({ success: true, user: currentProfile });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// 7. DELETE Admin Delete User Record
-app.delete("/api/admin/users/:username", (req, res) => {
-  try {
-    const origUsername = req.params.username.trim().toLowerCase();
-    const allProfiles = loadProfilesDatabase();
-    const foundKey = Object.keys(allProfiles).find(
-      (k) => k.toLowerCase() === origUsername || (allProfiles[k].username && allProfiles[k].username.toLowerCase() === origUsername) || (allProfiles[k].email && allProfiles[k].email.toLowerCase() === origUsername)
-    );
-    if (foundKey) {
-      delete allProfiles[foundKey];
-      saveProfilesDatabase(allProfiles);
-    }
-    return res.json({ success: true, message: "User deleted successfully" });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
 // ==========================================
 // TWILIO INTEGRATION SERVICE (SMS & WHATSAPP)
 // ==========================================
@@ -1308,9 +941,9 @@ app.post("/api/twilio/send-whatsapp", async (req, res) => {
   }
 });
 
-app.post(["/api/twilio/send-otp", "/api/auth/send-otp"], async (req, res) => {
+app.post("/api/twilio/send-otp", async (req, res) => {
   try {
-    const mobile = req.body.mobile || req.body.phone;
+    const { mobile } = req.body;
     if (!mobile) return res.status(400).json({ success: false, error: "Mobile number is required" });
     const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1353,9 +986,9 @@ app.post(["/api/twilio/send-otp", "/api/auth/send-otp"], async (req, res) => {
   }
 });
 
-app.post(["/api/twilio/verify-otp", "/api/auth/verify-otp"], (req, res) => {
+app.post("/api/twilio/verify-otp", (req, res) => {
   try {
-    const mobile = req.body.mobile || req.body.phone; const otp = req.body.otp || req.body.code;
+    const { mobile, otp } = req.body;
     if (!mobile || !otp) return res.status(400).json({ success: false, error: "Mobile and OTP are required" });
     const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
     const record = otpStore.get(cleanNum);
@@ -1366,7 +999,7 @@ app.post(["/api/twilio/verify-otp", "/api/auth/verify-otp"], (req, res) => {
       otpStore.delete(cleanNum);
       return res.json({ success: false, valid: false, message: "OTP की वैधता समाप्त हो गई है" });
     }
-    if (record.otp === String(otp).trim() || String(otp).trim() === "123456" || String(otp).trim() === "000000") {
+    if (record.otp === String(otp).trim() || String(otp).trim() === "123456") {
       otpStore.delete(cleanNum);
       return res.json({ success: true, valid: true, message: "OTP सफलतापूर्वक सत्यापित!" });
     }
@@ -2940,14 +2573,11 @@ Return ONLY the English prompt string.`,
 
 // Endpoint: Generate / Expand Instagram & Facebook Caption with strict 2-3 paragraphs and hashtags
 app.post("/api/generate-caption", async (req, res) => {
-  const { headline, location, existingSummary, category, style = 'detailed_3_para', customInstruction, aiProvider = 'gemini', username } = req.body;
+  const { headline, location, existingSummary, category, style = 'detailed_3_para', customInstruction, aiProvider = 'gemini' } = req.body;
   try {
     if (!headline) {
       return res.status(400).json({ error: "Headline is required" });
     }
-
-    const cleanUser = (username || "").replace(/^[@#]/, "").replace(/[^a-zA-Z0-9_]/g, "").trim();
-    const userTag = cleanUser ? `#${cleanUser}` : "#AiNewsMaker";
 
     let styleDirective = `1. समाचार को कम से कम 2 पैराग्राफ, और यदि घटना/मामले में बिंदु या विवरण अधिक हैं तो 3 पूर्ण पैराग्राफ में विस्तार से लिखें।`;
     if (style === 'detailed_3_para') {
@@ -2961,7 +2591,7 @@ app.post("/api/generate-caption", async (req, res) => {
       styleDirective = `1. समाचार को 2 बहुत ही आकर्षक, संक्षिप्त व वायरल पैराग्राफ में लिखें।`;
     }
 
-    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ संपादक हैं।
+    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल "ब्रेकिंग न्यूज़ वाला" के वरिष्ठ संपादक हैं।
 कृपया निम्नलिखित समाचार के लिए इंस्टाग्राम और फेसबुक पोस्ट का विस्तृत, प्रामाणिक और प्रभावशाली कैप्शन तैयार करें:
 
 हेडलाइन: "${headline}"
@@ -2976,9 +2606,9 @@ ${styleDirective}
 3. खबर में कोई फालतू हेडिंग, टाइटल, फोन नंबर, सोशल मीडिया लिंक्स या "पूरी खबर पढ़ें" जैसे निर्देश न जोड़ें।
 4. ठीक एक खाली लाइन छोड़कर अंत में 6 से 8 प्रासंगिक हैशटैग लगाएं।
 5. हैशटैग क्रम (MUST):
-   - सबसे पहला हैशटैग अनिवार्य रूप से: ${userTag}
+   - सबसे पहला हैशटैग अनिवार्य रूप से: #breakingnewswala
    - बीच में घटना/स्थान से संबंधित प्रासंगिक हैशटैग (उदा: #BreakingNews #HindiNews #LatestNews #${(location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
-   - सबसे अंतिम हैशटैग अनिवार्य रूप से: #AiNewsMaker
+   - सबसे अंतिम हैशटैग अनिवार्य रूप से: #BNWTV
 
 केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।`;
 
@@ -2992,7 +2622,7 @@ ${styleDirective}
           messages: [
             {
               role: "system",
-              content: "आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ संपादक हैं। केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।",
+              content: "आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल 'ब्रेकिंग न्यूज़ वाला' के वरिष्ठ संपादक हैं। केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।",
             },
             {
               role: "user",
@@ -3009,7 +2639,7 @@ ${styleDirective}
         }
         console.log("OpenAI caption busy, using fallback template");
         const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
-        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें।\n\n${userTag} #BreakingNews #HindiNews #${locTag}News #LatestUpdate #AiNewsMaker`;
+        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#breakingnewswala #BreakingNews #HindiNews #${locTag}News #LatestUpdate #BNWTV`;
       }
     } else {
       const ai = getGeminiClient();
@@ -3026,7 +2656,7 @@ ${styleDirective}
         console.log("Caption generation AI busy, using fallback template:", capErr?.message?.slice(0, 80));
         // Construct high-quality fallback caption
         const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
-        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें।\n\n${userTag} #BreakingNews #HindiNews #${locTag}News #LatestUpdate #AiNewsMaker`;
+        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें ब्रेकिंग न्यूज़ वाला के साथ।\n\n#breakingnewswala #BreakingNews #HindiNews #${locTag}News #LatestUpdate #BNWTV`;
       }
     }
 
@@ -3375,18 +3005,25 @@ async function startServer() {
     console.log(`News Graphic Studio server running on http://0.0.0.0:${PORT}`);
   });
 
-  // Dual-port listening: If running on Cloud Run (port 8080), also bind port 3000 as backup
+  serverInstance.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE" && PORT !== 3000) {
+      console.warn(`Port ${PORT} in use, falling back to port 3000...`);
+      app.listen(3000, "0.0.0.0", () => {
+        console.log(`Fallback server running on http://0.0.0.0:3000`);
+      });
+    } else {
+      console.error("Server listen error:", err);
+    }
+  });
+
+  // Dual-port listening: If running on Cloud Run (port 8080), also try binding port 3000 as backup
   if (PORT !== 3000) {
     try {
       const backupServer = app.listen(3000, "0.0.0.0", () => {
         console.log(`Backup listener running on http://0.0.0.0:3000`);
       });
-      backupServer.on("error", (e: any) => {
-        // Silently continue if port 3000 is already in use
-      });
-    } catch (_err) {
-      // Ignore
-    }
+      backupServer.on("error", () => {});
+    } catch (_err) {}
   }
 }
 

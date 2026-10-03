@@ -1,0 +1,131 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Dark Studio Badge Background -->
+    <path
+        android:pathData="M54,4 A50,50 0 1,0 54,104 A50,50 0 1,0 54,4 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="10"
+                android:startY="10"
+                android:endX="98"
+                android:endY="98"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF1E293B" />
+                <item android:offset="0.5" android:color="#FF0F172A" />
+                <item android:offset="1.0" android:color="#FF020617" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glowing Amber & Crimson Accent Ring -->
+    <path
+        android:pathData="M54,6 A48,48 0 1,0 54,102 A48,48 0 1,0 54,6 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFF59E0B"
+        android:fillColor="#00000000" />
+
+    <!-- Inner Red Neon Ring -->
+    <path
+        android:pathData="M54,10 A44,44 0 1,0 54,98 A44,44 0 1,0 54,10 Z"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FFE11D48"
+        android:fillColor="#00000000" />
+
+    <!-- Broadcast Waves / Signal Arcs Left -->
+    <path
+        android:pathData="M32,38 C28,44 28,64 32,70"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFF59E0B"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M24,32 C18,42 18,66 24,76"
+        android:strokeWidth="2"
+        android:strokeColor="#FFEF4444"
+        android:strokeLineCap="round" />
+
+    <!-- Broadcast Waves / Signal Arcs Right -->
+    <path
+        android:pathData="M76,38 C80,44 80,64 76,70"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFF59E0B"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M84,32 C90,42 90,66 84,76"
+        android:strokeWidth="2"
+        android:strokeColor="#FFEF4444"
+        android:strokeLineCap="round" />
+
+    <!-- Modern Studio News Microphone / AI Core Body -->
+    <path
+        android:pathData="M44,32 C44,26.48 48.48,22 54,22 C59.52,22 64,26.48 64,32 L64,52 C64,57.52 59.52,62 54,62 C48.48,62 44,57.52 44,52 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="44"
+                android:startY="22"
+                android:endX="64"
+                android:endY="62"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.4" android:color="#FFFDE047" />
+                <item android:offset="1.0" android:color="#FFF59E0B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Microphone Grille Horizontal Lines -->
+    <path
+        android:pathData="M46,32 L62,32 M46,38 L62,38 M46,44 L62,44 M46,50 L62,50"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FF0F172A" />
+
+    <!-- Microphone Cradle Arc -->
+    <path
+        android:pathData="M38,46 C38,60 70,60 70,46"
+        android:strokeWidth="3"
+        android:strokeColor="#FFF1F5F9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Stand Stem -->
+    <path
+        android:pathData="M54,60 L54,72"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FFF1F5F9"
+        android:strokeLineCap="round" />
+
+    <!-- Stand Base Plate -->
+    <path
+        android:pathData="M42,72 L66,72"
+        android:strokeWidth="4"
+        android:strokeColor="#FFE2E8F0"
+        android:strokeLineCap="round" />
+
+    <!-- "LIVE" Red Pill Indicator -->
+    <path
+        android:pathData="M43,78 L65,78 A3,3 0 0,1 68,81 L68,83 A3,3 0 0,1 65,86 L43,86 A3,3 0 0,1 40,83 L40,81 A3,3 0 0,1 43,78 Z"
+        android:fillColor="#FFE11D48" />
+
+    <!-- Live Dot Inside Pill -->
+    <path
+        android:pathData="M45,82 A1.5,1.5 0 1,0 45,82.01"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+
+    <!-- Live Text Accent -->
+    <path
+        android:pathData="M50,81 L50,84 M53,81 L55,81 M54,81 L54,84 M57,81 L58.5,84 L60,81 M62,81 L65,81 M62,82.5 L64,82.5 M62,84 L65,84"
+        android:strokeWidth="0.8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round" />
+
+    <!-- Shining Star / AI Accent Top Right -->
+    <path
+        android:pathData="M68,22 Q71,22 71,19 Q71,22 74,22 Q71,22 71,25 Q71,22 68,22 Z"
+        android:fillColor="#FFFDE047" />
+</vector>

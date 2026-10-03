@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "AI News Maker App",
-  "short_name": "AI News Maker",
-  "description": "AI News Maker App - डिजिटल न्यूज ग्राफिक कार्ड और वीडियो जैकेट स्टूडियो।",
+  "name": "न्यूज ग्राफिक स्टूडियो",
+  "short_name": "न्यूज ग्राफिक",
+  "description": "ब्रेकिंग न्यूजवाला - डिजिटल न्यूज ग्राफिक कार्ड और ब्रेकिंग न्यूज जैकेट स्टूडियो।",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

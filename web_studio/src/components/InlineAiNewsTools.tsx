@@ -242,19 +242,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         },
       });
 
-      let userHandle = '';
-      try {
-        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.username) userHandle = parsed.username;
-        }
-      } catch {}
-      if (!userHandle && card?.socialHandle) userHandle = card.socialHandle;
-      const cleanUserTag = (userHandle || '').replace(/^[@#]/, '').trim();
-      const firstTag = cleanUserTag ? `#${cleanUserTag}` : '#NewsUpdate';
-
-      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${res.summary || extraData?.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || url || 'https://ainewsmaker.online'}\n\n${firstTag} #BreakingNews #HindiNews #AiNewsMaker`;
+      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${res.summary || extraData?.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || url || 'https://breakingnewswala.com'}\n\n#breakingnewswala #BreakingNews #HindiNews #BNWTV`;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(captionText).catch(() => {});
       }
@@ -292,19 +280,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         },
       });
 
-      let userHandle = '';
-      try {
-        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.username) userHandle = parsed.username;
-        }
-      } catch {}
-      if (!userHandle && card?.socialHandle) userHandle = card.socialHandle;
-      const cleanUserTag = (userHandle || '').replace(/^[@#]/, '').trim();
-      const firstTag = cleanUserTag ? `#${cleanUserTag}` : '#NewsUpdate';
-
-      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${fallbackResult.summary || extraData?.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || url || 'https://ainewsmaker.online'}\n\n${firstTag} #BreakingNews #HindiNews #AiNewsMaker`;
+      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${fallbackResult.summary || extraData?.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || url || 'https://breakingnewswala.com'}\n\n#breakingnewswala #BreakingNews #HindiNews #BNWTV`;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(captionText).catch(() => {});
       }
@@ -407,8 +383,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
 
       // Auto-copy social media caption to clipboard
-      const userTag = card.socialHandle ? (card.socialHandle.startsWith('@') ? card.socialHandle.replace(/^@/, '#') : `#${card.socialHandle}`) : '#AiNews';
-      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${res.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || 'https://ainewsmaker.online'}\n\n${userTag} #BreakingNews #HindiNews #AiNewsMaker`;
+      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${res.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || 'https://breakingnewswala.com'}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(captionText).catch(() => {});
       }
@@ -443,7 +418,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         summary: fallbackResult.summary || card.summary,
       });
 
-      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${fallbackResult.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || 'https://ainewsmaker.online'}\n\n${userTag} #BreakingNews #HindiNews #AiNewsMaker`;
+      const captionText = `🚨 ${finalHeadline}\n\n📍 स्थान: ${finalLoc}\n\n📝 मुख्य विवरण:\n${fallbackResult.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink || 'https://breakingnewswala.com'}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(captionText).catch(() => {});
       }
@@ -815,9 +790,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             <button
               type="button"
               onClick={() => {
-                const effectiveUrl = linkUrl || 'https://ainewsmaker.online';
-                const userTag = card.socialHandle ? (card.socialHandle.startsWith('@') ? card.socialHandle.replace(/^@/, '#') : `#${card.socialHandle}`) : '#AiNews';
-                const cap = `🚨 ${result.headline}\n\n📍 स्थान: ${result.location || card.location}\n\n📝 मुख्य विवरण:\n${result.summary || card.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${userTag} #BreakingNews #HindiNews #AiNewsMaker`;
+                const effectiveUrl = linkUrl || 'https://breakingnewswala.com';
+                const cap = `🚨 ${result.headline}\n\n📍 स्थान: ${result.location || card.location}\n\n📝 मुख्य विवरण:\n${result.summary || card.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                   navigator.clipboard.writeText(cap).catch(() => {});
                 }
