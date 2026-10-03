@@ -23,14 +23,7 @@ import com.example.ui.theme.*
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    try {
-      android.system.Os.setenv("MESA_LOG_FILE", "/dev/null", true)
-      android.system.Os.setenv("MESA_DEBUG", "0", true)
-      android.system.Os.setenv("MESA_SILENT", "1", true)
-      android.system.Os.setenv("MESA_NO_ERROR", "1", true)
-      android.system.Os.setenv("LIBGL_DEBUG", "quiet", true)
-      android.system.Os.setenv("EGL_LOG_LEVEL", "fatal", true)
-    } catch (_: Throwable) {}
+    MainApplication.configureGraphicsEnvironment()
 
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()

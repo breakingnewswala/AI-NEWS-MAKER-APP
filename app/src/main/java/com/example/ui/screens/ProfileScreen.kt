@@ -77,6 +77,9 @@ fun ProfileScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    try {
+                        setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                    } catch (_: Throwable) {}
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
