@@ -10,14 +10,13 @@ export interface StepItem {
 }
 
 export const DEFAULT_STEPS: StepItem[] = [
-  { step: 1, id: 'step-frame', label: 'फ्रेम्स', shortLabel: 'फ्रेम्स', icon: '🖼️' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '🤖' },
-  { step: 3, id: 'step-headline', label: 'हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
+  { step: 1, id: 'step-frame', label: 'फ्रेम्स', shortLabel: 'फ्रेम्स', icon: '🎨' },
+  { step: 2, id: 'step-ai', label: 'एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '✨' },
+  { step: 3, id: 'step-headline', label: 'हेडलाइन', shortLabel: 'हेडलाइन', icon: '📝' },
   { step: 4, id: 'step-photo', label: 'फोटो', shortLabel: 'फोटो', icon: '📷' },
-  { step: 5, id: 'step-location', label: 'लोकेशन', shortLabel: 'लोकेशन', icon: '📍' },
-  { step: 6, id: 'step-date-watermark', label: 'तारीख व वॉटरमार्क', shortLabel: 'तारीख-वॉटरमार्क', icon: '📅' },
-  { step: 7, id: 'step-header-footer', label: 'हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
-  { step: 8, id: 'step-download', label: 'डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
+  { step: 5, id: 'step-location-date', label: 'लोकेशन, तारीख और वॉटरमार्क', shortLabel: 'लोकेशन-तारीख', icon: '📍' },
+  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📌' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व एक्सपोर्ट', shortLabel: 'डाउनलोड', icon: '💾' },
 ];
 
 interface StepNavigatorProps {
@@ -67,7 +66,6 @@ export const StepNavigator: React.FC<StepNavigatorProps> = ({
   onStepChange,
   className = '',
   steps = DEFAULT_STEPS,
-  onOpenCloudSettings,
 }) => {
   const handleStepClick = (s: StepItem) => {
     onStepChange(s.step);
@@ -78,17 +76,13 @@ export const StepNavigator: React.FC<StepNavigatorProps> = ({
     <div
       className={`w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl p-2 sm:p-2.5 shadow-xl flex flex-col gap-1.5 ${className}`}
     >
-      {/* Header with Title */}
       <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-800/80 mb-0.5">
-        <div
-          className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 py-0.5"
-        >
+        <div className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 py-0.5">
           <span>⚙️</span>
-          <span>एडिटर स्टेप्स</span>
+          <span>एडिटर नेविगेटर (7 स्टेप्स)</span>
         </div>
       </div>
 
-      {/* 1, 2, 3, 4, 5 ऊपर से नीचे तक (Vertical Stack) */}
       <div className="flex flex-col gap-1 sm:gap-1.5 flex-1 justify-between">
         {steps.map((s) => {
           const isActive = activeStep === s.step;
@@ -120,7 +114,7 @@ export const StepNavigator: React.FC<StepNavigatorProps> = ({
               <div className="flex items-center gap-1 shrink-0">
                 {isActive ? (
                   <span className="text-[8.5px] sm:text-[10px] font-black text-amber-300 bg-black/40 px-1 py-0.5 rounded border border-amber-400/40 hidden xs:inline-block">
-                    सक्रिय ▼
+                    सक्रिय
                   </span>
                 ) : (
                   <ChevronRight className="w-3 h-3 text-slate-400 hidden xs:inline-block" />

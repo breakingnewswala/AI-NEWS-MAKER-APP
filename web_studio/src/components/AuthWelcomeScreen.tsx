@@ -366,6 +366,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
       localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
       localStorage.setItem('is_onboarding_completed', 'true');
+    localStorage.removeItem('auth_current_step');
       setDetailFullName(googleUser.name);
 
       // Register or update in Admin directory

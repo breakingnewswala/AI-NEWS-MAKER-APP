@@ -2674,7 +2674,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       {/* STEP 5: लोकेशन (Location & District) */}
       {/* ========================================================================= */}
       <div
-        id="step-location"
+        id="step-location-date"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
           mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
@@ -2761,7 +2761,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       {/* STEP 6: तारीख और वॉटरमार्क (Date & Watermark) */}
       {/* ========================================================================= */}
       <div
-        id="step-date-watermark"
+        id="step-location-date-sub"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
           mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
@@ -2960,7 +2960,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-                स्टेप 7: हैडर और फुटर (Header & Footer)
+                स्टेप 6 : हैडर और फुटर (Header & Footer)
               </span>
               <span className="text-xs text-neutral-400 font-medium">
                 टॉप हेडर व बॉटम फुटर स्ट्रिप

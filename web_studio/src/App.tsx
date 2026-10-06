@@ -67,6 +67,7 @@ import { HomeScreenWeb } from './components/HomeScreenWeb';
 import { VideosScreenWeb } from './components/VideosScreenWeb';
 import { EPaperScreenWeb } from './components/EPaperScreenWeb';
 import { ProfileScreenWeb } from './components/ProfileScreenWeb';
+import { NewsroomScreenWeb } from './components/NewsroomScreenWeb';
 import { DraftsScreenWeb } from './components/DraftsScreenWeb';
 import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
 import { ExportScreenWeb } from './components/ExportScreenWeb';
@@ -1080,6 +1081,17 @@ export default function App() {
   };
 
   // Export card to High-Res PNG or JPG (with full status, progress & robust blob downloading)
+  
+  const handleOpenDraftInStudio = (draft: any) => {
+    if (draft.card) {
+      setCard(draft.card);
+    }
+    setActiveDraftId(draft.id);
+    setCurrentTab('studio');
+    window.location.hash = 'studio';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleDownload = async (formatOverride?: 'png' | 'jpeg') => {
     if (downloading) return;
     const fmt: 'png' | 'jpeg' =
@@ -1883,61 +1895,59 @@ export default function App() {
         </main>
       )}
 
-      {/* 4. Newsroom / E-Paper Tab */}
-      {(currentTab === 'epaper' || currentTab === 'newsroom') && (
-        <EPaperScreenWeb
-          onOpenStudioWithEPaper={handleOpenStudioWithEPaper}
-          onOpenDrafts={() => setIsDraftsModalOpen(true)}
-
-        />
-      )}
-
-      {/* 4. Categories Tab (Categories + E-Paper + Video Feed) */}
-      {(currentTab === 'categories' || currentTab === 'videos' || currentTab === 'epaper') && (
-        <CategoriesScreenWeb
-          posts={posts}
+      {/* 2. Videos Tab (Rich Video News Feed) */}
+      {currentTab === 'videos' && (
+        <VideosScreenWeb
           videos={videos}
-          onOpenStudioWithNews={(post) => {
-            handleOpenStudioWithNews(post);
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
+          currentUser={currentUser}
           onOpenStudioWithVideo={(video) => {
             handleOpenStudioWithVideo(video);
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          onOpenStudioWithEPaper={(edition) => {
-            handleOpenStudioWithEPaper(edition);
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
+          onAdminAddVideo={(newVid) => {
+            setVideos((prev) => [newVid, ...prev]);
+          }}
+        />
+      )}
+
+      {/* 4. Newsroom Tab (Drafts & Saved Projects Workspace) */}
+      {(currentTab === 'newsroom' || currentTab === 'drafts') && (
+        <NewsroomScreenWeb
+          onOpenStudioWithDraft={handleOpenDraftInStudio}
+          onNavigateToStudio={() => {
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateToVideos={() => {
+            setCurrentTab('videos');
+            window.location.hash = 'videos';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateToControlPanel={() => {
+            setCurrentTab('profile');
+            window.location.hash = 'profile';
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         />
       )}
 
-      {/* 5. Export Tab (Multi-Format Export + Caption + Settings) */}
-      {(currentTab === 'export' || currentTab === 'profile') && (
-        <ExportScreenWeb
-          card={card}
-          onDownload={handleDownload}
-          downloading={downloading}
-          onCopyImage={handleCopyToClipboard}
-          copied={copied}
-          onOpenCaptionModal={() => setIsCaptionModalOpen(true)}
+      {/* 5. Profile & Control Panel Tab (10 Options + Channel Branding + Plans + APK Download) */}
+      {(currentTab === 'profile' || currentTab === 'export') && (
+        <ProfileScreenWeb
           currentUser={currentUser}
           onLogout={handleLogout}
           onAddNewPost={handleAddNewPost}
           onOpenStudio={() => {
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onNavigateToGenerator={() => {
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         />
