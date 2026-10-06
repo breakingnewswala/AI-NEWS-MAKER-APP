@@ -255,9 +255,7 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
               <h3 className="font-bold text-white text-base">
                 इंस्टाग्राम व फेसबुक पोस्ट कैप्शन
               </h3>
-              <p className="text-[11px] text-neutral-400">
-                2-3 पैराग्राफ में पूरी खबर • पहला टैग <span className="text-yellow-400 font-mono font-bold">{firstUserTag}</span> • अंतिम टैग <span className="text-yellow-400 font-mono font-bold">#AINewsMaker</span>
-              </p>
+              <p className="text-[11px] text-neutral-400">2-3 पैराग्राफ में पूरी खबर और हैशटैग</p>
             </div>
           </div>
           <button

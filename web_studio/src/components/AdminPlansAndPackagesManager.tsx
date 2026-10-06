@@ -2285,7 +2285,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    7. RSS लिंक्स डैशबोर्ड (Live Production RSS Feeds)
+                    7. RSS लिंक्स डैशबोर्ड
                   </h3>
                   <p className="text-xs text-slate-300">
                     विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।

@@ -876,7 +876,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                     <div>
                       <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        <span>मेंबरशिप प्लान व अपग्रेड (Subscription Plans)</span>
+                        <span>मेंबरशिप प्लान व अपग्रेड</span>
                         <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-black rounded">
                           4 यूज़र स्तर
                         </span>
@@ -1135,7 +1135,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition flex items-center gap-2 active:scale-95 border border-amber-300 ring-2 ring-amber-400/30"
                             >
                               <ShieldCheck className="w-4 h-4 text-slate-950 shrink-0" />
-                              <span>लोगो बदलने हेतु एडमिन से अनुरोध करें (Request to Admin)</span>
+                              <span>लोगो बदलने हेतु अनुरोध</span>
                             </button>
                           )}
                         </div>
@@ -1304,7 +1304,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )}
               </div>
 
-              {/* Request Logo Change to Admin Modal for Normal Users */}
+              {/* लोगो बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
               {isLogoReqModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
                   <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
@@ -1317,7 +1317,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           <h3 className="text-white font-bold text-sm sm:text-base font-['Baloo_2']">
                             लोगो बदलने हेतु एडमिन से अनुरोध
                           </h3>
-                          <p className="text-[11px] text-slate-400">Request Logo Change to Admin</p>
+                          <p className="text-[11px] text-slate-400">लोगो बदलने हेतु एडमिन से अनुरोध</p>
                         </div>
                       </div>
                       <button

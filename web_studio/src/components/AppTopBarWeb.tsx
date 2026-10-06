@@ -207,7 +207,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             </div>
 
           {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
-          <nav className="flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-0.5 sm:p-1 shrink-0 overflow-x-auto no-scrollbar max-w-[58vw] sm:max-w-none">
+          <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0">
             <button
               onClick={() => onNavigateToTab('home')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
