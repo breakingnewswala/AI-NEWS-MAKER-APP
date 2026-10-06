@@ -259,13 +259,23 @@ export default function App() {
     setIsSyncingNews(true);
     let loaded = false;
 
+    const getDeletedIds = (): Set<string> => {
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {}
+      return new Set();
+    };
+    const deletedIds = getDeletedIds();
+
     // 1. Try Firebase Storage cloud live database (works 100% on ainewsmaker.online, PWA, mobile)
     try {
       const fbRes = await fetch(`${CLOUD_STORAGE_NEWS_URL}&_t=${Date.now()}`, { cache: 'no-cache' });
       if (fbRes.ok) {
         const data = await fbRes.json();
         if (Array.isArray(data) && data.length > 0) {
-          setPosts(data);
+          const clean = data.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+          setPosts(clean);
           try {
             localStorage.setItem('app_news_posts_v2', JSON.stringify(data));
           } catch {}
@@ -284,7 +294,8 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && Array.isArray(data.posts) && data.posts.length > 0) {
-            setPosts(data.posts);
+            const clean = data.posts.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+            setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(data.posts));
             } catch {}
@@ -303,7 +314,8 @@ export default function App() {
         if (staticRes.ok) {
           const data = await staticRes.json();
           if (Array.isArray(data) && data.length > 0) {
-            setPosts(data);
+            const clean = data.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+            setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(data));
             } catch {}

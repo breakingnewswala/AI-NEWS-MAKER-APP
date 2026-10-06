@@ -18,7 +18,7 @@ interface CardPreviewProps {
   onChange?: (updates: Partial<NewsCardData>) => void;
 }
 
-const FALLBACK_NEWS_BG = '/assets/placeholder_news_photo.svg';
+const FALLBACK_NEWS_BG = '/assets/placeholder_news_search_square.jpg';
 
 const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const target = e.currentTarget;

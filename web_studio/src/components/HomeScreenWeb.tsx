@@ -165,6 +165,28 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const canModerate = isEffectiveAdmin(currentUser);
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
+  const [defaultThumbnailIds, setDefaultThumbnailIds] = useState<Set<string>>(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
+      if (raw) return new Set(JSON.parse(raw));
+    } catch {}
+    return new Set();
+  });
+
+  const toggleDefaultThumbnail = (postId: string) => {
+    setDefaultThumbnailIds((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(postId)) {
+        updated.delete(postId);
+      } else {
+        updated.add(postId);
+      }
+      try {
+        localStorage.setItem('app_default_thumbnail_news_ids_v1', JSON.stringify(Array.from(updated)));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Active Admin RSS & Web Link Sources News Integration
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
