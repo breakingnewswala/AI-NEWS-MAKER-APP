@@ -205,6 +205,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         customAccounts[prefix] = { pass: 'google_linked', user };
         localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
         localStorage.setItem('reporter_auth_session', JSON.stringify(user));
+      try {
+        registerOrUpdateUser({
+          email: cleanEmail,
+          name: user.name,
+          username: user.username,
+          role: user.role,
+          tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : 'basic'),
+          isLocked: !isAdmin && !isSuper,
+        });
+      } catch (gRegErr) {
+        console.warn('Error syncing Google user in LoginModal:', gRegErr);
+      }
       } catch (e) {}
 
       // Persist to server user-profile endpoint
@@ -414,6 +426,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       try {
         localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
         localStorage.setItem('reporter_auth_session', JSON.stringify(newUser));
+      try {
+        registerOrUpdateUser({
+          email: cleanUser.includes('@') ? cleanUser : `${cleanUser}@ainewsmaker.online`,
+          name: cleanName,
+          username: cleanUser,
+          role: signupRole,
+          tier: signupRole === 'admin' ? 'ultra' : 'basic',
+          isLocked: signupRole !== 'admin',
+        });
+      } catch (regErr) {
+        console.warn('Error syncing new user in LoginModal:', regErr);
+      }
       } catch (saveErr) {
         console.warn('Error storing new account:', saveErr);
       }

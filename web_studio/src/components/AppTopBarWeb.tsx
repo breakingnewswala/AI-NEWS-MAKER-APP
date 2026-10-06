@@ -105,7 +105,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     studio: isHindi ? 'ग्राफिक स्टूडियो' : 'Graphic Studio',
     epaper: isHindi ? 'दैनिक ई-पेपर' : 'E-Paper',
     profile: isAdminUser
-      ? (isHindi ? 'कंट्रोल पैनल' : 'Control Panel')
+      ? (isHindi ? 'कंट्रोल रूम' : 'Control Room')
       : (isHindi ? 'मेरी प्रोफाइल' : 'My Profile'),
   };
 
@@ -260,7 +260,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              ⚙️ कंट्रोल पैनल
+              {isAdminUser ? '⚙️ कंट्रोल रूम' : '👤 प्रोफाइल'}
 
             </button>
           </nav>

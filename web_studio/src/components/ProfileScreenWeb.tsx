@@ -46,6 +46,7 @@ import {
   setUserPlanTier,
   savePrimaryMobileNumber,
   isUserAdmin,
+  isUserSuperAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
   setAdminTestMode,
