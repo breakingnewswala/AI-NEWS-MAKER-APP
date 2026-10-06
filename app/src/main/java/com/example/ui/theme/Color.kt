@@ -2,43 +2,36 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// News Brand Palette: Red, Black, Gold, Light Newsprint
-val NewsRedPrimary = Color(0xFFC62828) // Deep Editorial Red
-val NewsRedDark = Color(0xFF8E0000)
-val NewsRedLight = Color(0xFFFF5F52)
-
-val NewsDarkRed = Color(0xFF580B07)
-val NewsRed = Color(0xFFD32F2F)
-val NewsWhite = Color(0xFFFFFFFF)
-val NewsYellow = Color(0xFFFFED00)
-val NewsCardDark = Color(0xFF262626)
-val NewsGrayText = Color(0xFFA1A1AA)
-val NewsSurfaceDark = Color(0xFF18181B)
-
-val NewsGold = Color(0xFFD4AF37) // Metallic Gold
-val NewsGoldLight = Color(0xFFFFF3CD)
-val NewsGoldDark = Color(0xFF997A15)
-
-val NewsBlack = Color(0xFF18181B) // Elegant Dark Charcoal
-val NewsSlate = Color(0xFF3F3F46)
-val NewsMuted = Color(0xFF71717A)
-
-val NewsBgLight = Color(0xFFF9FAFB) // Clean crisp editorial background
-val NewsCardBg = Color(0xFFFFFFFF)
-val NewsBorder = Color(0xFFE4E4E7)
-
-// Web Studio Matching Dark Palette
-val Slate950 = Color(0xFF020617) // Ultra deep obsidian slate
-val Slate900 = Color(0xFF0F172A) // Rich dark slate card/surface
-val Slate800 = Color(0xFF1E293B) // Dark border and divider
-val Slate700 = Color(0xFF334155) // Elevated element border
-val Slate500 = Color(0xFF64748B) // Slate medium muted
-val Slate400 = Color(0xFF94A3B8) // Crisp muted subtitle text
-val Slate300 = Color(0xFFCBD5E1) // Soft slate text
-val Slate200 = Color(0xFFE2E8F0) // High contrast clean white text
-val Amber400 = Color(0xFFFBBF24) // Brand energetic gold
-val Amber500 = Color(0xFFF59E0B) // Rich golden amber
-
-val NewsGreen = Color(0xFF16A34A)
-val NewsBlue = Color(0xFF2563EB)
-
+val NewsRedPrimary = Color(4291176488L)
+val NewsRedDark = Color(4287496192L)
+val NewsRedLight = Color(4294926162L)
+val NewsDarkRed = Color(4283960071L)
+val NewsRed = Color(4292030255L)
+val Red600 = Color(0xFFDC2626)
+val Red800 = Color(0xFF991B1B)
+val NewsWhite = Color(4294967295L)
+val NewsYellow = Color(4294962432L)
+val NewsCardDark = Color(4280690214L)
+val NewsGrayText = Color(4288782762L)
+val NewsSurfaceDark = Color(4279769115L)
+val NewsGold = Color(4292128567L)
+val NewsGoldLight = Color(4294964173L)
+val NewsGoldDark = Color(4288248341L)
+val NewsBlack = Color(4279769115L)
+val NewsSlate = Color(4282335046L)
+val NewsMuted = Color(4285624698L)
+val NewsBgLight = Color(4294572795L)
+val NewsCardBg = Color(4294967295L)
+val NewsBorder = Color(4293190887L)
+val Slate950 = Color(4278322711L)
+val Slate900 = Color(4279179050L)
+val Slate800 = Color(4280166715L)
+val Slate700 = Color(4281549141L)
+val Slate500 = Color(4284773515L)
+val Slate400 = Color(4287931320L)
+val Slate300 = Color(4291548641L)
+val Slate200 = Color(4293060848L)
+val Amber400 = Color(4294688548L)
+val Amber500 = Color(4294286859L)
+val NewsGreen = Color(4279673674L)
+val NewsBlue = Color(4280640491L)

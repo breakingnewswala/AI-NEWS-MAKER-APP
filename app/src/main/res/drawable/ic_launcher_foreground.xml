@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
+<<<<<<< HEAD
         android:width="66dp"
         android:height="66dp"
         android:drawable="@drawable/ic_app_logo_img"
         android:gravity="center" />
+=======
+        android:width="72dp"
+        android:height="72dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_app_logo" />
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 </layer-list>

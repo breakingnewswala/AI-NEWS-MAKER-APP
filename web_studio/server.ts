@@ -44,6 +44,24 @@ let dynamicOpenAiKey: string = (process.env.OPENAI_API_KEY && process.env.OPENAI
   : CONFIGURED_OPENAI_KEY;
 let dynamicCustomDomain: string = "";
 
+const GEMINI_MODELS_POOL = [
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-3.1-flash-lite",
+];
+
+function getCategoryFallbackImage(category: string = 'general'): string {
+  const cat = (category || '').toLowerCase();
+  if (cat.includes('crime') || cat.includes('अपराध')) return 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80';
+  if (cat.includes('politics') || cat.includes('राजनीति')) return 'https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=800&q=80';
+  if (cat.includes('sports') || cat.includes('खेल')) return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80';
+  if (cat.includes('tech') || cat.includes('तकनीक')) return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80';
+  if (cat.includes('business') || cat.includes('व्यापार')) return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80';
+  if (cat.includes('weather') || cat.includes('मौसम')) return 'https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80';
+  return 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80';
+}
+
 // Check availability of AI Providers (Gemini & OpenAI)
 app.get("/api/ai-providers-status", (req, res) => {
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -637,6 +655,7 @@ function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
   }
 }
 
+<<<<<<< HEAD
 function getCategoryFallbackImage(category: string): string {
   const cat = (category || "").toLowerCase();
   if (cat.includes("खेल") || cat.includes("sports")) return "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&auto=format&fit=crop";
@@ -646,6 +665,199 @@ function getCategoryFallbackImage(category: string): string {
   if (cat.includes("अपराध") || cat.includes("crime")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&auto=format&fit=crop";
   if (cat.includes("अंतरराष्ट्रीय") || cat.includes("world")) return "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=800&auto=format&fit=crop";
   return "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop";
+=======
+function isValidNewsImage(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  const clean = url.trim().toLowerCase();
+  if (clean.length < 8) return false;
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
+  // Exclude unwanted file extensions
+  if (clean.endsWith(".ico") || clean.endsWith(".svg") || clean.endsWith(".gif")) return false;
+  // Exclude logos, favicons, ads, trackers, placeholders, social icons, widgets
+  const invalidKeywords = [
+    "logo", "favicon", "avatar", "icon", "advertisement", "ad_", "_ad", "/ads/",
+    "banner", "pixel", "1x1", "tracking", "analytics", "share", "social", "button",
+    "badge", "sponsor", "placeholder", "default_thumb", "spinner", "loader", "loading",
+    "widget", "counter", "wp-content/themes", "/themes/", "/static/images/logo"
+  ];
+  return !invalidKeywords.some((kw) => clean.includes(kw));
+}
+
+async function extractBestNewsImage(
+  itemXml: string,
+  rawDesc: string,
+  articleUrl: string,
+  fallbackCategory: string
+): Promise<string> {
+  // 1. media:content (highest priority)
+  const mediaMatches = itemXml.matchAll(/<media:content[^>]+url=["']([^"']+)["'][^>]*>/gi);
+  for (const m of mediaMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+
+  // 2. enclosure (image/jpeg, image/png, image/webp)
+  const enclosureMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/gi);
+  for (const m of enclosureMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+  const enclosureAltMatches = itemXml.matchAll(/<enclosure[^>]+type=["']image\/[^"']+["'][^>]*url=["']([^"']+)["']/gi);
+  for (const m of enclosureAltMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+
+  // 3. RSS content image (content:encoded or description img tag)
+  const contentEncodedMatch = itemXml.match(/<content:encoded>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/content:encoded>/i);
+  const contentBody = (contentEncodedMatch ? (contentEncodedMatch[1] || contentEncodedMatch[2] || "") : "") + " " + rawDesc;
+  const imgMatches = contentBody.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
+  for (const m of imgMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+
+  // 4, 5, 6. Fetch actual webpage for og:image, twitter:image, article main image
+  if (articleUrl && articleUrl.startsWith("http")) {
+    try {
+      const resp = await fetch(articleUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
+        },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (resp.ok) {
+        const html = await resp.text();
+        // Priority 4: og:image
+        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+                             html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+        if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
+          return ogImageMatch[1].trim();
+        }
+
+        // Priority 5: twitter:image
+        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
+                                  html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+        if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
+          return twitterImageMatch[1].trim();
+        }
+
+        // Priority 6: Article main image (<article> img or <figure> img)
+        const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
+                                html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+        if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
+          return articleImgMatch[1].trim();
+        }
+      }
+    } catch {
+      // ignore network timeout for speed
+    }
+  }
+
+  // Reliable category fallback image
+  return getCategoryFallbackImage(fallbackCategory);
+}
+
+// Clean and craft professional factual Hindi headline adhering strictly to user guidelines:
+// Factual, clear, concise, neutral, professional.
+// Avoid clickbaits ("जानिए", "देखिए", "Breaking News:", "Exclusive", "बड़ा खुलासा", "सन्न रह जाएंगे").
+// Remove unnecessary honorifics (श्री, माननीय, जी) if making headline unnecessarily long.
+function cleanAndCraftHindiHeadline(rawHeadline: string, articleText: string): { title: string; summary: string; location: string } {
+  let title = rawHeadline || "";
+
+  // 1. Remove clickbait / hype markers
+  title = title
+    .replace(/^(breaking\s*news\s*[:\-–—]|ब्रेकिंग\s*न्यूज़\s*[:\-–—]|एक्सक्लूसिव\s*[:\-–—]|exclusive\s*[:\-–—]|बड़ी\s*खबर\s*[:\-–—])/i, "")
+    .replace(/(?:^|\s)(जानिए|देखिए|सुनिए|सन्न\s*रह\s*जाएंगे|हैरान\s*हो\s*जाएंगे|बड़ा\s*खुलासा|चौंकाने\s*वाला|वायरल\s*सच)\s*[:\-–—]?\s*/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
+    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/\.{2,}/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // 2. Identify location
+  const locationList = [
+    "शहडोल", "रीवा", "सीधी", "सतना", "भोपाल", "इंदौर", "जबलपुर", "ग्वालियर", "उज्जैन",
+    "सागर", "छतरपुर", "दमोह", "कटनी", "मंडला", "डिंडोरी", "अनूपपुर", "उमरिया", "सिंगरौली",
+    "दिल्ली", "नई दिल्ली", "मध्य प्रदेश", "उत्तर प्रदेश", "बिहार", "राजस्थान", "मुंबई"
+  ];
+  let detectedLocation = "विशेष डेस्क";
+  for (const loc of locationList) {
+    if (title.includes(loc) || articleText.includes(loc)) {
+      detectedLocation = loc;
+      break;
+    }
+  }
+
+  // 3. Keep concise: max 14-16 words for ideal 4:5 2-3 line capacity
+  const words = title.split(/\s+/).filter(Boolean);
+  if (words.length > 15) {
+    title = words.slice(0, 15).join(" ");
+  }
+
+  // 4. Clean summary
+  let summary = articleText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  if (summary.length > 220) {
+    summary = summary.slice(0, 215) + "...";
+  }
+  if (!summary) {
+    summary = `${title} को लेकर ताज़ा रिपोर्ट सामने आई है। प्रशासनिक स्तर पर आवश्यक संज्ञान लिया गया है।`;
+  }
+
+  return { title, summary, location: detectedLocation };
+}
+
+async function processRssItemWithAiEditorial(
+  rawTitle: string,
+  rawDesc: string,
+  sourceCategory: string,
+  sourceUrl: string
+): Promise<{ title: string; summary: string; location: string; categoryName: string }> {
+  const fallback = cleanAndCraftHindiHeadline(rawTitle, rawDesc);
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  if (geminiKey && geminiKey !== "MY_GEMINI_API_KEY" && geminiKey.length > 5) {
+    try {
+      const ai = getGeminiClient();
+      const prompt = `आप एक वरिष्ठ, निष्पक्ष और तथ्यपरक हिंदी समाचार संपादक हैं।
+नीचे दी गई खबर के विवरण और शीर्षक का विश्लेषण करें और एक तथ्यपरक, स्पष्ट, संक्षिप्त और निष्पक्ष हिंदी हेडलाइन (Headline) व 2 वाक्यों का संक्षिप्त सार (Summary) तैयार करें।
+
+नियम:
+1. केवल तथ्यात्मक (factual), स्पष्ट (clear) और न्यूट्रल (neutral) भाषा का प्रयोग करें।
+2. "जानिए", "देखिए", "Breaking News:", "Exclusive", "बड़ा खुलासा" जैसे क्लिकबेट शब्दों का प्रयोग कतई न करें।
+3. अनावश्यक आदरसूचक शब्द (श्री, माननीय, जी) न लगाएं।
+4. हेडलाइन अधिकतम 12 से 14 शब्दों की हो (ताकि 4:5 ग्राफिक कार्ड में 2-3 लाइनों में सही दिखे)।
+5. आउटपुट केवल वैध JSON में दें:
+{"headline": "तथ्यात्मक हेडलाइन", "summary": "संक्षिप्त विवरण", "location": "जिले/शहर का नाम"}`;
+
+      const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+        contents: `${prompt}\n\nमूल शीर्षक: ${rawTitle}\nमूल विवरण: ${rawDesc.slice(0, 500)}`,
+        config: { temperature: 0.2 },
+      });
+
+      const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.headline && parsed.headline.trim().length > 5) {
+          return {
+            title: parsed.headline.trim(),
+            summary: parsed.summary?.trim() || fallback.summary,
+            location: parsed.location?.trim() || fallback.location,
+            categoryName: sourceCategory || "देश",
+          };
+        }
+      }
+    } catch {
+      // Fallback cleanly to editorial heuristics
+    }
+  }
+
+  return {
+    title: fallback.title,
+    summary: fallback.summary,
+    location: fallback.location,
+    categoryName: sourceCategory || "देश",
+  };
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 }
 
 function decodeHtmlEntities(str: string): string {
@@ -666,7 +878,11 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
+<<<<<<< HEAD
 function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): StoredNewsPost[] {
+=======
+async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): Promise<StoredNewsPost[]> {
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
   const posts: StoredNewsPost[] = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
   const items = xmlText.match(itemRegex) || [];
@@ -676,8 +892,11 @@ function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): St
     const rawTitle = titleMatch ? (titleMatch[1] || titleMatch[2] || "").trim() : "";
     if (!rawTitle) continue;
 
+<<<<<<< HEAD
     const cleanTitle = decodeHtmlEntities(rawTitle);
 
+=======
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) ||
                       itemXml.match(/<link\s+href=["']([^"']+)["']/i);
     const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
@@ -685,7 +904,10 @@ function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): St
     const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) ||
                       itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
     const rawDesc = descMatch ? (descMatch[1] || descMatch[2] || "").trim() : "";
+<<<<<<< HEAD
     const cleanDesc = decodeHtmlEntities(rawDesc.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+=======
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 
     const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) ||
                          itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
@@ -696,6 +918,7 @@ function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): St
       if (!isNaN(parsedTime)) timestamp = parsedTime;
     }
 
+<<<<<<< HEAD
     let imageUrl = "";
     const mediaThumbMatch = itemXml.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
     const mediaContentMatch = itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i);
@@ -718,6 +941,15 @@ function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): St
     }
 
     const catName = source.category || "देश";
+=======
+    // 1. Strict Priority Image Selection (media:content -> enclosure -> content img -> og:image -> twitter:image -> article img)
+    const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+
+    // 2. Article-Aware AI Editorial Headline & Summary Generation
+    const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
+
+    const catName = editorial.categoryName || source.category || "देश";
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const catKey =
       catName === "देश" ? "national" :
       catName === "राज्य" ? "state" :
@@ -727,24 +959,43 @@ function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): St
       catName === "मनोरंजन" ? "entertainment" :
       catName === "अपराध" ? "crime" : "tech";
 
+<<<<<<< HEAD
     const hashStr = Buffer.from(cleanTitle.slice(0, 30) + link).toString("base64url").slice(0, 14);
+=======
+    const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const postId = `rss-${source.id}-${hashStr}`;
 
     posts.push({
       id: postId,
+<<<<<<< HEAD
       title: cleanTitle,
       summary: cleanDesc || cleanTitle,
       sourceChannel: source.name,
       sourceUrl: link,
+=======
+      title: editorial.title,
+      summary: editorial.summary,
+      sourceChannel: source.name,
+      sourceUrl: link, // PRESERVE original article URL
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       category: catKey,
       categoryName: catName,
       publishedTime: formatRelativeTime(timestamp),
       imageUrl,
+<<<<<<< HEAD
       breaking: cleanTitle.includes("ब्रेकिंग") || cleanTitle.includes("बड़ा") || cleanTitle.includes("लाइव") || cleanTitle.includes("तुरंत"),
       isExclusive: false,
       timestamp,
       fullContent: cleanDesc ? `${cleanTitle}\n\n${cleanDesc}\n\nस्रोतः ${source.name} (${link})` : cleanTitle,
       location: "विशेष डेस्क",
+=======
+      breaking: editorial.title.includes("बड़ा") || editorial.title.includes("फैसला") || editorial.title.includes("कार्रवाई"),
+      isExclusive: false,
+      timestamp,
+      fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
+      location: editorial.location || "विशेष डेस्क",
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     });
   }
 
@@ -757,7 +1008,11 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
       },
+<<<<<<< HEAD
       signal: AbortSignal.timeout(8000),
+=======
+      signal: AbortSignal.timeout(9000),
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     });
     if (!resp.ok) return [];
     const html = await resp.text();
@@ -765,6 +1020,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
                          html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
                          html.match(/<title>([^<]+)<\/title>/i);
+<<<<<<< HEAD
     const title = ogTitleMatch ? ogTitleMatch[1].trim() : "";
     if (!title) return [];
 
@@ -775,10 +1031,49 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
                          html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
     let imageUrl = ogImageMatch ? ogImageMatch[1].trim() : "";
+=======
+    const rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
+    if (!rawTitle) return [];
+
+    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
+                        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+    const rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
+
+    // Extract article text from <article> or <p> tags
+    const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi))
+      .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()))
+      .filter((p) => p.length > 30)
+      .slice(0, 5)
+      .join("\n\n");
+
+    const fullArticleText = paragraphs || rawDesc;
+
+    // 1. Strict Priority Image Selection
+    let imageUrl = "";
+    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+                         html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
+      imageUrl = ogImageMatch[1].trim();
+    }
+    if (!imageUrl) {
+      const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+      if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
+        imageUrl = twitterImageMatch[1].trim();
+      }
+    }
+    if (!imageUrl) {
+      const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
+                              html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+      if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
+        imageUrl = articleImgMatch[1].trim();
+      }
+    }
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     if (!imageUrl) {
       imageUrl = getCategoryFallbackImage(source.category);
     }
 
+<<<<<<< HEAD
     const catName = source.category || "देश";
     const catKey =
       catName === "देश" ? "national" :
@@ -798,6 +1093,30 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       summary,
       sourceChannel: source.name,
       sourceUrl: source.url,
+=======
+    // 2. Article-Aware AI Editorial Headline & Summary
+    const editorial = await processRssItemWithAiEditorial(rawTitle, fullArticleText, source.category, source.url);
+
+    const catName = editorial.categoryName || source.category || "देश";
+    const catKey =
+      catName === "देश" ? "national" :
+      catName === "राज्य" ? "state" :
+      catName === "राजनीति" ? "politics" :
+      catName === "व्यापार" ? "business" :
+      catName === "खेल" ? "sports" :
+      catName === "मनोरंजन" ? "entertainment" :
+      catName === "अपराध" ? "crime" : "tech";
+
+    const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
+    const postId = `web-${source.id}-${hashStr}`;
+
+    return [{
+      id: postId,
+      title: editorial.title,
+      summary: editorial.summary,
+      sourceChannel: source.name,
+      sourceUrl: source.url, // PRESERVE original article URL
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       category: catKey,
       categoryName: catName,
       publishedTime: "अभी-अभी",
@@ -805,8 +1124,13 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       breaking: false,
       isExclusive: false,
       timestamp: Date.now(),
+<<<<<<< HEAD
       fullContent: `${title}\n\n${summary}\n\nवेब लिंक स्रोतः ${source.url}`,
       location: "वेब डेस्क",
+=======
+      fullContent: `${editorial.title}\n\n${editorial.summary}\n\nवेब लिंक स्रोतः ${source.url}`,
+      location: editorial.location || "वेब डेस्क",
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     }];
   } catch (err: any) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -872,7 +1196,11 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
             });
             if (resp.ok) {
               const xmlText = await resp.text();
+<<<<<<< HEAD
               const items = parseRssItemsFromXml(xmlText, src);
+=======
+              const items = await parseRssItemsFromXml(xmlText, src);
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;

@@ -125,6 +125,7 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
 
 import type { NewsFeedPost } from '../data/newsFeedData';
 
+<<<<<<< HEAD
 export function getActiveRssNewsPosts(): NewsFeedPost[] {
   const activeSources = getAdminRssSources().filter((s) => s.isActive);
   const posts: NewsFeedPost[] = [];
@@ -175,6 +176,31 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
   }
 
   return posts;
+=======
+const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
+
+export function getActiveRssNewsPosts(): NewsFeedPost[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return [];
+}
+
+export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(posts));
+    window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+  } catch {}
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 }
 
 export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {
@@ -182,13 +208,36 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
     const res = await fetch('/api/admin/rss-sync', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
+<<<<<<< HEAD
+=======
+      // Fetch latest production posts from /api/news-posts to update active synced feed
+      try {
+        const postsRes = await fetch('/api/news-posts');
+        if (postsRes.ok) {
+          const allPosts = await postsRes.json();
+          if (Array.isArray(allPosts)) {
+            const rssAndWebOnly = allPosts.filter(
+              (p: any) => p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-'))
+            );
+            setSyncedRssNewsPosts(rssAndWebOnly);
+          }
+        }
+      } catch {}
+
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
         window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
       }
       return { success: true, totalNewItems: data.count || data.totalNewItems || 0 };
     }
+<<<<<<< HEAD
   } catch {}
+=======
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'सिंक त्रुटि' };
+  }
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
   return { success: true, totalNewItems: 0 };
 }
 

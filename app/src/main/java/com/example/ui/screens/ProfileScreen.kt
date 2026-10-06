@@ -60,6 +60,7 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var webViewCrashId by remember { mutableIntStateOf(0) }
 
     androidx.activity.compose.BackHandler(enabled = webViewInstance?.canGoBack() == true) {
         webViewInstance?.goBack()
@@ -70,6 +71,7 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
+<<<<<<< HEAD
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -80,6 +82,19 @@ fun ProfileScreen(
                     try {
                         setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
                     } catch (_: Throwable) {}
+=======
+        androidx.compose.runtime.key(webViewCrashId) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        try {
+                            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                        } catch (_: Throwable) {}
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -139,6 +154,22 @@ fun ProfileScreen(
                             return super.shouldInterceptRequest(view, request)
                         }
 
+                        override fun onRenderProcessGone(
+                            view: WebView?,
+                            detail: android.webkit.RenderProcessGoneDetail?
+                        ): Boolean {
+                            try {
+                                view?.let {
+                                    val parent = it.parent as? ViewGroup
+                                    parent?.removeView(it)
+                                    it.destroy()
+                                }
+                            } catch (_: Throwable) {}
+                            webViewInstance = null
+                            webViewCrashId++
+                            return true
+                        }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             val sessionJson = AuthManager.getUserSessionJson()
@@ -177,6 +208,7 @@ fun ProfileScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+        }
     }
 }
 

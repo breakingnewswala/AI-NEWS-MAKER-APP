@@ -1,168 +1,171 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.ui.theme.*
-
-data class NotificationItem(
-    val id: String,
-    val title: String,
-    val description: String,
-    val time: String,
-    val isAlert: Boolean = false
-)
+import com.example.ui.theme.Amber400
+import com.example.ui.theme.NewsBorder
+import com.example.ui.theme.Red600
+import com.example.ui.theme.Slate800
+import com.example.ui.theme.Slate900
 
 @Composable
 fun NotificationDialog(
     onDismiss: () -> Unit
 ) {
-    val sampleNotifications = listOf(
-        NotificationItem(
-            id = "n1",
-            title = "🔴 ब्रेकिंग अलर्ट: नई राष्ट्रीय AI पॉलिसी जारी",
-            description = "लाइव फीड में नया पोस्ट उपलब्ध है। 1-क्लिक में हेडर-फुटर जैकेट तैयार करें।",
-            time = "5 मिनट पहले",
-            isAlert = true
-        ),
-        NotificationItem(
-            id = "n2",
-            title = "✨ न्यूज़ जैकेट तैयार",
-            description = "दैनिक भास्कर की रिपोर्ट का ग्राफिक न्यूज़ रूम में तैयार है।",
-            time = "15 मिनट पहले"
-        ),
-        NotificationItem(
-            id = "n3",
-            title = "📰 नया ई-पेपर संस्करण उपलब्ध",
-            description = "आज का राष्ट्रीय संस्करण (पेज 1-4) पढ़ने हेतु तैयार है।",
-            time = "1 घंटा पहले"
+    val sampleNotifications = remember {
+        listOf(
+            NotificationItem(
+                id = "n-1",
+                title = "🔴 नई ब्रेकिंग न्यूज़ अलर्ट",
+                description = "सुप्रीम कोर्ट द्वारा डिजिटल मीडिया गाइडलाइंस पर नया फैसला जारी किया गया है।",
+                time = "5 मिनट पहले",
+                isAlert = true
+            ),
+            NotificationItem(
+                id = "n-2",
+                title = "🎬 वीडियो रेंडरिंग सफल",
+                description = "आपका 'संसद विशेष सत्र' एचडी वीडियो एक्सपोर्ट तैयार है।",
+                time = "25 मिनट पहले",
+                isAlert = false
+            ),
+            NotificationItem(
+                id = "n-3",
+                title = "📰 नया ई-पेपर संस्करण उपलब्ध",
+                description = "दैनिक संस्करण पेज 1 से 6 तक प्रकाशित हो चुका है।",
+                time = "1 घंटा पहले",
+                isAlert = false
+            ),
+            NotificationItem(
+                id = "n-4",
+                title = "⚡ एडमिन कमांड प्राप्त",
+                description = "चीफ एडिटर द्वारा आज के मुख्य पैकेज पर प्राथमिकता मार्क की गई है।",
+                time = "2 घंटे पहले",
+                isAlert = true
+            )
         )
-    )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = Color.White,
-            shadowElevation = 8.dp,
+            color = Slate900,
+            tonalElevation = 8.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp)
+                .padding(16.dp)
+                .testTag("notification_dialog")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(20.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(NewsRedPrimary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = Amber400,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "सूचनाएं एवं अलर्ट (Notifications)",
-                            fontSize = 15.sp,
+                            text = "न्यूज़ अपडेट्स एवं सूचनाएं",
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = NewsBlack
+                            color = Color.White
                         )
                     }
 
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = NewsSlate)
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "बंद करें",
+                            tint = Color.LightGray
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Divider(color = NewsBorder)
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.heightIn(max = 350.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(sampleNotifications, key = { it.id }) { notif ->
+                    items(sampleNotifications, key = { it.id }) { item ->
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (notif.isAlert) Color(0xFFFFF1F2) else Color(0xFFF9FAFB),
-                            border = androidx.compose.foundation.BorderStroke(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (item.isAlert) Slate800 else Slate900,
+                            border = BorderStroke(
                                 1.dp,
-                                if (notif.isAlert) Color(0xFFFECDD3) else NewsBorder
+                                if (item.isAlert) Red600.copy(alpha = 0.5f) else NewsBorder
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = notif.title,
+                                        text = item.title,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (notif.isAlert) NewsRedDark else NewsBlack
+                                        color = if (item.isAlert) Amber400 else Color.White
+                                    )
+                                    Text(
+                                        text = item.time,
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = notif.description,
-                                    fontSize = 11.sp,
-                                    color = NewsSlate
-                                )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = notif.time,
-                                    fontSize = 10.sp,
-                                    color = NewsMuted
+                                    text = item.description,
+                                    fontSize = 12.sp,
+                                    color = Color.LightGray,
+                                    lineHeight = 16.sp
                                 )
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = NewsBlack),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = Red600)
                 ) {
-                    Text("ठीक है (Close)", fontWeight = FontWeight.Bold)
+                    Text("ठीक है (बंद करें)", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         }

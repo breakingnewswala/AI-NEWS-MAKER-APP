@@ -1,74 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
     <application
-        android:name=".MainApplication"
+        android:name="com.example.MainApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+<<<<<<< HEAD
         android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.MyApplication">
+=======
+        android:theme="@style/Theme.MyApplication"
+        android:usesCleartextTraffic="true">
+
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- App Links & Deep Links for ainewsmaker.online -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:scheme="https"
-                    android:host="ainewsmaker.online" />
-                <data
-                    android:scheme="https"
-                    android:host="www.ainewsmaker.online" />
-                <data
-                    android:scheme="http"
-                    android:host="ainewsmaker.online" />
-                <data
-                    android:scheme="http"
-                    android:host="www.ainewsmaker.online" />
+                <data android:scheme="https" android:host="ainewsmaker.online" />
+                <data android:scheme="https" android:host="www.ainewsmaker.online" />
+                <data android:scheme="http" android:host="ainewsmaker.online" />
+                <data android:scheme="http" android:host="www.ainewsmaker.online" />
             </intent-filter>
 
-            <!-- Custom URI Scheme deep link e.g. ainewsmaker://app -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:scheme="ainewsmaker"
-                    android:host="app" />
+                <data android:scheme="ainewsmaker" android:host="app" />
             </intent-filter>
         </activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
+            android:authorities="com.aistudio.ainewsmaker.dyynbu.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-    </application>
 
+    </application>
 </manifest>

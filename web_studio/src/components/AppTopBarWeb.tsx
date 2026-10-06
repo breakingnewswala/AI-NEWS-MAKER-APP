@@ -60,10 +60,17 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const isAdminUser = isUserAdmin(currentUser);
 
   const isHome = currentTab === 'home';
+<<<<<<< HEAD
   const isGenerator = currentTab === 'generator' || currentTab === 'studio';
   const isDrafts = currentTab === 'drafts';
   const isCategories = currentTab === 'categories' || currentTab === 'videos' || currentTab === 'epaper';
   const isExport = currentTab === 'export' || currentTab === 'profile';
+=======
+  const isVideos = currentTab === 'videos';
+  const isStudio = currentTab === 'studio' || currentTab === 'generator';
+  const isNewsroom = currentTab === 'newsroom' || currentTab === 'drafts';
+  const isControlPanel = currentTab === 'profile' || currentTab === 'export';
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -205,11 +212,15 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </div>
             </div>
 
-          {/* Desktop Tab Links (md+) */}
+          {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
           <nav className="flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-0.5 sm:p-1 shrink-0 overflow-x-auto no-scrollbar max-w-[58vw] sm:max-w-none">
             <button
               onClick={() => onNavigateToTab('home')}
+<<<<<<< HEAD
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+=======
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                 isHome
                   ? 'bg-red-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -218,33 +229,68 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               🏠 होम
             </button>
             <button
+<<<<<<< HEAD
               onClick={() => onNavigateToTab('generator')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 isGenerator
+=======
+              onClick={() => onNavigateToTab('videos')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isVideos
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              🎬 वीडियो
+            </button>
+            <button
+              onClick={() => onNavigateToTab('studio')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isStudio
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                   ? 'bg-gradient-to-r from-amber-500 to-red-600 text-slate-950 font-black shadow-md'
                   : 'text-amber-300 hover:text-white hover:bg-slate-800'
               }`}
             >
+<<<<<<< HEAD
               ✨ न्यूज़ जनरेटर
             </button>
             <button
               onClick={() => onNavigateToTab('drafts')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 isDrafts
+=======
+              🎨 स्टूडियो
+            </button>
+            <button
+              onClick={() => onNavigateToTab('newsroom')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isNewsroom
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                   ? 'bg-red-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
+<<<<<<< HEAD
               📑 ड्राफ्ट्स
             </button>
             <button
               onClick={() => onNavigateToTab('categories')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 isCategories
+=======
+              📰 न्यूज़ रूम
+            </button>
+            <button
+              onClick={() => onNavigateToTab('profile')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isControlPanel
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                   ? 'bg-red-600 text-white shadow-md'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
+<<<<<<< HEAD
               🗂️ कैटेगरीज़
             </button>
             <button
@@ -256,6 +302,9 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               }`}
             >
               ⬇️ एक्सपोर्ट
+=======
+              ⚙️ कंट्रोल पैनल
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
             </button>
           </nav>
 

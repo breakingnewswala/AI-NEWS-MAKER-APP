@@ -325,9 +325,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       3: 'step-headline',
       4: 'step-photo',
       5: 'step-location',
+<<<<<<< HEAD
       6: 'step-date-watermark',
       7: 'step-header-footer',
       8: 'step-download',
+=======
+      6: 'step-header-footer',
+      7: 'step-download',
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     };
     const id = targetId || stepMap[newStep];
     if (id) {
@@ -347,10 +352,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     { step: 2, id: 'step-ai', label: '2. एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '🤖' },
     { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
     { step: 4, id: 'step-photo', label: '4. फोटो', shortLabel: 'फोटो', icon: '📷' },
+<<<<<<< HEAD
     { step: 5, id: 'step-location', label: '5. लोकेशन', shortLabel: 'लोकेशन', icon: '📍' },
     { step: 6, id: 'step-date-watermark', label: '6. तारीख व वॉटरमार्क', shortLabel: 'तारीख-वॉटरमार्क', icon: '📅' },
     { step: 7, id: 'step-header-footer', label: '7. हैडर व फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
     { step: 8, id: 'step-download', label: '8. डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
+=======
+    { step: 5, id: 'step-location', label: '5. लोकेशन, तारीख और वॉटरमार्क', shortLabel: 'लोकेशन-तारीख', icon: '📍' },
+    { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
+    { step: 7, id: 'step-download', label: '7. डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
   ];
 
   const activeHeaderPng = getActiveHeaderPng(card);
@@ -2677,7 +2688,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         id="step-location"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
+<<<<<<< HEAD
           mobileViewMode === 'steps' && activeStep !== 5 ? 'hidden' : 'block'
+=======
+          mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
         }`}
       >
         <div className="flex items-center justify-between">
@@ -2763,7 +2778,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         id="step-date-watermark"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
+<<<<<<< HEAD
           mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
+=======
+          mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
         }`}
       >
         <div className="flex items-center justify-between">
@@ -2951,7 +2970,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             id="step-header-footer"
             style={{ scrollMarginTop: '120px' }}
             className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
+<<<<<<< HEAD
               mobileViewMode === 'steps' && activeStep !== 7 ? 'hidden' : 'block'
+=======
+              mobileViewMode === 'steps' && (activeStep !== 6 && activeStep !== 7) ? 'hidden' : 'block'
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
             }`}
           >
             <div className="flex items-center justify-between">
@@ -3351,7 +3374,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       {/* ========================================================================= */}
       {/* STEP 8: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
       {/* ========================================================================= */}
+<<<<<<< HEAD
       {(mobileViewMode === 'all' || activeStep === 8) && (
+=======
+      {(mobileViewMode === 'all' || activeStep === 7 || activeStep === 8) && (
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}

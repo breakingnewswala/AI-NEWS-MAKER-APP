@@ -22,14 +22,13 @@ object TemplateConfigManager {
     private const val KEY_CONFIGS = "template_header_footer_json"
     private const val KEY_APPLY_ALL = "apply_to_all_templates"
 
-    // Graphic 1 registered in Basic Plan
-    val AVAILABLE_TEMPLATES = mutableListOf<Pair<String, String>>(
-        "graphic_001" to "Graphic 1 (बेसिक 4:5 न्यूज़ जैकेट)"
+    val AVAILABLE_TEMPLATES: MutableList<Pair<String, String>> = mutableListOf(
+        Pair("graphic_001", "Graphic 1 (बेसिक 4:5 न्यूज़ जैकेट)")
     )
 
     fun registerTemplate(id: String, label: String) {
         AVAILABLE_TEMPLATES.removeAll { it.first == id }
-        AVAILABLE_TEMPLATES.add(id to label)
+        AVAILABLE_TEMPLATES.add(Pair(id, label))
     }
 
     fun clearAllTemplates() {
@@ -58,18 +57,16 @@ object TemplateConfigManager {
 
     fun getTemplateConfig(context: Context, templateId: String): TemplateHeaderFooter {
         val applyToAll = isApplyToAll(context)
-        val jsonStr = getConfigsJson(context)
+        val configsJson = getConfigsJson(context)
         try {
-            val root = JSONObject(jsonStr)
-            val effectiveId = if (applyToAll && !root.has(templateId)) {
-                // If applyToAll is on, find any configured template or "default"
+            val root = JSONObject(configsJson)
+            val key = if (applyToAll && !root.has(templateId)) {
                 root.keys().asSequence().firstOrNull() ?: templateId
             } else {
                 templateId
             }
-
-            if (root.has(effectiveId)) {
-                val obj = root.getJSONObject(effectiveId)
+            if (root.has(key)) {
+                val obj = root.getJSONObject(key)
                 return TemplateHeaderFooter(
                     templateId = templateId,
                     brandName = obj.optString("brandName", ""),
@@ -86,14 +83,14 @@ object TemplateConfigManager {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        return TemplateHeaderFooter(templateId = templateId, isConfigured = false)
+        return TemplateHeaderFooter(templateId = templateId)
     }
 
     fun saveTemplateConfig(context: Context, config: TemplateHeaderFooter, applyToAll: Boolean) {
         setApplyToAll(context, applyToAll)
         val jsonStr = getConfigsJson(context)
         try {
-            val root = if (jsonStr.isNotBlank() && jsonStr != "{}") JSONObject(jsonStr) else JSONObject()
+            val root = if (jsonStr.isBlank() || jsonStr == "{}") JSONObject() else JSONObject(jsonStr)
             val obj = JSONObject().apply {
                 put("brandName", config.brandName)
                 put("brandTagline", config.brandTagline)
@@ -105,16 +102,13 @@ object TemplateConfigManager {
                 put("customFooterPng", config.customFooterPng)
                 put("isConfigured", true)
             }
-
-            if (applyToAll) {
-                // Save to all available templates
+            if (!applyToAll) {
+                root.put(config.templateId, obj)
+            } else {
                 AVAILABLE_TEMPLATES.forEach { (id, _) ->
                     root.put(id, obj)
                 }
-            } else {
-                root.put(config.templateId, obj)
             }
-
             getPrefs(context).edit().putString(KEY_CONFIGS, root.toString()).apply()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -136,9 +130,10 @@ object TemplateConfigManager {
         val applyToAll = isApplyToAll(context)
         val configsJson = getConfigsJson(context)
         return try {
-            val root = JSONObject()
-            root.put("applyToAll", applyToAll)
-            root.put("templates", JSONObject(configsJson))
+            val root = JSONObject().apply {
+                put("applyToAll", applyToAll)
+                put("templates", JSONObject(configsJson))
+            }
             root.toString()
         } catch (e: Exception) {
             "{}"

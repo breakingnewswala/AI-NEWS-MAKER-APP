@@ -585,6 +585,7 @@ function saveRssSourcesDatabase(sources) {
     return false;
   }
 }
+<<<<<<< HEAD
 function getCategoryFallbackImage(category) {
   const cat = (category || "").toLowerCase();
   if (cat.includes("\u0916\u0947\u0932") || cat.includes("sports")) return "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&auto=format&fit=crop";
@@ -594,6 +595,188 @@ function getCategoryFallbackImage(category) {
   if (cat.includes("\u0905\u092A\u0930\u093E\u0927") || cat.includes("crime")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&auto=format&fit=crop";
   if (cat.includes("\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F") || cat.includes("world")) return "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=800&auto=format&fit=crop";
   return "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop";
+=======
+function isValidNewsImage(url) {
+  if (!url || typeof url !== "string") return false;
+  const clean = url.trim().toLowerCase();
+  if (clean.length < 8) return false;
+  if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
+  if (clean.endsWith(".ico") || clean.endsWith(".svg") || clean.endsWith(".gif")) return false;
+  const invalidKeywords = [
+    "logo",
+    "favicon",
+    "avatar",
+    "icon",
+    "advertisement",
+    "ad_",
+    "_ad",
+    "/ads/",
+    "banner",
+    "pixel",
+    "1x1",
+    "tracking",
+    "analytics",
+    "share",
+    "social",
+    "button",
+    "badge",
+    "sponsor",
+    "placeholder",
+    "default_thumb",
+    "spinner",
+    "loader",
+    "loading",
+    "widget",
+    "counter",
+    "wp-content/themes",
+    "/themes/",
+    "/static/images/logo"
+  ];
+  return !invalidKeywords.some((kw) => clean.includes(kw));
+}
+async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCategory) {
+  const mediaMatches = itemXml.matchAll(/<media:content[^>]+url=["']([^"']+)["'][^>]*>/gi);
+  for (const m of mediaMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+  const enclosureMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/gi);
+  for (const m of enclosureMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+  const enclosureAltMatches = itemXml.matchAll(/<enclosure[^>]+type=["']image\/[^"']+["'][^>]*url=["']([^"']+)["']/gi);
+  for (const m of enclosureAltMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+  const contentEncodedMatch = itemXml.match(/<content:encoded>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/content:encoded>/i);
+  const contentBody = (contentEncodedMatch ? contentEncodedMatch[1] || contentEncodedMatch[2] || "" : "") + " " + rawDesc;
+  const imgMatches = contentBody.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
+  for (const m of imgMatches) {
+    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+  }
+  if (articleUrl && articleUrl.startsWith("http")) {
+    try {
+      const resp = await fetch(articleUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
+        },
+        signal: AbortSignal.timeout(3500)
+      });
+      if (resp.ok) {
+        const html = await resp.text();
+        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+        if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
+          return ogImageMatch[1].trim();
+        }
+        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+        if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
+          return twitterImageMatch[1].trim();
+        }
+        const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+        if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
+          return articleImgMatch[1].trim();
+        }
+      }
+    } catch {
+    }
+  }
+  return getCategoryFallbackImage(fallbackCategory);
+}
+function cleanAndCraftHindiHeadline(rawHeadline, articleText) {
+  let title = rawHeadline || "";
+  title = title.replace(/^(breaking\s*news\s*[:\-–—]|ब्रेकिंग\s*न्यूज़\s*[:\-–—]|एक्सक्लूसिव\s*[:\-–—]|exclusive\s*[:\-–—]|बड़ी\s*खबर\s*[:\-–—])/i, "").replace(/(?:^|\s)(जानिए|देखिए|सुनिए|सन्न\s*रह\s*जाएंगे|हैरान\s*हो\s*जाएंगे|बड़ा\s*खुलासा|चौंकाने\s*वाला|वायरल\s*सच)\s*[:\-–—]?\s*/gu, " ").replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ").replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ").replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "").replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "").replace(/\.{2,}/g, "").replace(/\s+/g, " ").trim();
+  const locationList = [
+    "\u0936\u0939\u0921\u094B\u0932",
+    "\u0930\u0940\u0935\u093E",
+    "\u0938\u0940\u0927\u0940",
+    "\u0938\u0924\u0928\u093E",
+    "\u092D\u094B\u092A\u093E\u0932",
+    "\u0907\u0902\u0926\u094C\u0930",
+    "\u091C\u092C\u0932\u092A\u0941\u0930",
+    "\u0917\u094D\u0935\u093E\u0932\u093F\u092F\u0930",
+    "\u0909\u091C\u094D\u091C\u0948\u0928",
+    "\u0938\u093E\u0917\u0930",
+    "\u091B\u0924\u0930\u092A\u0941\u0930",
+    "\u0926\u092E\u094B\u0939",
+    "\u0915\u091F\u0928\u0940",
+    "\u092E\u0902\u0921\u0932\u093E",
+    "\u0921\u093F\u0902\u0921\u094B\u0930\u0940",
+    "\u0905\u0928\u0942\u092A\u092A\u0941\u0930",
+    "\u0909\u092E\u0930\u093F\u092F\u093E",
+    "\u0938\u093F\u0902\u0917\u0930\u094C\u0932\u0940",
+    "\u0926\u093F\u0932\u094D\u0932\u0940",
+    "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940",
+    "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936",
+    "\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936",
+    "\u092C\u093F\u0939\u093E\u0930",
+    "\u0930\u093E\u091C\u0938\u094D\u0925\u093E\u0928",
+    "\u092E\u0941\u0902\u092C\u0908"
+  ];
+  let detectedLocation = "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915";
+  for (const loc of locationList) {
+    if (title.includes(loc) || articleText.includes(loc)) {
+      detectedLocation = loc;
+      break;
+    }
+  }
+  const words = title.split(/\s+/).filter(Boolean);
+  if (words.length > 15) {
+    title = words.slice(0, 15).join(" ");
+  }
+  let summary = articleText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  if (summary.length > 220) {
+    summary = summary.slice(0, 215) + "...";
+  }
+  if (!summary) {
+    summary = `${title} \u0915\u094B \u0932\u0947\u0915\u0930 \u0924\u093E\u091C\u093C\u093E \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0938\u093E\u092E\u0928\u0947 \u0906\u0908 \u0939\u0948\u0964 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964`;
+  }
+  return { title, summary, location: detectedLocation };
+}
+async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, sourceUrl) {
+  const fallback = cleanAndCraftHindiHeadline(rawTitle, rawDesc);
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey && geminiKey !== "MY_GEMINI_API_KEY" && geminiKey.length > 5) {
+    try {
+      const ai = getGeminiClient();
+      const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0914\u0930 \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0939\u093F\u0902\u0926\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
+\u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u093E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0947\u0902 \u0914\u0930 \u090F\u0915 \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u0938\u094D\u092A\u0937\u094D\u091F, \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (Headline) \u0935 2 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0938\u093E\u0930 (Summary) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
+
+\u0928\u093F\u092F\u092E:
+1. \u0915\u0947\u0935\u0932 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 (factual), \u0938\u094D\u092A\u0937\u094D\u091F (clear) \u0914\u0930 \u0928\u094D\u092F\u0942\u091F\u094D\u0930\u0932 (neutral) \u092D\u093E\u0937\u093E \u0915\u093E \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964
+2. "\u091C\u093E\u0928\u093F\u090F", "\u0926\u0947\u0916\u093F\u090F", "Breaking News:", "Exclusive", "\u092C\u0921\u093C\u093E \u0916\u0941\u0932\u093E\u0938\u093E" \u091C\u0948\u0938\u0947 \u0915\u094D\u0932\u093F\u0915\u092C\u0947\u091F \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u093E \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0924\u0908 \u0928 \u0915\u0930\u0947\u0902\u0964
+3. \u0905\u0928\u093E\u0935\u0936\u094D\u092F\u0915 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 (\u0936\u094D\u0930\u0940, \u092E\u093E\u0928\u0928\u0940\u092F, \u091C\u0940) \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
+4. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0905\u0927\u093F\u0915\u0924\u092E 12 \u0938\u0947 14 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0940 \u0939\u094B (\u0924\u093E\u0915\u093F 4:5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921 \u092E\u0947\u0902 2-3 \u0932\u093E\u0907\u0928\u094B\u0902 \u092E\u0947\u0902 \u0938\u0939\u0940 \u0926\u093F\u0916\u0947)\u0964
+5. \u0906\u0909\u091F\u092A\u0941\u091F \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092E\u0947\u0902 \u0926\u0947\u0902:
+{"headline": "\u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928", "summary": "\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935\u093F\u0935\u0930\u0923", "location": "\u091C\u093F\u0932\u0947/\u0936\u0939\u0930 \u0915\u093E \u0928\u093E\u092E"}`;
+      const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+        contents: `${prompt}
+
+\u092E\u0942\u0932 \u0936\u0940\u0930\u094D\u0937\u0915: ${rawTitle}
+\u092E\u0942\u0932 \u0935\u093F\u0935\u0930\u0923: ${rawDesc.slice(0, 500)}`,
+        config: { temperature: 0.2 }
+      });
+      const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.headline && parsed.headline.trim().length > 5) {
+          return {
+            title: parsed.headline.trim(),
+            summary: parsed.summary?.trim() || fallback.summary,
+            location: parsed.location?.trim() || fallback.location,
+            categoryName: sourceCategory || "\u0926\u0947\u0936"
+          };
+        }
+      }
+    } catch {
+    }
+  }
+  return {
+    title: fallback.title,
+    summary: fallback.summary,
+    location: fallback.location,
+    categoryName: sourceCategory || "\u0926\u0947\u0936"
+  };
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 }
 function decodeHtmlEntities(str) {
   if (!str) return "";
@@ -602,7 +785,11 @@ function decodeHtmlEntities(str) {
     return String.fromCharCode(num);
   }).trim();
 }
+<<<<<<< HEAD
 function parseRssItemsFromXml(xmlText, source) {
+=======
+async function parseRssItemsFromXml(xmlText, source) {
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
   const posts = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
   const items = xmlText.match(itemRegex) || [];
@@ -610,12 +797,18 @@ function parseRssItemsFromXml(xmlText, source) {
     const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
     const rawTitle = titleMatch ? (titleMatch[1] || titleMatch[2] || "").trim() : "";
     if (!rawTitle) continue;
+<<<<<<< HEAD
     const cleanTitle = decodeHtmlEntities(rawTitle);
+=======
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) || itemXml.match(/<link\s+href=["']([^"']+)["']/i);
     const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
     const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) || itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
     const rawDesc = descMatch ? (descMatch[1] || descMatch[2] || "").trim() : "";
+<<<<<<< HEAD
     const cleanDesc = decodeHtmlEntities(rawDesc.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+=======
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
     const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
     let timestamp = Date.now();
@@ -623,6 +816,7 @@ function parseRssItemsFromXml(xmlText, source) {
       const parsedTime = Date.parse(pubDateStr);
       if (!isNaN(parsedTime)) timestamp = parsedTime;
     }
+<<<<<<< HEAD
     let imageUrl = "";
     const mediaThumbMatch = itemXml.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
     const mediaContentMatch = itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i);
@@ -650,10 +844,26 @@ function parseRssItemsFromXml(xmlText, source) {
       summary: cleanDesc || cleanTitle,
       sourceChannel: source.name,
       sourceUrl: link,
+=======
+    const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+    const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
+    const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
+    const catKey = catName === "\u0926\u0947\u0936" ? "national" : catName === "\u0930\u093E\u091C\u094D\u092F" ? "state" : catName === "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" ? "politics" : catName === "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" ? "business" : catName === "\u0916\u0947\u0932" ? "sports" : catName === "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" ? "entertainment" : catName === "\u0905\u092A\u0930\u093E\u0927" ? "crime" : "tech";
+    const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
+    const postId = `rss-${source.id}-${hashStr}`;
+    posts.push({
+      id: postId,
+      title: editorial.title,
+      summary: editorial.summary,
+      sourceChannel: source.name,
+      sourceUrl: link,
+      // PRESERVE original article URL
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       category: catKey,
       categoryName: catName,
       publishedTime: formatRelativeTime(timestamp),
       imageUrl,
+<<<<<<< HEAD
       breaking: cleanTitle.includes("\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917") || cleanTitle.includes("\u092C\u0921\u093C\u093E") || cleanTitle.includes("\u0932\u093E\u0907\u0935") || cleanTitle.includes("\u0924\u0941\u0930\u0902\u0924"),
       isExclusive: false,
       timestamp,
@@ -663,6 +873,17 @@ ${cleanDesc}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : cleanTitle,
       location: "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915"
+=======
+      breaking: editorial.title.includes("\u092C\u0921\u093C\u093E") || editorial.title.includes("\u092B\u0948\u0938\u0932\u093E") || editorial.title.includes("\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908"),
+      isExclusive: false,
+      timestamp,
+      fullContent: editorial.summary ? `${editorial.title}
+
+${editorial.summary}
+
+\u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
+      location: editorial.location || "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915"
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     });
   }
   return posts;
@@ -673,11 +894,16 @@ async function fetchAndParseWebLink(source) {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
       },
+<<<<<<< HEAD
       signal: AbortSignal.timeout(8e3)
+=======
+      signal: AbortSignal.timeout(9e3)
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     });
     if (!resp.ok) return [];
     const html = await resp.text();
     const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<title>([^<]+)<\/title>/i);
+<<<<<<< HEAD
     const title = ogTitleMatch ? ogTitleMatch[1].trim() : "";
     if (!title) return [];
     const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
@@ -697,6 +923,46 @@ async function fetchAndParseWebLink(source) {
       summary,
       sourceChannel: source.name,
       sourceUrl: source.url,
+=======
+    const rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
+    if (!rawTitle) return [];
+    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+    const rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
+    const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)).map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim())).filter((p) => p.length > 30).slice(0, 5).join("\n\n");
+    const fullArticleText = paragraphs || rawDesc;
+    let imageUrl = "";
+    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
+      imageUrl = ogImageMatch[1].trim();
+    }
+    if (!imageUrl) {
+      const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+      if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
+        imageUrl = twitterImageMatch[1].trim();
+      }
+    }
+    if (!imageUrl) {
+      const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+      if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
+        imageUrl = articleImgMatch[1].trim();
+      }
+    }
+    if (!imageUrl) {
+      imageUrl = getCategoryFallbackImage(source.category);
+    }
+    const editorial = await processRssItemWithAiEditorial(rawTitle, fullArticleText, source.category, source.url);
+    const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
+    const catKey = catName === "\u0926\u0947\u0936" ? "national" : catName === "\u0930\u093E\u091C\u094D\u092F" ? "state" : catName === "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" ? "politics" : catName === "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" ? "business" : catName === "\u0916\u0947\u0932" ? "sports" : catName === "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" ? "entertainment" : catName === "\u0905\u092A\u0930\u093E\u0927" ? "crime" : "tech";
+    const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
+    const postId = `web-${source.id}-${hashStr}`;
+    return [{
+      id: postId,
+      title: editorial.title,
+      summary: editorial.summary,
+      sourceChannel: source.name,
+      sourceUrl: source.url,
+      // PRESERVE original article URL
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       category: catKey,
       categoryName: catName,
       publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
@@ -704,12 +970,21 @@ async function fetchAndParseWebLink(source) {
       breaking: false,
       isExclusive: false,
       timestamp: Date.now(),
+<<<<<<< HEAD
       fullContent: `${title}
 
 ${summary}
 
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
       location: "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915"
+=======
+      fullContent: `${editorial.title}
+
+${editorial.summary}
+
+\u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
+      location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915"
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -766,7 +1041,11 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
             });
             if (resp.ok) {
               const xmlText = await resp.text();
+<<<<<<< HEAD
               const items = parseRssItemsFromXml(xmlText, src);
+=======
+              const items = await parseRssItemsFromXml(xmlText, src);
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;

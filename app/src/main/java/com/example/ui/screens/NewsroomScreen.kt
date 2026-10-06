@@ -246,6 +246,44 @@ fun NewsroomScreen(
                             )
                         }
                     }
+
+                    // Option 3: ड्राफ्ट्स (News Room -> Drafts)
+                    Surface(
+                        modifier = Modifier
+                            .weight(0.85f)
+                            .height(42.dp)
+                            .clickable {
+                                currentMode = NewsroomMode.GRAPHIC_DESIGN
+                                activeStudioWebView?.evaluateJavascript(
+                                    "if (window.setStudioMode) { window.setStudioMode('graphic'); } " +
+                                    "if (window.openStudioDraftsModal) { window.openStudioDraftsModal(); }",
+                                    null
+                                )
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF1E293B),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = NewsGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "ड्राफ्ट्स",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFE2E8F0)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -273,6 +311,56 @@ fun NewsroomScreen(
                         currentMode = if (mode == "video") NewsroomMode.VIDEO_DESIGN else NewsroomMode.GRAPHIC_DESIGN
                     }
                 )
+            }
+
+            // ई-पेपर (E-Paper) सबसे नीचे कमिंग सून (Coming Soon) के साथ - non-clickable
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0xFF0F172A).copy(alpha = 0.85f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.6f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Newspaper,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "ई-पेपर (E-Paper)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF1E293B),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF475569))
+                    ) {
+                        Text(
+                            text = "जल्द आ रहा है (Coming Soon)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFCD34D),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -302,53 +390,6 @@ fun NewsroomScreen(
     }
 }
 
-private fun isEmulatorEnvironment(): Boolean {
-    // If no hardware DRI render node exists on Linux (/dev/dri/renderD*), we are in a container/software GPU environment
-    try {
-        val dri = java.io.File("/dev/dri")
-        val hasRenderNode = dri.exists() && (dri.listFiles()?.any { it.name.startsWith("renderD") && it.canWrite() } == true)
-        if (!hasRenderNode) {
-            return true
-        }
-    } catch (_: Throwable) {
-        return true
-    }
-
-    val fp = Build.FINGERPRINT.lowercase()
-    val model = Build.MODEL.lowercase()
-    val mfg = Build.MANUFACTURER.lowercase()
-    val brand = Build.BRAND.lowercase()
-    val dev = Build.DEVICE.lowercase()
-    val hw = Build.HARDWARE.lowercase()
-    val prod = Build.PRODUCT.lowercase()
-    val board = Build.BOARD.lowercase()
-
-    return fp.startsWith("generic")
-            || fp.startsWith("unknown")
-            || fp.contains("emulator")
-            || fp.contains("vbox")
-            || fp.contains("cuttlefish")
-            || fp.contains("cf_")
-            || model.contains("google_sdk")
-            || model.contains("emulator")
-            || model.contains("android sdk")
-            || model.contains("sdk")
-            || model.contains("cuttlefish")
-            || mfg.contains("genymotion")
-            || (mfg.contains("google") && (model.contains("sdk") || prod.contains("sdk") || prod.contains("cf_") || model.contains("cuttlefish")))
-            || (brand.startsWith("generic") && dev.startsWith("generic"))
-            || hw.contains("goldfish")
-            || hw.contains("ranchu")
-            || hw.contains("cuttlefish")
-            || hw.contains("cutf")
-            || prod.contains("sdk")
-            || prod.contains("emulator")
-            || prod.contains("cuttlefish")
-            || prod.contains("cf_")
-            || board.contains("goldfish")
-            || board.contains("cutf")
-}
-
 /**
  * 100% Full-Featured Interactive WebView loading the exact GitHub Vite+React+Tailwind studio.
  * Now equipped with Photo Picker callback for Android, HTML5 Canvas support, and DOM storage.
@@ -367,8 +408,7 @@ fun BreakingNewsStudioWebView(
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var fileChooserCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     var webViewCrashId by remember { mutableIntStateOf(0) }
-    // Software rendering in emulator/container environments lacking hardware render nodes, or upon crash
-    var useSoftwareRendering by remember { mutableStateOf(isEmulatorEnvironment()) }
+    var crashRetryCount by remember { mutableIntStateOf(0) }
     var isRendererCrashed by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialTab, webViewInstance) {
@@ -441,7 +481,7 @@ fun BreakingNewsStudioWebView(
                 Button(
                     onClick = {
                         isRendererCrashed = false
-                        useSoftwareRendering = true
+                        crashRetryCount = 0
                         webViewCrashId++
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Amber400, contentColor = Slate950)
@@ -462,15 +502,9 @@ fun BreakingNewsStudioWebView(
 
                         setBackgroundColor(0xFF0F172A.toInt())
 
-                        if (useSoftwareRendering) {
-                            try {
-                                setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-                            } catch (_: Throwable) {}
-                        } else {
-                            try {
-                                setLayerType(android.view.View.LAYER_TYPE_NONE, null)
-                            } catch (_: Throwable) {}
-                        }
+                        try {
+                            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                        } catch (_: Throwable) {}
 
                     settings.apply {
                         javaScriptEnabled = true
@@ -586,9 +620,12 @@ fun BreakingNewsStudioWebView(
                                 }
                             } catch (_: Throwable) {}
                             webViewInstance = null
-                            useSoftwareRendering = true
-                            isRendererCrashed = false
-                            webViewCrashId++
+                            if (crashRetryCount < 2) {
+                                crashRetryCount++
+                                webViewCrashId++
+                            } else {
+                                isRendererCrashed = true
+                            }
                             return true
                         }
 

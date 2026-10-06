@@ -2,6 +2,40 @@
 <html lang="hi">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        try {
+          // Disable WebGL and WebGPU to prevent Mesa DRI rendernode crashes on virtualized Android emulators
+          if (typeof HTMLCanvasElement !== 'undefined') {
+            var _origGetContext = HTMLCanvasElement.prototype.getContext;
+            HTMLCanvasElement.prototype.getContext = function(type, attributes) {
+              if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+                return null;
+              }
+              return _origGetContext.apply(this, arguments);
+            };
+          }
+          if (typeof OffscreenCanvas !== 'undefined') {
+            var _origOffscreenGetContext = OffscreenCanvas.prototype.getContext;
+            OffscreenCanvas.prototype.getContext = function(type, attributes) {
+              if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+                return null;
+              }
+              return _origOffscreenGetContext.apply(this, arguments);
+            };
+          }
+          if (typeof window !== 'undefined') {
+            try { window.WebGLRenderingContext = undefined; } catch(e) {}
+            try { window.WebGL2RenderingContext = undefined; } catch(e) {}
+          }
+          if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+            try {
+              Object.defineProperty(navigator, 'gpu', { get: function() { return undefined; } });
+            } catch(e) {}
+          }
+        } catch(e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -30,8 +64,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800;900&family=Gotu&family=Hind:wght@500;600;700&family=Kalam:wght@700&family=Martel:wght@400;600;700;800;900&family=Mukta:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@500;600;700;800;900&family=Noto+Serif+Devanagari:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Poppins:wght@500;600;700;800;900&family=Rajdhani:wght@600;700&family=Rozha+One&family=Sarala:wght@700&family=Tiro+Devanagari+Hindi&family=Yatra+One&display=swap" />
+<<<<<<< HEAD
     <script type="module" crossorigin src="./assets/index-DIyd9Shu.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-BGODSBzR.css">
+=======
+    <script type="module" crossorigin src="./assets/index-oDKv6z9o.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Cn7cQB-M.css">
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
   </head>
   <body class="bg-[#0F172A] text-slate-100 antialiased font-sans">
     <div id="root">

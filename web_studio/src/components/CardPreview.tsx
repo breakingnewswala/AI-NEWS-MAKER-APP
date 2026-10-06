@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { NewsCardData } from '../types';
-import { MapPin, Quote, FileText } from 'lucide-react';
+import { MapPin, Quote, FileText, Camera } from 'lucide-react';
 import { HeaderGraphic } from './HeaderGraphic';
 import { FooterGraphic } from './FooterGraphic';
 import { TextBreakingBadge } from './TextBreakingBadge';
@@ -319,13 +319,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
     return parseLineParts(raw);
   };
 
-  // Aspect ratio class
-  const aspectClass =
-    card.aspectRatio === '1:1'
-      ? 'aspect-square'
-      : card.aspectRatio === '9:16'
-      ? 'aspect-[9/16]'
-      : 'aspect-[4/5]';
+  // Aspect ratio class: Graphic Photo News canvas is strictly True 4:5 (1080x1350)
+  const aspectClass = 'aspect-[4/5]';
 
   const getFilterCss = (filters?: typeof card.imageFilters): string => {
     if (!filters) return 'none';
@@ -383,9 +378,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
     <div
       ref={containerRef}
       id="news-card-container"
-      className={`relative w-full max-w-[540px] mx-auto overflow-hidden rounded-2xl shadow-2xl bg-neutral-900 select-none ${aspectClass} ${card.frameDesign === 'graphic_002' ? 'border-[5px] sm:border-[8px] border-[#EA580C]' : card.frameDesign === 'graphic_004' ? 'border-[4px] sm:border-[6px] border-black bg-white' : ''} ${className || ''}`}
+      className={`relative w-full mx-auto overflow-hidden rounded-2xl shadow-2xl bg-neutral-900 select-none ${aspectClass} ${card.frameDesign === 'graphic_002' ? 'border-[5px] sm:border-[8px] border-[#EA580C]' : card.frameDesign === 'graphic_004' ? 'border-[4px] sm:border-[6px] border-black bg-white' : ''} ${className || ''}`}
       style={{
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+        aspectRatio: '4 / 5',
       }}
     >
       {/* 1. BACKGROUND PHOTOS ACCORDING TO USER'S SELECTED LAYOUT */}
@@ -528,13 +524,36 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
         {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
           <div className="w-full h-full overflow-hidden relative">
-            <img
-              src={mainPhotoSrc}
-              alt=""
-              className="w-full h-full object-cover transition-all duration-150"
-              style={mainStyle}
-              onError={handleImgError}
-            />
+            {card.images?.main && card.images.main.trim().length > 0 && card.images.main !== FALLBACK_NEWS_BG && card.images.main !== '/assets/placeholder_news_photo.png' ? (
+              <img
+                src={mainPhotoSrc}
+                alt=""
+                className="w-full h-full object-cover transition-all duration-150"
+                style={mainStyle}
+                onError={handleImgError}
+              />
+            ) : (
+              /* Reference Template Instructional State Layer */
+              <div className="w-full h-full bg-gradient-to-br from-slate-900 via-neutral-900 to-black flex flex-col items-center justify-center p-4 text-center select-none relative">
+                {/* Subtle photo grid texture */}
+                <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-35 pointer-events-none" />
+                <div className="relative z-10 flex flex-col items-center max-w-[280px]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-md mb-2">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>स्टेप 4 : फोटो जोड़ें</span>
+                  </div>
+                  <h3 className="font-extrabold text-white text-sm sm:text-base tracking-wide font-['Baloo_2']">
+                    कृपया अपनी न्यूज फोटो अपलोड करें
+                  </h3>
+                  <p className="text-slate-300 text-[11px] sm:text-xs font-['Baloo_2'] mt-1 leading-snug">
+                    गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं
+                  </p>
+                  <span className="text-amber-300/90 text-[10px] sm:text-[11px] font-['Baloo_2'] mt-1 font-bold">
+                    (1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1019,7 +1038,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                   {card.speakerName && <span className="text-neutral-200">• {card.speakerName}</span>}
                 </div>
               )}
-              {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' ? (
+              {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
                 <h1
                   className="font-black leading-snug tracking-tight text-neutral-900 transition-all line-clamp-3"
                   style={{
@@ -1030,15 +1049,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                   {renderFormattedHeadline()}
                 </h1>
               ) : (
-                <div className="flex flex-col items-center text-center">
-                  <div className="flex items-center justify-center gap-1.5 font-black text-2xl sm:text-4xl font-['Poppins'] tracking-tight">
-                    <span className="text-black">YOUR</span>
-                    <span className="text-[#DC2626]">HEADLINE</span>
+                <div className="flex flex-col items-center text-center max-w-[90%]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-red-600 text-white font-black text-[11px] sm:text-xs shadow-xs mb-1.5">
+                    <span>स्टेप 3 : हेडलाइन लिखें</span>
                   </div>
-                  <span className="font-extrabold text-xl sm:text-3xl text-neutral-900 font-['Baloo_2'] mt-1">
-                    यहाँ आपकी हेडलाइन आएगी
-                  </span>
-                  <span className="font-bold text-xs sm:text-base text-neutral-500 font-['Baloo_2'] mt-0.5">
+                  <h2 className="font-black text-sm sm:text-xl text-neutral-950 font-['Baloo_2'] leading-snug">
+                    स्टेप 3 में जाकर अपनी मुख्य खबर की हेडलाइन दर्ज करें
+                  </h2>
+                  <span className="font-bold text-[10px] sm:text-xs text-neutral-500 font-['Baloo_2'] mt-0.5">
                     (अधिकतम 3 लाइन में)
                   </span>
                 </div>
@@ -1060,7 +1078,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             </div>
 
+<<<<<<< HEAD
             {/* Fixed Footer: If Custom Footer PNG is uploaded, display it directly and HIDE default Fixed Yellow Footer */}
+=======
+            {/* Fixed Footer: Dynamic user profile data, no unnecessary blank space */}
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
             {card.customFooterPng ? (
               <div className="relative z-10 w-full pointer-events-auto">
                 <img
@@ -1070,6 +1092,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 />
               </div>
             ) : (
+<<<<<<< HEAD
               <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
                 {/* Left Social Icons */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -1106,6 +1129,54 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
                 {/* Contact Number (if enabled by admin/profile) */}
                 {card.showMobileNumber !== false && card.whatsappNumber && (
+=======
+              <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto overflow-hidden">
+                {/* Left Social Icons: Respect active ones */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('youtube')) && (
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                      ▶
+                    </div>
+                  )}
+                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('facebook')) && (
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
+                      f
+                    </div>
+                  )}
+                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('instagram')) && (
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                      📷
+                    </div>
+                  )}
+                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('whatsapp')) && (
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                      💬
+                    </div>
+                  )}
+                </div>
+
+                {/* Divider & Handle */}
+                <div className="h-5 w-px bg-[#CA8A04]" />
+                <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
+                  {card.socialHandle
+                    ? (card.socialHandle.startsWith('@') ? card.socialHandle : `@${card.socialHandle}`)
+                    : `@${(card.channelNameEn || card.brandTagline || 'ainewsmaker').toLowerCase().replace(/[^a-z0-9]/g, '')}`}
+                </span>
+
+                {/* Website (Only if present, no blank space) */}
+                {card.websiteUrl && card.websiteUrl.trim().length > 0 && (
+                  <>
+                    <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
+                    <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
+                      <span className="text-sky-600 font-bold">🌐</span>
+                      <span>{card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '').trim()}</span>
+                    </div>
+                  </>
+                )}
+
+                {/* Contact Number (if present and enabled) */}
+                {card.showMobileNumber !== false && card.whatsappNumber && card.whatsappNumber.trim().length > 0 && (
+>>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                   <>
                     <div className="h-5 w-px bg-[#CA8A04]" />
                     <div className="flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] shrink-0">
