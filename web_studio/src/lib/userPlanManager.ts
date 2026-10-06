@@ -935,7 +935,9 @@ export function checkAccountUniqueness(input: {
     cleanEmail === 'admin.ainewsmaker@gmail.com' ||
     cleanEmail === 'admin@breakingnewswala.com' ||
     cleanEmail === 'breakingnewswala.com@gmail.com' ||
-    cleanEmail.startsWith('admin');
+    cleanEmail.includes('admin') ||
+    cleanEmail.includes('superadmin') ||
+    cleanEmail.includes('breakingnews');
 
   const cleanChannel = (input.channelName || '').trim().toLowerCase();
   const cleanUsername = (input.username || '').trim().toLowerCase().replace(/^@/, '');

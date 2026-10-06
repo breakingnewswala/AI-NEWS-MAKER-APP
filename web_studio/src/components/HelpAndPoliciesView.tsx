@@ -249,10 +249,10 @@ export const HelpAndPoliciesView: React.FC<HelpAndPoliciesViewProps> = ({ isComp
                   <span>आधिकारिक ईमेल (Email Support)</span>
                 </div>
                 <a
-                  href="mailto:breakingnewswala.com@gmail.com"
+                  href="mailto:support.ainewsmaker@gmail.com"
                   className="text-white hover:text-amber-300 font-mono text-xs sm:text-sm font-bold block truncate"
                 >
-                  breakingnewswala.com@gmail.com
+                  support.ainewsmaker@gmail.com
                 </a>
                 <p className="text-[11px] text-slate-400">तकनीकी समस्याओं, बिलिंग व चैनल सत्यापन के लिए लिखें</p>
               </div>

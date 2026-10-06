@@ -1097,36 +1097,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             )}
           </div>
 
-          {/* Bottom White Dynamic Branding Footer (Height ~14%) */}
-          <div className="relative z-30 w-full bg-white border-t border-neutral-200 px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between pointer-events-auto shadow-md">
-            {/* Left Social Icons + Handle */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold shadow-xs">📷</div>
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[9px] sm:text-xs font-black shadow-xs">f</div>
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-black flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold shadow-xs">𝕏</div>
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-neutral-900 flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold shadow-xs">@</div>
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-red-600 flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold shadow-xs">▶</div>
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#0A66C2] flex items-center justify-center text-white text-[8px] sm:text-[10px] font-bold shadow-xs">in</div>
-              </div>
-              <span className="font-black text-[11px] sm:text-xs text-neutral-900 font-['Poppins'] truncate max-w-[90px] sm:max-w-[130px]">
-                {card.socialHandle || '/@UserName'}
-              </span>
-            </div>
-
-            {/* Center Website */}
-            <div className="flex items-center gap-1.5 px-2 border-x border-neutral-300">
-              <span className="text-sm">🌐</span>
-              <span className="font-bold text-[11px] sm:text-xs text-neutral-900 font-['Poppins'] truncate max-w-[100px] sm:max-w-[150px]">
-                {card.websiteUrl ? card.websiteUrl.replace(/^https?:\/\//, '').replace(/^www\./, '') : 'yourwebsite.com'}
-              </span>
-            </div>
-
-            {/* Right WhatsApp */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[9px] sm:text-xs font-bold shadow-xs">📞</div>
-              <span className="font-bold text-[11px] sm:text-xs text-neutral-900 font-['Poppins']">
-                {card.whatsappNumber || '+91 98765 43210'}</span></div></div></div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
+          {/* Bottom Dynamic Branding Footer */}
+          <div className="relative z-30 w-full pointer-events-auto">
+            <FooterGraphic
+              socialHandle={card.socialHandle}
+              whatsappNumber={card.whatsappNumber}
+              customFooterPng={getActiveFooterPng(card)}
+              websiteUrl={card.websiteUrl}
+              footerBgColor="#FFFFFF"
+              footerTextColor="#111827"
+              footerIconStyle="color"
+            />
+          </div>
+        </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none">
           {/* Top Overlay: Location Box (Left), Logo Box (Right) */}
           <div className="relative w-full h-[53%] p-3 sm:p-5 flex flex-col justify-between">

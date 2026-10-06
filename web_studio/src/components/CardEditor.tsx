@@ -2677,7 +2677,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         id="step-location-date"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-          mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
+          mobileViewMode === 'steps' && activeStep !== 5 ? 'hidden' : 'block'
 
         }`}
       >
@@ -2764,7 +2764,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         id="step-location-date-sub"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-          mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
+          mobileViewMode === 'steps' && activeStep !== 5 ? 'hidden' : 'block'
 
         }`}
       >
@@ -2953,7 +2953,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             id="step-header-footer"
             style={{ scrollMarginTop: '120px' }}
             className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-              mobileViewMode === 'steps' && (activeStep !== 6 && activeStep !== 7) ? 'hidden' : 'block'
+              mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
 
             }`}
           >
@@ -3336,10 +3336,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <ChevronLeft className="w-3.5 h-3.5" />
                   <span>पिछला: तारीख व वॉटरमार्क</span>
                 </button>
-                <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 8 / {STEPS.length}</span>
+                <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 6 / {STEPS.length}</span>
                 <button
                   type="button"
-                  onClick={() => handleGoToStep(8)}
+                  onClick={() => handleGoToStep(7)}
                   className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
                 >
                   <span>अगला: डाउनलोड</span>
