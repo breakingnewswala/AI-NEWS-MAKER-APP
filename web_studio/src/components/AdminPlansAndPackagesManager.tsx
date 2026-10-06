@@ -275,6 +275,59 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   // Plan Users State
   const [planUsers, setPlanUsers] = useState<PlanUserRecord[]>(() => getPlanUsers());
+  const [isAddUserOpen, setIsAddUserOpen] = useState<boolean>(false);
+  const [newUserName, setNewUserName] = useState<string>('');
+  const [newUserEmail, setNewUserEmail] = useState<string>('');
+  const [newUserPassword, setNewUserPassword] = useState<string>('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'user'>('user');
+  const [newUserPlan, setNewUserPlan] = useState<UserPlanTier>('basic');
+  const [newUserMobile, setNewUserMobile] = useState<string>('');
+  const [newUserChannel, setNewUserChannel] = useState<string>('');
+  const [addUserSuccessMsg, setAddUserSuccessMsg] = useState<string>('');
+  const [addUserErrorMsg, setAddUserErrorMsg] = useState<string>('');
+
+  // Website News Portal Manager State
+  const [newsPortals, setNewsPortals] = useState<Array<{ id: string; name: string; url: string; category: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('admin_news_portals_list');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      { id: 'p-1', name: 'आज तक (Aaj Tak)', url: 'https://aajtak.in', category: 'breaking' },
+      { id: 'p-2', name: 'दैनिक भास्कर (Dainik Bhaskar)', url: 'https://bhaskar.com', category: 'state' },
+      { id: 'p-3', name: 'एनडीटीवी (NDTV India)', url: 'https://ndtv.in', category: 'national' },
+      { id: 'p-4', name: 'ज़ी न्यूज़ (Zee News)', url: 'https://zeenews.india.com', category: 'breaking' },
+      { id: 'p-5', name: 'अमर उजाला (Amar Ujala)', url: 'https://amarujala.com', category: 'state' },
+      { id: 'p-6', name: 'खबरिदास न्यूज़ (Khabridas News)', url: 'https://khabridasnews.com', category: 'breaking' }
+    ];
+  });
+  const [newPortalName, setNewPortalName] = useState<string>('');
+  const [newPortalUrl, setNewPortalUrl] = useState<string>('');
+  const [newPortalCat, setNewPortalCat] = useState<string>('breaking');
+
+  const handleAddNewsPortal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPortalName.trim()) return;
+    const item = {
+      id: 'portal-' + Date.now(),
+      name: newPortalName.trim(),
+      url: newPortalUrl.trim() || 'https://' + newPortalName.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '.com',
+      category: newPortalCat,
+    };
+    const updated = [item, ...newsPortals];
+    setNewsPortals(updated);
+    saveNewsChannel(item.name);
+    setSavedChannels(getSavedNewsChannels());
+    localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
+    setNewPortalName('');
+    setNewPortalUrl('');
+  };
+
+  const handleDeleteNewsPortal = (id: string) => {
+    const updated = newsPortals.filter(p => p.id !== id);
+    setNewsPortals(updated);
+    localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
+  };
   const [manualUserEmail, setManualUserEmail] = useState<string>('');
   const [manualUserTier, setManualUserTier] = useState<UserPlanTier>('professional');
   const [manualDuration, setManualDuration] = useState<number>(30);
@@ -1795,6 +1848,131 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </form>
           </div>
 
+          {/* 2.5 SUPER ADMIN: ADD NEW USER / ADMIN (ईमेल व पासवर्ड के साथ नया यूज़र / एडमिन जोड़ें) */}
+          <div className="bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/50 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm sm:text-base font-black text-amber-300 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-amber-400" />
+                  <span>➕ नया यूज़र या एडमिन जोड़ें (Add User / Admin)</span>
+                </h4>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  सुपर एडमिन सीधे यहाँ से किसी भी पत्रकार/यूज़र या एडमिन का ईमेल आईडी व पासवर्ड बनाकर अकाउंट जोड़ सकते हैं।
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddUserOpen(!isAddUserOpen)}
+                className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-1.5 shrink-0"
+              >
+                <span>{isAddUserOpen ? '✕ फॉर्म बंद करें' : '➕ नया यूज़र जोड़ें'}</span>
+              </button>
+            </div>
+
+            {isAddUserOpen && (
+              <form onSubmit={handleSuperAdminAddUser} className="bg-slate-950/90 border border-amber-500/40 rounded-xl p-4 space-y-4 animate-in slide-in-from-top-2">
+                {addUserSuccessMsg && (
+                  <div className="p-3 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>{addUserSuccessMsg}</span>
+                  </div>
+                )}
+                {addUserErrorMsg && (
+                  <div className="p-3 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-300 text-xs font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400" />
+                    <span>{addUserErrorMsg}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">पूरा नाम (Full Name) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      placeholder="उदा. राहुल शर्मा"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">ईमेल आईडी (Email / Login ID) *</label>
+                    <input
+                      type="email"
+                      required
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      placeholder="user@gmail.com"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">लॉगिन पासवर्ड (Password) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      placeholder="कम से कम 4 अक्षर (उदा. pass123)"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">रोल चयन (Role) *</label>
+                    <select
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-amber-300 font-bold focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="user">👤 सामान्य यूज़र / रिपोर्टर (User)</option>
+                      <option value="admin">🛡️ एडमिन (Admin)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">प्लान (Plan Tier) *</label>
+                    <select
+                      value={newUserPlan}
+                      onChange={(e) => setNewUserPlan(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-amber-300 font-bold focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="basic">BASIC (वॉटरमार्क सहित)</option>
+                      <option value="advanced">ADVANCE (फुल एचडी)</option>
+                      <option value="professional">PRO (वीडियो स्टूडियो)</option>
+                      <option value="ultra">VIP DESK (4K फ्रेम्स)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">मोबाइल नंबर (वैकल्पिक)</label>
+                    <input
+                      type="tel"
+                      value={newUserMobile}
+                      onChange={(e) => setNewUserMobile(e.target.value)}
+                      placeholder="9876543210"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4 text-slate-950" />
+                    <span>अकाउंट बनाएं व डेटाबेस में जोड़ें</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
           {/* 3. ADMIN USER CONTROL: ALL REGISTERED USERS DATABASE RECORDS */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -2722,6 +2900,66 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">3. DATABASE</span>
                 <span>→</span>
                 <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">4. HOME FEED</span>
+              </div>
+            </div>
+
+            {/* Unified Website News Portal Manager */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-bold text-white">🌐 वेबसाइट न्यूज़ पोर्टल प्रबंधक (Website News Portal Manager - RSS & Web Links)</span>
+                </div>
+                <span className="text-[10px] text-cyan-300 font-bold">{newsPortals.length} न्यूज़ पोर्टल्स सक्रिय</span>
+              </div>
+
+              <form onSubmit={handleAddNewsPortal} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  required
+                  value={newPortalName}
+                  onChange={(e) => setNewPortalName(e.target.value)}
+                  placeholder="न्यूज़ चैनल / पोर्टल का नाम (उदा. अमर उजाला)"
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-hidden"
+                />
+                <input
+                  type="url"
+                  value={newPortalUrl}
+                  onChange={(e) => setNewPortalUrl(e.target.value)}
+                  placeholder="वेबसाइट URL (उदा. https://amarujala.com)"
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-hidden font-mono"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center justify-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ न्यूज़ पोर्टल जोड़ें</span>
+                </button>
+              </form>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
+                {newsPortals.map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-2 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between gap-1.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-bold text-slate-200 truncate">{p.name}</div>
+                      <div className="text-[9px] font-mono text-cyan-400/80 truncate">{p.url}</div>
+                    </div>
+                    {newsPortals.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteNewsPortal(p.id)}
+                        className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                        title="पोर्टल हटाएं"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 

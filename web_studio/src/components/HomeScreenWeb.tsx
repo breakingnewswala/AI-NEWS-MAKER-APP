@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
+  Calendar,
   Sparkles,
   Flame,
   Share2,

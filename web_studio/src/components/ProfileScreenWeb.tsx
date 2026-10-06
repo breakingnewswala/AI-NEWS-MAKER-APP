@@ -109,6 +109,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
+      const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
+      if (cleanEmail) {
+        const specific = localStorage.getItem(`user_profile_${cleanEmail}`);
+        if (specific) return JSON.parse(specific);
+      }
       const saved = localStorage.getItem('user_channel_profile');
       if (saved) return JSON.parse(saved);
     } catch {}
@@ -1295,7 +1300,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
                           title="लोगो को मूल डिफ़ॉल्ट पर रीसेट करें"
                         >
-                          <span>🔄 Logo Upload Reset</span>
+                          <span>🔄 एडमिन लोगो रीसेट (Reset Logo)</span>
                         </button>
                       )}
                     </div>
@@ -1541,6 +1546,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
                     }`}
                   />
+                </div>
+              </div>
+
+              {/* Registered Email Address (Gmail / Login ID) */}
+              <div className="pt-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
+                  <span>पंजीकृत ईमेल आईडी (Gmail / Login Email)</span>
+                  <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>सत्यापित खाता</span>
+                  </span>
+                </label>
+                <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm font-mono text-amber-300 select-all">
+                  <Globe className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="truncate">{currentUser?.email || effectiveUser?.email || 'Google Login Email'}</span>
                 </div>
               </div>
 
@@ -2000,7 +2020,7 @@ return (
                   Gmail:
                 </span>
                 <span className="text-amber-200 font-mono">
-                  {currentUser?.email || 'breakingnewswala.com@gmail.com'}
+                  {currentUser?.email || (effectiveUser?.email && !effectiveUser.email.includes('editor@ainewsmaker') ? effectiveUser.email : 'ईमेल उपलब्ध नहीं')}
                 </span>
                 <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">
                   सत्यापित ID
