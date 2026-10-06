@@ -40,3 +40,5 @@ debug.keystore.base64
 
 # Keep important config templates
 !.env.example
+
+*.zip
