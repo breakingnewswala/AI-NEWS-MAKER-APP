@@ -57,8 +57,32 @@ export interface AuthWelcomeScreenProps {
 
 export const KNOWN_REGISTERED_USERS: Record<
   string,
-  Partial<ChannelProfile & { role: 'admin' | 'reporter'; district: string }>
+  Partial<ChannelProfile & { role: 'admin' | 'superadmin' | 'reporter' | 'user'; district: string }>
 > = {
+  'admin.ainewsmaker@gmail.com': {
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    channelLogoType: 'png',
+    username: 'superadmin',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
+    fullName: 'सुपर एडमिन (Super Admin)',
+    district: 'हेडक्वार्टर सेंट्रल डेस्क',
+    role: 'superadmin',
+  },
+  superadmin: {
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    channelLogoType: 'png',
+    username: 'superadmin',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
+    fullName: 'सुपर एडमिन (Super Admin)',
+    district: 'हेडक्वार्टर सेंट्रल डेस्क',
+    role: 'superadmin',
+  },
   'breakingnewswala.com@gmail.com': {
     channelNameHi: 'एआई न्यूज़ मेकर',
     channelNameEn: 'AI News Maker',
@@ -595,12 +619,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
 
     const emailLower = loginEmail.trim().toLowerCase();
-    const isAdmin =
-      emailLower.includes('admin') ||
-      emailLower.includes('editor') ||
-      emailLower === 'breakingnewswala.com@gmail.com' ||
-      loginPassword === 'news123' ||
-      loginPassword === 'admin123';
+    const isSuper = emailLower === 'admin.ainewsmaker@gmail.com' || emailLower === 'superadmin' || loginPassword === 'Admin@ainewsmaker';
+    const isAdmin = isSuper || emailLower.includes('admin') || emailLower.includes('editor') || emailLower === 'breakingnewswala.com@gmail.com' || loginPassword === 'news123' || loginPassword === 'admin123' || loginPassword === 'Admin@2026';
 
     getUserSubscription();
 

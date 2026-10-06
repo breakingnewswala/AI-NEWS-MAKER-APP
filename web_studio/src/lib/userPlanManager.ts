@@ -3,6 +3,40 @@
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
 export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
+export const SUPER_ADMIN_EMAILS = [
+  'admin.ainewsmaker@gmail.com',
+  'admin@breakingnewswala.com',
+  'breakingnewswala.com@gmail.com',
+];
+
+export function isUserSuperAdmin(userOrEmail?: any): boolean {
+  if (!userOrEmail) return false;
+  if (typeof userOrEmail === 'string') {
+    const clean = userOrEmail.toLowerCase().trim();
+    return clean === 'superadmin' || SUPER_ADMIN_EMAILS.includes(clean);
+  }
+  const email = (userOrEmail.email || '').toLowerCase().trim();
+  const username = (userOrEmail.username || '').toLowerCase().trim();
+  const role = (userOrEmail.role || '').toLowerCase().trim();
+  return role === 'superadmin' || SUPER_ADMIN_EMAILS.includes(email) || username === 'superadmin';
+}
+
+export function isEffectiveSuperAdmin(user?: any): boolean {
+  if (!user) {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return isUserSuperAdmin(parsed);
+        }
+      } catch {}
+    }
+    return false;
+  }
+  return isUserSuperAdmin(user);
+}
+
 
 export interface UserSubscriptionInfo {
   tier: UserPlanTier;
@@ -478,6 +512,8 @@ export interface PlanUserRecord {
   userId: string;
   email: string;
   name?: string;
+  role?: 'superadmin' | 'admin' | 'reporter' | 'user';
+  name?: string;
 
   mobile?: string;
   channelName?: string;
@@ -889,12 +925,23 @@ export interface AccountUniquenessInput {
   currentEmail?: string;
 }
 
-export function checkAccountUniqueness(input: AccountUniquenessInput): { valid: boolean; error?: string } {
+export function checkAccountUniqueness(input: {
+  channelName?: string;
+  username?: string;
+  currentEmail?: string;
+}): { valid: boolean; error?: string } {
+  const cleanEmail = (input.currentEmail || '').trim().toLowerCase();
+  const isPrivileged =
+    cleanEmail === 'admin.ainewsmaker@gmail.com' ||
+    cleanEmail === 'admin@breakingnewswala.com' ||
+    cleanEmail === 'breakingnewswala.com@gmail.com' ||
+    cleanEmail.startsWith('admin');
+
   const cleanChannel = (input.channelName || '').trim().toLowerCase();
   const cleanUsername = (input.username || '').trim().toLowerCase().replace(/^@/, '');
 
   const reservedNames = ['admin', 'official', 'breakingnewswala', 'ainewsmaker', 'superadmin'];
-  if (reservedNames.includes(cleanChannel) || reservedNames.includes(cleanUsername)) {
+  if (!isPrivileged && (reservedNames.includes(cleanChannel) || reservedNames.includes(cleanUsername))) {
     return { valid: false, error: 'यह नाम सिस्टम द्वारा आरक्षित है।' };
   }
 
@@ -923,19 +970,21 @@ export function registerOrUpdateUser(userData: {
   isLocked?: boolean;
   username?: string;
   tier?: UserPlanTier;
-  role?: string;
-
+  role?: 'superadmin' | 'admin' | 'reporter' | 'user' | string;
 }): void {
   if (typeof window === 'undefined') return;
   try {
     const users = getPlanUsers();
     const cleanEmail = userData.email.toLowerCase().trim();
+    const isSuper = isUserSuperAdmin(cleanEmail);
+    const assignedRole = (isSuper ? 'superadmin' : (userData.role || 'user')) as any;
     const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
     if (idx >= 0) {
       users[idx] = {
         ...users[idx],
         email: cleanEmail,
         name: userData.name || users[idx].name,
+        role: users[idx].role || assignedRole,
         channelName: userData.channelName || users[idx].channelName,
         channelLogoUrl: userData.channelLogoUrl || users[idx].channelLogoUrl,
         mobile: userData.mobile || users[idx].mobile,
@@ -946,15 +995,16 @@ export function registerOrUpdateUser(userData: {
         userId: `user-${Date.now()}`,
         email: cleanEmail,
         name: userData.name,
-        tier: 'basic',
-        planName: 'BASIC',
+        role: assignedRole,
+        tier: isSuper ? 'ultra' : (userData.tier || 'basic'),
+        planName: isSuper ? 'VIP DESK' : 'BASIC',
         channelName: userData.channelName,
         channelLogoUrl: userData.channelLogoUrl,
         mobile: userData.mobile,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : true,
         activatedAt: Date.now(),
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        activatedVia: 'Profile Registration',
+        expiresAt: Date.now() + (isSuper ? 3650 : 7) * 24 * 60 * 60 * 1000,
+        activatedVia: isSuper ? 'Super Admin Preset' : 'Profile Registration',
       });
     }
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));

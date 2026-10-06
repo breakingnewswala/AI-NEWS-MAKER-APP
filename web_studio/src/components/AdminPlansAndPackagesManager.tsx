@@ -44,6 +44,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import {
+  isUserSuperAdmin,
   syncCloudUsers,
   adminUpdateCloudUser,
   adminDeleteCloudUser,
@@ -112,6 +113,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // Sub-tabs: 10 main accordions in exact order
   const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('profile');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
+  const isSuperAdminUser = isUserSuperAdmin(currentUser);
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -996,6 +998,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'promocodes' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              
+            {!isSuperAdminUser ? (
+              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                    यह सेक्शन (<strong>5. प्रोमो कोड्स व कूपन मैनेजर</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
+                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
+                </div>
+              </div>
+            ) : (
         <div className="space-y-6">
           {/* Manual Payment Workflow Guide */}
           <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-xs text-slate-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -1326,6 +1345,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             )}
           </div>
         </div>
+              )}
             </div>
           )}
         </div>
@@ -1362,6 +1382,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'users' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              
+            {!isSuperAdminUser ? (
+              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                    यह सेक्शन (<strong>6. यूजर्स मैनेजर व रोल नियंत्रण</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
+                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
+                </div>
+              </div>
+            ) : (
         <div className="space-y-6">
           {/* 0. LOGO CHANGE REQUESTS MANAGEMENT CARD */}
           <div className="bg-gradient-to-br from-slate-900 via-amber-950/20 to-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
@@ -1796,11 +1833,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/50">
                       <th className="p-3">User & Account Info</th>
+                      <th className="p-3">रोल नियंत्रण (Role)</th>
                       <th className="p-3">Channel Name & Logo</th>
-                      <th className="p-3">Profile / Branding Info</th>
+                      <th className="p-3">Profile / Branding</th>
                       <th className="p-3">Current Plan</th>
-                      <th className="p-3">Profile Lock Status</th>
-                      <th className="p-3">कस्टम H/F स्थिति</th>
+                      <th className="p-3">Profile Lock</th>
+                      <th className="p-3">एक्शन (Delete)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -1821,9 +1859,17 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           <td className="p-3">
                             <div className="font-bold text-white flex items-center gap-1.5">
                               <span>{u.name || u.email.split('@')[0]}</span>
-                              {u.role === 'admin' && (
-                                <span className="px-1.5 py-0.2 bg-red-600/80 text-white text-[9px] font-black rounded uppercase">
-                                  Admin
+                              {u.role === 'superadmin' ? (
+                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
+                                  👑 Super Admin
+                                </span>
+                              ) : u.role === 'admin' ? (
+                                <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9px] font-black rounded uppercase">
+                                  🛡️ Admin
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded uppercase">
+                                  👤 User
                                 </span>
                               )}
                             </div>
@@ -1831,6 +1877,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             {u.mobile && (
                               <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
                             )}
+                          </td>
+
+                          {/* Role Changer */}
+                          <td className="p-3">
+                            <select
+                              value={u.role || 'user'}
+                              onChange={(e) => {
+                                const newRole = e.target.value as any;
+                                adminUpdateUserRecord(u.email, { role: newRole });
+                                adminUpdateCloudUser(u.userId, { role: newRole });
+                                setPlanUsers(getPlanUsers());
+                              }}
+                              className="bg-slate-950 border border-slate-700 text-amber-300 rounded-lg px-2 py-1 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                            >
+                              <option value="superadmin">👑 सुपर एडमिन (Super Admin)</option>
+                              <option value="admin">🛡️ एडमिन (Admin)</option>
+                              <option value="user">👤 सामान्य यूज़र (User)</option>
+                            </select>
                           </td>
 
                           {/* Channel & Logo */}
@@ -1937,15 +2001,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             </div>
                           </td>
 
-                          {/* Custom H/F Assignment Status */}
+                          {/* Delete User & Danger Zone */}
                           <td className="p-3">
-                            {u.assignedCustomActive && (u.assignedHeaderUrl || u.assignedFooterUrl) ? (
-                              <span className="px-2 py-0.5 bg-purple-950 border border-purple-500 text-purple-300 rounded text-[10px] font-bold">
-                                ✨ असाइन्ड (Active)
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-500">डिफ़ॉल्ट</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`क्या आप यूजर "${u.name || u.email}" का प्रोफाइल व पूरा डेटाबेस हमेशा के लिए हटाना चाहते हैं?`)) {
+                                  adminDeleteUserRecord(u.email);
+                                  adminDeleteCloudUser(u.userId);
+                                  setPlanUsers(getPlanUsers());
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/60 text-rose-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                              title="यूज़र प्रोफाइल व डेटाबेस हटाएं"
+                            >
+                              <Trash2 className="w-3 h-3 text-rose-400" />
+                              <span>हटाएं</span>
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -2086,11 +2158,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
           )}
-        </div>
-            </div>
-          )}
-        </div>
-
 
           {/* EDIT USER MODAL (ADMIN POWER: CHANGE USERNAME, PLAN, PHONE, LOCK) */}
           {editingUser && (
@@ -2246,6 +2313,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
           )}
+        </div>
+            )}
+          </div>
+        )}
+      </div>
 
 
         {/* ========================================================================= */}
@@ -2833,6 +2905,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'restricted' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              
+            {!isSuperAdminUser ? (
+              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                    यह सेक्शन (<strong>9. प्रतिबंधित चैनल सुरक्षा सूची</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
+                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
+                </div>
+              </div>
+            ) : (
         <div className="space-y-6">
           {/* Top Explanation Banner */}
           <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
@@ -3128,6 +3217,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
+              )}
             </div>
           )}
         </div>

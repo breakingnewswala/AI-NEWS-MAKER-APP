@@ -655,7 +655,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       username: channelProfile.username,
       websiteUrl: channelProfile.websiteUrl,
       channelName: channelProfile.channelNameHi,
-      currentEmail: currentUser?.email,
+      currentEmail: effectiveUser?.email || currentUser?.email,
     });
     if (!uniqCheck.valid) {
       alert(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');

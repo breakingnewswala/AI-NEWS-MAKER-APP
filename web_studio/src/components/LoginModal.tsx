@@ -32,7 +32,7 @@ export interface UserSocialLinks {
 export interface ReporterUser {
   username: string;
   name: string;
-  role: 'reporter' | 'admin' | 'bureau';
+  role: 'reporter' | 'admin' | 'superadmin' | 'bureau' | 'user';
   district?: string;
   email?: string;
   channelName?: string;
@@ -55,6 +55,29 @@ interface LoginModalProps {
 
 // Default pre-configured accounts
 const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
+  'admin.ainewsmaker@gmail.com': {
+    pass: 'Admin@ainewsmaker',
+    user: {
+      username: 'superadmin',
+      name: 'सुपर एडमिन (Super Admin)',
+      role: 'superadmin' as any,
+      district: 'हेडक्वार्टर सेंट्रल डेस्क',
+      email: 'admin.ainewsmaker@gmail.com',
+      planTier: 'ultra',
+    },
+  },
+  superadmin: {
+    pass: 'Admin@ainewsmaker',
+    user: {
+      username: 'superadmin',
+      name: 'सुपर एडमिन (Super Admin)',
+      role: 'superadmin' as any,
+      district: 'हेडक्वार्टर सेंट्रल डेस्क',
+      email: 'admin.ainewsmaker@gmail.com',
+      planTier: 'ultra',
+    },
+  },
+
   admin: {
     pass: 'news123',
     user: {
@@ -160,17 +183,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     const processGoogleUser = (email: string, displayName?: string) => {
       const cleanEmail = email.trim().toLowerCase();
-      const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail.startsWith('admin');
+      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'superadmin';
+      const isAdmin = isSuper || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail.startsWith('admin');
       const prefix = cleanEmail.split('@')[0];
       const defaultName = displayName || prefix.replace(/[._-]/g, ' ');
 
       const user: ReporterUser = {
         username: prefix,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        role: isAdmin ? 'admin' : 'reporter',
+        role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
         email: cleanEmail,
         district: isAdmin ? 'सेंट्रल डेस्क' : 'डिजिटल डेस्क',
-        planTier: isAdmin ? 'enterprise' : 'basic',
+        planTier: isSuper ? 'ultra' : (isAdmin ? 'enterprise' : 'basic'),
       };
 
       try {
