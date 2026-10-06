@@ -180,10 +180,47 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   }, [onRefreshLiveNews]);
 
   // Merge active RSS/Web posts with database news posts seamlessly
+  const getDeletedIds = (): Set<string> => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
+      if (raw) return new Set(JSON.parse(raw));
+    } catch {}
+    return new Set();
+  };
+
+  // Merge active RSS/Web posts with database news posts seamlessly & shuffle/interleave across categories
   const combinedPosts = useMemo(() => {
+    const deletedIds = getDeletedIds();
     const existingIds = new Set(posts.map((p) => p.id));
-    const newFromRss = activeRssPosts.filter((p) => !existingIds.has(p.id));
-    return [...newFromRss, ...posts];
+    const newFromRss = activeRssPosts.filter((p) => !existingIds.has(p.id) && !deletedIds.has(p.id));
+    const validPosts = posts.filter((p) => !deletedIds.has(p.id));
+
+    const rawList = [...newFromRss, ...validPosts];
+
+    // Interleave / shuffle by category for a balanced, dynamic feed
+    const categoryBuckets: Record<string, NewsFeedPost[]> = {};
+    for (const item of rawList) {
+      const cat = item.category || 'general';
+      if (!categoryBuckets[cat]) categoryBuckets[cat] = [];
+      categoryBuckets[cat].push(item);
+    }
+
+    const shuffled: NewsFeedPost[] = [];
+    const keys = Object.keys(categoryBuckets);
+    let maxLen = 0;
+    for (const k of keys) {
+      if (categoryBuckets[k].length > maxLen) maxLen = categoryBuckets[k].length;
+    }
+
+    for (let i = 0; i < maxLen; i++) {
+      for (const k of keys) {
+        if (i < categoryBuckets[k].length) {
+          shuffled.push(categoryBuckets[k][i]);
+        }
+      }
+    }
+
+    return shuffled.length > 0 ? shuffled : rawList;
   }, [posts, activeRssPosts]);
 
   const toggleSelectNews = (id: string) => {

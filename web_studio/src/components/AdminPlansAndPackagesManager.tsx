@@ -63,6 +63,7 @@ import {
   getPlanUsers,
   assignPlanToUserManually,
   adminUpdateUserRecord,
+  adminDeleteUserRecord,
   assignCustomHeaderFooterToUser,
   PLAN_KEY_MAP,
   LogoChangeRequest,
@@ -488,6 +489,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   };
 
   // Branding Editor Handlers
+  
+  const handleDeleteUser = (email: string, name?: string) => {
+    if (window.confirm(`क्या आप निश्चित रूप से यूज़र "${name || email}" का प्रोफाइल/अकाउंट डिलीट करना चाहते हैं?`)) {
+      adminDeleteUserRecord(email);
+      adminDeleteCloudUser(email).catch(() => {});
+      setPlanUsers(getPlanUsers());
+    }
+  };
+
   const handleOpenBrandingEditor = (user: PlanUserRecord) => {
     setEditingBrandingUser(user);
     setEditBrandNameHi(user.channelName || '');

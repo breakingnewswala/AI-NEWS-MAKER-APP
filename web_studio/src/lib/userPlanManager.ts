@@ -1113,3 +1113,20 @@ export function rejectLogoChangeRequest(requestId: string): void {
 }
 
 
+
+export function adminDeleteUserRecord(emailOrUserId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const users = getPlanUsers();
+    const clean = emailOrUserId.toLowerCase().trim();
+    const filtered = users.filter(
+      (u) => u.email.toLowerCase().trim() !== clean && u.userId?.toLowerCase().trim() !== clean
+    );
+    localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(filtered));
+    window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    return true;
+  } catch (e) {
+    console.warn('Error deleting user record:', e);
+    return false;
+  }
+}

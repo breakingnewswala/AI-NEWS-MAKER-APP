@@ -1340,6 +1340,10 @@ export default function App() {
     setPosts(updated);
     try {
       localStorage.setItem('app_news_posts_v2', JSON.stringify(updated));
+      const raw = localStorage.getItem('app_deleted_news_ids_v1');
+      const set = new Set(raw ? JSON.parse(raw) : []);
+      set.add(postId);
+      localStorage.setItem('app_deleted_news_ids_v1', JSON.stringify(Array.from(set)));
     } catch {
       // ignore
     }
