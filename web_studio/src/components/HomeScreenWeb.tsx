@@ -151,6 +151,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   onOpenAdminLogin,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
+  const [customDateFilter, setCustomDateFilter] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [speakingPostId, setSpeakingPostId] = useState<string | null>(null);

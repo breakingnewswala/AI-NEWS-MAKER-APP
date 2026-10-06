@@ -78,6 +78,9 @@ import {
   toggleAdminRssSource,
   deleteAdminRssSource,
   syncAllSourcesLive,
+  getSavedNewsChannels,
+  saveNewsChannel,
+  deleteSavedNewsChannel,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
@@ -238,6 +241,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // RSS & Web Link Sources State
   const [rssSources, setRssSources] = useState<AdminRssSource[]>(() => getAdminRssSources());
   const [newSourceName, setNewSourceName] = useState<string>('');
+  const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
   const [newSourceUrl, setNewSourceUrl] = useState<string>('');
   const [newSourceType, setNewSourceType] = useState<'rss' | 'web'>('rss');
   const [newSourceCategory, setNewSourceCategory] = useState<string>('देश');
@@ -2420,7 +2424,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   return;
                 }
                 const name = newSourceName.trim() || 'RSS Source';
-                addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
+                saveNewsChannel(name);
+                  setSavedChannels(getSavedNewsChannels());
+                  addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
                 setRssSources(getAdminRssSources());
                 setNewSourceName('');
                 setNewSourceUrl('');
@@ -2656,7 +2662,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   return;
                 }
                 const name = newSourceName.trim() || 'Web Source';
-                addAdminRssSource(name, newSourceUrl, 'web', newSourceCategory);
+                saveNewsChannel(name);
+                  setSavedChannels(getSavedNewsChannels());
+                  addAdminRssSource(name, newSourceUrl, 'web', newSourceCategory);
                 setRssSources(getAdminRssSources());
                 setNewSourceName('');
                 setNewSourceUrl('');

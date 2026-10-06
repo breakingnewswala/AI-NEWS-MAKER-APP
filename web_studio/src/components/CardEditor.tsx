@@ -2771,7 +2771,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Calendar className="w-4 h-4 text-amber-400" />
-            स्टेप 6: तारीख व वॉटरमार्क (Date & Watermark)
+            दिनांक व वॉटरमार्क (Date Stamp & Watermark)
           </span>
           <span className="text-[11px] text-neutral-400">
             दिनांक शो/हाइड • वॉटरमार्क (ऑफ / प्रतीकात्मक फोटो / AI जनरेटेड)
@@ -3354,7 +3354,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       {/* ========================================================================= */}
       {/* STEP 8: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
       {/* ========================================================================= */}
-      {(mobileViewMode === 'all' || activeStep === 7 || activeStep === 8) && (
+      {(mobileViewMode === 'all' || activeStep === 7) && (
 
         <div
           id="step-download"
@@ -3429,7 +3429,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       {/* ========================================================================= */}
       {/* STEP 7: कैप्शन (सोशल मीडिया कैप्शन व शेयर) */}
       {/* ========================================================================= */}
-      {(mobileViewMode === 'all' || activeStep === 8) && (
+      {(mobileViewMode === 'all' || activeStep === 7) && (
         <div
           id="step-caption"
           style={{ scrollMarginTop: '380px' }}

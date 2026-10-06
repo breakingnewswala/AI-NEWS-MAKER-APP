@@ -784,7 +784,7 @@ export default function App() {
           scrollToStepById('step-ai');
         }, 150);
 
-        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
+        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n#BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
         }
@@ -1231,7 +1231,7 @@ export default function App() {
       summary: post.summary,
       images: {
         ...prev.images,
-        main: post.imageUrl || prev.images.main,
+        main: '', // Reset main photo so default template displays photo upload placeholder
       },
     }));
 
@@ -1239,7 +1239,7 @@ export default function App() {
       url: effectiveLink,
       title: post.title,
       summary: post.summary,
-      imageUrl: post.imageUrl,
+      imageUrl: '', // Keep empty so user can manually upload custom news photo
       location: effectiveLoc,
       category: post.categoryName,
       autoTrigger: true,
