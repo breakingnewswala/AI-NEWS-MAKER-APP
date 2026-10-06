@@ -1270,7 +1270,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         <span>
                           {saveSettingsSuccess
                             ? '✅ लोगो सुरक्षित! स्टूडियो में लागू हो गया'
-                            : '💾 चैनल लोगो सेव करें (Save Logo)'}
+                            : '💾 चैनल लोगो सेव करें'}
                         </span>
                       </button>
                     </div>

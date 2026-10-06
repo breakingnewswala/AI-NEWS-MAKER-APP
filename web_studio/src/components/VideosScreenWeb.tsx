@@ -321,13 +321,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Requirement 10: Button 'Video Studio में ले जाएँ' */}
+              {/* Requirement 10: Button 'वीडियो स्टूडियो में ले जाएँ' */}
               <button
                 onClick={() => onOpenStudioWithVideo(activeVideo)}
                 className="px-5 py-3 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-2 shrink-0 transition-transform active:scale-95 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 text-slate-950" />
-                <span>Video Studio में ले जाएँ</span>
+                <span>वीडियो स्टूडियो में ले जाएँ</span>
               </button>
             </div>
           </div>
@@ -391,7 +391,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons: Video Studio में ले जाएँ + Share */}
+              {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + Share */}
               <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
                 <button
                   type="button"
@@ -399,7 +399,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Video Studio में ले जाएँ</span>
+                  <span>वीडियो स्टूडियो में ले जाएँ</span>
                 </button>
 
                 <button

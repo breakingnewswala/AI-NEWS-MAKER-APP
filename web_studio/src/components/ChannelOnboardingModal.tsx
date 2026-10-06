@@ -647,7 +647,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                 className="w-full py-3 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-600 hover:to-yellow-600 text-black font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
               >
                 <Sparkles className="w-5 h-5 text-black" />
-                <span>✨ ऐप के अंदर प्रवेश करें (Enter Studio)</span>
+                <span>✨ ऐप के अंदर प्रवेश करें</span>
               </button>
             </div>
           </form>

@@ -1235,6 +1235,18 @@ export default function App() {
 
     setStudioMode('graphic');
 
+    // Check if this specific card has the default photo toggled or missing image
+    const getDefaultThumbnailIds = (): Set<string> => {
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {}
+      return new Set();
+    };
+
+    const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id) || !post.imageUrl || post.imageUrl.includes('placeholder');
+    const targetImageForStudio = hasDefaultPhotoActive ? '/assets/placeholder_news_search_square.jpg' : (post.imageUrl || '');
+
     setCard((prev) => ({
       ...prev,
       headline: post.title,
@@ -1243,7 +1255,7 @@ export default function App() {
       summary: post.summary,
       images: {
         ...prev.images,
-        main: '', // Reset main photo so default template displays photo upload placeholder
+        main: targetImageForStudio,
       },
     }));
 
@@ -1251,7 +1263,7 @@ export default function App() {
       url: effectiveLink,
       title: post.title,
       summary: post.summary,
-      imageUrl: '', // Keep empty so user can manually upload custom news photo
+      imageUrl: targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,
       autoTrigger: true,

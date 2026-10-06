@@ -91,14 +91,14 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl sm:text-2xl font-black text-white">
-                न्यूज़ रूम (Newsroom & Editorial Desk)
+                न्यूज़ रूम (संपादकीय डेस्क)
               </h2>
               <span className="px-2 py-0.5 bg-red-600/90 text-white text-[10px] font-black rounded uppercase animate-pulse">
                 लाइव
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              एडिटोरियल डेस्क, ड्राफ्ट प्रोजेक्ट्स, ब्रेकिंग न्यूज़ अलर्ट्स और त्वरित प्रोडक्शन हब
+              संपादकीय डेस्क, सहेजे गए ड्राफ्ट प्रोजेक्ट्स, ब्रेकिंग अलर्ट्स व त्वरित प्रोडक्शन हब
             </p>
           </div>
         </div>
@@ -212,7 +212,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                     </span>
                     <span className="flex items-center gap-1 text-[11px]">
                       <Clock className="w-3 h-3 text-slate-500" />
-                      {formatTime(draft.timestamp)}
+                      {formatTime(draft.timestamp || (draft as any).savedAt || (draft as any).updatedAt)}
                     </span>
                   </div>
 
