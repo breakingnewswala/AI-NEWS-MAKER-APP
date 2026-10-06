@@ -104,11 +104,11 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </div>
 
         {/* Quick Production Actions */}
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <button
             type="button"
             onClick={onNavigateToStudio}
-            className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-slate-950" />
             <span>ग्राफिक स्टूडियो</span>
@@ -117,7 +117,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           <button
             type="button"
             onClick={onNavigateToVideos}
-            className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
           >
             <Film className="w-4 h-4 text-white" />
             <span>वीडियो न्यूज़</span>
@@ -126,7 +126,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           <button
             type="button"
             onClick={onNavigateToControlPanel}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
             <Sliders className="w-4 h-4 text-amber-400" />
             <span>कंट्रोल पैनल</span>

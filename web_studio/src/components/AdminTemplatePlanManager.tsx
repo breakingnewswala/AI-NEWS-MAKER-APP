@@ -128,7 +128,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
         <Lock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
         <h4 className="text-base font-bold text-white">एडमिन अधिकार आवश्यक है</h4>
-        <p className="text-xs mt-1">टेम्पलेट प्लान मैनेजमेंट केवल चीफ एडमिन के लिए उपलब्ध है।</p>
+        <p className="text-xs mt-1">टेम्पलेट प्लान मैनेजमेंट केवल सुपर एडमिन के लिए उपलब्ध है।</p>
       </div>
     );
   }
@@ -144,7 +144,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                <span>4 अनुमोदित टेम्पलेट्स — प्लान मैपिंग (Template → Plan Mapping)</span>
+                <span>4 अनुमोदित टेम्पलेट्स — प्लान मैपिंग</span>
               </h3>
               <span className="px-2 py-0.5 bg-red-600/30 border border-red-500/50 text-red-300 text-[10px] font-bold rounded">
                 एडमिन नियंत्रण

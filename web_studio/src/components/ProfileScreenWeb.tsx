@@ -1047,7 +1047,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white">
-                      चैनल व लोगो विवरण (Channel & Logo Branding)
+                      चैनल व लोगो विवरण
                     </h3>
                     <p className="text-xs text-slate-400">
                       यह विवरण सीधे ग्राफिक डिजाइनिंग स्टूडियो के फुटर और कार्ड्स में सिंक होगा
@@ -1707,7 +1707,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white flex items-center gap-2">
-                      <span>कस्टम हेडर व फुटर सेटिंग्स (Header & Footer Settings)</span>
+                      <span>कस्टम हेडर व फुटर सेटिंग्स</span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase">
                         PRO & VIP DESK ONLY
                       </span>
@@ -1978,7 +1978,7 @@ return (
               <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                 <h2 className="text-lg font-black text-white">{currentUser?.name || 'मुख्य संपादक'}</h2>
                 <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
-                  {isAdmin ? 'चीफ एडमिन' : 'संवाददाता'}
+                  {isUserSuperAdmin(effectiveUser || currentUser) ? '👑 सुपर एडमिन (Super Admin)' : isAdmin ? '🛡️ एडमिन (Admin)' : '👤 संवाददाता'}
                 </span>
                 {/* Active Plan Tier Badge */}
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-sm ${
