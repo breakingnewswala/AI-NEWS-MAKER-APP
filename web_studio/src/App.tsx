@@ -1993,6 +1993,7 @@ export default function App() {
       {!isAndroidEnvironment && (
         <AppBottomBarWeb
           currentTab={currentTab}
+          currentUser={currentUser}
           onSelectTab={(tab) => {
             setCurrentTab(tab);
             window.location.hash = tab;

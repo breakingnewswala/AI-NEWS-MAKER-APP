@@ -101,9 +101,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      name: 'मुख्य संपादक',
-      email: 'editor@ainewsmaker.online',
-      role: 'admin',
+      name: 'संवाददाता', email: 'user@ainewsmaker.online', role: 'user',
       district: 'सेंट्रल डेस्क'
     };
   })();
@@ -115,7 +113,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      fullName: currentUser?.name || 'मुख्य संपादक',
+      fullName: currentUser?.name || 'संवाददाता',
       channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
       channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
       channelLogoUrl: '/assets/ai_news_maker_logo.png',

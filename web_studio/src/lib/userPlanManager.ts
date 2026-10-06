@@ -771,15 +771,23 @@ export function getEffectiveUserTier(currentUser?: any): UserPlanTier {
 
 export function isUserAdmin(user: any): boolean {
   if (!user) return false;
-  const email = (user.email || user.username || '').toLowerCase();
-  const role = (user.role || '').toLowerCase();
-  return (
-    role === 'admin' ||
-    email === 'admin' ||
-    email === 'breakingnewswala.com@gmail.com' ||
-    email.includes('admin') ||
-    email.includes('editor')
-  );
+  if (isUserSuperAdmin(user)) return true;
+  const role = (user.role || "").toLowerCase().trim();
+  if (role === "admin" || role === "superadmin") return true;
+  
+  if (typeof window !== "undefined") {
+    try {
+      const email = (user.email || user.username || "").toLowerCase().trim();
+      if (email) {
+        const users = getPlanUsers();
+        const matched = users.find((u) => u.email.toLowerCase().trim() === email);
+        if (matched && (matched.role === "admin" || matched.role === "superadmin")) {
+          return true;
+        }
+      }
+    } catch {}
+  }
+  return false;
 }
 
 /**

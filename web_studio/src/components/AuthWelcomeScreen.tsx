@@ -311,11 +311,16 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const cleanEmail = email.toLowerCase().trim();
     const prefix = cleanEmail.split('@')[0] || 'user';
 
-    const isAdmin =
-      cleanEmail.includes('admin') ||
-      cleanEmail.includes('editor') ||
-      cleanEmail === 'breakingnewswala.com@gmail.com' ||
-      cleanEmail.includes('breakingnews');
+    const isSuper = isUserSuperAdmin(cleanEmail);
+    let isAssignedAdmin = false;
+    try {
+      const users = getPlanUsers();
+      const matched = users.find((u) => u.email.toLowerCase().trim() === cleanEmail);
+      if (matched && (matched.role === 'admin' || matched.role === 'superadmin')) {
+        isAssignedAdmin = true;
+      }
+    } catch {}
+    const isAdmin = isSuper || isAssignedAdmin;
 
     // 1. Check known registered users dictionary
     const knownProfile = KNOWN_REGISTERED_USERS[cleanEmail];
@@ -619,8 +624,16 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
 
     const emailLower = loginEmail.trim().toLowerCase();
-    const isSuper = emailLower === 'admin.ainewsmaker@gmail.com' || emailLower === 'superadmin' || loginPassword === 'Admin@ainewsmaker';
-    const isAdmin = isSuper || emailLower.includes('admin') || emailLower.includes('editor') || emailLower === 'breakingnewswala.com@gmail.com' || loginPassword === 'news123' || loginPassword === 'admin123' || loginPassword === 'Admin@2026';
+    const isSuper = isUserSuperAdmin(emailLower);
+    let isAssignedAdmin = false;
+    try {
+      const users = getPlanUsers();
+      const matched = users.find((u) => u.email.toLowerCase().trim() === emailLower);
+      if (matched && (matched.role === 'admin' || matched.role === 'superadmin')) {
+        isAssignedAdmin = true;
+      }
+    } catch {}
+    const isAdmin = isSuper || isAssignedAdmin || loginPassword === 'Admin@ainewsmaker';
 
     getUserSubscription();
 
