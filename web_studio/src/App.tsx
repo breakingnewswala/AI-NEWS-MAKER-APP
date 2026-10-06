@@ -885,45 +885,52 @@ export default function App() {
 
   // Full reset / clean card to default template matching user specification
   const handleResetCard = () => {
-    const freshDate = getFormattedHindiDate();
     const savedProfile = getSavedChannelProfile();
+    const activeSocialKeys = savedProfile?.socialIcons
+      ? Object.entries(savedProfile.socialIcons).filter(([_, active]) => active).map(([key]) => key)
+      : ['instagram', 'facebook', 'twitter', 'youtube', 'whatsapp'];
+
     setCard((prev) => ({
       ...prev,
-      frameDesign: 'jacket-default',
-      headline: 'आपकी चुनी गयी खबर को यहां\nपर २-३ लाइन में लिखा जाएगा\nटेम्पलेट्स से पसंदीदा फ्रेम चुनें',
-      formattedHeadline: 'आपकी चुनी गयी खबर को यहां\nपर २-३ लाइन में लिखा जाएगा\nटेम्पलेट्स से पसंदीदा फ्रेम चुनें',
+      frameDesign: 'graphic_001',
+      headline: '',
+      formattedHeadline: '',
       highlightWords: [],
       headlineAlign: 'center',
-      location: 'खबर की लोकेशन',
+      location: '',
       summary: '',
+      category: 'ताज़ा खबर',
       images: {
         main: '',
         second: '',
       },
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
-      customLogoUrl: savedProfile?.channelLogoUrl || prev.customLogoUrl || '',
+      customLogoUrl: savedProfile?.channelLogoUrl || prev.customLogoUrl || (currentUser as any)?.avatarUrl || '',
       brandName: savedProfile?.channelNameHi || prev.brandName || prev.channelNameHi || '',
       brandTagline: savedProfile?.channelNameEn || prev.brandTagline || prev.channelNameEn || '',
       channelNameHi: savedProfile?.channelNameHi || prev.channelNameHi || prev.brandName || '',
       channelNameEn: savedProfile?.channelNameEn || prev.channelNameEn || prev.brandTagline || '',
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
-        : (prev.socialHandle || ''),
-      whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '',
-      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || '',
+        : (prev.socialHandle || '/@UserName'),
+      whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '+91 98765 43210',
+      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || 'yourwebsite.com',
       showMobileNumber: savedProfile?.showMobileNumber ?? prev.showMobileNumber ?? true,
+      activeSocialIcons: activeSocialKeys,
       customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : prev.customFooterPng,
       speakerName: '',
       speakerTitle: '',
-      dateStr: freshDate,
+      dateStr: '',
       showDate: false,
-      showLocation: true,
+      showLocation: false,
       showCallout: false,
       calloutTag: '',
       layout: 'single',
       aspectRatio: '4:5',
+      headlineFontSize: 28,
+      highlightColor: '#FFE600',
     }));
 
     try {
@@ -934,8 +941,9 @@ export default function App() {
 
     // Fully reset AI Prompt & Link inputs
     setAiResetKey((prev) => prev + 1);
+    setActiveStep(1);
 
-    showToast('✨ डिफ़ॉल्ट टेम्पलेट रिफ्रेश हो गया!');
+    showToast('✨ डिफ़ॉल्ट 4:5 टेम्प्लेट रीसेट हो गया!');
   };
 
   const handleSaveDraft = () => {
