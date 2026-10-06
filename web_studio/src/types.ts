@@ -374,15 +374,12 @@ export interface NewsDraft {
 }
 
 export interface ChannelProfile {
-<<<<<<< HEAD
-  fullName: string;
-=======
   fullName?: string;
   district?: string;
   isLocked?: boolean;
   tier?: string;
   email?: string;
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
   channelNameHi: string;
   channelNameEn: string;
   channelLogoUrl: string;

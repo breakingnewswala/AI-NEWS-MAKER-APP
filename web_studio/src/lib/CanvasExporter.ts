@@ -3128,7 +3128,7 @@ async function drawGraphic004Canvas(
   const photoX = 20;
 
   const hasPhoto1 = card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg';
-  const secondPhotoUrl = card.secondaryPhoto || card.images?.secondary;
+  const secondPhotoUrl = card.secondaryPhoto || card.images?.second || (card.images as any)?.secondary;
   const hasPhoto2 = secondPhotoUrl && secondPhotoUrl.trim().length > 0;
 
   if (hasPhoto2 && hasPhoto1) {
@@ -4750,7 +4750,7 @@ async function drawEPaperJacketContent(
         ctx.fillStyle = '#4B5563';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`í ½í³· ${card.epaperPhotoCaption}`, startX + 8, curY + imgH + captionH / 2);
+        ctx.fillText(`ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${card.epaperPhotoCaption}`, startX + 8, curY + imgH + captionH / 2);
       }
 
       // Photo 2

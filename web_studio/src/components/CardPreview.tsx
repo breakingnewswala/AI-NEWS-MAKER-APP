@@ -1078,11 +1078,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             </div>
 
-<<<<<<< HEAD
-            {/* Fixed Footer: If Custom Footer PNG is uploaded, display it directly and HIDE default Fixed Yellow Footer */}
-=======
             {/* Fixed Footer: Dynamic user profile data, no unnecessary blank space */}
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
             {card.customFooterPng ? (
               <div className="relative z-10 w-full pointer-events-auto">
                 <img
@@ -1092,44 +1089,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 />
               </div>
             ) : (
-<<<<<<< HEAD
-              <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
-                {/* Left Social Icons */}
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                    ▶
-                  </div>
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                    f
-                  </div>
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                    📷
-                  </div>
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                    💬
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="h-5 w-px bg-[#CA8A04]" />
-
-                {/* Handle */}
-                <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
-                  {card.socialHandle || '@BreakingNewsWala'}
-                </span>
-
-                {/* Divider */}
-                <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
-
-                {/* Website */}
-                <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
-                  <span className="text-sky-600 font-bold">🌐</span>
-                  <span>{card.websiteUrl || 'ainewsmaker.online'}</span>
-                </div>
-
-                {/* Contact Number (if enabled by admin/profile) */}
-                {card.showMobileNumber !== false && card.whatsappNumber && (
-=======
               <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto overflow-hidden">
                 {/* Left Social Icons: Respect active ones */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -1176,7 +1135,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
                 {/* Contact Number (if present and enabled) */}
                 {card.showMobileNumber !== false && card.whatsappNumber && card.whatsappNumber.trim().length > 0 && (
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
                   <>
                     <div className="h-5 w-px bg-[#CA8A04]" />
                     <div className="flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] shrink-0">

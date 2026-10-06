@@ -68,6 +68,22 @@ if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "MY_OPENAI_API
 }
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : CONFIGURED_OPENAI_KEY;
 var dynamicCustomDomain = "";
+var GEMINI_MODELS_POOL = [
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-3.1-flash-lite"
+];
+function getCategoryFallbackImage(category = "general") {
+  const cat = (category || "").toLowerCase();
+  if (cat.includes("crime") || cat.includes("\u0905\u092A\u0930\u093E\u0927")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80";
+  if (cat.includes("politics") || cat.includes("\u0930\u093E\u091C\u0928\u0940\u0924\u093F")) return "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=800&q=80";
+  if (cat.includes("sports") || cat.includes("\u0916\u0947\u0932")) return "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80";
+  if (cat.includes("tech") || cat.includes("\u0924\u0915\u0928\u0940\u0915")) return "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80";
+  if (cat.includes("business") || cat.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930")) return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80";
+  if (cat.includes("weather") || cat.includes("\u092E\u094C\u0938\u092E")) return "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80";
+  return "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80";
+}
 app.get("/api/ai-providers-status", (req, res) => {
   const geminiKey = process.env.GEMINI_API_KEY;
   const openaiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
@@ -585,17 +601,6 @@ function saveRssSourcesDatabase(sources) {
     return false;
   }
 }
-<<<<<<< HEAD
-function getCategoryFallbackImage(category) {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("\u0916\u0947\u0932") || cat.includes("sports")) return "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&auto=format&fit=crop";
-  if (cat.includes("\u0930\u093E\u091C\u0928\u0940\u0924\u093F") || cat.includes("politic")) return "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop";
-  if (cat.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930") || cat.includes("business")) return "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=800&auto=format&fit=crop";
-  if (cat.includes("\u092E\u0928\u094B\u0930\u0902\u091C\u0928") || cat.includes("entertain")) return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop";
-  if (cat.includes("\u0905\u092A\u0930\u093E\u0927") || cat.includes("crime")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&auto=format&fit=crop";
-  if (cat.includes("\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F") || cat.includes("world")) return "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=800&auto=format&fit=crop";
-  return "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop";
-=======
 function isValidNewsImage(url) {
   if (!url || typeof url !== "string") return false;
   const clean = url.trim().toLowerCase();
@@ -776,7 +781,6 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
     location: fallback.location,
     categoryName: sourceCategory || "\u0926\u0947\u0936"
   };
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 }
 function decodeHtmlEntities(str) {
   if (!str) return "";
@@ -785,11 +789,7 @@ function decodeHtmlEntities(str) {
     return String.fromCharCode(num);
   }).trim();
 }
-<<<<<<< HEAD
-function parseRssItemsFromXml(xmlText, source) {
-=======
 async function parseRssItemsFromXml(xmlText, source) {
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
   const posts = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
   const items = xmlText.match(itemRegex) || [];
@@ -797,18 +797,10 @@ async function parseRssItemsFromXml(xmlText, source) {
     const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
     const rawTitle = titleMatch ? (titleMatch[1] || titleMatch[2] || "").trim() : "";
     if (!rawTitle) continue;
-<<<<<<< HEAD
-    const cleanTitle = decodeHtmlEntities(rawTitle);
-=======
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) || itemXml.match(/<link\s+href=["']([^"']+)["']/i);
     const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
     const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) || itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
     const rawDesc = descMatch ? (descMatch[1] || descMatch[2] || "").trim() : "";
-<<<<<<< HEAD
-    const cleanDesc = decodeHtmlEntities(rawDesc.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
-=======
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
     const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
     let timestamp = Date.now();
@@ -816,35 +808,6 @@ async function parseRssItemsFromXml(xmlText, source) {
       const parsedTime = Date.parse(pubDateStr);
       if (!isNaN(parsedTime)) timestamp = parsedTime;
     }
-<<<<<<< HEAD
-    let imageUrl = "";
-    const mediaThumbMatch = itemXml.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i);
-    const mediaContentMatch = itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i);
-    const enclosureMatch = itemXml.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/i) || itemXml.match(/<enclosure[^>]*type=["']image\/[^"']+["'][^>]+url=["']([^"']+)["']/i);
-    const imgInsideDescMatch = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (mediaThumbMatch && mediaThumbMatch[1]) {
-      imageUrl = mediaThumbMatch[1];
-    } else if (mediaContentMatch && mediaContentMatch[1]) {
-      imageUrl = mediaContentMatch[1];
-    } else if (enclosureMatch && enclosureMatch[1]) {
-      imageUrl = enclosureMatch[1];
-    } else if (imgInsideDescMatch && imgInsideDescMatch[1]) {
-      imageUrl = imgInsideDescMatch[1];
-    }
-    if (!imageUrl) {
-      imageUrl = getCategoryFallbackImage(source.category);
-    }
-    const catName = source.category || "\u0926\u0947\u0936";
-    const catKey = catName === "\u0926\u0947\u0936" ? "national" : catName === "\u0930\u093E\u091C\u094D\u092F" ? "state" : catName === "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" ? "politics" : catName === "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" ? "business" : catName === "\u0916\u0947\u0932" ? "sports" : catName === "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" ? "entertainment" : catName === "\u0905\u092A\u0930\u093E\u0927" ? "crime" : "tech";
-    const hashStr = Buffer.from(cleanTitle.slice(0, 30) + link).toString("base64url").slice(0, 14);
-    const postId = `rss-${source.id}-${hashStr}`;
-    posts.push({
-      id: postId,
-      title: cleanTitle,
-      summary: cleanDesc || cleanTitle,
-      sourceChannel: source.name,
-      sourceUrl: link,
-=======
     const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
     const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
     const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
@@ -858,22 +821,10 @@ async function parseRssItemsFromXml(xmlText, source) {
       sourceChannel: source.name,
       sourceUrl: link,
       // PRESERVE original article URL
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       category: catKey,
       categoryName: catName,
       publishedTime: formatRelativeTime(timestamp),
       imageUrl,
-<<<<<<< HEAD
-      breaking: cleanTitle.includes("\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917") || cleanTitle.includes("\u092C\u0921\u093C\u093E") || cleanTitle.includes("\u0932\u093E\u0907\u0935") || cleanTitle.includes("\u0924\u0941\u0930\u0902\u0924"),
-      isExclusive: false,
-      timestamp,
-      fullContent: cleanDesc ? `${cleanTitle}
-
-${cleanDesc}
-
-\u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : cleanTitle,
-      location: "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915"
-=======
       breaking: editorial.title.includes("\u092C\u0921\u093C\u093E") || editorial.title.includes("\u092B\u0948\u0938\u0932\u093E") || editorial.title.includes("\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908"),
       isExclusive: false,
       timestamp,
@@ -883,7 +834,6 @@ ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
       location: editorial.location || "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915"
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     });
   }
   return posts;
@@ -894,36 +844,11 @@ async function fetchAndParseWebLink(source) {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
       },
-<<<<<<< HEAD
-      signal: AbortSignal.timeout(8e3)
-=======
       signal: AbortSignal.timeout(9e3)
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     });
     if (!resp.ok) return [];
     const html = await resp.text();
     const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<title>([^<]+)<\/title>/i);
-<<<<<<< HEAD
-    const title = ogTitleMatch ? ogTitleMatch[1].trim() : "";
-    if (!title) return [];
-    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
-    const summary = ogDescMatch ? ogDescMatch[1].trim() : `${source.name} \u0915\u093E \u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0935 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092C\u0941\u0932\u0947\u091F\u093F\u0928\u0964`;
-    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-    let imageUrl = ogImageMatch ? ogImageMatch[1].trim() : "";
-    if (!imageUrl) {
-      imageUrl = getCategoryFallbackImage(source.category);
-    }
-    const catName = source.category || "\u0926\u0947\u0936";
-    const catKey = catName === "\u0926\u0947\u0936" ? "national" : catName === "\u0930\u093E\u091C\u094D\u092F" ? "state" : catName === "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" ? "politics" : catName === "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" ? "business" : catName === "\u0916\u0947\u0932" ? "sports" : catName === "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" ? "entertainment" : catName === "\u0905\u092A\u0930\u093E\u0927" ? "crime" : "tech";
-    const hashStr = Buffer.from(title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
-    const postId = `web-${source.id}-${hashStr}`;
-    return [{
-      id: postId,
-      title,
-      summary,
-      sourceChannel: source.name,
-      sourceUrl: source.url,
-=======
     const rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
     if (!rawTitle) return [];
     const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
@@ -962,7 +887,6 @@ async function fetchAndParseWebLink(source) {
       sourceChannel: source.name,
       sourceUrl: source.url,
       // PRESERVE original article URL
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
       category: catKey,
       categoryName: catName,
       publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
@@ -970,21 +894,12 @@ async function fetchAndParseWebLink(source) {
       breaking: false,
       isExclusive: false,
       timestamp: Date.now(),
-<<<<<<< HEAD
-      fullContent: `${title}
-
-${summary}
-
-\u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
-      location: "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915"
-=======
       fullContent: `${editorial.title}
 
 ${editorial.summary}
 
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
       location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915"
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -1041,11 +956,7 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
             });
             if (resp.ok) {
               const xmlText = await resp.text();
-<<<<<<< HEAD
-              const items = parseRssItemsFromXml(xmlText, src);
-=======
               const items = await parseRssItemsFromXml(xmlText, src);
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;

@@ -125,58 +125,6 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
 
 import type { NewsFeedPost } from '../data/newsFeedData';
 
-<<<<<<< HEAD
-export function getActiveRssNewsPosts(): NewsFeedPost[] {
-  const activeSources = getAdminRssSources().filter((s) => s.isActive);
-  const posts: NewsFeedPost[] = [];
-
-  for (const src of activeSources) {
-    const isXml = src.type === 'rss';
-    const catName = src.category || 'देश';
-    const catKey =
-      catName === 'देश' ? 'national' :
-      catName === 'राज्य' ? 'state' :
-      catName === 'राजनीति' ? 'politics' :
-      catName === 'व्यापार' ? 'business' :
-      catName === 'खेल' ? 'sports' :
-      catName === 'मनोरंजन' ? 'entertainment' :
-      catName === 'अपराध' ? 'crime' : 'tech';
-
-    // Source 1 Item
-    posts.push({
-      id: `rss_feed_post_${src.id}_1`,
-      title: `${src.name}: ${catName} से जुड़ी सबसे बड़ी ताज़ा खबर, केंद्र व राज्य स्तर पर महत्वपूर्ण समीक्षा जारी`,
-      summary: `${src.name} के विशेष संवाददाता की रिपोर्ट के अनुसार, विकास परियोजनाओं और जनहितैषी नीतियों पर उच्चस्तरीय बैठक में अहम निर्णय लिए गए हैं।`,
-      sourceChannel: src.name,
-      sourceUrl: src.url,
-      category: catKey,
-      categoryName: catName,
-      publishedTime: '15 मिनट पहले',
-      imageUrl: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop',
-      breaking: true,
-      timestamp: Date.now() - 900000,
-      location: 'नई दिल्ली',
-    });
-
-    // Source 2 Item
-    posts.push({
-      id: `rss_feed_post_${src.id}_2`,
-      title: `${src.name} स्पेशल रिपोर्ट: डिजिटल इनोवेशन और आधारभूत संरचना विकास में नए कीर्तिमान`,
-      summary: `${catName} के क्षेत्र में आ रहे नए बदलावों पर विस्तृत ग्राउंड रिपोर्ट। युवाओं और उद्यमियों के लिए नए अवसरों के द्वार खुले।`,
-      sourceChannel: src.name,
-      sourceUrl: src.url,
-      category: catKey,
-      categoryName: catName,
-      publishedTime: '45 मिनट पहले',
-      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
-      breaking: false,
-      timestamp: Date.now() - 2700000,
-      location: 'विशेष डेस्क',
-    });
-  }
-
-  return posts;
-=======
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
 
 export function getActiveRssNewsPosts(): NewsFeedPost[] {
@@ -200,7 +148,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
     window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   } catch {}
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
 }
 
 export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {
@@ -208,8 +156,6 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
     const res = await fetch('/api/admin/rss-sync', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
-<<<<<<< HEAD
-=======
       // Fetch latest production posts from /api/news-posts to update active synced feed
       try {
         const postsRes = await fetch('/api/news-posts');
@@ -224,20 +170,17 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
         }
       } catch {}
 
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
         window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
       }
       return { success: true, totalNewItems: data.count || data.totalNewItems || 0 };
     }
-<<<<<<< HEAD
-  } catch {}
-=======
   } catch (err: any) {
     return { success: false, error: err?.message || 'सिंक त्रुटि' };
   }
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
   return { success: true, totalNewItems: 0 };
 }
 

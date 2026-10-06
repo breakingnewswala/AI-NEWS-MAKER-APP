@@ -477,10 +477,8 @@ export function redeemPromoCode(codeStr: string, userInfo?: any): RedeemResult {
 export interface PlanUserRecord {
   userId: string;
   email: string;
-<<<<<<< HEAD
-=======
   name?: string;
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
   mobile?: string;
   channelName?: string;
   tier: UserPlanTier;
@@ -488,14 +486,12 @@ export interface PlanUserRecord {
   activatedAt: number;
   expiresAt: number;
   activatedVia: string;
-<<<<<<< HEAD
-=======
   isLocked?: boolean;
   isProfileLocked?: boolean;
   websiteUrl?: string;
   channelLogoUrl?: string;
   socialIcons?: Record<string, boolean>;
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
 }
 
 export function getPlanUsers(): PlanUserRecord[] {
@@ -925,12 +921,10 @@ export function registerOrUpdateUser(userData: {
   channelLogoUrl?: string;
   mobile?: string;
   isLocked?: boolean;
-<<<<<<< HEAD
-=======
   username?: string;
   tier?: UserPlanTier;
   role?: string;
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
 }): void {
   if (typeof window === 'undefined') return;
   try {

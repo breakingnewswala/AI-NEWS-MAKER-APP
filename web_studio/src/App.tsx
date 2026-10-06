@@ -27,6 +27,7 @@ import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter } from './lib/profileConfig';
 import {
+  FolderOpen,
   Download,
   Copy,
   Check,
@@ -55,13 +56,9 @@ import {
   Newspaper,
   Eye,
   EyeOff,
-<<<<<<< HEAD
-  FolderOpen,
-=======
   Bookmark,
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
 } from 'lucide-react';
-import { VideoStudioWeb } from './components/VideoStudioWeb';
+import { VideoStudioWeb } from './components/VideoStudioWeb'; 
 import { FRAME_OPTIONS } from './lib/HeaderDesigns';
 import { AutoFillNewsData } from './components/InlineAiNewsTools';
 import { AppTopBarWeb } from './components/AppTopBarWeb';
@@ -83,11 +80,8 @@ import {
   INITIAL_CATEGORIES,
 } from './data/newsFeedData';
 
-<<<<<<< HEAD
-export type AppTab = 'home' | 'generator' | 'drafts' | 'categories' | 'export' | 'studio' | 'videos' | 'epaper' | 'profile';
-=======
 type AppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'epaper' | 'profile';
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
 
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
@@ -172,35 +166,6 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
       const fullUrl = (window.location.href || '').toLowerCase();
-<<<<<<< HEAD
-      if (fullUrl.includes('#drafts') || fullUrl.includes('tab=drafts')) return 'drafts';
-      if (fullUrl.includes('#categories') || fullUrl.includes('tab=categories')) return 'categories';
-      if (fullUrl.includes('#export') || fullUrl.includes('tab=export')) return 'export';
-      if (fullUrl.includes('#generator') || fullUrl.includes('tab=generator')) return 'generator';
-      if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile')) return 'export';
-      if (fullUrl.includes('#studio') || fullUrl.includes('tab=studio')) return 'generator';
-      if (fullUrl.includes('#videos') || fullUrl.includes('tab=videos')) return 'categories';
-      if (fullUrl.includes('#epaper') || fullUrl.includes('tab=epaper')) return 'categories';
-      if (fullUrl.includes('#home') || fullUrl.includes('tab=home')) return 'home';
-
-      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
-      if (hash === 'generator' || hash === 'studio') return 'generator';
-      if (hash === 'drafts') return 'drafts';
-      if (hash === 'categories' || hash === 'videos' || hash === 'epaper') return 'categories';
-      if (hash === 'export' || hash === 'profile') return 'export';
-      if (hash === 'home') return 'home';
-
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const tabParam = urlParams.get('tab')?.toLowerCase();
-        if (tabParam === 'generator' || tabParam === 'studio') return 'generator';
-        if (tabParam === 'drafts') return 'drafts';
-        if (tabParam === 'categories' || tabParam === 'videos' || tabParam === 'epaper') return 'categories';
-        if (tabParam === 'export' || tabParam === 'profile') return 'export';
-        if (tabParam === 'home') return 'home';
-      } catch {}
-
-=======
       if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile') || fullUrl.includes('/profile')) {
         return 'profile';
       }
@@ -235,7 +200,7 @@ export default function App() {
       if (path.includes('home')) return 'home';
       if (path.includes('video')) return 'videos';
       if (path.includes('newsroom') || path.includes('epaper')) return 'newsroom';
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
       return 'home';
     }
     return 'home';
@@ -246,32 +211,6 @@ export default function App() {
     if (typeof window === 'undefined') return;
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
-<<<<<<< HEAD
-      if (hash === 'generator' || hash === 'studio') setCurrentTab('generator');
-      else if (hash === 'drafts') setCurrentTab('drafts');
-      else if (hash === 'categories' || hash === 'videos' || hash === 'epaper') setCurrentTab('categories');
-      else if (hash === 'export' || hash === 'profile') setCurrentTab('export');
-      else if (hash === 'home') setCurrentTab('home');
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    (window as any).setAppTab = (tab: string) => {
-      const t = (tab || '').toLowerCase();
-      if (t === 'generator' || t === 'studio') {
-        setCurrentTab('generator');
-        window.location.hash = 'generator';
-      } else if (t === 'drafts') {
-        setCurrentTab('drafts');
-        window.location.hash = 'drafts';
-      } else if (t === 'categories' || t === 'videos' || t === 'epaper') {
-        setCurrentTab('categories');
-        window.location.hash = 'categories';
-      } else if (t === 'export' || t === 'profile') {
-        setCurrentTab('export');
-        window.location.hash = 'export';
-      } else if (t === 'home') {
-        setCurrentTab('home');
-        window.location.hash = 'home';
-=======
       if (['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(hash)) {
         setCurrentTab((hash === 'epaper' ? 'newsroom' : hash) as AppTab);
       }
@@ -282,7 +221,7 @@ export default function App() {
       if (['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(target)) {
         setCurrentTab(target);
         window.location.hash = target;
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
       }
     };
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -1323,7 +1262,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOpenStudioWithEPaper = () => {
+  const handleOpenStudioWithEPaper = (edition?: any) => {
     setCard((prev) => ({
       ...prev,
       frameDesign: 'jacket-epaper',
@@ -1605,49 +1544,7 @@ export default function App() {
                           </>
                         )}
                       </button>
-<<<<<<< HEAD
 
-                      <button
-                        type="button"
-                        onClick={handleSaveCurrentCardAsDraft}
-                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold rounded-lg border border-amber-500/30 flex items-center gap-1 cursor-pointer transition active:scale-95"
-                        title="ड्राफ्ट में सहेजें"
-                      >
-                        <FolderOpen className="w-3 h-3 text-amber-400 shrink-0" />
-                        <span>ड्राफ्ट सेव</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDownload("jpeg")}
-                        disabled={downloading}
-                        className="px-2.5 py-1 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 text-[10px] font-black rounded-lg shadow flex items-center gap-1 cursor-pointer transition active:scale-95 disabled:opacity-50"
-                        title="कार्ड डाउनलोड करें"
-                      >
-                        <Download className="w-3 h-3 text-slate-950 shrink-0" />
-                        <span>{downloading ? "..." : "JPG डाउनलोड"}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleResetCard}
-                        className="p-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 flex items-center justify-center cursor-pointer transition active:scale-95"
-                        title="रीसेट करें"
-                      >
-                        <RefreshCw className="w-3 h-3 shrink-0" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsCaptionModalOpen(true)}
-                        className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-bold rounded-lg border border-slate-800 flex items-center gap-1 cursor-pointer transition active:scale-95"
-                        title="कैप्शन और शेयर"
-                      >
-                        <Share2 className="w-3 h-3 shrink-0" />
-                        <span>शेयर</span>
-                      </button>
-=======
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                     </div>
                   </div>
 
@@ -1986,35 +1883,12 @@ export default function App() {
         </main>
       )}
 
-<<<<<<< HEAD
-      {/* 3. Drafts Tab */}
-      {currentTab === 'drafts' && (
-        <DraftsScreenWeb
-          onOpenStudioWithDraft={(draft) => {
-            setCard(draft.cardData);
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            showToast('📂 ड्राफ्ट जनरेटर में लोड हो गया!');
-          }}
-          onOpenExportWithDraft={(draft) => {
-            setCard(draft.cardData);
-            setCurrentTab('export');
-            window.location.hash = 'export';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateToGenerator={() => {
-            setCurrentTab('generator');
-            window.location.hash = 'generator';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-=======
       {/* 4. Newsroom / E-Paper Tab */}
       {(currentTab === 'epaper' || currentTab === 'newsroom') && (
         <EPaperScreenWeb
           onOpenStudioWithEPaper={handleOpenStudioWithEPaper}
           onOpenDrafts={() => setIsDraftsModalOpen(true)}
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
         />
       )}
 

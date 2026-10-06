@@ -1,3 +1,4 @@
+import { Smartphone, Download } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import {
   User,
@@ -2230,6 +2231,35 @@ return (
               {normalUserTab === 'membership' && (
                 <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
                   {renderMembershipUpgradeSection()}
+
+      {/* MOBILE APK DOWNLOAD PROMINENT CARD */}
+      <div className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-emerald-950/90 border-2 border-emerald-500/80 rounded-2xl p-4 shadow-xl flex items-center justify-between flex-wrap gap-3 my-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
+            <Smartphone className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-white flex items-center gap-2">
+              <span>📲 एंड्रॉइड मोबाइल ऐप (Android APK) डाउनलोड करें</span>
+              <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                Official Mobile App
+              </span>
+            </h4>
+            <p className="text-xs text-emerald-200/90">
+              AI News Maker का आधिकारिक Android App अपने मोबाइल में इंस्टॉल करें और हाई-स्पीड न्यूज़ ग्राफिक व वीडियो बनाएं!
+            </p>
+          </div>
+        </div>
+        <a
+          href="/ainewsmaker-app.apk"
+          download="ainewsmaker-app.apk"
+          className="px-5 py-2.5 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95 shrink-0"
+        >
+          <Download className="w-4 h-4 text-slate-950" />
+          <span>APK डाउनलोड करें (Direct Download)</span>
+        </a>
+      </div>
+
                 </div>
               )}
             </div>
