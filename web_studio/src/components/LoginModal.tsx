@@ -184,14 +184,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const processGoogleUser = (email: string, displayName?: string) => {
       const cleanEmail = email.trim().toLowerCase();
       const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'superadmin';
-      const isAdmin = isSuper || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail.startsWith('admin');
+      const isAdmin = isSuper;
       const prefix = cleanEmail.split('@')[0];
       const defaultName = displayName || prefix.replace(/[._-]/g, ' ');
 
       const user: ReporterUser = {
         username: prefix,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+        role: isSuper ? 'superadmin' : 'user',
         email: cleanEmail,
         district: isAdmin ? 'सेंट्रल डेस्क' : 'डिजिटल डेस्क',
         planTier: isSuper ? 'ultra' : (isAdmin ? 'enterprise' : 'basic'),

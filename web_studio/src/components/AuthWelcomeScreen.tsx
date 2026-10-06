@@ -784,47 +784,49 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
-    // Lock primary mobile number permanently
     if (primaryMobileNumber.trim()) {
       savePrimaryMobileNumber(primaryMobileNumber.trim());
     }
     activateFreeTrial();
 
-    const isAdm = isUserAdmin(currentUser);
+    const activeEmail = (currentUser?.email || tempRegisteredUser?.email || "").toLowerCase().trim();
+    const isSuper = isUserSuperAdmin(activeEmail);
+    const isAdm = isSuper || (currentUser?.role === "admin") || (tempRegisteredUser?.role === "admin");
 
     // Lock channel details and logo for normal users (One-Time Setup Rule)
     if (!isAdm) {
-      localStorage.setItem('is_channel_profile_locked', 'true');
+      localStorage.setItem("is_channel_profile_locked", "true");
     }
 
     const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
 
     const finalProfile: ChannelProfile = {
-      fullName: detailFullName.trim() || 'मुख्य संपादक',
-      channelNameHi: detailChannelNameHi.trim() || 'AI News Maker App',
-      channelNameEn: detailChannelNameEn.trim() || 'AI News Maker',
-      channelLogoUrl: detailChannelLogoUrl || '',
+      fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
+      channelNameHi: detailChannelNameHi.trim() || "AI News Maker App",
+      channelNameEn: detailChannelNameEn.trim() || "AI News Maker",
+      channelLogoUrl: detailChannelLogoUrl || "",
       channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
       channelLogoType: detailChannelLogoType,
       socialIcons,
-      username: username.replace(/^@/, '').trim() || 'ainewsmaker',
+      username: username.replace(/^@/, "").trim() || currentUser?.username || tempRegisteredUser?.username || "user",
       mobileNumber: finalContact,
       showMobileNumber,
-      websiteUrl: websiteUrl.trim() || 'ainewsmaker.online',
+      websiteUrl: websiteUrl.trim() || "ainewsmaker.online",
       isLocked: !isAdm,
     };
 
     const updatedUser: ReporterUser = {
-      username: currentUser?.username || username.replace(/^@/, '').trim() || 'chief_editor',
-      name: detailFullName.trim() || currentUser?.name || 'मुख्य संपादक',
-      role: isAdm ? 'admin' : (currentUser?.role || 'reporter'),
-      district: reportingDistrict || currentUser?.district || 'सेंट्रल डेस्क',
-      email: currentUser?.email || 'breakingnewswala.com@gmail.com',
+      username: finalProfile.username,
+      name: finalProfile.fullName,
+      role: isSuper ? "superadmin" : (isAdm ? "admin" : "user"),
+      district: reportingDistrict || currentUser?.district || "सेंट्रल डेस्क",
+      email: activeEmail || "user@ainewsmaker.online",
+      avatarUrl: currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl,
     };
 
-    localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
-    localStorage.setItem('reporter_auth_session', JSON.stringify(updatedUser));
-    localStorage.setItem('is_onboarding_completed', 'true');
+    localStorage.setItem("user_channel_profile", JSON.stringify(finalProfile));
+    localStorage.setItem("reporter_auth_session", JSON.stringify(updatedUser));
+    localStorage.setItem("is_onboarding_completed", "true");
     if (updatedUser.email) {
       const cleanEmail = updatedUser.email.toLowerCase().trim();
       localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
@@ -837,7 +839,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       mobile: finalContact,
       channelName: finalProfile.channelNameHi,
       channelLogoUrl: finalProfile.channelLogoUrl,
-      tier: isAdm ? 'ultra' : 'basic',
+      tier: isAdm ? "ultra" : "basic",
       role: updatedUser.role,
       isLocked: !isAdm,
     });
