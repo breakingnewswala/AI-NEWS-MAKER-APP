@@ -33,6 +33,7 @@ export interface AutoFillNewsData {
   location?: string;
   autoTrigger?: boolean;
   timestamp?: number;
+  additionalPhotos?: string[];
 }
 
 interface InlineAiNewsToolsProps {

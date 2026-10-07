@@ -31,11 +31,15 @@ import {
   Save,
   RefreshCw,
   Lock,
+  Sliders,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { NewsFeedPost, INITIAL_CATEGORIES } from '../data/newsFeedData';
+import { NewsFeedPost } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
-import { getActiveRssNewsPosts } from '../lib/rssSourceManager';
+import { getActiveRssNewsPosts, getSavedNewsChannels } from '../lib/rssSourceManager';
+import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
 
 // Category visual differentiation helper: professional, subtle color coding per category
 export function getCategoryVisualTheme(category?: string, categoryName?: string) {
@@ -166,6 +170,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const canModerate = isEffectiveAdmin(currentUser);
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
+
+  // Dynamic Unified Categories (Single Source of Truth from CategoryManager)
+  const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
+
+  // Admin Date & Channel Filter State (Visible only to Admin/SuperAdmin)
+  const [adminFilterDate, setAdminFilterDate] = useState<string>('');
+  const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
+  const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
+
   const [defaultThumbnailIds, setDefaultThumbnailIds] = useState<Set<string>>(() => {
     try {
       const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
@@ -199,11 +212,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleFeedRefresh = () => {
       if (onRefreshLiveNews) onRefreshLiveNews();
     };
+    const handleCategoriesUpdate = () => {
+      setFeedCategories(getActiveCategories());
+    };
+    const handleChannelsUpdate = () => {
+      setSavedChannels(getSavedNewsChannels());
+    };
+
     window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
     window.addEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
+    window.addEventListener('ai_news_unified_categories_updated', handleCategoriesUpdate);
+    window.addEventListener('ai_news_categories_updated', handleCategoriesUpdate);
+    window.addEventListener('ai_news_channels_updated', handleChannelsUpdate);
+
     return () => {
       window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
       window.removeEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
+      window.removeEventListener('ai_news_unified_categories_updated', handleCategoriesUpdate);
+      window.removeEventListener('ai_news_categories_updated', handleCategoriesUpdate);
+      window.removeEventListener('ai_news_channels_updated', handleChannelsUpdate);
     };
   }, [onRefreshLiveNews]);
 
@@ -271,21 +298,60 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   };
 
-  // Filter posts from combined feed (including active RSS/Web sources)
-  const filteredPosts = combinedPosts.filter((p) => {
-    if (selectedCategory === 'all') return true;
-    if (selectedCategory === 'breaking') return p.breaking;
-    return p.category === selectedCategory || p.categoryName.includes(selectedCategory);
-  });
+  // Thumbnail resolver supporting Source, Default, and Manual
+  const getPostThumbnail = (post: NewsFeedPost) => {
+    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
+      return post.manualThumbnailUrl;
+    }
+    if (post.imageSource === 'default' || defaultThumbnailIds.has(post.id)) {
+      return '/assets/placeholder_news_search_16x9.jpg';
+    }
+    return post.imageUrl || '/assets/placeholder_news_search_16x9.jpg';
+  };
+
+  // Filter posts from combined feed (Admin Date, Channel, & Dynamic Category Filters)
+  const filteredPosts = useMemo(() => {
+    return combinedPosts.filter((p) => {
+      // 1. Admin Date Filter (Strict India Timezone YYYY-MM-DD match)
+      if (canModerate && adminFilterDate) {
+        const pDate = new Date(p.timestamp || 0);
+        let istDateStr = '';
+        try {
+          istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(pDate);
+        } catch {
+          istDateStr = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}-${String(pDate.getDate()).padStart(2, '0')}`;
+        }
+        if (istDateStr !== adminFilterDate) return false;
+      }
+
+      // 2. Admin Channel Filter (Matches sourceChannel)
+      if (canModerate && adminFilterChannel) {
+        const cleanChan = cleanViewerChannel(p.sourceChannel).toLowerCase();
+        const filterChan = adminFilterChannel.toLowerCase();
+        if (!cleanChan.includes(filterChan) && !filterChan.includes(cleanChan)) {
+          return false;
+        }
+      }
+
+      // 3. Category Filter
+      if (selectedCategory === 'all') return true;
+      if (selectedCategory === 'breaking') return p.breaking;
+      const catObj = feedCategories.find((c) => c.id === selectedCategory);
+      const catName = catObj ? catObj.name.replace(/^[^a-zA-Z0-9\u0900-\u097F]+/, '').trim().toLowerCase() : selectedCategory.toLowerCase();
+      const postCat = (p.category || '').toLowerCase();
+      const postCatName = (p.categoryName || '').toLowerCase();
+      return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
+    });
+  }, [combinedPosts, canModerate, adminFilterDate, adminFilterChannel, selectedCategory, feedCategories]);
 
   const breakingPosts = combinedPosts.filter((p) => p.breaking).length > 0
     ? combinedPosts.filter((p) => p.breaking)
     : combinedPosts.slice(0, 6);
 
   // Identify highlights (exclusive / breaking) for Notification Board Carousel
-  const highlightPosts = combinedPosts.filter((p) => p.isExclusive || p.breaking).length > 0
-    ? combinedPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 6)
-    : combinedPosts.slice(0, 5);
+  const highlightPosts = filteredPosts.filter((p) => p.isExclusive || p.breaking).length > 0
+    ? filteredPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 6)
+    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 5) : combinedPosts.slice(0, 5));
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -513,6 +579,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               </div>
             </div>
 
+            {/* Media Image Banner for Special Notification */}
+            <div
+              onClick={() => onOpenStudioWithNews(currentHighlightPost)}
+              className="relative w-full h-44 sm:h-64 rounded-xl overflow-hidden bg-slate-950 mb-3 cursor-pointer group shadow-inner border border-slate-800"
+            >
+              <img
+                src={getPostThumbnail(currentHighlightPost)}
+                alt={currentHighlightPost.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+              <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-xs text-white">
+                <span className="px-2.5 py-1 bg-black/75 backdrop-blur-sm rounded-lg font-bold text-amber-300 border border-amber-500/30">
+                  {currentHighlightPost.categoryName}
+                </span>
+                <span className="px-2 py-1 bg-black/75 backdrop-blur-sm rounded-lg text-[11px] text-slate-300">
+                  {formatDynamicTime(currentHighlightPost.timestamp, currentHighlightPost.publishedTime)}
+                </span>
+              </div>
+            </div>
+
             {/* Content: ONE Single News Item with Animated Transition */}
             <div
               key={currentHighlightPost.id}
@@ -563,7 +650,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <button
                     key={hp.id}
                     onClick={() => setCurrentHighlightIndex(idx)}
-                    className={`h-2 rounded-full transition-all ${
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
                       idx === currentHighlightIndex
                         ? 'w-6 bg-amber-400 shadow-md shadow-amber-400/30'
                         : 'w-2 bg-slate-700 hover:bg-slate-500'
@@ -583,7 +670,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         : `highlight-${currentHighlightPost.id}`
                     )
                   }
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5 text-slate-300" />
                   <span>
@@ -600,7 +687,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       currentHighlightPost.id
                     )
                   }
-                  className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors border ${
+                  className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors border cursor-pointer ${
                     isSpeaking && speakingPostId === currentHighlightPost.id
                       ? 'bg-red-600 border-red-500 text-white animate-pulse'
                       : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-amber-300'
@@ -616,7 +703,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                 <button
                   onClick={() => handleShare(currentHighlightPost)}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors"
+                  className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors cursor-pointer"
                   title="शेयर करें"
                 >
                   {copiedId === currentHighlightPost.id ? (
@@ -628,7 +715,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                 <button
                   onClick={() => onOpenStudioWithNews(currentHighlightPost)}
-                  className="px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95"
+                  className="px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-200" />
                   <span>खबर से ग्राफिक बनाएं</span>
@@ -638,21 +725,91 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* 4. Category Filter Chips */}
+        {/* Admin Date & Channel Filter Bar (Visible strictly to authenticated Admin / Super Admin) */}
+        {canModerate && (
+          <div className="w-full bg-slate-900 border border-amber-500/40 rounded-2xl p-3 sm:p-4 shadow-xl space-y-2.5">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-amber-300">
+                  एडमिन फ़िल्टर (Admin Date & Channel Filter)
+                </span>
+              </div>
+              {(adminFilterDate || adminFilterChannel) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminFilterDate('');
+                    setAdminFilterChannel('');
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                  <span>फ़िल्टर हटाएं (Clear)</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
+              {/* Left 50%: Date Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  📅 तारीख चुनें (Date Filter)
+                </label>
+                <input
+                  type="date"
+                  value={adminFilterDate}
+                  onChange={(e) => setAdminFilterDate(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                />
+              </div>
+
+              {/* Right 50%: Channel Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  📰 चैनल चुनें (Channel Filter)
+                </label>
+                <select
+                  value={adminFilterChannel}
+                  onChange={(e) => setAdminFilterChannel(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="">सभी चैनल (All Channels)</option>
+                  {savedChannels.map((ch) => (
+                    <option key={ch} value={ch}>{ch}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. Category Filter Chips (Single Source of Truth from Category Manager) */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-          {INITIAL_CATEGORIES.map((cat) => {
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+              selectedCategory === 'all'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+            }`}
+          >
+            <span>सभी</span>
+          </button>
+
+          {feedCategories.map((cat) => {
             const active = selectedCategory === cat.id;
             return (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                   active
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black scale-105'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
                     : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
                 }`}
               >
-                {cat.name}
+                <span>{cat.name}</span>
               </button>
             );
           })}
@@ -673,7 +830,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const isHighlighted = post.isExclusive;
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
               const isDefaultThumbActive = defaultThumbnailIds.has(post.id);
-              const displayThumbnail = isDefaultThumbActive ? '/assets/placeholder_news_search_16x9.jpg' : (post.imageUrl || '/assets/placeholder_news_search_16x9.jpg');
+              const displayThumbnail = getPostThumbnail(post);
 
               return (
                 <div
@@ -698,18 +855,45 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </label>
 
                       <div className="flex items-center gap-1 flex-wrap">
-                        {/* 1. Default Thumbnail Toggle Button */}
+                        {/* 1. Thumbnail Source Toggle (Source / Default / Manual) */}
                         <button
                           type="button"
-                          onClick={() => toggleDefaultThumbnail(post.id)}
+                          onClick={() => {
+                            const cur = post.imageSource || (defaultThumbnailIds.has(post.id) ? 'default' : 'source');
+                            let next: 'source' | 'default' | 'manual' = 'source';
+                            if (cur === 'source') {
+                              next = 'default';
+                              toggleDefaultThumbnail(post.id);
+                            } else if (cur === 'default') {
+                              if (post.manualThumbnailUrl) {
+                                next = 'manual';
+                              } else {
+                                setEditingPost(post);
+                                return;
+                              }
+                            } else {
+                              next = 'source';
+                            }
+                            if (onEditNews) {
+                              onEditNews({ ...post, imageSource: next });
+                            }
+                          }}
                           className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                            defaultThumbnailIds.has(post.id)
+                            post.imageSource === 'manual'
+                              ? 'bg-purple-500/30 text-purple-300 border border-purple-500/60'
+                              : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
                               ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
                               : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
                           }`}
-                          title="डिफ़ॉल्ट थंबनेल टॉगल करें"
+                          title="थंबनेल स्रोत बदलें (सोर्स / डिफ़ॉल्ट / मैन्युअल)"
                         >
-                          <span>{defaultThumbnailIds.has(post.id) ? '📷 डिफ़ॉल्ट' : '📷 सोर्स'}</span>
+                          <span>
+                            {post.imageSource === 'manual'
+                              ? '📷 मैन्युअल'
+                              : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
+                              ? '📷 डिफ़ॉल्ट'
+                              : '📷 सोर्स'}
+                          </span>
                         </button>
 
                         {/* 2. Highlight Button */}
@@ -921,7 +1105,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <select
                     value={editingPost.category}
                     onChange={(e) => {
-                      const catObj = INITIAL_CATEGORIES.find((c) => c.id === e.target.value);
+                      const catObj = feedCategories.find((c) => c.id === e.target.value);
                       setEditingPost({
                         ...editingPost,
                         category: e.target.value,
@@ -930,12 +1114,161 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     }}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {INITIAL_CATEGORIES.filter((c) => c.id !== 'all').map((c) => (
+                    {feedCategories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* 1. Image Source & Manual Thumbnail Management (Parts 11, 12, 13) */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300">📷 थंबनेल इमेज स्रोत (Thumbnail Source)</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {editingPost.imageSource === 'manual'
+                      ? 'मैन्युअल अपलोड'
+                      : editingPost.imageSource === 'default'
+                      ? 'डिफ़ॉल्ट ग्राफिक'
+                      : 'मूल सोर्स इमेज'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost({ ...editingPost, imageSource: 'source' })}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      (!editingPost.imageSource || editingPost.imageSource === 'source')
+                        ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    सोर्स (Source)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost({ ...editingPost, imageSource: 'default' })}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      editingPost.imageSource === 'default'
+                        ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    डिफ़ॉल्ट (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost({ ...editingPost, imageSource: 'manual' })}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      editingPost.imageSource === 'manual'
+                        ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    मैन्युअल (Manual)
+                  </button>
+                </div>
+
+                {/* If Manual is chosen, upload custom thumbnail */}
+                {editingPost.imageSource === 'manual' && (
+                  <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                    <label className="flex items-center justify-center gap-2 p-2.5 border-2 border-dashed border-amber-500/50 hover:border-amber-400 rounded-xl cursor-pointer text-xs text-amber-300 font-bold bg-amber-500/10 hover:bg-amber-500/20 transition">
+                      <Upload className="w-4 h-4 text-amber-400" />
+                      <span>{editingPost.manualThumbnailUrl ? 'थंबनेल बदलें' : 'मैन्युअल थंबनेल अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) {
+                                setEditingPost({
+                                  ...editingPost,
+                                  imageSource: 'manual',
+                                  manualThumbnailUrl: String(ev.target.result),
+                                });
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    {editingPost.manualThumbnailUrl && (
+                      <div className="relative w-28 h-18 rounded-lg overflow-hidden border border-amber-400/60 shadow">
+                        <img src={editingPost.manualThumbnailUrl} alt="Manual thumbnail preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Additional Photos Section (Parts 14, 15 - Maximum 3) */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-cyan-300">📸 अतिरिक्त फ़ोटो (अतिरिक्त 3 फ़ोटो तक)</span>
+                  <span className="text-[10px] text-cyan-400 font-bold">
+                    {(editingPost.additionalPhotos || []).length} / 3 अपलोड
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {(editingPost.additionalPhotos || []).map((imgUrl, idx) => (
+                    <div key={idx} className="relative h-20 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 group">
+                      <img src={imgUrl} alt={`Additional ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = (editingPost.additionalPhotos || []).filter((_, i) => i !== idx);
+                          setEditingPost({ ...editingPost, additionalPhotos: updated });
+                        }}
+                        className="absolute top-1 right-1 p-1 bg-red-600/90 text-white rounded-md opacity-80 hover:opacity-100 transition cursor-pointer"
+                        title="फोटो हटाएं"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white font-bold">
+                        फोटो {idx + 1}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Upload button if less than 3 photos */}
+                  {(editingPost.additionalPhotos || []).length < 3 && (
+                    <label className="h-20 border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer bg-cyan-500/5 hover:bg-cyan-500/15 transition text-cyan-300">
+                      <Upload className="w-4 h-4 text-cyan-400" />
+                      <span className="text-[10px] font-bold">+ फोटो जोड़ें</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) {
+                                const currentList = editingPost.additionalPhotos || [];
+                                if (currentList.length < 3) {
+                                  setEditingPost({
+                                    ...editingPost,
+                                    additionalPhotos: [...currentList, String(ev.target.result)],
+                                  });
+                                }
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
 

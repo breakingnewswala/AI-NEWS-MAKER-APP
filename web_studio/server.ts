@@ -2552,27 +2552,30 @@ Description: ${metaDescMatch ? metaDescMatch[1] : ""}
       }
     }
 
-    const editorialSystemInstruction = `You are the Chief Editor and Senior Art Director of "ब्रेकिंग न्यूज़ वाला" (Breaking News Wala), India's premier Hindi digital news channel.
-You strictly enforce newsroom editorial integrity and graphic layout constraints.
+    const editorialSystemInstruction = `आप एक अनुभवी हिंदी समाचार संपादक हैं। दिए गए RSS/Web Article के वास्तविक content को पढ़कर तथ्यात्मक, स्पष्ट, संक्षिप्त लेकिन प्रभावशाली हिंदी समाचार शीर्षक तैयार करें। केवल source title की नकल न करें। Article में मौजूद मुख्य घटना, व्यक्ति, स्थान, निर्णय, संख्या, प्रभाव या सबसे महत्वपूर्ण news point को headline में प्राथमिकता दें। अनुमान, अपुष्ट जानकारी या article में मौजूद नहीं तथ्य headline में न जोड़ें।
 
 ★ SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS:
 - Template ID: ${tplConfig.template_id} (${tplConfig.name})
 - Headline Layout Area: ${targetArea}
-- Strict Maximum Lines: ${targetMaxLines} lines (${targetMaxLines === 2 ? "Strictly 2 lines maximum, approx 8-12 words" : "Strictly 3 lines maximum, approx 12-16 words"})
+- Strict Maximum Lines: ${targetMaxLines} lines (${targetMaxLines === 2 ? "सख्ती से 2 लाइन्स, लगभग 8-14 शब्द" : "सख्ती से 3 लाइन्स, लगभग 12-22 शब्द"})
 
-★ MANDATORY HEADLINE LOGIC RULES:
-1. दिए गए समाचार के आधार पर संक्षिप्त, स्पष्ट, तथ्यात्मक और प्रोफेशनल न्यूज़ हेडलाइन बनाएं। हेडलाइन सामान्य पत्रकारिता की headline style में हो। केवल समाचार का मुख्य तथ्य और महत्वपूर्ण जानकारी रखें। अनावश्यक भूमिका, explanation, emoji, clickbait language या अतिरिक्त वाक्य न जोड़ें। Headline को paragraph या सामान्य sentence की तरह न लिखें।
-2. STRICT CAPACITY ENFORCEMENT: The selected graphic template only has capacity for ${targetMaxLines} lines in its ${targetArea}. You MUST craft the headline to fit cleanly within ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}).
-3. THREE DISTINCT HEADLINE OPTIONS: You must provide exactly 3 options in "headlineOptions", and EVERY SINGLE OPTION must strictly adhere to the ${targetMaxLines}-line (${targetMaxLines === 2 ? "8-12" : "12-16"} words) capacity limit.
-4. ZERO TRAILING PUNCTUATION: NEVER end the headline with full stop (.), purnaviram (।), exclamation, comma or hyphen. No punctuation at the end of any headline.
-5. ZERO HONORIFICS OR FLATTERY (ABSOLUTE RULE): Strip all PR flattery, sycophancy, and honorific words such as 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी' from headline, headline options, and summary. State official titles and names directly.
-6. STRICT JSON OUTPUT: Always output strictly valid JSON conforming to the schema.`;
+★ MANDATORY EDITORIAL HEADLINE RULES:
+1. Professional Hindi, newsroom quality, factual, specific, clear, strong but not sensational.
+2. लगभग 12–22 शब्द (कंटेक्स्ट के अनुसार 8-18 शब्द भी हो सकते हैं ताकि टेम्पलेट की ${targetMaxLines} लाइनों में सही फिट हो)।
+3. केवल source title की नकल न करें। Article के वास्तविक content से मुख्य बिंदु पहचानकर हेडलाइन बनाएं।
+4. 'जानिए', 'देखिए', 'Breaking News:', 'Exclusive', 'बड़ी खबर' जैसे generic filler words पूरी तरह avoid करें जब तक वास्तविक संदर्भ इसकी मांग न करे।
+5. Headline के अंत में full stop, पूर्णविराम (।), comma, hyphen या कोई अनावश्यक विराम चिह्न न लगाएं।
+6. आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन: 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी' जैसे औपचारिक शब्द हटाकर सीधा पद और नाम लिखें।
+7. Clickbait और झूठी हड़बड़ाहट (false urgency) से बचें। Headline आर्टिकल के वास्तविक तथ्यों से समर्थित हो।
+8. Summary: घटना की जटिलता के अनुसार 2 से 4 पैराग्राफ में पूरी निष्पक्ष खबर लिखें। आर्टिकल में अनुपस्थित तथ्य खुद से न गढ़ें।
+9. Output strictly valid JSON.`;
 
     const prompt = `
-आप भारत के न्यूज़ चैनल "ब्रेकिंग न्यूज़ वाला" के चीफ एडिटर हैं।
+आप एक अनुभवी हिंदी समाचार संपादक हैं। दिए गए RSS/Web Article के वास्तविक content को पढ़कर तथ्यात्मक, स्पष्ट, संक्षिप्त लेकिन प्रभावशाली हिंदी समाचार शीर्षक तैयार करें। केवल source title की नकल न करें। Article में मौजूद मुख्य घटना, व्यक्ति, स्थान, निर्णय, संख्या, प्रभाव या सबसे महत्वपूर्ण news point को headline में प्राथमिकता दें। अनुमान, अपुष्ट जानकारी या article में मौजूद नहीं तथ्य headline में न जोड़ें।
+
 यूज़र ने यह कमांड / कच्ची स्क्रिप्ट / समाचार विवरण या प्रेस नोट दिया है:
 ${effectiveInput || ""}
-${fetchedArticleSnippet ? `वेबसाइट सामग्री: ${fetchedArticleSnippet}` : ""}
+${fetchedArticleSnippet ? `वेबसाइट सामग्री (वास्तविक आर्टिकल कंटेंट): ${fetchedArticleSnippet}` : ""}
 ${customPrompt ? `यूज़र का विशेष निर्देश / प्रॉम्प्ट या कच्ची स्क्रिप्ट (Prompt / Raw Script / Press Note): ${customPrompt}` : ""}
 
 चयनित न्यूज़ ग्राफ़िक टेम्पलेट विनिर्देश (SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS):
@@ -2583,14 +2586,15 @@ ${customPrompt ? `यूज़र का विशेष निर्देश /
 
 विशेष संपादकीय नियम (प्रेस नोट / स्क्रिप्ट रूपांतरण):
 - यदि यूज़र ने बिना किसी लिंक के सीधे प्रॉम्प्ट बॉक्स या इनपुट बॉक्स में कोई कच्ची स्क्रिप्ट, प्रेस नोट, सरकारी विज्ञप्ति या नेताओं का बयान दिया है, तो उस पूरी सामग्री को निष्पक्ष, प्रामाणिक और प्रभावशाली न्यूज़ ग्राफ़िक में बदलें।
-- आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन (MANDATORY): हेडलाइन, हेडलाइन विकल्पों और पूरी स्क्रिप्ट (summary) में से 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी' जैसे सभी औपचारिक व सरकारी/पीआर शब्दों को पूरी तरह हटा दें। सीधे नेता या अधिकारी का पद और नाम लिखें (जैसे: 'माननीय मुख्यमंत्री श्री ... जी' के स्थान पर 'मुख्यमंत्री ...', 'श्रीमान कलेक्टर महोदय' के स्थान पर 'कलेक्टर')।
+- आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन (MANDATORY): हेडलाइन, हेडलाइन विकल्पों और पूरी स्क्रिप्ट (summary) में से 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी' जैसे सभी औपचारिक व सरकारी/पीआर शब्दों को पूरी तरह हटा दें। सीधे नेता या अधिकारी का पद और नाम लिखें।
 
 ★ हेडलाइन के लिए अनिवार्य सख्त नियम (STRICT ${targetMaxLines}-LINE HEADLINE RULE):
-1. चुने गए टेम्पलेट की क्षमता ${targetMaxLines} लाइन है। हेडलाइन को ${targetMaxLines === 2 ? "सख्ती से अधिकतम 2 लाइन्स (लगभग 8-12 शब्द)" : "सख्ती से अधिकतम 3 लाइन्स (लगभग 12-16 शब्द)"} में ही बनाना है।
+1. चुने गए टेम्पलेट की क्षमता ${targetMaxLines} लाइन है। हेडलाइन लगभग 12-22 शब्दों की (टेम्पलेट अनुसार 8-16 शब्द) हो जो ${targetMaxLines} लाइन्स में पूर्ण हो।
 2. हेडलाइन का काम पूरी कहानी सुनाना नहीं है! हेडलाइन केवल मुख्य खबर की सटीक, स्पष्ट और प्रभावशाली जानकारी देगी। किसी भी स्थिति में लंबी कहानी जैसी हेडलाइन नहीं बनानी है।
-3. पूरी विस्तृत खबर और सभी विवरण अनिवार्य रूप से "summary" (News Description / Full Story) में रहेंगे।
-4. हेडलाइन जनरेट करते समय ही ${targetMaxLines}-लाइन क्षमता को ध्यान में रखकर संक्षिप्त व व्याकरण सम्मत हिंदी में बनाना है (बीच में काटना नहीं है)।
-5. "headlineOptions" में 3 अलग-अलग, शक्तिशाली हेडलाइन विकल्प दें, और तीनों विकल्प भी अनिवार्य रूप से अधिकतम ${targetMaxLines} लाइनों की सीमा में ही होने चाहिए।
+3. पूरी विस्तृत खबर और सभी विवरण अनिवार्य रूप से "summary" (2 से 4 पैराग्राफ) में रहेंगे।
+4. 'जानिए', 'देखिए', 'Breaking News:', 'Exclusive', 'बड़ी खबर' जैसे generic filler words न लिखें।
+5. हेडलाइन के अंत में कोई पूर्णविराम या विराम चिह्न न लगाएं।
+6. "headlineOptions" में 3 अलग-अलग, शक्तिशाली हेडलाइन विकल्प दें (सख्ती से अधिकतम ${targetMaxLines} लाइनों की सीमा में)।
 
 कृपया इस जानकारी और निर्देश से एक शक्तिशाली, वायरल और ऑथेंटिक हिंदी इमेज न्यूज़ (न्यूज़ ग्राफ़िक कार्ड) तैयार करें:
 1. "headline": मुख्य, स्पष्ट और प्रभावकारी हिंदी हेडलाइन (सख्ती से अधिकतम ${targetMaxLines} लाइन्स, लगभग ${targetMaxLines === 2 ? "8-12" : "12-16"} शब्द, देवनागरी लिपि में, बिना किसी आदरसूचक शब्द के)।

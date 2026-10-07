@@ -2389,6 +2389,70 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
           )}
 
+          {/* Available Photos from News Article (Parts 16, 17) */}
+          {(() => {
+            let photos: string[] = [];
+            if (autoFillNews?.additionalPhotos && autoFillNews.additionalPhotos.length > 0) {
+              photos = autoFillNews.additionalPhotos;
+            } else {
+              try {
+                const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('studio_active_news_photos') : null;
+                if (raw) photos = JSON.parse(raw);
+              } catch {}
+            }
+            if (!photos || photos.length === 0) return null;
+
+            return (
+              <div className="bg-slate-900/90 border border-amber-500/40 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>इस समाचार की उपलब्ध फोटो (Available Photos from Article)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold">{photos.length} उपलब्ध</span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  कार्ड में मुख्य फोटो बनाने के लिए किसी भी फोटो पर क्लिक करें:
+                </p>
+                <div className="grid grid-cols-4 gap-2 pt-1">
+                  {photos.map((pUrl, pIdx) => {
+                    const isSelected = card.images.main === pUrl;
+                    return (
+                      <div
+                        key={pIdx}
+                        onClick={() => {
+                          onChange({
+                            images: {
+                              ...card.images,
+                              main: pUrl,
+                            },
+                          });
+                        }}
+                        className={`relative h-20 rounded-lg overflow-hidden border-2 cursor-pointer transition group shadow ${
+                          isSelected
+                            ? 'border-amber-400 ring-2 ring-amber-400/50 scale-102'
+                            : 'border-slate-700 hover:border-amber-300'
+                        }`}
+                      >
+                        <img src={pUrl} alt={`Article photo ${pIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                        <span className={`absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-black ${
+                          isSelected ? 'bg-amber-400 text-slate-950' : 'bg-black/75 text-white'
+                        }`}>
+                          {pIdx === 0 ? 'मुख्य' : `फोटो ${pIdx}`}
+                        </span>
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 p-0.5 bg-amber-400 text-slate-950 rounded-full">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="text-xs font-semibold text-neutral-300">
             तस्वीरें अपलोड करें:
           </div>

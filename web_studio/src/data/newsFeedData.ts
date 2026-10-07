@@ -14,6 +14,9 @@ export interface NewsFeedPost {
   district?: string;
   location?: string;
   timestamp: number;
+  imageSource?: 'source' | 'default' | 'manual';
+  manualThumbnailUrl?: string;
+  additionalPhotos?: string[];
 }
 
 export interface VideoFeedItem {

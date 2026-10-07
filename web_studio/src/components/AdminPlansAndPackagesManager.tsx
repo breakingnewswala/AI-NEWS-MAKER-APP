@@ -92,6 +92,15 @@ import {
   addRestrictedChannel,
   deleteRestrictedChannel,
 } from '../lib/restrictedChannelsManager';
+import {
+  CategoryItem,
+  getAllCategories,
+  getActiveCategories,
+  addCategory,
+  updateCategoryName,
+  toggleCategoryStatus,
+  deleteCategoryItem,
+} from '../lib/categoryManager';
 interface AdminPlansAndPackagesManagerProps {
   currentUser?: any;
   onPlanChanged?: () => void;
@@ -201,40 +210,58 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   };
 
   // Single Unified Category Manager for RSS & Web Links (Synchronized with Home Feed)
-  const [feedCategories, setFeedCategories] = useState<string[]>(() => {
-    const defaults = ['देश / राष्ट्रीय', 'मध्य प्रदेश', 'उत्तर प्रदेश', 'बिहार', 'राजस्थान', 'विदेश', 'व्यापार', 'खेल', 'मनोरंजन', 'टेक्नोलॉजी', 'क्राइम / अपराध', 'विशेष रिपोर्ट'];
-    if (typeof window === 'undefined') return defaults;
-    try {
-      const saved = localStorage.getItem('ai_news_unified_categories_list') || localStorage.getItem('ai_news_rss_categories_list');
-      return saved ? JSON.parse(saved) : defaults;
-    } catch {
-      return defaults;
-    }
-  });
+  const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getAllCategories());
   const [newCatInput, setNewCatInput] = useState<string>('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState<string>('');
+
+  useEffect(() => {
+    const handleCatsUpdated = () => {
+      setFeedCategories(getAllCategories());
+    };
+    window.addEventListener('ai_news_categories_updated', handleCatsUpdated);
+    return () => window.removeEventListener('ai_news_categories_updated', handleCatsUpdated);
+  }, []);
 
   const handleAddCategoryUnified = (e: React.FormEvent) => {
     e.preventDefault();
     const cat = newCatInput.trim();
     if (!cat) return;
-    if (!feedCategories.includes(cat)) {
-      const updated = [...feedCategories, cat];
-      setFeedCategories(updated);
-      localStorage.setItem('ai_news_unified_categories_list', JSON.stringify(updated));
-      localStorage.setItem('ai_news_rss_categories_list', JSON.stringify(updated));
-      localStorage.setItem('ai_news_web_categories_list', JSON.stringify(updated));
+    try {
+      addCategory(cat);
+      setFeedCategories(getAllCategories());
       if (onAddCategory) onAddCategory(cat);
+      setNewCatInput('');
+    } catch (err: any) {
+      alert(err.message || 'त्रुटि');
     }
-    setNewCatInput('');
   };
 
-  const handleDeleteCategoryUnified = (catToDelete: string) => {
+  const handleStartEditCat = (cat: CategoryItem) => {
+    setEditingCatId(cat.id);
+    setEditingCatName(cat.name);
+  };
+
+  const handleSaveEditCat = (id: string) => {
+    if (!editingCatName.trim()) {
+      alert('श्रेणी का नाम खाली नहीं हो सकता');
+      return;
+    }
+    updateCategoryName(id, editingCatName.trim());
+    setFeedCategories(getAllCategories());
+    setEditingCatId(null);
+    setEditingCatName('');
+  };
+
+  const handleToggleCatStatus = (id: string) => {
+    toggleCategoryStatus(id);
+    setFeedCategories(getAllCategories());
+  };
+
+  const handleDeleteCategoryUnified = (id: string) => {
     if (feedCategories.length <= 1) return;
-    const updated = feedCategories.filter(c => c !== catToDelete);
-    setFeedCategories(updated);
-    localStorage.setItem('ai_news_unified_categories_list', JSON.stringify(updated));
-    localStorage.setItem('ai_news_rss_categories_list', JSON.stringify(updated));
-    localStorage.setItem('ai_news_web_categories_list', JSON.stringify(updated));
+    deleteCategoryItem(id);
+    setFeedCategories(getAllCategories());
   };
 
   // Logo Change Requests State
@@ -2704,14 +2731,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
 
-                        {/* Single Category Manager for RSS & Web Links (Synchronized with Home Feed) */}
+            {/* Single Category Manager for RSS & Web Links (Synchronized with Home Feed) */}
             <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
                   <FolderTree className="w-4 h-4 text-amber-400" />
                   <span className="text-xs font-bold text-white">एकल श्रेणी प्रबंधक (Single Category Manager - RSS, Web & Home Feed)</span>
                 </div>
-                <span className="text-[10px] text-amber-300 font-bold">{feedCategories.length} श्रेणियां सक्रिय</span>
+                <span className="text-[10px] text-amber-300 font-bold">{feedCategories.filter((c) => c.isActive).length} श्रेणियां सक्रिय</span>
               </div>
 
               <form onSubmit={handleAddCategoryUnified} className="flex items-center gap-2">
@@ -2719,7 +2746,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   type="text"
                   value={newCatInput}
                   onChange={(e) => setNewCatInput(e.target.value)}
-                  placeholder="नई श्रेणी का नाम जोड़ें (उदा. मध्य प्रदेश, क्राइम, टेक, राजनीति...)"
+                  placeholder="नई श्रेणी का नाम जोड़ें (उदा. खेती-किसानी, स्वास्थ्य, क्राइम, टेक...)"
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-400 focus:outline-hidden"
                 />
                 <button
@@ -2733,22 +2760,85 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="flex flex-wrap gap-2 pt-1">
                 {feedCategories.map((cat) => (
-                  <span
-                    key={cat}
-                    className="px-2.5 py-1 bg-slate-900 border border-slate-700 rounded-lg text-[11px] font-bold text-slate-200 flex items-center gap-1.5"
+                  <div
+                    key={cat.id}
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                      cat.isActive
+                        ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/80 text-slate-500 opacity-70'
+                    }`}
                   >
-                    <span>{cat}</span>
-                    {feedCategories.length > 1 && (
+                    {/* Active/Inactive Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCatStatus(cat.id)}
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-black cursor-pointer transition ${
+                        cat.isActive
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-500 border border-slate-700'
+                      }`}
+                      title={cat.isActive ? 'क्लिक करके निष्क्रिय करें' : 'क्लिक करके सक्रिय करें'}
+                    >
+                      {cat.isActive ? 'सक्रिय' : 'निष्क्रिय'}
+                    </button>
+
+                    {/* Category Name or Inline Edit Input */}
+                    {editingCatId === cat.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          className="px-2 py-0.5 bg-slate-950 border border-amber-400 rounded text-xs text-white focus:outline-hidden w-28 sm:w-36"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEditCat(cat.id);
+                            if (e.key === 'Escape') setEditingCatId(null);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditCat(cat.id)}
+                          className="px-1.5 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded cursor-pointer"
+                        >
+                          सेव
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCatId(null)}
+                          className="p-0.5 text-slate-400 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-semibold">{cat.name}</span>
+                    )}
+
+                    {/* Edit Button */}
+                    {editingCatId !== cat.id && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteCategoryUnified(cat)}
-                        className="text-slate-500 hover:text-red-400 transition cursor-pointer"
+                        onClick={() => handleStartEditCat(cat)}
+                        className="text-slate-400 hover:text-amber-400 transition cursor-pointer p-0.5"
+                        title="श्रेणी का नाम संपादित करें (Edit)"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                    )}
+
+                    {/* Delete Button */}
+                    {feedCategories.length > 1 && editingCatId !== cat.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategoryUnified(cat.id)}
+                        className="text-slate-500 hover:text-red-400 transition cursor-pointer p-0.5"
                         title="श्रेणी हटाएं"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
                     )}
-                  </span>
+                  </div>
                 ))}
               </div>
             </div>
@@ -2761,12 +2851,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   setRssMsg({ type: 'error', text: 'कृपया वैध RSS Feed XML URL दर्ज करें।' });
                   return;
                 }
-                const name = newSourceName.trim() || 'RSS Source';
+                const name = newSourceName.trim() || (savedChannels[0] || 'RSS Source');
                 saveNewsChannel(name);
-                  setSavedChannels(getSavedNewsChannels());
-                  addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
+                setSavedChannels(getSavedNewsChannels());
+                addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
                 setRssSources(getAdminRssSources());
-                setNewSourceName('');
                 setNewSourceUrl('');
                 setRssMsg({ type: 'success', text: `नया RSS स्रोत "${name}" जोड़ा गया! वास्तविक RSS से समाचार प्राप्त किए जा रहे हैं...` });
                 syncAllSourcesLive().then((res) => {
@@ -2785,15 +2874,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल / स्रोत का नाम *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
+                  <label className="block text-slate-300 font-bold mb-1">चैनल चुनें (Select Channel) *</label>
+                  <select
+                    value={newSourceName || (savedChannels[0] || '')}
                     onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="उदा. आज तक लाइव RSS"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                  />
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                  >
+                    {savedChannels.map((ch) => (
+                      <option key={ch} value={ch}>{ch}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">RSS Feed XML URL *</label>
@@ -2811,10 +2901,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <select
                     value={newSourceCategory}
                     onChange={(e) => setNewSourceCategory(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -2880,14 +2970,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <button
                           type="button"
                           onClick={() => {
-                            if (confirm(`क्या आप स्रोत "${s.name}" हटाना चाहते हैं?`)) {
+                            if (confirm(`क्या आप RSS स्रोत "${s.name}" हटाना चाहते हैं?`)) {
                               deleteAdminRssSource(s.id);
                               setRssSources(getAdminRssSources());
                             }
                           }}
-                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
+                          className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                          title="हटाएं"
                         >
-                          हटाएँ
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -2897,40 +2988,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
-            </div>
-          )}
-        </div>
-
-
-        {/* ========================================================================= */}
-        {/* STEP 8: वेब लिंक्स डैशबोर्ड (WEB LINKS DASHBOARD)                         */}
-        {/* ========================================================================= */}
-        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => setSubTab(subTab === 'web' ? '' : 'web')}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'web' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>8</span>
-              </div>
-              <div className="min-w-0">
-                <span className="text-sm sm:text-base font-black text-white block truncate">
-                  8. वेब लिंक्स डैशबोर्ड
-                </span>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स प्रबंधन
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                {`${rssSources.filter(s => s.type === "web").length} वेब लिंक्स`}
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'web' ? 'rotate-180 text-amber-400' : ''}`} />
-            </div>
-          </button>
+      </div>
+    )}
           {subTab === 'web' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">
@@ -3083,15 +3142,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">वेबसाइट / न्यूज़ पोर्टल का नाम *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
+                  <label className="block text-slate-300 font-bold mb-1">चैनल / न्यूज़ पोर्टल चुनें (Select Channel) *</label>
+                  <select
+                    value={newSourceName || (savedChannels[0] || '')}
                     onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="उदा. पीआईबी प्रेस रिलीज़"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
-                  />
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
+                  >
+                    {savedChannels.map((ch) => (
+                      <option key={ch} value={ch}>{ch}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">वेबसाइट / आर्टिकल URL *</label>
@@ -3109,10 +3169,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <select
                     value={newSourceCategory}
                     onChange={(e) => setNewSourceCategory(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>

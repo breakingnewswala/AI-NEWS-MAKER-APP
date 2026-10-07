@@ -1264,7 +1264,24 @@ export default function App() {
     };
 
     const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id);
-    const targetImageForStudio = hasDefaultPhotoActive ? '/assets/placeholder_news_search_square.jpg' : (post.imageUrl || '/assets/placeholder_news_search_square.jpg');
+    let targetImageForStudio = post.imageUrl || '/assets/placeholder_news_search_square.jpg';
+    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
+      targetImageForStudio = post.manualThumbnailUrl;
+    } else if (post.imageSource === 'default' || hasDefaultPhotoActive) {
+      targetImageForStudio = '/assets/placeholder_news_search_square.jpg';
+    }
+
+    // Collect all available photos for this article: primary + up to 3 additional photos
+    const articlePhotos: string[] = [targetImageForStudio];
+    if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
+      post.additionalPhotos.forEach((p) => {
+        if (p && !articlePhotos.includes(p)) articlePhotos.push(p);
+      });
+    }
+
+    try {
+      localStorage.setItem('studio_active_news_photos', JSON.stringify(articlePhotos));
+    } catch {}
 
     setCard((prev) => ({
       ...prev,
@@ -1287,6 +1304,7 @@ export default function App() {
       category: post.categoryName,
       autoTrigger: true,
       timestamp: Date.now(),
+      additionalPhotos: articlePhotos,
     });
 
     setCurrentTab('studio');
