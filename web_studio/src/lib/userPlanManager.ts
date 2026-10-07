@@ -1031,6 +1031,8 @@ export function registerOrUpdateUser(userData: {
 export interface LogoChangeRequest {
   id: string;
   userEmail: string;
+  userName?: string;
+  username?: string;
   channelName: string;
   currentLogoUrl?: string;
   newLogoUrl?: string;
@@ -1053,12 +1055,16 @@ export function submitLogoChangeRequest(
   channelName: string,
   currentLogoUrl: string | undefined,
   reason: string,
-  newLogoUrl?: string
+  newLogoUrl?: string,
+  userName?: string,
+  username?: string
 ): LogoChangeRequest {
   const reqs = getLogoChangeRequests();
   const newReq: LogoChangeRequest = {
     id: `req_${Date.now()}`,
     userEmail: userEmail.toLowerCase().trim(),
+    userName,
+    username,
     channelName,
     currentLogoUrl,
     newLogoUrl,

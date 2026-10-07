@@ -165,7 +165,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         {/* Frame Filter Buttons Bar (सभी, 9:16, 4:3, 1:1) */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           {[
-            { id: 'all', label: 'सभी (All)' },
+            { id: 'all', label: 'सभी' },
             { id: '9:16', label: '9:16' },
             { id: '4:3', label: '4:3' },
             { id: '1:1', label: '1:1' },

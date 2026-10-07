@@ -1245,8 +1245,8 @@ export default function App() {
       return new Set();
     };
 
-    const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id) || !post.imageUrl || post.imageUrl.includes('placeholder');
-    const targetImageForStudio = hasDefaultPhotoActive ? '/assets/placeholder_news_search_square.jpg' : (post.imageUrl || '');
+    const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id);
+    const targetImageForStudio = hasDefaultPhotoActive ? '/assets/placeholder_news_search_square.jpg' : (post.imageUrl || '/assets/placeholder_news_search_square.jpg');
 
     setCard((prev) => ({
       ...prev,

@@ -1567,7 +1567,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     {logoRequests.map((req) => (
                       <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="p-3">
-                          <div className="font-bold text-white font-mono">{req.userEmail}</div>
+                          {(() => {
+                            const matchedUser = planUsers.find((u) => u.email.toLowerCase().trim() === req.userEmail.toLowerCase().trim());
+                            const name = req.userName || matchedUser?.name || 'यूज़र';
+                            const uname = req.username || matchedUser?.username;
+                            const unameFormatted = uname ? (uname.startsWith('@') ? uname : `@${uname}`) : '';
+                            return (
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-white text-xs">{name}</div>
+                                {unameFormatted && (
+                                  <div className="text-[11px] font-mono text-amber-300 font-bold">{unameFormatted}</div>
+                                )}
+                                <div className="text-[10px] font-mono text-slate-400">{req.userEmail}</div>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">

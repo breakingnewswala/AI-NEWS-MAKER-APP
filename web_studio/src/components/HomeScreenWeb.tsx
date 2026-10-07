@@ -672,8 +672,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const isSelected = selectedNewsIds.includes(post.id);
               const isHighlighted = post.isExclusive;
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
-              const isDefaultThumbActive = defaultThumbnailIds.has(post.id) || !post.imageUrl || post.imageUrl.includes('placeholder') || post.imageUrl.includes('unsplash');
-              const displayThumbnail = isDefaultThumbActive ? '/assets/placeholder_news_search_square.jpg' : post.imageUrl;
+              const isDefaultThumbActive = defaultThumbnailIds.has(post.id);
+              const displayThumbnail = isDefaultThumbActive ? '/assets/placeholder_news_search_square.jpg' : (post.imageUrl || '/assets/placeholder_news_search_square.jpg');
 
               return (
                 <div

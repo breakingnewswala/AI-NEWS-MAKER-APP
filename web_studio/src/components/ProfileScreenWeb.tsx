@@ -105,8 +105,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      name: 'संवाददाता', email: 'user@ainewsmaker.online', role: 'user',
-      district: 'सेंट्रल डेस्क'
+      name: currentUser?.name || 'यूज़र', email: currentUser?.email || '', role: 'user',
+      district: 'डिजिटल डेस्क'
     };
   })();
   const isAdmin = isUserAdmin(effectiveUser);
@@ -122,7 +122,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      fullName: currentUser?.name || 'संवाददाता',
+      fullName: currentUser?.name || 'यूज़र',
       channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
       channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
       channelLogoUrl: '/assets/ai_news_maker_logo.png',
@@ -135,7 +135,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         telegram: false,
         whatsapp: true,
       },
-      username: 'ainewsmaker',
+      username: currentUser?.username || '',
       mobileNumber: '96698-02408',
       showMobileNumber: true,
       websiteUrl: 'ainewsmaker.online',
@@ -1550,7 +1550,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             channelProfile.channelNameHi || '',
                             channelProfile.channelLogoUrl,
                             logoReqReason.trim(),
-                            newRequestedLogoUrl || undefined
+                            newRequestedLogoUrl || undefined,
+                            currentUser?.name || channelProfile.fullName || 'यूज़र',
+                            channelProfile.username || currentUser?.username || ''
                           );
                           setLogoReqStatus('pending');
                           setIsLogoReqModalOpen(false);
