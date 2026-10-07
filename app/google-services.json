@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "401033199805",
+    "firebase_url": "https://ai-news-maker-app-default-rtdb.firebaseio.com",
     "project_id": "ai-news-maker-app",
     "storage_bucket": "ai-news-maker-app.firebasestorage.app"
   },

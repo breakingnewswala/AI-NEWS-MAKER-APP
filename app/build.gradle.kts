@@ -1,27 +1,19 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
 }
 
 android {
     namespace = "com.example"
     compileSdk = 36
 
-<<<<<<< HEAD
-  defaultConfig {
-    applicationId = "com.aistudio.ainewsmaker.dyynbu"
-    minSdk = 24
-    targetSdk = 36
-    versionCode = 11
-    versionName = "11.0"
-=======
     defaultConfig {
         applicationId = "com.aistudio.ainewsmaker.dyynbu"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "4.0"
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+        versionCode = 11
+        versionName = "11.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
