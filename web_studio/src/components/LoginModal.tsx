@@ -187,10 +187,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'superadmin';
       const isAdmin = isSuper;
       const prefix = cleanEmail.split('@')[0];
-      const defaultName = displayName || prefix.replace(/[._-]/g, ' ');
+      let existingUsername = '';
+      try {
+        const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
+        if (savedProfileStr) {
+          const parsed = JSON.parse(savedProfileStr);
+          if (parsed.username) existingUsername = parsed.username;
+        }
+      } catch {}
 
       const user: ReporterUser = {
-        username: prefix,
+        username: existingUsername,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
         role: isSuper ? 'superadmin' : 'user',
         email: cleanEmail,

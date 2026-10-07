@@ -152,6 +152,61 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     getUserLogoChangeRequestStatus(currentUser?.email || '')
   );
 
+  // Manual Username Creation state & handler (Google Email != Username)
+  const [isUsernameEditing, setIsUsernameEditing] = useState(false);
+  const [manualUsernameInput, setManualUsernameInput] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+
+  const handleSaveManualUsername = () => {
+    const clean = manualUsernameInput.trim().replace(/^@/, '').toLowerCase();
+    if (!clean) {
+      setUsernameError('कृपया एक वैध यूज़रनेम दर्ज करें।');
+      return;
+    }
+    if (clean.length < 3 || clean.length > 20) {
+      setUsernameError('यूज़रनेम 3 से 20 अक्षरों के बीच होना चाहिए।');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(clean)) {
+      setUsernameError('केवल अंग्रेजी अक्षर, अंक और _ (underscore) मान्य हैं।');
+      return;
+    }
+
+    // Check availability against all registered users
+    const users = getPlanUsers();
+    const existing = users.find(u => u.username?.toLowerCase() === clean && u.email.toLowerCase() !== (currentUser?.email || '').toLowerCase());
+    if (existing) {
+      setUsernameError(`'${clean}' यूज़रनेम पहले से किसी अन्य यूज़र द्वारा उपयोग में है। कृपया दूसरा यूज़रनेम चुनें।`);
+      return;
+    }
+
+    const formattedUsername = `@${clean}`;
+    setChannelProfile(prev => ({ ...prev, username: formattedUsername }));
+
+    if (currentUser?.email) {
+      const emailKey = `user_profile_${currentUser.email.toLowerCase().trim()}`;
+      try {
+        const saved = localStorage.getItem(emailKey);
+        const obj = saved ? JSON.parse(saved) : {};
+        obj.username = formattedUsername;
+        localStorage.setItem(emailKey, JSON.stringify(obj));
+      } catch {}
+    }
+
+    try {
+      const sessStr = localStorage.getItem('reporter_auth_session');
+      if (sessStr) {
+        const sess = JSON.parse(sessStr);
+        sess.username = clean;
+        localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
+      }
+    } catch {}
+
+    setIsUsernameEditing(false);
+    setUsernameError('');
+    alert(`✅ आपका मनपसंद यूज़रनेम '${formattedUsername}' सफलतापूर्वक सेट हो गया!`);
+  };
+
   const handleNewRequestedLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2141,21 +2196,86 @@ return (
                     </span>
                   </div>
 
-                  {/* Username & Location - Clean & Real Data */}
-                  {(displayUsername || displayLocation) && (
+                  {/* Username & Location - Clean & Real Data + Manual Username Creation */}
+                  <div className="flex flex-col items-center sm:items-start gap-1 w-full">
                     <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap text-xs text-slate-300">
-                      {displayUsername && (
-                        <span className="font-bold text-amber-300 font-mono">{displayUsername}</span>
+                      {displayUsername ? (
+                        <div className="flex items-center gap-1.5 font-bold text-amber-300 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                          <span>{displayUsername}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualUsernameInput(displayUsername.replace(/^@/, ''));
+                              setIsUsernameEditing(!isUsernameEditing);
+                              setUsernameError('');
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-amber-300 ml-1 transition"
+                            title="यूज़रनेम बदलें"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsUsernameEditing(!isUsernameEditing);
+                            setUsernameError('');
+                          }}
+                          className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-[11px] font-black rounded-lg shadow cursor-pointer transition active:scale-95 flex items-center gap-1"
+                        >
+                          <span>✏️ अपना यूज़रनेम बनाएं (Set Username)</span>
+                        </button>
                       )}
-                      {displayUsername && displayLocation && <span className="text-slate-600">•</span>}
+
                       {displayLocation && (
-                        <span className="flex items-center gap-1 text-slate-300 font-medium">
-                          <MapPin className="w-3 h-3 text-red-400 shrink-0" />
-                          <span>{displayLocation}</span>
-                        </span>
+                        <>
+                          <span className="text-slate-600">•</span>
+                          <span className="flex items-center gap-1 text-slate-300 font-medium">
+                            <MapPin className="w-3 h-3 text-red-400 shrink-0" />
+                            <span>{displayLocation}</span>
+                          </span>
+                        </>
                       )}
                     </div>
-                  )}
+
+                    {/* Inline Manual Username Creation Form */}
+                    {isUsernameEditing && (
+                      <div className="mt-2 p-3 bg-slate-950 border border-amber-500/60 rounded-xl space-y-2 w-full max-w-sm animate-in fade-in duration-200 text-left">
+                        <label className="block text-[11px] font-bold text-amber-300">
+                          अपना मनपसंद यूज़रनेम चुनें (जैसे: rahul_sharma):
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-amber-400">@</span>
+                          <input
+                            type="text"
+                            value={manualUsernameInput}
+                            onChange={(e) => {
+                              setManualUsernameInput(e.target.value.toLowerCase().replace(/[^a-zA-Z0-9_]/g, ''));
+                              setUsernameError('');
+                            }}
+                            placeholder="username"
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-400 focus:outline-hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveManualUsername}
+                            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg transition cursor-pointer shrink-0"
+                          >
+                            सेव करें
+                          </button>
+                        </div>
+                        {usernameError && (
+                          <p className="text-[10px] text-red-400 font-bold leading-tight">
+                            ⚠️ {usernameError}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          * Google Email से यूज़रनेम स्वतः नहीं बनेगा। यूज़रनेम Unique होना आवश्यक है।
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Clean Email Display (No boxed container/border) */}
                   {displayEmail && (

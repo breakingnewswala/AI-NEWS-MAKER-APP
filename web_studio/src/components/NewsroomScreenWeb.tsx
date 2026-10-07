@@ -122,15 +122,6 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             <Film className="w-4 h-4 text-white shrink-0" />
             <span>वीडियो न्यूज़</span>
           </button>
-
-          <button
-            type="button"
-            onClick={onNavigateToControlPanel}
-            className="col-span-2 sm:col-span-1 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
-          >
-            <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>कंट्रोल पैनल</span>
-          </button>
         </div>
       </div>
 

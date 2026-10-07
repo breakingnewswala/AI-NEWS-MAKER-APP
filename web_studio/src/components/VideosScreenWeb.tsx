@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
+import { isEffectiveAdmin } from '../lib/userPlanManager';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -58,7 +59,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   }, [activeVideos, selectedRatioFilter]);
 
   // Role-based Admin check: ONLY Super Admin and Admin have access to video upload controls
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = isEffectiveAdmin(currentUser);
 
   const handleShare = (vid: VideoFeedItem) => {
     if (navigator.share) {

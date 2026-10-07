@@ -362,15 +362,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         telegram: false,
         whatsapp: true,
       },
-      username: knownProfile?.username || parsedProfile?.username || prefix.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'ainewsmaker',
+      username: knownProfile?.username || parsedProfile?.username || '',
       mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || primaryMobileNumber || '9669802408',
       showMobileNumber: true,
       websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
     };
 
     const googleUser: ReporterUser = {
-      username: finalProfile.username || prefix,
-      name: finalProfile.fullName || name || prefix,
+      username: finalProfile.username || '',
+      name: finalProfile.fullName || name || 'यूज़र',
       role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'user'),
       district: knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
       email: cleanEmail,
