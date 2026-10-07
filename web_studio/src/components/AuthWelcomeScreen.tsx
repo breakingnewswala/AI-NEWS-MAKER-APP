@@ -371,9 +371,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const googleUser: ReporterUser = {
       username: finalProfile.username || prefix,
       name: finalProfile.fullName || name || prefix,
-      role: isAdmin ? 'admin' : (knownProfile?.role || 'reporter'),
+      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'user'),
       district: knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
-      email: email,
+      email: cleanEmail,
       avatarUrl: picture, // Avatar photo only, NEVER channel logo
     };
 
@@ -398,7 +398,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     setDetailChannelNameEn(finalProfile.channelNameEn);
     setUsername(finalProfile.username);
 
-    // Register or update in Admin directory
+    // Register or update in Admin directory with single source of truth
     registerOrUpdateUser({
       email: cleanEmail,
       username: finalProfile.username,
@@ -597,7 +597,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const loggedUser: ReporterUser = {
       username: finalProfile.username,
       name: finalProfile.fullName,
-      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'user'),
       district: knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
       email: inputLower.includes('@') ? inputLower : (isAdmin ? 'admin@breakingnewswala.com' : `${inputLower}@ainewsmaker.online`),
       avatarUrl: finalProfile.channelLogoUrl,

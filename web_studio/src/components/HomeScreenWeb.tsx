@@ -672,6 +672,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const isSelected = selectedNewsIds.includes(post.id);
               const isHighlighted = post.isExclusive;
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
+              const isDefaultThumbActive = defaultThumbnailIds.has(post.id) || !post.imageUrl || post.imageUrl.includes('placeholder') || post.imageUrl.includes('unsplash');
+              const displayThumbnail = isDefaultThumbActive ? '/assets/placeholder_news_search_square.jpg' : post.imageUrl;
 
               return (
                 <div
@@ -695,8 +697,22 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span>Select</span>
                       </label>
 
-                      <div className="flex items-center gap-1">
-                        {/* 1. Highlight Button */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {/* 1. Default Thumbnail Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => toggleDefaultThumbnail(post.id)}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                            defaultThumbnailIds.has(post.id)
+                              ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                          }`}
+                          title="डिफ़ॉल्ट थंबनेल टॉगल करें"
+                        >
+                          <span>{defaultThumbnailIds.has(post.id) ? '📷 डिफ़ॉल्ट' : '📷 सोर्स'}</span>
+                        </button>
+
+                        {/* 2. Highlight Button */}
                         <button
                           type="button"
                           onClick={() => onToggleHighlightNews && onToggleHighlightNews(post.id)}
@@ -711,7 +727,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span>{isHighlighted ? 'हाइलाइटेड' : 'हाइलाइट'}</span>
                         </button>
 
-                        {/* 2. Edit Button */}
+                        {/* 3. Edit Button */}
                         <button
                           type="button"
                           onClick={() => setEditingPost(post)}
@@ -722,7 +738,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span>एडिट</span>
                         </button>
 
-                        {/* 3. Delete Button */}
+                        {/* 4. Delete Button */}
                         <button
                           type="button"
                           onClick={() => {
@@ -742,7 +758,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div>
                     <div className="relative h-48 w-full overflow-hidden bg-slate-950">
                       <img
-                        src={post.imageUrl || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop'}
+                        src={displayThumbnail}
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
