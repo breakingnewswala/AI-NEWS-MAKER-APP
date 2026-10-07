@@ -49,7 +49,16 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     return filterActiveVideos(videos);
   }, [videos]);
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'subeditor' || true;
+  // Frame Filter State: 'all' | '9:16' | '4:3' | '1:1'
+  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '4:3' | '1:1'>('all');
+
+  const filteredVideos = useMemo(() => {
+    if (selectedRatioFilter === 'all') return activeVideos;
+    return activeVideos.filter((v) => v.aspectRatio === selectedRatioFilter);
+  }, [activeVideos, selectedRatioFilter]);
+
+  // Role-based Admin check: ONLY Super Admin and Admin have access to video upload controls
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   const handleShare = (vid: VideoFeedItem) => {
     if (navigator.share) {
@@ -131,7 +140,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               4-दिन ऑटो-डिलीट सक्रिय
             </span>
 
-            {/* Admin Upload Button */}
+            {/* Admin Upload Button - ONLY for Super Admin & Admin */}
             {isAdmin && (
               <button
                 type="button"
@@ -145,15 +154,42 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
             <span className="hidden sm:inline-flex px-3 py-1 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full items-center gap-1.5">
               <Flame className="w-3.5 h-3.5 text-red-500" />
-              {activeVideos.length} एक्टिव वीडियो
+              {filteredVideos.length} वीडियो
             </span>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
-        {/* Admin Video Upload Panel (Control Panel) */}
-        {isAdminPanelOpen && (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 space-y-5">
+        {/* Frame Filter Buttons Bar (सभी, 9:16, 4:3, 1:1) */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {[
+            { id: 'all', label: 'सभी (All)' },
+            { id: '9:16', label: '9:16' },
+            { id: '4:3', label: '4:3' },
+            { id: '1:1', label: '1:1' },
+          ].map((f) => {
+            const isSelected = selectedRatioFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSelectedRatioFilter(f.id as any)}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 border ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 text-slate-950 border-amber-300 shadow-lg font-black scale-105 ring-2 ring-amber-400/50'
+                    : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span>{f.label}</span>
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Admin Video Upload Panel (Control Panel) - ONLY for Super Admin & Admin */}
+        {isAdmin && isAdminPanelOpen && (
           <div className="bg-slate-900 border-2 border-amber-500/60 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
@@ -334,8 +370,30 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         )}
 
         {/* Video Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {activeVideos.map((vid) => (
+        {filteredVideos.length === 0 ? (
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-10 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+              <Film className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-bold text-slate-300">
+              {selectedRatioFilter === 'all'
+                ? 'कोई वीडियो उपलब्ध नहीं है'
+                : `${selectedRatioFilter} रेशियो में कोई वीडियो नहीं मिला`}
+            </h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              अन्य रेशियो फ़िल्टर चुनें या "सभी (All)" पर क्लिक करके सभी उपलब्ध वीडियो देखें।
+            </p>
+            <button
+              type="button"
+              onClick={() => setSelectedRatioFilter('all')}
+              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl transition cursor-pointer"
+            >
+              सभी वीडियो देखें
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredVideos.map((vid) => (
             <div
               key={vid.id}
               className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all hover:shadow-xl flex flex-col justify-between group"
@@ -418,6 +476,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
           ))}
         </div>
+      )}
       </div>
     </div>
   );

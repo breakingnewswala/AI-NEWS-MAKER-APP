@@ -1555,6 +1555,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
                     <tr>
                       <th className="p-3">यूज़र विवरण</th>
+                      <th className="p-3">लोगो प्रिव्यू (नया / वर्तमान)</th>
                       <th className="p-3">चैनल नाम</th>
                       <th className="p-3">अनुरोध का कारण</th>
                       <th className="p-3">दिनांक</th>
@@ -1567,6 +1568,29 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="p-3">
                           <div className="font-bold text-white font-mono">{req.userEmail}</div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            {req.newLogoUrl ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-12 h-12 rounded-lg border-2 border-emerald-500/60 bg-slate-950 p-1 flex items-center justify-center overflow-hidden shadow-md">
+                                  <img src={req.newLogoUrl} alt="New Logo" className="max-w-full max-h-full object-contain" />
+                                </div>
+                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1 rounded">नया लोगो</span>
+                              </div>
+                            ) : null}
+                            {req.currentLogoUrl ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-10 h-10 rounded-lg border border-slate-700 bg-slate-950 p-1 flex items-center justify-center overflow-hidden opacity-75">
+                                  <img src={req.currentLogoUrl} alt="Current Logo" className="max-w-full max-h-full object-contain" />
+                                </div>
+                                <span className="text-[9px] text-slate-400">वर्तमान</span>
+                              </div>
+                            ) : null}
+                            {!req.newLogoUrl && !req.currentLogoUrl && (
+                              <span className="text-xs text-slate-500 italic">—</span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 font-semibold text-amber-300">
                           {req.channelName || '—'}

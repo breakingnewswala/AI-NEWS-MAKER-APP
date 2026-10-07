@@ -853,20 +853,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         </div>
 
-        {/* Subtle Discreet Admin Login / Footer Note */}
-        <div className="pt-8 pb-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500 border-t border-slate-800/60">
+        {/* Footer Note */}
+        <div className="pt-8 pb-4 flex items-center justify-center text-[11px] text-slate-500 border-t border-slate-800/60">
           <span>AI News Maker • डिजिटल न्यूज़ स्टूडियो</span>
-          {onOpenAdminLogin && (
-            <button
-              type="button"
-              onClick={onOpenAdminLogin}
-              className="text-slate-500 hover:text-amber-400/90 flex items-center gap-1.5 transition-colors cursor-pointer py-1 px-2.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800"
-              title="एडमिन लॉग इन करें"
-            >
-              <Lock className="w-3 h-3 text-slate-500" />
-              <span>Admin Login</span>
-            </button>
-          )}
         </div>
       </div>
 

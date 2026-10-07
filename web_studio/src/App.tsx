@@ -420,6 +420,7 @@ export default function App() {
 
   // Studio mode: Graphic Design vs Video Design (Web parity with Android)
   const [studioMode, setStudioMode] = useState<'graphic' | 'video'>('graphic');
+  const [studioInitialItem, setStudioInitialItem] = useState<VideoFeedItem | null>(null);
   const [studioInitialVideo, setStudioInitialVideo] = useState<string | null>(null);
   const [studioInitialHeadline, setStudioInitialHeadline] = useState<string | null>(null);
 
@@ -1288,6 +1289,7 @@ export default function App() {
 
   const handleOpenStudioWithVideo = (vid: VideoFeedItem) => {
     setStudioMode('video');
+    setStudioInitialItem(vid);
     setStudioInitialVideo(vid.videoUrl || null);
     setStudioInitialHeadline(vid.title);
     setCard((prev) => ({
@@ -1547,6 +1549,8 @@ export default function App() {
           {studioMode === 'video' ? (
             <div className="w-full">
               <VideoStudioWeb
+                currentUser={currentUser}
+                initialVideo={studioInitialItem}
                 initialVideoUrl={studioInitialVideo || undefined}
                 initialHeadline={studioInitialHeadline || undefined}
                 onBackToGraphic={() => updateStudioMode('graphic')}

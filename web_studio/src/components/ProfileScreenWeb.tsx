@@ -37,10 +37,14 @@ import {
   ChevronDown,
   Film,
   Layers,
+  Mail,
+  MapPin,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { getApiUrl } from '../lib/apiConfig';
+import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import {
   getUserSubscription,
   setUserPlanTier,
@@ -143,9 +147,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const isLockedForUser = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoGifUrl));
   const [isLogoReqModalOpen, setIsLogoReqModalOpen] = useState(false);
   const [logoReqReason, setLogoReqReason] = useState("नया आधिकारिक चैनल लोगो अपडेट करना है");
+  const [newRequestedLogoUrl, setNewRequestedLogoUrl] = useState<string>('');
   const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
     getUserLogoChangeRequestStatus(currentUser?.email || '')
   );
+
+  const handleNewRequestedLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const res = ev.target?.result as string;
+      if (res) setNewRequestedLogoUrl(res);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     const handleLogoUpdates = () => {
@@ -1311,66 +1327,155 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               {/* लोगो बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
               {isLogoReqModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
                           <ShieldCheck className="w-5 h-5" />
                         </div>
                         <div>
-                          <h3 className="text-white font-bold text-sm sm:text-base font-['Baloo_2']">
+                          <h3 className="text-white font-bold text-base">
                             लोगो बदलने हेतु एडमिन से अनुरोध
                           </h3>
-                          <p className="text-[11px] text-slate-400">लोगो बदलने हेतु एडमिन से अनुरोध</p>
+                          <p className="text-[11px] text-slate-400">
+                            नया लोगो अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें
+                          </p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setIsLogoReqModalOpen(false)}
-                        className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                        className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer"
                       >
                         ✕
                       </button>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
-                        <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0">
-                          <img
-                            src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl || '/assets/breaking_news_wala_logo.png'}
-                            alt="Current Logo"
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-white">
+                    <div className="space-y-4">
+                      {/* Current & New Logo Preview Side-by-Side */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* 1. Current Logo */}
+                        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-400 block">
+                            1. वर्तमान चैनल लोगो (Current Logo):
+                          </span>
+                          <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl || '/assets/ai_news_maker_logo.png'}
+                              alt="Current Logo"
+                              className="max-h-20 w-auto object-contain"
+                            />
+                          </div>
+                          <div className="text-[11px] text-slate-300 font-bold truncate">
                             {channelProfile.channelNameHi || 'वर्तमान चैनल'}
                           </div>
-                          <div className="text-[11px] text-slate-400 font-mono">
-                            {currentUser?.email || 'यूज़र'}
+                        </div>
+
+                        {/* 2. New Logo Upload & Preview */}
+                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2">
+                          <span className="text-[11px] font-bold text-amber-300 block flex items-center justify-between">
+                            <span>2. नया लोगो (New Logo Upload):</span>
+                            {newRequestedLogoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setNewRequestedLogoUrl('')}
+                                className="text-[10px] text-red-400 hover:underline"
+                              >
+                                हटाएं
+                              </button>
+                            )}
+                          </span>
+                          <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                            {newRequestedLogoUrl ? (
+                              <img
+                                src={newRequestedLogoUrl}
+                                alt="New Logo Preview"
+                                className="max-h-20 w-auto object-contain"
+                              />
+                            ) : (
+                              <div className="text-center text-slate-500 space-y-1">
+                                <ImageIcon className="w-6 h-6 mx-auto opacity-60" />
+                                <span className="text-[10px] block">लोगो फ़ाइल चुनें</span>
+                              </div>
+                            )}
                           </div>
+                          <label className="w-full py-1.5 px-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition">
+                            <Upload className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{newRequestedLogoUrl ? 'लोगो बदलें' : '📁 नया लोगो चुनें'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/gif,image/*"
+                              onChange={handleNewRequestedLogoUpload}
+                              className="hidden"
+                            />
+                          </label>
                         </div>
                       </div>
 
+                      {/* Request Status Info if active */}
+                      {logoReqStatus !== 'none' && (
+                        <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs font-bold ${
+                          logoReqStatus === 'pending'
+                            ? 'bg-amber-950/70 border-amber-500/50 text-amber-300'
+                            : logoReqStatus === 'approved'
+                            ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
+                            : 'bg-rose-950/70 border-rose-500/50 text-rose-300'
+                        }`}>
+                          <span>वर्तमान स्थिति (Request Status):</span>
+                          <span>
+                            {logoReqStatus === 'pending'
+                              ? '⏳ लंबित (Admin Review Underway)'
+                              : logoReqStatus === 'approved'
+                              ? '✅ स्वीकृत (Approved)'
+                              : '❌ अस्वीकृत (Rejected)'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Reason Textarea */}
                       <div>
                         <label className="block text-xs font-bold text-slate-300 mb-1">
                           लोगो बदलने का कारण (Reason for Logo Change) *
                         </label>
                         <textarea
-                          rows={3}
+                          rows={2}
                           value={logoReqReason}
                           onChange={(e) => setLogoReqReason(e.target.value)}
-                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें (उदा. चैनल का नया लोगो जारी हुआ है)"
+                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें..."
                           className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500"
                         />
                       </div>
 
-                      <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300/90 leading-relaxed">
-                        ℹ️ अनुरोध सबमिट करने के बाद एडमिन द्वारा स्वीकृति मिलते ही आपका लोगो अनलॉक कर दिया जाएगा और आप नया लोगो अपलोड कर सकेंगे।
+                      {/* Support Email & Central Contact Number Display */}
+                      <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300">
+                        <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>आधिकारिक सहायता व सत्यापन डेस्क (Support Info):</span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-300">
+                          <div className="flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-slate-400" />
+                            <a
+                              href={`mailto:${APP_SUPPORT_CONFIG.supportEmail}`}
+                              className="text-amber-300 hover:underline font-mono"
+                            >
+                              {APP_SUPPORT_CONFIG.supportEmail}
+                            </a>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                            <a
+                              href={`tel:${APP_SUPPORT_CONFIG.supportPhone}`}
+                              className="text-emerald-300 hover:underline font-mono font-bold"
+                            >
+                              {APP_SUPPORT_CONFIG.supportPhone}
+                            </a>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                       <button
                         type="button"
                         onClick={() => setIsLogoReqModalOpen(false)}
@@ -1389,13 +1494,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             currentUser?.email || '',
                             channelProfile.channelNameHi || '',
                             channelProfile.channelLogoUrl,
-                            logoReqReason.trim()
+                            logoReqReason.trim(),
+                            newRequestedLogoUrl || undefined
                           );
                           setLogoReqStatus('pending');
                           setIsLogoReqModalOpen(false);
-                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा स्वीकृति मिलते ही आप नया लोगो अपलोड कर सकेंगे।');
+                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।');
                         }}
-                        className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
+                        className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
                       >
                         अनुरोध सबमिट करें (Submit Request)
                       </button>
@@ -1988,78 +2094,115 @@ return (
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
         {/* User Identity & Active Plan Header Card */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-slate-950 text-2xl font-black shadow-lg">
-              {isAdmin ? '👑' : '📰'}
-            </div>
-            <div className="text-center sm:text-left">
-              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                <h2 className="text-lg font-black text-white">{currentUser?.name || 'मुख्य संपादक'}</h2>
-                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
-                  {isUserSuperAdmin(effectiveUser || currentUser) ? '👑 सुपर एडमिन (Super Admin)' : isAdmin ? '🛡️ एडमिन (Admin)' : '👤 संवाददाता'}
-                </span>
-                {/* Active Plan Tier Badge */}
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-sm ${
-                  subscription.tier === 'basic'
-                    ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
-                    : subscription.tier === 'advanced'
-                    ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
-                    : subscription.tier === 'professional'
-                    ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
-                    : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
-                }`}>
-                  <Crown className="w-3 h-3" />
-                  <span>{activePlanDetail.nameHi}</span>
-                </span>
+        {(() => {
+          const displayUserName = currentUser?.name || channelProfile.fullName || 'यूज़र';
+          const rawUsername = channelProfile.username || currentUser?.username || '';
+          const displayUsername = rawUsername ? (rawUsername.startsWith('@') ? rawUsername : `@${rawUsername}`) : '';
+          const displayLocation = reporterDistrict || channelProfile.location || currentUser?.district || '';
+          const displayEmail = currentUser?.email || (effectiveUser?.email && !effectiveUser.email.includes('editor@ainewsmaker') ? effectiveUser.email : '');
+
+          return (
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
+                {/* User Avatar / Channel Logo */}
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
+                  {channelProfile.channelLogoUrl ? (
+                    <img
+                      src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
+                      alt={displayUserName}
+                      className="w-full h-full object-contain rounded-xl"
+                    />
+                  ) : (
+                    <span className="text-2xl">{isAdmin ? '👑' : '📰'}</span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 flex flex-col items-center sm:items-start">
+                  {/* User Name & Admin / Plan Badge */}
+                  <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                    <h2 className="text-lg sm:text-xl font-black text-white">{displayUserName}</h2>
+                    {isAdmin && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
+                        {isUserSuperAdmin(effectiveUser || currentUser) ? '👑 सुपर एडमिन' : '🛡️ एडमिन'}
+                      </span>
+                    )}
+                    {/* Active Plan Tier Badge */}
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-xs ${
+                      subscription.tier === 'basic'
+                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                        : subscription.tier === 'advanced'
+                        ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
+                        : subscription.tier === 'professional'
+                        ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
+                        : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                    }`}>
+                      <Crown className="w-3 h-3" />
+                      <span>{activePlanDetail.nameHi}</span>
+                    </span>
+                  </div>
+
+                  {/* Username & Location - Clean & Real Data */}
+                  {(displayUsername || displayLocation) && (
+                    <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap text-xs text-slate-300">
+                      {displayUsername && (
+                        <span className="font-bold text-amber-300 font-mono">{displayUsername}</span>
+                      )}
+                      {displayUsername && displayLocation && <span className="text-slate-600">•</span>}
+                      {displayLocation && (
+                        <span className="flex items-center gap-1 text-slate-300 font-medium">
+                          <MapPin className="w-3 h-3 text-red-400 shrink-0" />
+                          <span>{displayLocation}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Clean Email Display (No boxed container/border) */}
+                  {displayEmail && (
+                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-300 pt-0.5">
+                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="text-slate-200 font-mono">{displayEmail}</span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold ml-1">
+                        सत्यापित ID
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Primary Mobile Status */}
+                  <div className="flex items-center justify-center sm:justify-start gap-2 text-xs text-slate-400 pt-0.5">
+                    {subscription.isMobileLocked ? (
+                      <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
+                        <Lock className="w-3 h-3" />
+                        <span>प्राइमरी नंबर: +91 {subscription.primaryMobile}</span>
+                      </span>
+                    ) : (
+                      <span className="text-amber-400 text-xs flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Gmail Tracking ID */}
-              <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1 text-xs text-slate-300 font-medium">
-                <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] text-amber-300 font-mono">
-                  Gmail:
-                </span>
-                <span className="text-amber-200 font-mono">
-                  {currentUser?.email || (effectiveUser?.email && !effectiveUser.email.includes('editor@ainewsmaker') ? effectiveUser.email : 'ईमेल उपलब्ध नहीं')}
-                </span>
-                <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">
-                  सत्यापित ID
-                </span>
-              </div>
-
-              {/* Primary Mobile Status */}
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-1 text-xs text-slate-400">
-                {subscription.isMobileLocked ? (
-                  <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
-                    <Lock className="w-3 h-3" />
-                    <span>प्राइमरी नंबर: {subscription.primaryMobile}</span>
-                  </span>
-                ) : (
-                  <span className="text-amber-400 text-xs flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
-                  </span>
+              <div className="flex items-center justify-center sm:justify-end gap-2.5 flex-wrap">
+                {/* Primary Mobile Number Badge - Shown when locked via OTP */}
+                {subscription.isMobileLocked && (
+                  <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
+                    <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
+                      <span>+91 {subscription.primaryMobile}</span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800 flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>स्थायी लॉक</span>
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Primary Mobile Number Badge - Shown when locked via OTP */}
-            {subscription.isMobileLocked && (
-              <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
-                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
-                  <span>+91 {subscription.primaryMobile}</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-800 flex items-center gap-0.5">
-                    <Lock className="w-2.5 h-2.5" />
-                    <span>स्थायी लॉक</span>
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Global Plan Success Notice */}
         {planSuccessMsg && (

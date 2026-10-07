@@ -553,7 +553,12 @@ export function recordUserPlanAssignment(record: PlanUserRecord): void {
   }
 }
 
-export function assignPlanToUserManually(userEmail: string, tier: UserPlanTier, durationDays: number = 30): void {
+export function assignPlanToUserManually(
+  userEmail: string,
+  tier: UserPlanTier,
+  durationDays: number = 30,
+  activatedVia: string = 'Admin Manual Assignment'
+): void {
   const planDetail = getPlanDetail(tier);
   const now = Date.now();
   const expiresAt = now + durationDays * 24 * 60 * 60 * 1000;
@@ -564,7 +569,7 @@ export function assignPlanToUserManually(userEmail: string, tier: UserPlanTier, 
     planName: planDetail.planKey,
     activatedAt: now,
     expiresAt,
-    activatedVia: 'Admin Manual Assignment',
+    activatedVia,
   });
 }
 
@@ -1028,6 +1033,7 @@ export interface LogoChangeRequest {
   userEmail: string;
   channelName: string;
   currentLogoUrl?: string;
+  newLogoUrl?: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: number;
@@ -1046,7 +1052,8 @@ export function submitLogoChangeRequest(
   userEmail: string,
   channelName: string,
   currentLogoUrl: string | undefined,
-  reason: string
+  reason: string,
+  newLogoUrl?: string
 ): LogoChangeRequest {
   const reqs = getLogoChangeRequests();
   const newReq: LogoChangeRequest = {
@@ -1054,6 +1061,7 @@ export function submitLogoChangeRequest(
     userEmail: userEmail.toLowerCase().trim(),
     channelName,
     currentLogoUrl,
+    newLogoUrl,
     reason,
     status: 'pending',
     createdAt: Date.now(),
@@ -1096,6 +1104,30 @@ export function approveLogoChangeRequest(requestId: string): void {
         localStorage.setItem('unlocked_channel_profiles', JSON.stringify(unlocked));
       }
 
+      // When admin approves, if a new logo was uploaded, sync it as the user's permanent saved channel logo
+      if (req.newLogoUrl) {
+        try {
+          const userProfKey = `user_profile_${cleanEmail}`;
+          let prof: any = {};
+          const existingRaw = localStorage.getItem(userProfKey);
+          if (existingRaw) prof = JSON.parse(existingRaw);
+          prof.channelLogoUrl = req.newLogoUrl;
+          prof.channelLogoPngUrl = req.newLogoUrl;
+          localStorage.setItem(userProfKey, JSON.stringify(prof));
+
+          // Also update active session profile if it matches the current user
+          const activeProfRaw = localStorage.getItem('user_channel_profile');
+          if (activeProfRaw) {
+            const activeProf = JSON.parse(activeProfRaw);
+            activeProf.channelLogoUrl = req.newLogoUrl;
+            activeProf.channelLogoPngUrl = req.newLogoUrl;
+            localStorage.setItem('user_channel_profile', JSON.stringify(activeProf));
+          }
+        } catch (e) {
+          console.warn('Error applying approved logo:', e);
+        }
+      }
+
       try {
         const users = getPlanUsers();
         const u = users.find((x) => x.email.toLowerCase() === cleanEmail);
@@ -1105,6 +1137,7 @@ export function approveLogoChangeRequest(requestId: string): void {
         }
       } catch {}
 
+      window.dispatchEvent(new Event('channel_profile_updated'));
       window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
       window.dispatchEvent(new Event('ai_news_channel_profile_unlocked'));
       window.dispatchEvent(new Event('ai_news_plan_users_changed'));

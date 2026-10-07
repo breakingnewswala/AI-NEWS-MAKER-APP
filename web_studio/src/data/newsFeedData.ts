@@ -20,7 +20,7 @@ export interface VideoFeedItem {
   id: string;
   title: string;
   caption?: string;
-  aspectRatio?: '9:16' | '16:9' | '1:1' | '4:5';
+  aspectRatio?: '9:16' | '16:9' | '4:3' | '1:1' | '4:5';
   createdAt?: number; // timestamp in ms for 4-day auto-deletion system
   duration: string;
   channel: string;
@@ -301,6 +301,19 @@ export const INITIAL_VIDEOS: VideoFeedItem[] = [
     videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop',
     category: 'business'
+  },
+  {
+    id: 'vid-5',
+    title: 'विशेष रिपोर्ट: डिजिटल स्टूडियो और आधुनिक मीडिया टेक्नोलॉजी का प्रभाव',
+    caption: 'नई दिल्ली स्थित मीडिया कॉन्क्लेव में आधुनिक AI टूल्स और ऑटोमेशन पर देश भर के शीर्ष पत्रकारों का विशेष सत्र।',
+    aspectRatio: '4:3',
+    createdAt: Date.now() - 3600 * 1000 * 32,
+    duration: '02:40',
+    channel: 'मीडिया वार्ता (Media News)',
+    views: '31K देखा गया',
+    videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop',
+    category: 'tech'
   }
 ];
 

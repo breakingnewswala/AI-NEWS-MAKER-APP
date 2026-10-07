@@ -39,7 +39,7 @@ import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
 
-export type VideoAspect = '4:5' | '9:16' | '16:9' | '1:1';
+export type VideoAspect = '4:5' | '9:16' | '16:9' | '1:1' | '4:3';
 export type VideoTransitionType = 'none' | 'fade' | 'flash' | 'zoom' | 'slide' | 'glitch';
 
 interface VideoStudioWebProps {
@@ -434,8 +434,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       // Render canvas snapshot with jacket
       const canvas = document.createElement('canvas');
-      const width = aspect === '9:16' ? 720 : aspect === '16:9' ? 1280 : 1080;
-      const height = aspect === '9:16' ? 1280 : aspect === '16:9' ? 720 : aspect === '4:5' ? 1350 : 1080;
+      const width = aspect === '9:16' ? 720 : aspect === '16:9' ? 1280 : aspect === '4:3' ? 960 : 1080;
+      const height = aspect === '9:16' ? 1280 : aspect === '16:9' ? 720 : aspect === '4:5' ? 1350 : aspect === '4:3' ? 720 : 1080;
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
@@ -619,6 +619,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       ? 'aspect-[9/16] max-w-[360px]'
       : aspect === '16:9'
       ? 'aspect-video max-w-[560px]'
+      : aspect === '4:3'
+      ? 'aspect-[4/3] max-w-[480px]'
       : 'aspect-square max-w-[420px]';
 
   return (
@@ -627,11 +629,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl text-xs text-neutral-300">
           <div className="flex items-center gap-2">
             <Film className="w-4 h-4 text-red-500" />
-            <span className="font-bold text-white">फ़ीड से प्राप्त वीडियो लोड हुआ</span>
+            <span className="font-bold text-white">फ़ीड से प्राप्त वीडियो लोड हुआ ({aspect})</span>
           </div>
           <span className="px-2.5 py-0.5 bg-amber-950/80 border border-amber-500/50 text-amber-300 text-[11px] font-black rounded-lg flex items-center gap-1">
             <Sparkles className="w-3 h-3" />
-            Active
+            {aspect} Studio Active
           </span>
         </div>
       )}
@@ -647,7 +649,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 <span className="text-red-400 font-black">लाइव वीडियो कैनवास</span>
               </div>
               <div className="flex items-center gap-1">
-                {(['9:16', '16:9', '1:1', '4:5'] as VideoAspect[]).map((r) => (
+                {(['9:16', '4:3', '1:1', '16:9', '4:5'] as VideoAspect[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -1079,12 +1081,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             </div>
 
             {/* Ratio Selector Buttons */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
               {[
-                { id: '9:16', label: '9:16', desc: 'रील्स / शॉर्ट्स' },
-                { id: '16:9', label: '16:9', desc: 'यूट्यूब / टीवी' },
+                { id: '9:16', label: '9:16', desc: 'रील्स' },
+                { id: '4:3', label: '4:3', desc: 'क्लासिक' },
                 { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
-                { id: '4:5', label: '4:5', desc: 'फ़ीड पोस्ट' },
+                { id: '16:9', label: '16:9', desc: 'यूट्यूब' },
+                { id: '4:5', label: '4:5', desc: 'फ़ीड' },
               ].map((r) => (
                 <button
                   key={r.id}
