@@ -67,6 +67,7 @@ import {
   AdminSystemMode,
   isChannelProfileLocked,
   registerOrUpdateUser,
+  getPlanUsers,
   submitLogoChangeRequest,
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
@@ -750,6 +751,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
     localStorage.setItem('app_channel_name', channelProfile.channelNameHi);
     localStorage.setItem('app_channel_name_en', channelProfile.channelNameEn);
+    localStorage.setItem('user_profile_data', JSON.stringify(updatedProfile));
+
+    const cleanEmail = (effectiveUser?.email || currentUser?.email || '').toLowerCase().trim();
+    if (cleanEmail) {
+      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
+    }
 
     // Save into centralized profile_header_footer_json
     const headerFooterConfig = {
@@ -772,17 +779,59 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     };
     localStorage.setItem('profile_header_footer_json', JSON.stringify(headerFooterConfig));
 
-    // For non-admin users, permanently lock profile & record in admin database
+    // For non-admin users, lock profile status
     if (!isAdmin) {
       localStorage.setItem('is_channel_profile_locked', 'true');
-      registerOrUpdateUser({
-        name: currentUser?.name || channelProfile.fullName || 'संपादक',
-        email: currentUser?.email || 'user@breakingnewswala.com',
-        channelName: channelProfile.channelNameHi,
-        channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
-        mobile: channelProfile.mobileNumber,
-        isLocked: true,
-      });
+    }
+
+    // Register or sync user profile record in system database
+    registerOrUpdateUser({
+      name: channelProfile.fullName || currentUser?.name || 'संपादक',
+      email: cleanEmail || 'user@breakingnewswala.com',
+      channelName: channelProfile.channelNameHi,
+      channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
+      mobile: channelProfile.mobileNumber,
+      username: channelProfile.username,
+      isLocked: !isAdmin,
+    });
+
+    // Sync to backend cloud server API so cloud domain retains updated branding & logo across refreshes
+    try {
+      const serverPayload = {
+        ...updatedProfile,
+        email: cleanEmail,
+        fullName: channelProfile.fullName || currentUser?.name || 'संपादक',
+        username: channelProfile.username,
+        websiteUrl: channelProfile.websiteUrl,
+        channelNameHi: channelProfile.channelNameHi,
+        channelNameEn: channelProfile.channelNameEn,
+        channelLogoUrl: channelProfile.channelLogoUrl,
+      };
+      fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverPayload),
+      }).catch(() => {});
+
+      if (cleanEmail) {
+        fetch(getApiUrl('/api/admin/update-user'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: cleanEmail,
+            updates: {
+              name: channelProfile.fullName || currentUser?.name,
+              channelName: channelProfile.channelNameHi,
+              channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
+              mobile: channelProfile.mobileNumber,
+              websiteUrl: channelProfile.websiteUrl,
+              username: channelProfile.username,
+            },
+          }),
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Cloud server sync failed:', err);
     }
 
     // Dispatch update event for active studio card

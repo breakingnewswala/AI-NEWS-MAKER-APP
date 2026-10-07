@@ -116,22 +116,23 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     setNotifPermission(perm);
   };
 
-  const handleRefreshClick = () => {
+  const handleRefreshClick = async () => {
     setIsRefreshing(true);
     setNotificationsList(getNotifications());
-    onRefresh();
-    if ('caches' in window) {
-      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      }
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 600);
     }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((r) => r.update());
-      });
-    }
-    setTimeout(() => {
-      setIsRefreshing(false);
-      window.location.reload();
-    }, 400);
   };
 
   return (

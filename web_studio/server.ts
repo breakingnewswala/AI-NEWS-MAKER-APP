@@ -1494,6 +1494,49 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
   }
 });
 
+app.get("/api/admin/users", (req, res) => {
+  try {
+    const allProfiles = loadProfilesDatabase();
+    return res.json({ success: true, users: Object.values(allProfiles) });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/admin/update-user", (req, res) => {
+  try {
+    const { userId, updates } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const key = userId.trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    const existing = allProfiles[key] || Object.values(allProfiles).find(p => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
+    const effectiveKey = existing.username?.toLowerCase() || existing.email?.toLowerCase() || key;
+    allProfiles[effectiveKey] = {
+      ...existing,
+      ...updates,
+      updatedAt: Date.now()
+    };
+    saveProfilesDatabase(allProfiles);
+    return res.json({ success: true, user: allProfiles[effectiveKey] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/admin/delete-user", (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const key = userId.trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    delete allProfiles[key];
+    saveProfilesDatabase(allProfiles);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // ==========================================
 // TWILIO INTEGRATION SERVICE (SMS & WHATSAPP)
 // ==========================================

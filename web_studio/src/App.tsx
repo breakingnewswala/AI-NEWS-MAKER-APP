@@ -1476,7 +1476,11 @@ export default function App() {
           <AppTopBarWeb
             currentTab={currentTab}
             currentUser={currentUser}
-            onRefresh={() => setToastMessage('फ़ीड रीफ्रेश हो गई है!')}
+            onRefresh={async () => {
+              await fetchLiveNews();
+              window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+              setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
+            }}
             onNavigateToTab={(tab) => {
               setCurrentTab(tab);
               window.location.hash = tab;

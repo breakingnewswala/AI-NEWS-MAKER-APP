@@ -196,6 +196,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         }
       } catch {}
 
+      const defaultName = displayName || prefix.split('.')[0] || 'User';
+
       const user: ReporterUser = {
         username: existingUsername,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
