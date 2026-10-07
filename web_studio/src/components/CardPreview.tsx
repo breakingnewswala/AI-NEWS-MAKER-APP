@@ -524,36 +524,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
         {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
           <div className="w-full h-full overflow-hidden relative">
-            {card.images?.main && card.images.main.trim().length > 0 && card.images.main !== FALLBACK_NEWS_BG && card.images.main !== '/assets/placeholder_news_photo.png' ? (
-              <img
-                src={mainPhotoSrc}
-                alt=""
-                className="w-full h-full object-cover transition-all duration-150"
-                style={mainStyle}
-                onError={handleImgError}
-              />
-            ) : (
-              /* Reference Template Instructional State Layer */
-              <div className="w-full h-full bg-gradient-to-br from-slate-900 via-neutral-900 to-black flex flex-col items-center justify-center p-4 text-center select-none relative">
-                {/* Subtle photo grid texture */}
-                <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-35 pointer-events-none" />
-                <div className="relative z-10 flex flex-col items-center max-w-[280px]">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-md mb-2">
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>स्टेप 4 : फोटो जोड़ें</span>
-                  </div>
-                  <h3 className="font-extrabold text-white text-sm sm:text-base tracking-wide font-['Baloo_2']">
-                    कृपया अपनी न्यूज फोटो अपलोड करें
-                  </h3>
-                  <p className="text-slate-300 text-[11px] sm:text-xs font-['Baloo_2'] mt-1 leading-snug">
-                    गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं
-                  </p>
-                  <span className="text-amber-300/90 text-[10px] sm:text-[11px] font-['Baloo_2'] mt-1 font-bold">
-                    (1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)
-                  </span>
-                </div>
-              </div>
-            )}
+            <img
+              src={mainPhotoSrc}
+              alt="News Photo"
+              className="w-full h-full object-cover transition-all duration-150"
+              style={mainStyle}
+              onError={handleImgError}
+            />
           </div>
         )}
 
@@ -1005,7 +982,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           </svg>
 
           {/* Top-Left Channel Logo Area */}
-          <div className="absolute top-3 left-3 sm:top-5 sm:left-5 z-30 pointer-events-auto max-w-[45%]">
+          <div
+            className="absolute top-3 left-3 sm:top-5 sm:left-5 z-30 pointer-events-auto max-w-[45%]"
+            style={{
+              transform: `scale(${card.logoScale ?? 1.25})`,
+              transformOrigin: 'top left',
+            }}
+          >
             {card.customLogoUrl ? (
               <img
                 src={card.customLogoUrl}
@@ -1023,41 +1006,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
           {/* Top Area: Photo Section (Height ~50%) */}
           <div className="relative w-full h-[50%] flex items-center justify-center overflow-hidden z-20 pt-6">
-            {card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg' && card.images.main !== '/assets/placeholder_news_photo.png' ? (
-              <div className="w-full h-full relative overflow-hidden">
-                <img
-                  src={card.images.main}
-                  alt="News Photo"
-                  className="w-full h-full object-cover"
-                  style={{
-                    objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
-                    transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
-                  }}
-                />
-              </div>
-            ) : (
-              /* Default Photo Placeholder Layers */
-              <div className="flex flex-col items-center justify-center text-center px-4 max-w-[90%]">
-                <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-full border-2 border-[#FFE600] bg-black/50 flex items-center justify-center shadow-[0_0_20px_rgba(255,230,0,0.35)] mb-2.5">
-                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#FFE600] flex items-center justify-center text-neutral-950 shadow-inner">
-                    <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-950 fill-neutral-950" />
-                  </div>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-0.5 sm:py-1 rounded-full bg-[#DC2626] text-white font-black text-[11px] sm:text-xs shadow-md mb-2">
-                  <span>🖼️</span>
-                  <span>स्टेप 4 : फोटो जोड़ें</span>
-                </div>
-                <h2 className="font-black text-sm sm:text-lg text-white font-['Baloo_2'] leading-tight tracking-tight">
-                  कृपया अपनी न्यूज़ फोटो अपलोड करें
-                </h2>
-                <p className="font-bold text-xs sm:text-sm text-[#FFE600] font-['Baloo_2'] mt-0.5">
-                  गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं
-                </p>
-                <span className="font-medium text-[10px] sm:text-xs text-neutral-400 font-['Baloo_2'] mt-0.5">
-                  (1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)
-                </span>
-              </div>
-            )}
+            <div className="w-full h-full relative overflow-hidden">
+              <img
+                src={mainPhotoSrc}
+                alt="News Photo"
+                onError={handleImgError}
+                className="w-full h-full object-cover"
+                style={{
+                  objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
+                  transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
+                }}
+              />
+            </div>
           </div>
 
           {/* Middle Radiant Glowing Golden Divider */}
@@ -1104,9 +1064,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
-              footerBgColor="#FFFFFF"
-              footerTextColor="#111827"
-              footerIconStyle="color"
+              showMobileNumber={card.showMobileNumber}
+              activeSocialIcons={card.activeSocialIcons}
+              footerBgColor={card.footerBgColor || '#FFFFFF'}
+              footerTextColor={card.footerTextColor || '#111827'}
+              footerIconStyle={card.footerIconStyle || 'color'}
+              showMasterBranding={card.showMasterBranding}
             />
           </div>
         </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */

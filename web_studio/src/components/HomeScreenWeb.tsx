@@ -673,7 +673,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const isHighlighted = post.isExclusive;
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
               const isDefaultThumbActive = defaultThumbnailIds.has(post.id);
-              const displayThumbnail = isDefaultThumbActive ? '/assets/placeholder_news_search_square.jpg' : (post.imageUrl || '/assets/placeholder_news_search_square.jpg');
+              const displayThumbnail = isDefaultThumbActive ? '/assets/placeholder_news_search_16x9.jpg' : (post.imageUrl || '/assets/placeholder_news_search_16x9.jpg');
 
               return (
                 <div
@@ -815,36 +815,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center justify-between gap-2">
                     <button
                       onClick={() => onOpenStudioWithNews(post)}
-                      className="flex-1 py-2 bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                      className="flex-1 py-2 px-3 bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      खबर से ग्राफिक बनाएं
+                      <span>खबर से ग्राफिक बनाएं</span>
                     </button>
 
                     <button
                       onClick={() =>
                         setExpandedCardId(expandedCardId === post.id ? null : post.id)
                       }
-                      className={`p-2 rounded-xl transition-colors ${
+                      className={`py-2 px-3 rounded-xl transition-colors font-bold text-xs flex items-center justify-center gap-1.5 border ${
                         expandedCardId === post.id
-                          ? 'bg-amber-500 text-slate-950 font-bold'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
                       }`}
-                      title="पूरी खबर पढ़ें (विस्तार)"
+                      title="पूरी खबर पढ़ें"
                     >
-                      <FileText className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => handleShare(post)}
-                      className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors"
-                      title="शेयर करें"
-                    >
-                      {copiedId === post.id ? (
-                        <Check className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <Share2 className="w-4 h-4" />
-                      )}
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>{expandedCardId === post.id ? 'बंद करें' : 'पूरी खबर पढ़ें'}</span>
                     </button>
                   </div>
                 </div>

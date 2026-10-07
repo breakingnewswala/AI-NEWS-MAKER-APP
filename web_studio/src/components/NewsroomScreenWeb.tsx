@@ -81,7 +81,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-white overflow-x-hidden">
+    <div className="w-full max-w-full lg:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-white overflow-x-hidden">
       {/* 1. Header Banner */}
       <div className="w-full bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/50 border border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -126,9 +126,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       </div>
 
       {/* 2. Editorial Alert / Live Ticker Strip */}
-      <div className="w-full bg-slate-900/90 border border-amber-500/40 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5 shadow-lg overflow-hidden">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
-          <Megaphone className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0 animate-bounce" />
+      <div className="w-full max-w-full bg-slate-900/90 border border-amber-500/40 rounded-xl p-3 sm:p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-lg overflow-hidden">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden w-full sm:w-auto">
+          <Megaphone className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
           <div className="min-w-0 flex-1 truncate text-xs sm:text-sm">
             <span className="font-black text-amber-400 mr-2 shrink-0">ब्रेकिंग टिकर:</span>
             <span className="text-slate-200 font-medium">
@@ -140,7 +140,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         <button
           type="button"
           onClick={onNavigateToStudio}
-          className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-lg shrink-0 cursor-pointer transition active:scale-95 whitespace-nowrap"
+          className="self-end sm:self-auto px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-lg shrink-0 cursor-pointer transition active:scale-95 whitespace-nowrap"
         >
           टिकर बदलें
         </button>

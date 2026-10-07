@@ -6307,9 +6307,7 @@ async function drawThemeFooterBar(
 
   // Clean social handle
   let displayHandle = (socialHandle || '').trim();
-  if (!displayHandle || displayHandle === '/BreakingNewsWala') {
-    displayHandle = '@BreakingNewsWala';
-  } else if (!displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
+  if (displayHandle && !displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
     displayHandle = `@${displayHandle}`;
   }
 
@@ -6328,8 +6326,8 @@ async function drawThemeFooterBar(
 
   // Active social icons to display
   const icons: ('youtube' | 'facebook' | 'instagram' | 'twitter' | 'telegram' | 'whatsapp')[] =
-    activeSocialIcons && activeSocialIcons.length > 0
-      ? activeSocialIcons
+    Array.isArray(activeSocialIcons)
+      ? (activeSocialIcons.filter((i) => ['youtube', 'facebook', 'instagram', 'twitter', 'telegram'].includes(i)) as any)
       : ['youtube', 'facebook', 'instagram', 'twitter'];
 
   // Base typography & sizing strictly in Arial
@@ -6521,22 +6519,63 @@ export async function generateCardCanvas(
   if (!element) throw new Error('Preview element not found');
 
   const htmlElement = element as HTMLElement;
+
+  // 1. Ensure fonts are loaded
+  if (typeof document !== 'undefined' && (document as any).fonts && (document as any).fonts.ready) {
+    try {
+      await (document as any).fonts.ready;
+    } catch {}
+  }
+
+  // 2. Ensure all nested images are loaded
+  const imgElements = Array.from(htmlElement.querySelectorAll('img'));
+  if (imgElements.length > 0) {
+    await Promise.all(
+      imgElements.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise<void>((res) => {
+          img.onload = () => res();
+          img.onerror = () => res();
+        });
+      })
+    );
+  }
+
+  // 3. Temporarily reset transform & border radius for true full-bleed output
   const origTransform = htmlElement.style.transform;
+  const origBorderRadius = htmlElement.style.borderRadius;
   htmlElement.style.transform = 'none';
+  htmlElement.style.borderRadius = '0px';
 
   try {
-    const canvas = await html2canvas(htmlElement, {
-      width: 1080,
-      height: 1350,
-      scale: 1,
+    const elemWidth = htmlElement.offsetWidth || 540;
+    const targetWidth = 1080;
+    const targetHeight = 1350;
+    const dynamicScale = targetWidth / elemWidth;
+
+    const rawCanvas = await html2canvas(htmlElement, {
+      scale: dynamicScale,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#0a0a0a',
       logging: false,
+      imageTimeout: 15000,
     });
-    return canvas;
+
+    // Create normalized 1080x1350 canvas
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = targetWidth;
+    finalCanvas.height = targetHeight;
+    const ctx = finalCanvas.getContext('2d');
+    if (ctx) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(rawCanvas, 0, 0, targetWidth, targetHeight);
+    }
+    return finalCanvas;
   } finally {
     htmlElement.style.transform = origTransform;
+    htmlElement.style.borderRadius = origBorderRadius;
   }
 }
 

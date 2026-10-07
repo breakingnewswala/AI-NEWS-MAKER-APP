@@ -2343,6 +2343,68 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
         {/* Upload Buttons according to selected layout */}
         <div className="pt-2 border-t border-neutral-800/80 space-y-3">
+          {/* Internet Photo Search Workflow & Prompt Restoration */}
+          {(!card.images?.main || card.images.main.includes('placeholder_news_search') || card.images.main.includes('placeholder_news_photo')) && (
+            <div className="bg-gradient-to-br from-blue-950/70 via-slate-900 to-amber-950/40 border-2 border-blue-500/50 rounded-xl p-3.5 sm:p-4 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between gap-2 border-b border-blue-500/30 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
+                  <span className="text-xs sm:text-sm font-extrabold text-blue-300 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-blue-400" />
+                    इंटरनेट से संबंधित समाचार फोटो खोजें
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/40 px-2 py-0.5 rounded-full">
+                  स्टेप 4 गाइडेंस
+                </span>
+              </div>
+
+              <div className="bg-slate-950/80 border border-blue-500/20 rounded-lg p-3 text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1.5">
+                <p className="font-semibold text-amber-300">
+                  📌 <b>निर्देश:</b> इस खबर के विषय के अनुसार इंटरनेट पर संबंधित और वास्तविक समाचार फोटो खोजें। फोटो खबर के वास्तविक विषय, व्यक्ति, स्थान या घटना से संबंधित हो।
+                </p>
+                <p className="text-slate-300 text-[11px] sm:text-xs">
+                  ⚠️ गलत व्यक्ति, असंबंधित फोटो, logo, advertisement, stock image या unrelated image का उपयोग न करें। चुनी गई फोटो को डाउनलोड करके Graphic Studio के <b>Step 4 / Photos</b> में upload करें।
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {(() => {
+                  const searchQuery = (card.headline || card.title || 'ताज़ा समाचार')
+                    .replace(/\[\/?(yellow|red|white|cyan|green|orange|gold)\]/gi, '')
+                    .slice(0, 70)
+                    .trim();
+                  const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(searchQuery + (card.location ? ` ${card.location}` : ''))}`;
+                  return (
+                    <>
+                      <a
+                        href={searchUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-lg shadow-md flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer text-center"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>गूगल इमेज पर फोटो खोजें</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(searchQuery);
+                          alert('सर्च क्वेरी क्लिपबोर्ड में कॉपी हो गई!');
+                        }}
+                        className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-lg border border-slate-700 flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="सर्च टेक्स्ट कॉपी करें"
+                      >
+                        <span>क्वेरी कॉपी</span>
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           <div className="text-xs font-semibold text-neutral-300">
             तस्वीरें अपलोड करें:
           </div>

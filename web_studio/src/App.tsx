@@ -533,19 +533,27 @@ export default function App() {
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
-      if (e.detail) {
+        const activeSocialKeys = e.detail.socialIcons
+          ? Object.entries(e.detail.socialIcons)
+              .filter(([_, active]) => active)
+              .map(([key]) => key)
+          : undefined;
+
         setCard((prev) => ({
           ...prev,
           brandName: e.detail.channelNameHi || prev.brandName,
           brandTagline: e.detail.channelNameEn || prev.brandTagline,
+          channelNameHi: e.detail.channelNameHi || prev.channelNameHi,
+          channelNameEn: e.detail.channelNameEn || prev.channelNameEn,
           customLogoUrl: e.detail.channelLogoUrl || prev.customLogoUrl,
           customHeaderPng: e.detail.customHeaderPng !== undefined ? e.detail.customHeaderPng : prev.customHeaderPng,
           customFooterPng: e.detail.customFooterPng !== undefined ? e.detail.customFooterPng : prev.customFooterPng,
           socialHandle: e.detail.username ? (e.detail.username.startsWith('@') ? e.detail.username : `@${e.detail.username}`) : prev.socialHandle,
           websiteUrl: e.detail.websiteUrl || prev.websiteUrl,
           whatsappNumber: e.detail.mobileNumber || prev.whatsappNumber,
+          showMobileNumber: e.detail.showMobileNumber !== undefined ? e.detail.showMobileNumber : prev.showMobileNumber,
+          activeSocialIcons: activeSocialKeys !== undefined ? activeSocialKeys : prev.activeSocialIcons,
         }));
-      }
     };
     window.addEventListener('channel_profile_updated', handleProfileUpdated);
     return () => window.removeEventListener('channel_profile_updated', handleProfileUpdated);
@@ -1124,13 +1132,17 @@ export default function App() {
       setDownloadProgressText('कैनवास तैयार हो रहा है...');
       let canvas: HTMLCanvasElement | null = null;
       try {
-        canvas = await renderCardToCanvas(card);
-      } catch (renderErr) {
-        console.warn('renderCardToCanvas fallback to html2canvas:', renderErr);
+        canvas = await generateCardCanvas('news-card-container');
+      } catch (domErr) {
+        console.warn('generateCardCanvas DOM capture fallback to renderCardToCanvas:', domErr);
       }
 
       if (!canvas) {
-        canvas = await generateCardCanvas('news-card-container');
+        try {
+          canvas = await renderCardToCanvas(card);
+        } catch (renderErr) {
+          console.error('renderCardToCanvas fallback failed:', renderErr);
+        }
       }
 
       if (!canvas) {
@@ -1158,7 +1170,13 @@ export default function App() {
   const handleCopyToClipboard = async () => {
     try {
       setDownloading(true);
-      const canvas = await renderCardToCanvas(card);
+      let canvas: HTMLCanvasElement | null = null;
+      try {
+        canvas = await generateCardCanvas('news-card-container');
+      } catch (e) {
+        canvas = await renderCardToCanvas(card);
+      }
+      if (!canvas) throw new Error('Canvas rendering failed');
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         try {

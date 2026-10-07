@@ -624,7 +624,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       : 'aspect-square max-w-[420px]';
 
   return (
-    <div className="w-full flex flex-col gap-4 pb-24 text-slate-900">
+    <div className="w-full max-w-full overflow-x-hidden flex flex-col gap-4 pb-24 text-slate-900">
       {initialVideo && (
         <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl text-xs text-neutral-300">
           <div className="flex items-center gap-2">

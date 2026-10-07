@@ -1,7 +1,7 @@
 import { NewsCardData } from '../types';
 
 // Crisp SVG demo images matching user samples
-export const PLACEHOLDER_NEWS_IMG = '/assets/placeholder_news_photo.png';
+export const PLACEHOLDER_NEWS_IMG = '/assets/placeholder_news_search_square.jpg';
 export const SAMPLE_BUS_IMG = '/assets/sample_news_bus.svg';
 export const SAMPLE_TRUCK_IMG = 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=900&auto=format&fit=crop&q=80';
 export const SAMPLE_WAREHOUSE_IMG = 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=900&auto=format&fit=crop&q=80';
