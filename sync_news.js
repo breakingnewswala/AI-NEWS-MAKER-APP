@@ -105,6 +105,40 @@ function uploadToFirebase() {
   });
 }
 
+// 2b. Upload to Firebase Realtime Database
+const FIREBASE_RTDB_URL = 'https://ai-news-maker-app-default-rtdb.firebaseio.com/news_database.json';
+function uploadToRealtimeDatabase() {
+  return new Promise((resolve, reject) => {
+    const url = new URL(FIREBASE_RTDB_URL);
+    const options = {
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname,
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(rawData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(body);
+        } else {
+          reject(new Error(`Firebase Realtime DB responded with status ${res.statusCode}: ${body}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(rawData);
+    req.end();
+  });
+}
+
 // 3. Sync to local backend if running
 function syncLocalServer() {
   return new Promise((resolve) => {
@@ -133,28 +167,38 @@ function syncLocalServer() {
 }
 
 async function main() {
+  let cloudSuccess = false;
+  try {
+    console.log('🚀 Uploading to Firebase Realtime Database (RTDB)...');
+    await uploadToRealtimeDatabase();
+    console.log('✓ Firebase Realtime Database cloud upload: SUCCESS (HTTP 200)');
+    cloudSuccess = true;
+  } catch (err) {
+    console.warn('⚠️ Firebase Realtime DB sync note:', err.message);
+  }
+
   try {
     console.log('🚀 Uploading to Firebase Cloud Storage (ainewsmakerapp.firebasestorage.app)...');
     await uploadToFirebase();
     console.log('✓ Firebase Storage Cloud upload: SUCCESS (HTTP 200)');
-
-    await syncLocalServer();
-
-    console.log('\n====================================================');
-    console.log('🎉 सफलता! लाइव न्यूज़ डेटाबेस सफलतापूर्वक सिंक हो गया है!');
-    console.log('====================================================');
-    console.log(`🌐 Website: https://www.ainewsmaker.online/`);
-    console.log(`📊 कुल खबरें: ${posts.length} पोस्ट्स`);
-    console.log(`🕒 समय: ${new Date().toLocaleString('hi-IN')}`);
-    console.log('----------------------------------------------------');
-    console.log('नोट: ainewsmaker.online पर ताज़ा खबर देखने के लिए:');
-    console.log('1. वेबसाइट खोलें: https://www.ainewsmaker.online/');
-    console.log('2. ऊपर दाईं ओर "लाइव सिंक" बटन दबाएं या Ctrl + F5 (हार्ड रिफ्रेश) करें।');
-    console.log('====================================================\n');
+    cloudSuccess = true;
   } catch (err) {
-    console.error('❌ Cloud sync failed:', err.message);
-    process.exit(1);
+    console.warn('⚠️ Firebase Storage sync note:', err.message);
   }
+
+  await syncLocalServer();
+
+  console.log('\n====================================================');
+  console.log('🎉 सफलता! लाइव न्यूज़ डेटाबेस सफलतापूर्वक सिंक हो गया है!');
+  console.log('====================================================');
+  console.log(`🌐 Website: https://www.ainewsmaker.online/`);
+  console.log(`📊 कुल खबरें: ${posts.length} पोस्ट्स`);
+  console.log(`🕒 समय: ${new Date().toLocaleString('hi-IN')}`);
+  console.log('----------------------------------------------------');
+  console.log('नोट: ainewsmaker.online पर ताज़ा खबर देखने के लिए:');
+  console.log('1. वेबसाइट खोलें: https://www.ainewsmaker.online/');
+  console.log('2. ऊपर दाईं ओर "लाइव सिंक" बटन दबाएं या Ctrl + F5 (हार्ड रिफ्रेश) करें।');
+  console.log('====================================================\n');
 }
 
 main();

@@ -1,11 +1,12 @@
 {
   "projectId": "ai-news-maker-app",
-  "appId": "1:401033199805:android:cd2e59b0be2ae43bf5b7d4",
-  "apiKey": "AIzaSyDs4k9_UXdPIN2KPP83XfQwwotl934fvec",
+  "appId": "1:401033199805:web:f3a541f1dc51a2e1f5b7d4",
+  "apiKey": "AIzaSyBo9dbqeg-nmr5MTqqA068e7Xa-755HSO8",
   "authDomain": "ai-news-maker-app.firebaseapp.com",
+  "databaseURL": "https://ai-news-maker-app-default-rtdb.firebaseio.com",
   "storageBucket": "ai-news-maker-app.firebasestorage.app",
   "messagingSenderId": "401033199805",
-  "measurementId": "",
+  "measurementId": "G-J8JHSZMWWH",
   "oAuthClientId": "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
