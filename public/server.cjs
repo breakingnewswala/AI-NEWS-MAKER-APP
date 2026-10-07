@@ -1290,8 +1290,8 @@ app.post("/api/admin/update-user", (req, res) => {
     if (!userId) return res.status(400).json({ error: "userId is required" });
     const key = userId.trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
-    const existing = allProfiles[key] || Object.values(allProfiles).find(p => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
-    const effectiveKey = existing.username?.toLowerCase() || existing.email?.toLowerCase() || key;
+    const existing = allProfiles[key] || Object.values(allProfiles).find((p) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
+    const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
     allProfiles[effectiveKey] = {
       ...existing,
       ...updates,

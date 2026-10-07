@@ -1276,6 +1276,46 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/admin/users", (req, res) => {
+  try {
+    const allProfiles = loadProfilesDatabase();
+    return res.json({ success: true, users: Object.values(allProfiles) });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/update-user", (req, res) => {
+  try {
+    const { userId, updates } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const key = userId.trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    const existing = allProfiles[key] || Object.values(allProfiles).find((p) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
+    const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
+    allProfiles[effectiveKey] = {
+      ...existing,
+      ...updates,
+      updatedAt: Date.now()
+    };
+    saveProfilesDatabase(allProfiles);
+    return res.json({ success: true, user: allProfiles[effectiveKey] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/delete-user", (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+    const key = userId.trim().toLowerCase();
+    const allProfiles = loadProfilesDatabase();
+    delete allProfiles[key];
+    saveProfilesDatabase(allProfiles);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "ACc5f93634dce84c45a2c23c7063571f13";
 var TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "34b06e526dbca37904003a7ef6afae73";
 var TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || "SK60e777e96b2b42031b71af39f7399b81";
