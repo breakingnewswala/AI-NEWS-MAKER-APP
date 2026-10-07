@@ -50,6 +50,7 @@ import {
 import {
   isTemplateAvailableForUserPlan,
   getTemplateConfig,
+  GraphicPlanCategory,
 } from '../lib/graphicTemplatesRegistry';
 import {
   isTierSufficient,
@@ -220,11 +221,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const [internalMobileViewMode, setInternalMobileViewMode] = React.useState<'steps' | 'all'>('steps');
   const mobileViewMode = propMobileViewMode !== undefined ? propMobileViewMode : internalMobileViewMode;
   const setMobileViewMode = onToggleMobileViewMode || setInternalMobileViewMode;
-  const defaultFilter = effectiveAdmin ? 'all' : effectiveTier;
+  const defaultFilter = effectiveAdmin ? 'basic' : (effectiveTier === 'ultra' ? 'ultra' : effectiveTier === 'professional' ? 'professional' : effectiveTier === 'advanced' ? 'advanced' : 'basic');
   const [templatePlanFilter, setTemplatePlanFilter] = React.useState<string>(defaultFilter);
 
   React.useEffect(() => {
-    if (!effectiveAdmin) {
+    if (effectiveAdmin) {
+      if (templatePlanFilter === 'all') setTemplatePlanFilter('basic');
+    } else {
       if (effectiveTier === 'basic') setTemplatePlanFilter('basic');
       else if (effectiveTier === 'advanced') setTemplatePlanFilter('advanced');
       else if (effectiveTier === 'professional' && templatePlanFilter !== 'custom') setTemplatePlanFilter('professional');
@@ -232,42 +235,53 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     }
   }, [effectiveAdmin, effectiveTier]);
 
-  // Plan Categories for Step 1
+  // Plan Categories for Step 1: strictly 4 plan categories (Basic, Advance, Pro, VIP) + 5th Custom
   const planCategories = React.useMemo(() => {
+    const getCountForPlan = (category: GraphicPlanCategory) => {
+      return currentFrameOptions.filter((f) => {
+        const cfg = getTemplateConfig(f.id);
+        return cfg.isActive && cfg.allowedPlans.includes(category);
+      }).length;
+    };
+
+    const vipCount = currentFrameOptions.filter((f) => {
+      const cfg = getTemplateConfig(f.id);
+      return cfg.isActive;
+    }).length;
+
     if (effectiveAdmin) {
       return [
-        { id: 'all', label: 'सभी फ्रेम्स (All)', badge: `${currentFrameOptions.length + 1}` },
-        { id: 'basic', label: 'BASIC PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'basic').length}` },
-        { id: 'advanced', label: 'ADVANCE PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'advanced').length}` },
-        { id: 'professional', label: 'PRO PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'professional').length}` },
-        { id: 'ultra', label: 'VIP DESK PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'ultra').length}` },
-        { id: 'custom', label: 'CUSTOM FRAMES', badge: '1' },
+        { id: 'basic', label: 'Basic', badge: `${getCountForPlan('BASIC')}` },
+        { id: 'advanced', label: 'Advance', badge: `${getCountForPlan('ADVANCED')}` },
+        { id: 'professional', label: 'Pro', badge: `${getCountForPlan('PRO')}` },
+        { id: 'ultra', label: 'VIP', badge: `${vipCount}` },
+        { id: 'custom', label: 'Custom', badge: '1' },
       ];
     }
     if (effectiveTier === 'basic') {
       return [
-        { id: 'basic', label: 'BASIC PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'basic').length}` },
+        { id: 'basic', label: 'Basic', badge: `${getCountForPlan('BASIC')}` },
       ];
     }
     if (effectiveTier === 'advanced') {
       return [
-        { id: 'advanced', label: 'ADVANCE PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'advanced').length}` },
+        { id: 'advanced', label: 'Advance', badge: `${getCountForPlan('ADVANCED')}` },
       ];
     }
     if (effectiveTier === 'professional') {
       return [
-        { id: 'professional', label: 'PRO PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'professional').length}` },
-        { id: 'custom', label: 'CUSTOM FRAMES', badge: '1' },
+        { id: 'professional', label: 'Pro', badge: `${getCountForPlan('PRO')}` },
+        { id: 'custom', label: 'Custom', badge: '1' },
       ];
     }
     if (effectiveTier === 'ultra') {
       return [
-        { id: 'ultra', label: 'VIP DESK PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'ultra').length}` },
-        { id: 'custom', label: 'CUSTOM FRAMES', badge: '1' },
+        { id: 'ultra', label: 'VIP', badge: `${vipCount}` },
+        { id: 'custom', label: 'Custom', badge: '1' },
       ];
     }
     return [
-      { id: 'basic', label: 'BASIC PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'basic').length}` },
+      { id: 'basic', label: 'Basic', badge: `${getCountForPlan('BASIC')}` },
     ];
   }, [effectiveAdmin, effectiveTier, currentFrameOptions]);
 
@@ -1021,42 +1035,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               );
             })}
           </div>
-
-          {/* Quick 1-Tap Horizontal Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 border-t border-neutral-800/60 pt-2">
-            {currentFrameOptions
-              .filter((f) => isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin))
-              .filter((f) => templatePlanFilter === 'all' || f.requiredTier === templatePlanFilter)
-              .map((frame, idx) => {
-                const isSelected = (card.frameDesign || 'jacket-original') === frame.id;
-                const isUnlocked = effectiveAdmin || isTierSufficient(effectiveTier, frame.requiredTier);
-                return (
-                  <button
-                    key={frame.id}
-                    type="button"
-                    onClick={() => {
-                      if (isUnlocked) {
-                        onChange({ frameDesign: frame.id });
-                      } else {
-                        const tierLabel = frame.requiredTier === 'ultra' ? 'VIP DESK' : PLAN_KEY_MAP[frame.requiredTier] || frame.requiredTier.toUpperCase();
-                        alert(`यह ${frame.name} टेम्पलेट केवल ${tierLabel} प्लान में उपलब्ध है। कृपया प्रोफ़ाइल में जाकर अपना प्लान अपग्रेड करें।`);
-                      }
-                    }}
-                    className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-black transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap shadow-xs ${
-                      isSelected
-                        ? 'bg-amber-400 text-neutral-950 ring-2 ring-amber-300 font-black'
-                        : isUnlocked
-                        ? 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
-                        : 'bg-neutral-950/80 text-neutral-500 border border-neutral-800/60'
-                    }`}
-                  >
-                    <span>T{idx + 1}</span>
-                    <span>{frame.name.split(' ')[0]}</span>
-                    {!isUnlocked && <Lock className="w-2.5 h-2.5 text-amber-500" />}
-                  </button>
-                );
-              })}
-          </div>
         </div>
 
         {/* Custom Header & Footer Active Banner for Eligible User */}
@@ -1104,20 +1082,26 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {currentFrameOptions
               .filter((f) => isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin))
               .filter((f) => {
-                if (effectiveAdmin) return templatePlanFilter === 'all' || f.requiredTier === templatePlanFilter;
                 if (templatePlanFilter === 'custom') return false;
+                const cfg = getTemplateConfig(f.id);
+                if (!cfg.isActive) return false;
+                if (templatePlanFilter === 'basic') return cfg.allowedPlans.includes('BASIC');
+                if (templatePlanFilter === 'advanced') return cfg.allowedPlans.includes('ADVANCED');
+                if (templatePlanFilter === 'professional') return cfg.allowedPlans.includes('PRO');
+                if (templatePlanFilter === 'ultra') return true; // VIP desk has access to all active templates
                 return true;
               })
               .map((f) => {
                 const isSelected = (card.frameDesign || 'graphic_001') === f.id;
-                const isUnlocked = effectiveAdmin || isTierSufficient(effectiveTier, f.requiredTier);
-                const planDisplay = f.requiredTier === 'basic' 
+                const isUnlocked = effectiveAdmin || isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin);
+                const cfg = getTemplateConfig(f.id);
+                const planDisplay = cfg.allowedPlans.includes('BASIC') 
                   ? { name: 'BASIC', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' }
-                  : f.requiredTier === 'advanced'
+                  : cfg.allowedPlans.includes('ADVANCED')
                   ? { name: 'ADVANCE', color: 'bg-blue-500/20 text-blue-400 border-blue-500/40' }
-                  : f.requiredTier === 'professional'
+                  : cfg.allowedPlans.includes('PRO')
                   ? { name: 'PRO', color: 'bg-purple-500/20 text-purple-400 border-purple-500/40' }
-                  : { name: 'VIP DESK', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+                  : { name: 'VIP', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
 
                 return (
                   <div
@@ -1167,9 +1151,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 );
               })}
 
-            {/* Custom Frame Card — strictly visible only to PRO, VIP DESK, and Admin */}
+            {/* Custom Frame Card — strictly visible only to PRO, VIP DESK, and Admin on Custom tab */}
             {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') &&
-              (templatePlanFilter === 'all' || templatePlanFilter === 'custom' || templatePlanFilter === 'professional' || templatePlanFilter === 'ultra') && (
+              templatePlanFilter === 'custom' && (
                 <div
                   onClick={() => onChange({ frameDesign: 'custom-png' })}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer relative overflow-hidden select-none ${

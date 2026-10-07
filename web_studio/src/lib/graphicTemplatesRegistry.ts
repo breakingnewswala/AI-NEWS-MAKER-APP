@@ -70,6 +70,7 @@ export interface TemplatePlanConfig {
   allowedPlans: GraphicPlanCategory[];
   isActive: boolean;
   version: string;
+  customName?: string;
 }
 
 export const GRAPHIC_1_DEFINITION: GraphicTemplateDefinition = {
@@ -421,6 +422,7 @@ export function isTemplateAvailableForUserPlan(
   const config = getTemplateConfig(templateId);
   if (!config.isActive) return false;
   const userCat = normalizeUserPlanTier(userPlanTier);
+  if (userCat === 'VIP DESK') return true;
   return config.allowedPlans.includes(userCat);
 }
 

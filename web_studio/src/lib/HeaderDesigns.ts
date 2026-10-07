@@ -4,6 +4,7 @@ import {
   GraphicPlanCategory,
   getAdminAssignedPlan,
   categoryToPlanTier,
+  getTemplateConfig,
 } from './graphicTemplatesRegistry';
 
 export interface FrameOption {
@@ -13,7 +14,7 @@ export interface FrameOption {
   badge: string;
   requiredTier: UserPlanTier;
   planCategory: GraphicPlanCategory;
-  categoryLabel: string; // 'Basic Frames' | 'Advanced Frames' | 'Pro Frames' | 'VIP Desk Frames'
+  categoryLabel: string; // 'Basic' | 'Advance' | 'Pro' | 'VIP'
   graphicNumber?: number; // 1, 2, 3...
   aspectRatio: '4:5'; // Strictly 4:5
 }
@@ -94,15 +95,18 @@ export function registerFrameOption(option: FrameOption) {
  */
 export function getEffectiveFrameOptions(): FrameOption[] {
   return FRAME_OPTIONS.map((f) => {
-    const effectiveCategory = getAdminAssignedPlan(f.id, f.planCategory);
+    const cfg = getTemplateConfig(f.id);
+    const customName = cfg?.customName?.trim();
+    const effectiveCategory = (cfg?.allowedPlans && cfg.allowedPlans.length > 0) ? cfg.allowedPlans[0] : getAdminAssignedPlan(f.id, f.planCategory);
     const effectiveTier = categoryToPlanTier(effectiveCategory);
     const categoryLabel = 
-      effectiveCategory === 'BASIC' ? 'BASIC PACKAGE FRAMES' :
-      effectiveCategory === 'ADVANCED' ? 'ADVANCE PACKAGE FRAMES' :
-      effectiveCategory === 'PRO' ? 'PRO PACKAGE FRAMES' : 'VIP DESK PACKAGE FRAMES';
+      effectiveCategory === 'BASIC' ? 'Basic' :
+      effectiveCategory === 'ADVANCED' ? 'Advance' :
+      effectiveCategory === 'PRO' ? 'Pro' : 'VIP';
 
     return {
       ...f,
+      name: customName || f.name,
       planCategory: effectiveCategory,
       requiredTier: effectiveTier,
       categoryLabel,

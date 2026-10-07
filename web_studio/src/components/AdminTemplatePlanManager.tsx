@@ -12,6 +12,9 @@ import {
   Eye,
   ToggleLeft,
   ToggleRight,
+  Edit2,
+  Save,
+  X,
 } from 'lucide-react';
 import {
   GraphicPlanCategory,
@@ -37,10 +40,38 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [successToast, setSuccessToast] = useState<{ id: string; msg: string } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [tempCustomName, setTempCustomName] = useState<string>('');
 
   const refreshFrames = () => {
     setFrameOptions(getEffectiveFrameOptions());
     setTemplateConfigs(getAllTemplateConfigs());
+  };
+
+  const handleStartRename = (id: string, currentName: string) => {
+    setEditingId(id);
+    setTempCustomName(currentName);
+  };
+
+  const handleSaveRename = (id: string) => {
+    const trimmed = tempCustomName.trim();
+    if (!trimmed) {
+      alert('कृपया टेम्पलेट का नाम खाली न छोड़ें।');
+      return;
+    }
+    saveTemplateConfig(id, { customName: trimmed });
+    setEditingId(null);
+    refreshFrames();
+    setSuccessToast({
+      id,
+      msg: `टेम्पलेट का नाम बदलकर "${trimmed}" कर दिया गया है।`,
+    });
+    setTimeout(() => setSuccessToast(null), 2500);
+  };
+
+  const handleCancelRename = () => {
+    setEditingId(null);
+    setTempCustomName('');
   };
 
   useEffect(() => {
@@ -189,7 +220,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             const cfg = templateConfigs[f.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[f.id];
             return cfg && cfg.allowedPlans.includes(plan) && cfg.isActive;
           }).length;
-          const label = plan === 'ADVANCED' ? 'ADVANCE' : plan;
+          const label = plan === 'BASIC' ? 'Basic' : plan === 'ADVANCED' ? 'Advance' : plan === 'PRO' ? 'Pro' : 'VIP';
           const colorClass =
             plan === 'BASIC'
               ? 'border-emerald-500/30 text-emerald-400'
@@ -217,10 +248,10 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           {[
             { id: 'all', label: 'सभी (All)', count: frameOptions.length },
-            { id: 'BASIC', label: 'BASIC' },
-            { id: 'ADVANCED', label: 'ADVANCE' },
-            { id: 'PRO', label: 'PRO' },
-            { id: 'VIP DESK', label: 'VIP DESK' },
+            { id: 'BASIC', label: 'Basic' },
+            { id: 'ADVANCED', label: 'Advance' },
+            { id: 'PRO', label: 'Pro' },
+            { id: 'VIP DESK', label: 'VIP' },
           ].map((tab) => {
             const isActive = filterPlan === tab.id;
             return (
@@ -253,7 +284,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
         </div>
       </div>
 
-      {/* 4 Approved Templates List with Multi-Plan Selection */}
+      {/* 4 Approved Templates List with Multi-Plan Selection & Renaming */}
       <div className="space-y-4">
         {filteredFrames.map((frame) => {
           const cfg = templateConfigs[frame.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[frame.id] || {
@@ -261,6 +292,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             isActive: true,
             version: 'v1.0',
           };
+
+          const displayName = cfg.customName || frame.name;
 
           return (
             <div
@@ -271,15 +304,61 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   : 'bg-slate-950/40 border-slate-800/50 opacity-60'
               }`}
             >
-              {/* Header row: ID, Name, Version, Active Toggle */}
+              {/* Header row: ID, Name with inline Rename, Version, Active Toggle */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="font-mono text-xs font-black text-amber-400 px-2.5 py-0.5 bg-amber-400/10 rounded-lg border border-amber-400/20">
                     {frame.id}
                   </span>
-                  <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                    <span>{frame.name}</span>
-                  </h4>
+
+                  {editingId === frame.id ? (
+                    <div className="flex items-center gap-1.5 bg-slate-900 border border-amber-400/80 rounded-xl p-1 shadow-md">
+                      <input
+                        type="text"
+                        value={tempCustomName}
+                        onChange={(e) => setTempCustomName(e.target.value)}
+                        placeholder="टेम्पलेट का नया नाम..."
+                        className="px-2.5 py-1 bg-slate-950 text-white text-xs font-bold rounded-lg border border-slate-700 focus:outline-hidden focus:border-amber-400 min-w-[180px]"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveRename(frame.id);
+                          if (e.key === 'Escape') handleCancelRename();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveRename(frame.id)}
+                        className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        title="नाम सुरक्षित करें"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>सेव</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelRename}
+                        className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition"
+                        title="रद्द करें"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
+                        <span>{displayName}</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => handleStartRename(frame.id, displayName)}
+                        className="p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg cursor-pointer transition"
+                        title="टेम्पलेट का नाम बदलें (Rename Frame)"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
                     {cfg.version || 'v1.0'}
                   </span>
@@ -323,7 +402,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 {frame.description}
               </p>
 
-              {/* Multi-Plan Checkbox Row: Available For (BASIC, ADVANCE, PRO, VIP DESK) */}
+              {/* Multi-Plan Checkbox Row: Available For (Basic, Advance, Pro, VIP) */}
               <div className="pt-2 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span className="text-xs font-black text-amber-300 uppercase tracking-wide">
                   Available For (उपलब्ध प्लान्स):
@@ -332,7 +411,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 <div className="flex items-center gap-2 flex-wrap">
                   {(['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'] as GraphicPlanCategory[]).map((plan) => {
                     const isChecked = cfg.allowedPlans.includes(plan);
-                    const label = plan === 'ADVANCED' ? 'ADVANCE' : plan;
+                    const label = plan === 'BASIC' ? 'Basic' : plan === 'ADVANCED' ? 'Advance' : plan === 'PRO' ? 'Pro' : 'VIP';
 
                     return (
                       <label
