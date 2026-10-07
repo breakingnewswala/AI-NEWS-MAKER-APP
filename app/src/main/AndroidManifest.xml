@@ -16,15 +16,9 @@
         android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-<<<<<<< HEAD
         android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.MyApplication">
-=======
-        android:theme="@style/Theme.MyApplication"
-        android:usesCleartextTraffic="true">
-
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
         <activity
             android:name="com.example.MainActivity"
             android:exported="true"
