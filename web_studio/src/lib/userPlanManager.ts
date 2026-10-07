@@ -513,8 +513,6 @@ export interface PlanUserRecord {
   email: string;
   name?: string;
   role?: 'superadmin' | 'admin' | 'reporter' | 'user';
-  name?: string;
-
   mobile?: string;
   channelName?: string;
   tier: UserPlanTier;
@@ -527,7 +525,6 @@ export interface PlanUserRecord {
   websiteUrl?: string;
   channelLogoUrl?: string;
   socialIcons?: Record<string, boolean>;
-
 }
 
 export function getPlanUsers(): PlanUserRecord[] {
@@ -936,6 +933,7 @@ export interface AccountUniquenessInput {
 export function checkAccountUniqueness(input: {
   channelName?: string;
   username?: string;
+  websiteUrl?: string;
   currentEmail?: string;
 }): { valid: boolean; error?: string } {
   const cleanEmail = (input.currentEmail || '').trim().toLowerCase();

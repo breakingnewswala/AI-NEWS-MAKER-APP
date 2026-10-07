@@ -1414,23 +1414,21 @@ export default function App() {
               const cleanEmail = user.email?.toLowerCase().trim() || '';
               const userSpecificStr = cleanEmail ? localStorage.getItem(`user_profile_${cleanEmail}`) : null;
               const profileStr = userSpecificStr || localStorage.getItem('user_channel_profile');
-              const isOnboardingDone = localStorage.getItem('is_onboarding_completed') === 'true';
-              if (isOnboardingDone && profileStr) {
+              if (profileStr) {
                 const parsed = JSON.parse(profileStr);
-                if (parsed?.channelNameHi && parsed?.username) {
+                if (parsed?.channelNameHi) {
                   localStorage.setItem('user_channel_profile', JSON.stringify(parsed));
-                  setIsOnboardingCompleted(true);
-                  setCurrentTab('home');
-                  window.location.hash = 'home';
-                  showToast(`स्वागत है, ${user.name || parsed.fullName || 'रिपोर्टर'}!`);
-                  return;
                 }
               }
             } catch {
               // proceed
             }
-            // For new users without completed profile, keep onboarding pending
-            setIsOnboardingCompleted(false);
+            // Ensure onboarding is marked completed so the user enters the homepage immediately
+            setIsOnboardingCompleted(true);
+            localStorage.setItem('is_onboarding_completed', 'true');
+            setCurrentTab('home');
+            window.location.hash = 'home';
+            showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
           }}
           onCompleteDetails={(profile, updatedUser) => {
             handleSaveProfile(profile);

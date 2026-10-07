@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { registerOrUpdateUser } from '../lib/userPlanManager';
 import {
   Lock,
   User,

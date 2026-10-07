@@ -42,6 +42,7 @@ import {
   ChevronDown,
   FolderTree,
   PlusCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   isUserSuperAdmin,
@@ -328,6 +329,55 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     setNewsPortals(updated);
     localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
   };
+
+  const handleSuperAdminAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddUserSuccessMsg('');
+    setAddUserErrorMsg('');
+
+    const email = newUserEmail.trim().toLowerCase();
+    const password = newUserPassword.trim();
+    const name = newUserName.trim();
+
+    if (!email || !password || !name) {
+      setAddUserErrorMsg('कृपया नाम, ईमेल और पासवर्ड भरें।');
+      return;
+    }
+
+    try {
+      // 1. Assign plan
+      assignPlanToUserManually(email, newUserPlan, 365, 'SuperAdmin Direct Creation');
+      
+      // 2. Save credentials in local storage
+      const customAccRaw = localStorage.getItem('reporter_custom_accounts');
+      const customAcc = customAccRaw ? JSON.parse(customAccRaw) : {};
+      customAcc[email] = {
+        pass: password,
+        user: {
+          username: email.split('@')[0],
+          name: name,
+          role: newUserRole,
+          email: email,
+          mobileNumber: newUserMobile.trim() || undefined,
+          channelName: newUserChannel.trim() || undefined,
+          planTier: newUserPlan,
+        },
+      };
+      localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAcc));
+
+      // 3. Refresh user list
+      setPlanUsers(getPlanUsers());
+      setAddUserSuccessMsg(`उपयोगकर्ता '${name}' (${email}) सफलतापूर्वक बनाया गया!`);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserMobile('');
+      setNewUserChannel('');
+    } catch (err: any) {
+      setAddUserErrorMsg(err.message || 'यूज़र बनाने में त्रुटि हुई।');
+    }
+  };
+
   const [manualUserEmail, setManualUserEmail] = useState<string>('');
   const [manualUserTier, setManualUserTier] = useState<UserPlanTier>('professional');
   const [manualDuration, setManualDuration] = useState<number>(30);
