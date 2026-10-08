@@ -265,14 +265,16 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Removed in Studio */}
           {!isStudio && (
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Refresh Button */}
-              <button
-                onClick={handleRefreshClick}
-                className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors"
-                title="फ़ीड रीफ्रेश करें"
-              >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-              </button>
+              {/* Refresh Button - Hidden on Control Panel */}
+              {!isControlPanel && (
+                <button
+                  onClick={handleRefreshClick}
+                  className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
+                  title="फ़ीड रीफ्रेश करें"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                </button>
+              )}
 
               {/* Real-time Notifications */}
               <div className="relative">

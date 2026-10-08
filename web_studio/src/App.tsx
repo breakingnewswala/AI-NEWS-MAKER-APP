@@ -386,7 +386,7 @@ export default function App() {
       }
       const savedSession = localStorage.getItem('reporter_auth_session');
       const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedSession || savedOnboarding === 'true') {
+      if (savedSession && savedOnboarding === 'true') {
         return true;
       }
       return false;
@@ -756,6 +756,9 @@ export default function App() {
 
   // Expose bridge functions for Android Native communication
   useEffect(() => {
+    (window as any).showAppToast = (msg: string) => {
+      showToast(msg);
+    };
     (window as any).setStudioTemplate = (templateId: string) => {
       setCard((prev) => ({ ...prev, frameDesign: templateId as any }));
       showToast(`टेम्पलेट लागू किया: ${templateId}`);
@@ -797,7 +800,7 @@ export default function App() {
     };
     (window as any).onAutoFillNewsLink = (newsData: AutoFillNewsData) => {
       if (newsData) {
-        const effectiveLink = newsData.url || (newsData.title ? `https://breakingnewswala.com/news/${encodeURIComponent(newsData.title.slice(0, 30))}` : 'https://breakingnewswala.com');
+        const effectiveLink = newsData.url || (newsData.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(newsData.title.slice(0, 30))}` : 'https://www.ainewsmaker.online');
         const effectiveLoc = newsData.location || 'मध्य प्रदेश';
 
         setStudioMode('graphic');
@@ -831,7 +834,8 @@ export default function App() {
           scrollToStepById('step-ai');
         }, 150);
 
-        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n#BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
+        const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
         }
@@ -847,7 +851,7 @@ export default function App() {
         if (raw && raw.trim() !== '') {
           const parsed = JSON.parse(raw);
           if (parsed && (parsed.url || parsed.title || parsed.summary)) {
-            const effectiveLink = parsed.url || (parsed.title ? `https://breakingnewswala.com/news/${encodeURIComponent(parsed.title.slice(0, 30))}` : 'https://breakingnewswala.com');
+            const effectiveLink = parsed.url || (parsed.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(parsed.title.slice(0, 30))}` : 'https://www.ainewsmaker.online');
             const effectiveLoc = parsed.location || 'मध्य प्रदेश';
 
             setCard((prev) => ({
@@ -931,6 +935,15 @@ export default function App() {
 
   // Full reset / clean card to default template matching user specification
   const handleResetCard = () => {
+    // Check if active draft or saved drafts exist
+    const drafts = getSavedDrafts();
+    const activeDraft = currentDraftId ? drafts.find((d) => d.id === currentDraftId) : drafts[0];
+    if (activeDraft && activeDraft.cardData) {
+      setCard(activeDraft.cardData);
+      showToast(`📂 ड्राफ्ट रीस्टोर हुआ: ${activeDraft.title || 'सहेजा गया ड्राफ्ट'}`);
+      return;
+    }
+
     const savedProfile = getSavedChannelProfile();
     const activeSocialKeys = savedProfile?.socialIcons
       ? Object.entries(savedProfile.socialIcons).filter(([_, active]) => active).map(([key]) => key)
@@ -952,7 +965,7 @@ export default function App() {
       },
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
-      customLogoUrl: savedProfile?.channelLogoUrl || prev.customLogoUrl || (currentUser as any)?.avatarUrl || '',
+      customLogoUrl: savedProfile?.channelLogoUrl || prev.customLogoUrl || '',
       brandName: savedProfile?.channelNameHi || prev.brandName || prev.channelNameHi || '',
       brandTagline: savedProfile?.channelNameEn || prev.brandTagline || prev.channelNameEn || '',
       channelNameHi: savedProfile?.channelNameHi || prev.channelNameHi || prev.brandName || '',
@@ -961,7 +974,7 @@ export default function App() {
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
         : (prev.socialHandle || '/@UserName'),
       whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '+91 98765 43210',
-      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || 'yourwebsite.com',
+      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || 'ainewsmaker.online',
       showMobileNumber: savedProfile?.showMobileNumber ?? prev.showMobileNumber ?? true,
       activeSocialIcons: activeSocialKeys,
       customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : prev.customHeaderPng,
@@ -1274,7 +1287,7 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
-    const effectiveLink = post.sourceUrl || (post.id ? `https://breakingnewswala.com/news/${post.id}` : 'https://breakingnewswala.com');
+    const effectiveLink = post.sourceUrl || (post.id ? `https://www.ainewsmaker.online/news/${post.id}` : 'https://www.ainewsmaker.online');
     const effectiveLoc = post.district || post.location || 'मध्य प्रदेश';
 
     setStudioMode('graphic');
@@ -1342,7 +1355,8 @@ export default function App() {
     }, 150);
 
     // Instantly copy social media caption to clipboard
-    const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
+    const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+    const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }
@@ -1683,9 +1697,9 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* 2. DEDICATED ACTION AREA JUST BELOW PREVIEW (Order: 1. JPG डाउनलोड करें, 2. कैप्शन, 3. रिफ्रेश, 4. ड्राफ्ट) */}
+                      {/* 2. DEDICATED ACTION AREA JUST BELOW PREVIEW (Order: 1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
                       <div className="w-full max-w-[min(100%,360px,calc((100vh-220px)*0.8))] mx-auto mt-2 grid grid-cols-4 gap-1.5">
-                        {/* 1. JPG डाउनलोड करें */}
+                        {/* 1. JPG डाउनलोड */}
                         <button
                           type="button"
                           onClick={() => handleDownload("jpeg")}
@@ -1694,7 +1708,7 @@ export default function App() {
                           title="कार्ड को 1080x1350 True 4:5 JPG में डाउनलोड करें"
                         >
                           <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                          <span className="truncate">{downloading ? "..." : "JPG डाउनलोड करें"}</span>
+                          <span className="truncate">{downloading ? "..." : "JPG डाउनलोड"}</span>
                         </button>
 
                         {/* 2. कैप्शन */}
@@ -1708,18 +1722,7 @@ export default function App() {
                           <span className="truncate">कैप्शन</span>
                         </button>
 
-                        {/* 3. रिफ्रेश */}
-                        <button
-                          type="button"
-                          onClick={handleResetCard}
-                          className="py-2.5 px-1 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] sm:text-[11px] font-bold rounded-xl border border-slate-700/80 shadow-sm flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                          title="कार्ड को डिफ़ॉल्ट टेम्पलेट में रीसेट करें"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                          <span className="truncate">रिफ्रेश</span>
-                        </button>
-
-                        {/* 4. ड्राफ्ट */}
+                        {/* 3. ड्राफ्ट */}
                         <button
                           type="button"
                           onClick={handleSaveDraft}
@@ -1728,6 +1731,17 @@ export default function App() {
                         >
                           <Bookmark className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                           <span className="truncate">ड्राफ्ट</span>
+                        </button>
+
+                        {/* 4. रिफ्रेश */}
+                        <button
+                          type="button"
+                          onClick={handleResetCard}
+                          className="py-2.5 px-1 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] sm:text-[11px] font-bold rounded-xl border border-slate-700/80 shadow-sm flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                          title="कार्ड को डिफ़ॉल्ट टेम्पलेट में रीसेट करें"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          <span className="truncate">रिफ्रेश</span>
                         </button>
                       </div>
 
@@ -1865,8 +1879,9 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 4 Responsive Buttons Row */}
+                    {/* Action Bar below Preview: 4 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
+                      {/* 1. JPG डाउनलोड */}
                       <button
                         type="button"
                         onClick={() => handleDownload('jpeg')}
@@ -1875,9 +1890,21 @@ export default function App() {
                         title="कार्ड को HD JPG इमेज में डाउनलोड करें"
                       >
                         <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
-                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'डाउनलोड (JPG)'}</span>
+                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
                       </button>
 
+                      {/* 2. कैप्शन */}
+                      <button
+                        type="button"
+                        onClick={() => setIsCaptionModalOpen(true)}
+                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title="कैप्शन और शेयर"
+                      >
+                        <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <span className="truncate">कैप्शन</span>
+                      </button>
+
+                      {/* 3. ड्राफ्ट */}
                       <button
                         type="button"
                         onClick={handleSaveCurrentCardAsDraft}
@@ -1885,27 +1912,18 @@ export default function App() {
                         title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
                       >
                         <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                        <span className="truncate">ड्राफ्ट सेव</span>
+                        <span className="truncate">ड्राफ्ट</span>
                       </button>
 
+                      {/* 4. रिफ्रेश */}
                       <button
                         type="button"
                         onClick={handleResetCard}
                         className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                         title="कार्ड रीसेट करें"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
                         <span>रिफ्रेश</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsCaptionModalOpen(true)}
-                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                        title="कैप्शन और शेयर"
-                      >
-                        <Share2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">कैप्शन शेयर</span>
                       </button>
                     </div>
 

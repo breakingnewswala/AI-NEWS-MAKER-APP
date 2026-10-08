@@ -65,6 +65,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const isNewsroom = currentTab === 'newsroom' || currentTab === 'drafts';
   const isControlPanel = currentTab === 'profile' || currentTab === 'export';
 
+
   useEffect(() => {
     const handleUpdate = () => {
       setCurrentTier(getUserSubscription().tier);
@@ -104,7 +105,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     studio: isHindi ? 'ग्राफिक स्टूडियो' : 'Graphic Studio',
     epaper: isHindi ? 'दैनिक ई-पेपर' : 'E-Paper',
     profile: isAdminUser
-      ? (isHindi ? 'कंट्रोल पैनल' : 'Control Panel')
+      ? (isHindi ? 'कंट्रोल रूम' : 'Control Room')
       : (isHindi ? 'मेरी प्रोफाइल' : 'My Profile'),
   };
 
@@ -115,22 +116,23 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     setNotifPermission(perm);
   };
 
-  const handleRefreshClick = () => {
+  const handleRefreshClick = async () => {
     setIsRefreshing(true);
     setNotificationsList(getNotifications());
-    onRefresh();
-    if ('caches' in window) {
-      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      }
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 600);
     }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((r) => r.update());
-      });
-    }
-    setTimeout(() => {
-      setIsRefreshing(false);
-      window.location.reload();
-    }, 400);
   };
 
   return (
@@ -193,7 +195,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                     </span>
                   </div>
 
-                  {/* Subtitle line: Smart Digital News Studio | Plan Name (Shown only once) */}
                   <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
                     <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
                       {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
@@ -208,7 +209,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             )}
 
           {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
-          <nav className="flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-0.5 sm:p-1 shrink-0 overflow-x-auto no-scrollbar max-w-[58vw] sm:max-w-none">
+          <nav className={`hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0 ${isStudio ? 'mx-auto' : ''}`}>
             <button
               onClick={() => onNavigateToTab('home')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -250,17 +251,30 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               📰 न्यूज़ रूम
             </button>
             <button
-              onClick={() => onNav          {/* Right Action Icons - Removed in Studio */}
+              onClick={() => onNavigateToTab('profile')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isControlPanel
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {isAdminUser ? '⚙️ कंट्रोल रूम' : '👤 प्रोफाइल'}
+            </button>
+          </nav>
+
+          {/* Right Action Icons - Removed in Studio */}
           {!isStudio && (
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Refresh Button */}
-              <button
-                onClick={handleRefreshClick}
-                className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors"
-                title="फ़ीड रीफ्रेश करें"
-              >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-              </button>
+              {/* Refresh Button - Hidden on Control Panel */}
+              {!isControlPanel && (
+                <button
+                  onClick={handleRefreshClick}
+                  className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
+                  title="फ़ीड रीफ्रेश करें"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                </button>
+              )}
 
               {/* Real-time Notifications */}
               <div className="relative">

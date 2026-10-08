@@ -122,10 +122,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return initialStep === 2 ? 2 : 1;
   });
 
-  // Quick Google Fallback Modal States (Localhost fallback if popup is blocked)
-  const [isQuickGoogleModalOpen, setIsQuickGoogleModalOpen] = useState<boolean>(false);
-  const [quickGoogleEmail, setQuickGoogleEmail] = useState<string>('');
-  const [quickGoogleName, setQuickGoogleName] = useState<string>('');
+  // Terms Acceptance State
+  const [acceptedTerms, setAcceptedTerms] = useState<boolean>(() => {
+    try {
+      const email = (currentUser?.email || '').toLowerCase().trim();
+      return email ? localStorage.getItem(`terms_accepted_${email}`) === 'true' : false;
+    } catch {
+      return false;
+    }
+  });
 
   // Login Form States (for Admin Login)
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -208,16 +213,47 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gifFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-generate username from English channel name unless customized
+  // Auto-save onboarding draft so leaving midway retains progress
   useEffect(() => {
-    if (!isUsernameCustomized && detailChannelNameEn) {
-      const sanitized = detailChannelNameEn
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .slice(0, 16);
-      if (sanitized) setUsername(sanitized);
+    const activeEmail = (currentUser?.email || tempRegisteredUser?.email || '').toLowerCase().trim();
+    if (activeEmail && currentStep === 2) {
+      const draftObj = {
+        fullName: detailFullName,
+        district: reportingDistrict,
+        channelNameHi: detailChannelNameHi,
+        channelNameEn: detailChannelNameEn,
+        username,
+        mobileNumber: primaryMobileNumber,
+        graphicContactNumber,
+        channelLogoUrl: detailChannelLogoUrl,
+        channelLogoGifUrl: detailChannelLogoGifUrl,
+        channelLogoType: detailChannelLogoType,
+        websiteUrl,
+        otpVerified,
+        acceptedTerms,
+      };
+      try {
+        localStorage.setItem(`onboarding_draft_${activeEmail}`, JSON.stringify(draftObj));
+      } catch {}
     }
-  }, [detailChannelNameEn, isUsernameCustomized]);
+  }, [
+    detailFullName,
+    reportingDistrict,
+    detailChannelNameHi,
+    detailChannelNameEn,
+    username,
+    primaryMobileNumber,
+    graphicContactNumber,
+    detailChannelLogoUrl,
+    detailChannelLogoGifUrl,
+    detailChannelLogoType,
+    websiteUrl,
+    otpVerified,
+    acceptedTerms,
+    currentStep,
+    currentUser,
+    tempRegisteredUser,
+  ]);
 
   // Sync user details if currentUser updates
   useEffect(() => {
@@ -303,7 +339,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const handleGoogleUserSuccess = (email: string, name?: string, picture?: string) => {
     activateFreeTrial();
     const cleanEmail = email.toLowerCase().trim();
-    const prefix = cleanEmail.split('@')[0] || 'user';
 
     const isSuper = isUserSuperAdmin(cleanEmail);
     let isAssignedAdmin = false;
@@ -319,103 +354,139 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     // 1. Check known registered users dictionary
     const knownProfile = KNOWN_REGISTERED_USERS[cleanEmail];
 
-    // 2. Check local storage for user profile
+    // 2. Check local storage for user profile & onboarding flag
+    const isCompletedFlag = localStorage.getItem(`onboarding_completed_${cleanEmail}`) === 'true';
     const userProfileKey = `user_profile_${cleanEmail}`;
     const userSpecificProfileStr = localStorage.getItem(userProfileKey);
-    const genericProfileStr = localStorage.getItem('user_channel_profile');
-    const existingProfileStr = userSpecificProfileStr || genericProfileStr;
-
     let parsedProfile: any = null;
-    if (existingProfileStr) {
+    if (userSpecificProfileStr) {
       try {
-        parsedProfile = JSON.parse(existingProfileStr);
+        parsedProfile = JSON.parse(userSpecificProfileStr);
       } catch {
         parsedProfile = null;
       }
     }
 
-    const isExistingUser = Boolean(
-      knownProfile ||
-      isAdmin ||
-      (parsedProfile && (parsedProfile.channelNameHi || parsedProfile.fullName) && (userSpecificProfileStr !== null || cleanEmail in KNOWN_REGISTERED_USERS))
+    const hasCompletedProfile = Boolean(
+      (knownProfile && knownProfile.channelLogoUrl) ||
+      (parsedProfile && parsedProfile.channelLogoUrl && parsedProfile.channelNameHi && parsedProfile.mobileNumber)
     );
 
-    // CRITICAL: PNG & GIF logo = BLANK by default. Never use Google profile photo as channel logo!
-    const existingLogo =
-      knownProfile?.channelLogoUrl ||
-      parsedProfile?.channelLogoUrl ||
-      (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+    // Only genuine existing users with completed setup (or admins) bypass onboarding directly to Home
+    const isExistingUser = isAdmin || isCompletedFlag || hasCompletedProfile;
 
-    const finalProfile: ChannelProfile = {
-      fullName: knownProfile?.fullName || parsedProfile?.fullName || name || (isAdmin ? 'मुख्य संपादक' : (name || prefix)),
-      channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
-      channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
-      channelLogoUrl: existingLogo, // BLANK by default, NEVER use picture!
-      channelLogoPngUrl: parsedProfile?.channelLogoPngUrl || (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''),
-      channelLogoGifUrl: parsedProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
-      channelLogoType: knownProfile?.channelLogoType || parsedProfile?.channelLogoType || 'png',
-      socialIcons: parsedProfile?.socialIcons || {
-        youtube: true,
-        facebook: true,
-        instagram: true,
-        twitter: false,
-        telegram: false,
-        whatsapp: true,
-      },
-      username: knownProfile?.username || parsedProfile?.username || '',
-      mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || primaryMobileNumber || '9669802408',
-      showMobileNumber: true,
-      websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
-    };
+    if (isExistingUser) {
+      // EXISTING user: direct Home
+      const existingLogo =
+        knownProfile?.channelLogoUrl ||
+        parsedProfile?.channelLogoUrl ||
+        (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
 
-    const googleUser: ReporterUser = {
-      username: finalProfile.username || '',
-      name: finalProfile.fullName || name || 'यूज़र',
-      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'user'),
-      district: knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
-      email: cleanEmail,
-      avatarUrl: picture, // Avatar photo only, NEVER channel logo
-    };
+      const finalProfile: ChannelProfile = {
+        fullName: knownProfile?.fullName || parsedProfile?.fullName || name || (isAdmin ? 'मुख्य संपादक' : 'यूज़र'),
+        channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
+        channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
+        channelLogoUrl: existingLogo,
+        channelLogoPngUrl: parsedProfile?.channelLogoPngUrl || (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''),
+        channelLogoGifUrl: parsedProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
+        channelLogoType: knownProfile?.channelLogoType || parsedProfile?.channelLogoType || 'png',
+        socialIcons: parsedProfile?.socialIcons || {
+          youtube: true,
+          facebook: true,
+          instagram: true,
+          twitter: false,
+          telegram: false,
+          whatsapp: true,
+        },
+        username: knownProfile?.username || parsedProfile?.username || '',
+        mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || primaryMobileNumber || '9669802408',
+        showMobileNumber: true,
+        websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
+      };
 
-    if (isAdmin) {
-      setAdminSystemMode('admin');
-    } else {
-      localStorage.setItem('is_channel_profile_locked', 'true');
-      finalProfile.isLocked = true;
+      const googleUser: ReporterUser = {
+        username: finalProfile.username || '',
+        name: finalProfile.fullName || name || 'यूज़र',
+        role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'user'),
+        district: knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
+        email: cleanEmail,
+        avatarUrl: picture, // Avatar photo only, NEVER channel logo
+      };
+
+      if (isAdmin) {
+        setAdminSystemMode('admin');
+      } else {
+        localStorage.setItem('is_channel_profile_locked', 'true');
+        finalProfile.isLocked = true;
+      }
+
+      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
+      localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
+      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+      localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
+      localStorage.setItem('is_onboarding_completed', 'true');
+      localStorage.removeItem('auth_current_step');
+
+      registerOrUpdateUser({
+        email: cleanEmail,
+        username: finalProfile.username,
+        name: googleUser.name,
+        mobile: finalProfile.mobileNumber,
+        channelName: finalProfile.channelNameHi,
+        channelLogoUrl: finalProfile.channelLogoUrl,
+        tier: isAdmin ? 'ultra' : 'basic',
+        role: googleUser.role,
+        isLocked: !isAdmin,
+      });
+
+      onLoginSuccess(googleUser);
+      onCompleteDetails(finalProfile, googleUser);
+      setIsLoggingIn(false);
+      return;
     }
 
-    // Always persist session immediately so refresh never loops back to Step 1
-    localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
-    localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
-    localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
-    localStorage.setItem('is_onboarding_completed', 'true');
-    localStorage.removeItem('auth_current_step');
+    // NEW Google user: Send to Step 2 (First-Time Onboarding/Profile Setup)
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      try {
+        Notification.requestPermission().catch(() => {});
+      } catch {}
+    }
 
-    setDetailFullName(googleUser.name);
-    setPrimaryMobileNumber(finalProfile.mobileNumber);
-    setGraphicContactNumber(finalProfile.mobileNumber);
-    setDetailChannelNameHi(finalProfile.channelNameHi);
-    setDetailChannelNameEn(finalProfile.channelNameEn);
-    setUsername(finalProfile.username);
+    let draftData: any = null;
+    try {
+      const draftStr = localStorage.getItem(`onboarding_draft_${cleanEmail}`);
+      if (draftStr) draftData = JSON.parse(draftStr);
+    } catch {}
 
-    // Register or update in Admin directory with single source of truth
-    registerOrUpdateUser({
+    const pendingUser: ReporterUser = {
+      username: draftData?.username || '',
+      name: draftData?.fullName || name || '',
+      role: 'user',
+      district: draftData?.district || '',
       email: cleanEmail,
-      username: finalProfile.username,
-      name: googleUser.name,
-      mobile: finalProfile.mobileNumber,
-      channelName: finalProfile.channelNameHi,
-      channelLogoUrl: finalProfile.channelLogoUrl,
-      tier: isAdmin ? 'ultra' : 'basic',
-      role: googleUser.role,
-      isLocked: !isAdmin,
-    });
+      avatarUrl: picture, // Google avatar is NOT channel logo
+    };
 
-    // Notify parent App.tsx with full profile & user session
-    onLoginSuccess(googleUser);
-    onCompleteDetails(finalProfile, googleUser);
+    setTempRegisteredUser(pendingUser);
+    setIsGoogleLoggedIn(true);
+
+    setDetailFullName(draftData?.fullName || name || '');
+    setReportingDistrict(draftData?.district || '');
+    setDetailChannelNameHi(draftData?.channelNameHi || (knownProfile?.channelNameHi || ''));
+    setDetailChannelNameEn(draftData?.channelNameEn || (knownProfile?.channelNameEn || ''));
+    setUsername(draftData?.username || '');
+    setIsUsernameCustomized(true);
+    setPrimaryMobileNumber(draftData?.mobileNumber || '');
+    setGraphicContactNumber(draftData?.graphicContactNumber || '');
+    setDetailChannelLogoUrl(draftData?.channelLogoUrl || '');
+    setDetailChannelLogoGifUrl(draftData?.channelLogoGifUrl || '');
+    setDetailChannelLogoType(draftData?.channelLogoType || 'png');
+    setWebsiteUrl(draftData?.websiteUrl || '');
+    setOtpVerified(Boolean(draftData?.otpVerified));
+    setAcceptedTerms(Boolean(draftData?.acceptedTerms));
+
+    setCurrentStep(2);
     setIsLoggingIn(false);
-    setIsQuickGoogleModalOpen(false);
   };
 
   // Expose handleGoogleUserSuccess globally for native AndroidBridge
@@ -467,8 +538,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           error_callback: (error: any) => {
             console.warn('Google auth popup error or closed:', error);
             setIsLoggingIn(false);
-            // Open fallback quick login modal so user is never blocked
-            setIsQuickGoogleModalOpen(true);
+            setLoginErrorMsg('Google लॉगिन विंडो बंद हो गई या लोड नहीं हो सकी। कृपया पुनः प्रयास करें।');
           },
         });
         tokenClient.requestAccessToken({ prompt: 'select_account' });
@@ -503,7 +573,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         (window as any).google.accounts.id.prompt((notification: any) => {
           if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
             setIsLoggingIn(false);
-            setIsQuickGoogleModalOpen(true);
+            setLoginErrorMsg('Google लॉगिन प्रॉम्प्ट लोड नहीं हो सका। कृपया पुनः प्रयास करें।');
           }
         });
         return;
@@ -513,8 +583,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
 
     setIsLoggingIn(false);
-    // If external Google scripts are blocked or origin not whitelisted on localhost/custom domain
-    setIsQuickGoogleModalOpen(true);
+    setLoginErrorMsg('Google प्रमाणीकरण सेवा उपलब्ध नहीं हो सकी। कृपया इंटरनेट कनेक्शन जांचें और पुनः प्रयास करें।');
   };
 
   // 2. Email/Username & Password Login Handler (Supports Admin Login)
@@ -703,6 +772,24 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
+    // Check Channel Logo (Mandatory)
+    if (!detailChannelLogoUrl || !detailChannelLogoUrl.trim()) {
+      setStep2ErrorMsg('⚠️ चैनल लोगो अपलोड करना अनिवार्य है। कृपया "लोगो चुनें" पर क्लिक करके अपने चैनल का लोगो अपलोड करें।');
+      return;
+    }
+
+    // Check Username (Mandatory)
+    if (!username || !username.trim()) {
+      setStep2ErrorMsg('⚠️ यूज़रनेम दर्ज करना अनिवार्य है (उदा. yourchannel)।');
+      return;
+    }
+
+    // Check Terms & Conditions Acceptance (Mandatory)
+    if (!acceptedTerms) {
+      setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए नियम व शर्तें (Terms & Conditions) और गोपनीयता नीति स्वीकार करना अनिवार्य है।');
+      return;
+    }
+
     // Verify OTP first if not already locked
     if (!otpVerified && !subscription.isMobileLocked) {
       setOtpError('कृपया आगे बढ़ने से पहले प्राइमरी मोबाइल नंबर का OTP सत्यापन पूरा करें।');
@@ -733,7 +820,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
       channelLogoType: detailChannelLogoType,
       socialIcons,
-      username: username.replace(/^@/, "").trim() || currentUser?.username || tempRegisteredUser?.username || "user",
+      username: username.replace(/^@/, "").trim(),
       mobileNumber: finalContact,
       showMobileNumber,
       websiteUrl: websiteUrl.trim() || "ainewsmaker.online",
@@ -755,6 +842,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     if (updatedUser.email) {
       const cleanEmail = updatedUser.email.toLowerCase().trim();
       localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+      localStorage.setItem(`terms_accepted_${cleanEmail}`, "true");
+      localStorage.setItem(`onboarding_completed_${cleanEmail}`, "true");
+      localStorage.removeItem(`onboarding_draft_${cleanEmail}`);
     }
 
     // Register or update in Admin directory
@@ -1029,6 +1119,23 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <User className="w-4 h-4" />
                   <span>A. पत्रकार / संपादक विवरण व प्राइमरी नंबर</span>
                 </h3>
+
+                {/* Google Authenticated Primary Email (Read-Only) */}
+                <div className="p-3 bg-slate-900/90 rounded-xl border border-blue-500/40 flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Mail className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-[10px] text-slate-400 block">Google Primary Email (सत्यापित ईमेल):</span>
+                      <span className="text-xs font-mono font-bold text-white truncate block">
+                        {(currentUser?.email || tempRegisteredUser?.email || '').toLowerCase() || 'authenticated@gmail.com'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold rounded-full shrink-0 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    Verified
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1597,6 +1704,42 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
               )}
 
+              {/* Mandatory Terms & Privacy Acceptance Checkbox */}
+              <div className="p-3 bg-slate-950/90 rounded-xl border border-slate-800 space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-amber-400 rounded"
+                  />
+                  <div className="text-xs text-slate-300 leading-relaxed">
+                    <span className="font-bold text-white">
+                      मैंने{' '}
+                      <a
+                        href="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-400 underline hover:text-amber-300"
+                      >
+                        नियम व शर्तें (Terms & Conditions)
+                      </a>{' '}
+                      और{' '}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-400 underline hover:text-amber-300"
+                      >
+                        गोपनीयता नीति (Privacy Policy)
+                      </a>{' '}
+                      को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               {/* Action Submit Buttons */}
               <div className="pt-2 space-y-2">
                 <button
@@ -1606,102 +1749,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <Sparkles className="w-5 h-5 text-slate-950" />
                   <span>सेव करें एवं होम फ़ीड शुरू करें →</span>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleCompleteSetupSubmit}
-                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
-                >
-                  <span>⚡ बाद में कस्टमाइज़ करें • सीधे होम फ़ीड पर जाएं (Skip & Enter App) →</span>
-                </button>
               </div>
             </form>
           </div>
         )}
       </main>
-
-      {/* Quick Google / Direct Gmail Login Modal (Fallback when external Google popup is blocked) */}
-      {isQuickGoogleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl space-y-4 text-left">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black">
-                  🌟
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-white">
-                    त्वरित Google / Gmail लॉगिन
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    1-क्लिक सुरक्षित आईडी से तुरंत प्रवेश करें
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsQuickGoogleModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Google पॉपअप ब्लॉक होने की स्थिति में आप अपना <strong>Gmail ईमेल</strong> दर्ज करके सीधे प्रवेश कर सकते हैं:
-            </p>
-
-            {/* Custom Gmail Form */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (quickGoogleEmail.trim()) {
-                  handleGoogleUserSuccess(quickGoogleEmail.trim(), quickGoogleName.trim() || undefined);
-                }
-              }}
-              className="pt-2 border-t border-slate-800 space-y-3"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  अपना Gmail ईमेल दर्ज करें:
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                  <input
-                    type="email"
-                    required
-                    value={quickGoogleEmail}
-                    onChange={(e) => setQuickGoogleEmail(e.target.value)}
-                    placeholder="yourname@gmail.com"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  आपका नाम (वैकल्पिक):
-                </label>
-                <input
-                  type="text"
-                  value={quickGoogleName}
-                  onChange={(e) => setQuickGoogleName(e.target.value)}
-                  placeholder="अपना नाम दर्ज करें"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-slate-950" />
-                <span>सीधे ऐप में प्रवेश करें →</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Manual Logo Cropper Modal */}
       <LogoCropperModal

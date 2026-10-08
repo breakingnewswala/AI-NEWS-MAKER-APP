@@ -1412,17 +1412,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           <span>JPG को PNG में बदलें</span>
                         </button>
                       </div>
-
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={handleAdminResetLogo}
-                          className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                          title="लोगो को मूल डिफ़ॉल्ट पर रीसेट करें"
-                        >
-                          <span>🔄 एडमिन लोगो रीसेट (Reset Logo)</span>
-                        </button>
-                      )}
                     </div>
                   </>
                 )}
@@ -2164,7 +2153,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 return (
     <div className="min-h-screen bg-slate-950 text-white pb-28">
       {/* Top Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 sticky top-14 z-20 backdrop-blur-md shadow-md">
+      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Check, Share2, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
+import { X, Copy, Check, Share2, Sparkles, Loader2 } from 'lucide-react';
 import { NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 
@@ -9,59 +9,43 @@ interface CaptionModalProps {
   card: NewsCardData;
 }
 
-// Helper to extract channel name and build Hindi & English channel hashtags
-function getChannelHashtags(card?: NewsCardData): { hindiTag: string; englishTag: string } {
-  let hiName = '';
-  let enName = '';
+// Helper to extract user's username for the first hashtag (#<username>)
+export function getUserFirstHashtag(card?: NewsCardData): string {
+  let uName = '';
 
   try {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed.channelNameHi) hiName = parsed.channelNameHi;
-      if (parsed.channelNameEn) enName = parsed.channelNameEn;
+      if (parsed.username) uName = parsed.username;
     }
   } catch {}
 
-  if (!hiName && typeof localStorage !== 'undefined') {
-    hiName = localStorage.getItem('app_channel_name') || '';
+  if (!uName && card?.socialHandle) {
+    uName = card.socialHandle.replace(/^[/@]+/, '');
   }
-  if (!enName && typeof localStorage !== 'undefined') {
-    enName = localStorage.getItem('app_channel_name_en') || '';
+  if (!uName && typeof localStorage !== 'undefined') {
+    uName = localStorage.getItem('app_user_username') || '';
   }
+  if (!uName) uName = 'User';
 
-  // Fallbacks
-  if (!hiName && card?.brandName && card.brandName.trim() !== 'योर लोगो') {
-    hiName = card.brandName.trim();
-  }
-  if (!hiName) hiName = 'AI News Maker';
-  if (!enName) enName = 'AI News Maker';
-
-  // Sanitize Hindi hashtag: keep Devanagari and alphanumeric
-  const cleanHi = hiName.replace(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/g, '').replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
-  // Sanitize English hashtag: PascalCase alphanumeric
-  const cleanEn = enName
-    .split(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join('')
-    .replace(/[^a-zA-Z0-9]/g, '');
-
-  return {
-    hindiTag: cleanHi ? `#${cleanHi}` : '#ब्रेकिंगन्यूजवाला',
-    englishTag: cleanEn ? `#${cleanEn}` : '#BreakingNewsWala',
-  };
+  const clean = uName.replace(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/g, '').replace(/[^a-zA-Z0-9_]/g, '');
+  return `#${clean || 'User'}`;
 }
 
-// Ensure hashtags ALWAYS include both Hindi & English channel hashtags (#ब्रेकिंगन्यूजवाला and #BreakingNewsWala) and end with #BNWTV
-function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
-  const { hindiTag, englishTag } = getChannelHashtags(card);
+// Build hashtags strictly ensuring:
+// 1. FIRST TAG = User's Username (#<username>)
+// 2. LAST TAG = #AINewsMaker (English)
+// 3. NO #breakingnewswala or #BNWTV
+export function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
+  const firstTag = getUserFirstHashtag(card);
+  const lastTag = '#AINewsMaker';
 
-  const loc = (location || 'MP')
+  const loc = (location || 'News')
     .split(/[\/,]/)[0]
     .trim()
     .replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
-  const locationTag = loc ? `#${loc}News` : '#MPNews';
+  const locationTag = loc && loc.toLowerCase() !== 'location' && loc !== 'स्थान' ? `#${loc}News` : '#HindiNews';
 
   let tagList: string[] = [];
 
@@ -70,46 +54,41 @@ function buildHashtags(location?: string, existingTagsString?: string, card?: Ne
     tagList = extracted;
   }
 
-  // If no or few existing tags, seed standard tags
-  if (tagList.length < 3) {
+  // Filter out any legacy or prohibited tags
+  tagList = tagList.filter((t) => {
+    const lower = t.toLowerCase();
+    return (
+      lower !== '#breakingnewswala' &&
+      lower !== '#bnwtv' &&
+      lower !== '#ब्रेकिंगन्यूजवाला' &&
+      lower !== firstTag.toLowerCase() &&
+      lower !== lastTag.toLowerCase()
+    );
+  });
+
+  // If no or few existing tags, seed standard news tags
+  if (tagList.length < 2) {
     tagList = [
-      hindiTag,
-      englishTag,
       '#BreakingNews',
       locationTag,
-      '#HindiNews',
       '#LatestNews',
       '#NewsUpdate',
-      '#BNWTV',
+      '#ViralNews',
     ];
-  } else {
-    // Ensure both Hindi and English channel hashtags are present at the beginning
-    if (!tagList.some((t) => t.toLowerCase() === hindiTag.toLowerCase())) {
-      tagList.unshift(hindiTag);
-    }
-    if (!tagList.some((t) => t.toLowerCase() === englishTag.toLowerCase())) {
-      const idx = tagList.findIndex((t) => t.toLowerCase() === hindiTag.toLowerCase());
-      tagList.splice(idx + 1, 0, englishTag);
-    }
   }
 
-  // Deduplicate case-insensitively while preserving order
+  // Deduplicate while preserving order
   const seen = new Set<string>();
-  const uniqueTags: string[] = [];
+  const uniqueMidTags: string[] = [];
   for (const t of tagList) {
     const lower = t.toLowerCase();
-    if (!seen.has(lower)) {
+    if (!seen.has(lower) && lower !== firstTag.toLowerCase() && lower !== lastTag.toLowerCase()) {
       seen.add(lower);
-      uniqueTags.push(t);
+      uniqueMidTags.push(t);
     }
   }
 
-  // Ensure channel hashtags are at index 0 and 1
-  const filtered = uniqueTags.filter(
-    (t) => t.toLowerCase() !== hindiTag.toLowerCase() && t.toLowerCase() !== englishTag.toLowerCase() && t.toLowerCase() !== '#bnwtv'
-  );
-
-  return [hindiTag, englishTag, ...filtered, '#BNWTV'].join(' ');
+  return [firstTag, ...uniqueMidTags, lastTag].join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({
@@ -123,6 +102,8 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
   const [selectedStyle, setSelectedStyle] = useState<'detailed_3_para' | 'bullet_points' | 'short'>('detailed_3_para');
   const [customInstruction, setCustomInstruction] = useState<string>('');
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai'>('gemini');
+
+  const firstUserTag = getUserFirstHashtag(card);
 
   // Generate strictly 2 to 3 detailed paragraphs of news + tags at the end
   useEffect(() => {
@@ -176,47 +157,74 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
       setCaptionText(`${newsStory}\n\n${tagsToUse}`);
     } else {
       // Default template strictly adhering to 2-3 detailed paragraphs + tags
-      newsStory = `${cleanHeadline}। घटना को लेकर इलाके में हड़कंप मच गया है और प्रत्यक्षदर्शियों के अनुसार स्थिति काफी तनावपूर्ण बनी हुई है।\n\nमामले की सूचना मिलते ही वरिष्ठ प्रशासनिक अधिकारी और पुलिस बल मौके पर पहुंच गए हैं तथा राहत एवं आवश्यक कार्रवाई शुरू कर दी गई है।\n\nफिलहाल स्थिति पर लगातार नजर रखी जा रही है और पूरे घटनाक्रम की विस्तृत जांच के निर्देश दिए गए हैं।`;
+      newsStory = `${cleanHeadline || 'मुख्य समाचार'}। घटना को लेकर इलाके में हड़कंप मच गया है और प्रत्यक्षदर्शियों के अनुसार स्थिति काफी तनावपूर्ण बनी हुई है।\n\nमामले की सूचना मिलते ही वरिष्ठ प्रशासनिक अधिकारी और पुलिस बल मौके पर पहुंच गए हैं तथा राहत एवं आवश्यक कार्रवाई शुरू कर दी गई है।\n\nफिलहाल स्थिति पर लगातार नजर रखी जा रही है और पूरे घटनाक्रम की विस्तृत जांच के निर्देश दिए गए हैं।`;
       const tagsToUse = buildHashtags(card.location, undefined, card);
       setCaptionText(`${newsStory}\n\n${tagsToUse}`);
     }
   }, [isOpen, card]);
 
-  // Expand into full detailed paragraphs or customized style using Gemini AI
+  // Expand or rewrite caption using AI
   const handleExpandWithAI = async (overrideStyle?: 'detailed_3_para' | 'bullet_points' | 'short') => {
-    setIsExpanding(true);
     const styleToUse = overrideStyle || selectedStyle;
+    setIsExpanding(true);
+
     try {
-      const response = await fetch('/api/generate-caption', {
+      const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
+      const cleanSummary = (card.summary || '').trim();
+
+      const prompt = `
+आप एक वरिष्ठ हिंदी समाचार संपादक (Social Media News Journalist) हैं।
+निम्नलिखित खबर के आधार पर इंस्टाग्राम और फेसबुक के लिए एक आकर्षक, प्रामाणिक और विस्तृत पोस्ट कैप्शन (Caption) तैयार करें।
+
+हेडलाइन: "${cleanHeadline}"
+मूल विवरण/सारांश: "${cleanSummary || 'विवरण उपलब्ध नहीं'}"
+स्थान: "${card.location || 'मध्य प्रदेश'}"
+
+शैली (Style): ${
+  styleToUse === 'detailed_3_para'
+    ? 'विस्तृत 3 पैराग्राफ (Detailed 3 Paragraphs News Story)'
+    : styleToUse === 'bullet_points'
+    ? 'मुख्य बिंदु (Bullet Points Format with Key Highlights)'
+    : 'संक्षिप्त व असरदार 2 पैराग्राफ (Short & Punchy 2 Paragraphs)'
+}
+
+${customInstruction ? `अतिरिक्त निर्देश (User Instruction): "${customInstruction}"` : ''}
+
+नियम:
+1. भाषा शुद्ध, स्पष्ट और गंभीर हिंदी पत्रकारिता शैली की होनी चाहिए।
+2. कोई अनावश्यक काल्पनिक बातें न जोड़ें।
+3. पहला हैशटैग ${firstUserTag} और अंतिम हैशटैग #AINewsMaker ही होना चाहिए।
+`;
+
+      const response = await fetch('/api/generate-ai-news', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          headline: (card.headline || '').replace(/\[\/?yellow\]/g, '').trim(),
-          location: card.location,
-          category: card.category,
-          existingSummary: captionText || card.summary,
-          style: styleToUse,
-          customInstruction: customInstruction.trim() || undefined,
-          aiProvider: aiProvider,
+          prompt,
+          provider: aiProvider,
         }),
       });
 
-      const data = await response.json();
-      if (response.ok && data.caption) {
-        // Enforce the channel hashtags (Hindi & English) ... #BNWTV order on the output
-        let text = data.caption.trim();
-        const tagMatch = text.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
-        if (tagMatch) {
-          const bodyText = text.substring(0, tagMatch.index).trim();
-          const enforcedTags = buildHashtags(card.location, tagMatch[0], card);
-          setCaptionText(`${bodyText}\n\n${enforcedTags}`);
-        } else {
-          const enforcedTags = buildHashtags(card.location, undefined, card);
-          setCaptionText(`${text}\n\n${enforcedTags}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.text) {
+          let aiText = data.text.trim();
+          const tagMatch = aiText.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
+          let extractedTags = '';
+          if (tagMatch) {
+            extractedTags = tagMatch[0].trim();
+            aiText = aiText.substring(0, tagMatch.index).trim();
+          }
+          const finalTags = buildHashtags(card.location, extractedTags, card);
+          setCaptionText(`${aiText}\n\n${finalTags}`);
         }
+      } else {
+        const fallbackStory = `${cleanHeadline}। पूरे मामले पर प्रशासनिक स्तर पर त्वरित संज्ञान लिया गया है।\n\n${cleanSummary}\n\nसूत्रों के अनुसार मौके पर जांच दल तैनात है और आगे की कानूनी कार्यवाही जारी है।`;
+        const tags = buildHashtags(card.location, undefined, card);
+        setCaptionText(`${fallbackStory}\n\n${tags}`);
       }
     } catch (e) {
-      console.error('Failed to expand caption with AI:', e);
+      console.warn('AI Caption expansion error:', e);
     } finally {
       setIsExpanding(false);
     }
@@ -247,9 +255,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
               <h3 className="font-bold text-white text-base">
                 इंस्टाग्राम व फेसबुक पोस्ट कैप्शन
               </h3>
-              <p className="text-[11px] text-neutral-400">
-                2-3 पैराग्राफ में पूरी खबर • पहला टैग <span className="text-yellow-400 font-mono font-bold">#breakingnewswala</span> • अंतिम टैग <span className="text-yellow-400 font-mono font-bold">#BNWTV</span>
-              </p>
+              <p className="text-[11px] text-neutral-400">2-3 पैराग्राफ में पूरी खबर और हैशटैग</p>
             </div>
           </div>
           <button
@@ -261,9 +267,9 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-5 space-y-3.5">
-          {/* AI Provider Selector */}
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-950 border border-neutral-800">
+        <div className="p-4 sm:p-5 space-y-4">
+          {/* AI Provider Switcher */}
+          <div className="flex items-center justify-between bg-neutral-950 p-2 rounded-xl border border-neutral-800">
             <span className="text-xs font-bold text-neutral-300">
               AI इंजन:
             </span>

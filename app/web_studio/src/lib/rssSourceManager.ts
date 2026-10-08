@@ -148,6 +148,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
     window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   } catch {}
+
 }
 
 export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {
@@ -169,6 +170,7 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
         }
       } catch {}
 
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
         window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
@@ -178,6 +180,72 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
   } catch (err: any) {
     return { success: false, error: err?.message || 'सिंक त्रुटि' };
   }
+
   return { success: true, totalNewItems: 0 };
 }
 
+
+
+// =========================================================================
+// SHARED NEWS CHANNELS DIRECTORY (RSS & Web Links Sync)
+// =========================================================================
+
+const STORAGE_KEY_SAVED_CHANNELS = 'ai_news_admin_channels_list_v1';
+
+export const DEFAULT_PRESET_CHANNELS: string[] = [
+  'आज तक (Aaj Tak)',
+  'एबीपी न्यूज़ (ABP News)',
+  'NDTV इंडिया (NDTV India)',
+  'बीबीसी हिंदी (BBC Hindi)',
+  'ज़ी न्यूज़ (Zee News)',
+  'दैनिक भास्कर (Dainik Bhaskar)',
+  'अमर उजाला (Amar Ujala)',
+  'नवभारत टाइम्स (NBT)',
+  'प्रेस सूचना ब्यूरो (PIB)',
+  'न्यूज़18 इंडिया (News18)',
+  'जनसत्ता (Jansatta)',
+  'लाइव हिंदुस्तान (Live Hindustan)',
+  'इंडिया टीवी (India TV)',
+  'रिपब्लिक भारत (Republic Bharat)',
+];
+
+export function getSavedNewsChannels(): string[] {
+  if (typeof window === 'undefined') return DEFAULT_PRESET_CHANNELS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SAVED_CHANNELS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_PRESET_CHANNELS;
+}
+
+export function saveNewsChannel(channelName: string): string[] {
+  const trimmed = channelName.trim();
+  if (!trimmed) return getSavedNewsChannels();
+  const current = getSavedNewsChannels();
+  if (!current.includes(trimmed)) {
+    const updated = [...current, trimmed];
+    try {
+      localStorage.setItem(STORAGE_KEY_SAVED_CHANNELS, JSON.stringify(updated));
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: updated }));
+    }
+    return updated;
+  }
+  return current;
+}
+
+export function deleteSavedNewsChannel(channelName: string): string[] {
+  const current = getSavedNewsChannels();
+  const updated = current.filter((c) => c !== channelName);
+  try {
+    localStorage.setItem(STORAGE_KEY_SAVED_CHANNELS, JSON.stringify(updated));
+  } catch {}
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: updated }));
+  }
+  return updated;
+}

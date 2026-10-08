@@ -49,19 +49,18 @@ export function processNewsLocally(
     .replace(/\.{2,}/g, '')
     .trim();
 
-  // If text is a link itself, generate a meaningful news headline
-  if (rawHeadline.startsWith('http://') || rawHeadline.startsWith('https://')) {
-    try {
-      const urlObj = new URL(rawHeadline);
-      const pathParts = urlObj.pathname.split('/').filter(Boolean);
-      const lastSlug = pathParts[pathParts.length - 1] || urlObj.hostname;
-      const slugTitle = decodeURIComponent(lastSlug)
-        .replace(/[-_]/g, ' ')
-        .replace(/\.(html|php|aspx)$/, '');
-      rawHeadline = slugTitle || 'वेबसाइट से प्राप्त ताज़ा समाचार अपडेट';
-    } catch {
-      rawHeadline = 'वेबसाइट से प्राप्त ताज़ा समाचार अपडेट';
-    }
+  // Reject URL strings or slugs as headline - URL is NEVER a headline
+  const isUrlLike = (txt: string) => {
+    const l = txt.toLowerCase();
+    return l.startsWith('http://') || l.startsWith('https://') || l.startsWith('www.') ||
+      l.includes('http://') || l.includes('https://') || l.includes('.com') || l.includes('.in') ||
+      l.includes('.org') || l.includes('url:') || l.includes('url to reference');
+  };
+
+  if (isUrlLike(rawHeadline)) {
+    rawHeadline = detectedLocation !== 'मध्य प्रदेश'
+      ? `${detectedLocation}: मामले में प्रशासन का बड़ा एक्शन, निष्पक्ष जांच के आदेश जारी`
+      : 'प्रशासनिक कार्रवाई से क्षेत्र में मचा हड़कंप, निष्पक्ष जांच के आदेश';
   }
 
   // Enforce STRICT 2 or 3 line capacity
@@ -70,7 +69,7 @@ export function processNewsLocally(
   const words = rawHeadline.split(/\s+/).filter(Boolean);
   const maxWords = maxLines === 2 ? 10 : 16;
   let headline = words.length > maxWords ? words.slice(0, maxWords).join(' ') : rawHeadline;
-  headline = cleanHeadlineText(headline);
+  headline = cleanHeadlineText(headline).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
 
   // Pick highlight words: numbers, quoted words or location
   const highlightWords: string[] = [];
@@ -99,10 +98,12 @@ export function processNewsLocally(
     }
   }
 
-  // Generate 3 strict template-compliant headline options
+  // Generate 4 strict template-compliant headline options (12-22 words, natural Hindi, no trailing period)
   const opt1 = headline;
-  const opt2 = words.length > 6 ? words.slice(0, Math.min(words.length, maxLines === 2 ? 8 : 12)).join(' ') : `${detectedLocation}: ${headline}`;
-  const opt3 = `${headline}`;
+  const opt2 = `${detectedLocation}: प्रशासनिक अमले ने लिया त्वरित संज्ञान, जांच शुरू`;
+  const opt3 = `बड़ा एक्शन: ${detectedLocation} में मामले को लेकर प्रशासन सख्त`;
+  const opt4 = `ग्राउंड रिपोर्ट: घटनाक्रम को लेकर आमजन में आक्रोश, निष्पक्ष कार्रवाई की मांग`;
+  const headlineOptions = [opt1, opt2, opt3, opt4].map((h) => h.replace(/[।\.\,\!\?\:\-]+$/g, '').trim());
 
   const cleanHeadlinePure = headline.replace(/[^a-zA-Z0-9\u0900-\u097F\s]/g, '');
   const locTag = detectedLocation.replace(/\s+/g, '');
@@ -155,22 +156,31 @@ export function processNewsLocally(
     categories.push(detectedLocation);
   }
 
+  // Hashtag hierarchy: 1st: #${username}, Middle: topics/location, Last: #AINewsMaker
+  const cleanUsername = (channelUsername || '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
+  const userTag = cleanUsername ? `#${cleanUsername}` : '#AINews';
+
   const tags = [
+    userTag,
+    `#${locTag}News`,
     '#BreakingNews',
     '#HindiNews',
-    `#${locTag}News`,
     `#${category.replace(/\s+/g, '')}`,
-    '#BNWTV',
+    '#AINewsMaker',
   ];
 
   // Professional Hindi TV News Anchor Script
-  const anchorScript = `नमस्कार, मैं ब्रेकिंग न्यूज़ से। इस समय की बड़ी और महत्वपूर्ण खबर ${detectedLocation} से सामने आ रही है। ${headline}। प्रशासनिक अधिकारियों और संबंधित विभाग ने इस मामले में तत्काल संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी किए हैं। आइए देखते हैं इस पूरे घटनाक्रम पर ग्राउंड रिपोर्ट।`;
+  const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी और महत्वपूर्ण खबर ${detectedLocation} से सामने आ रही है। ${headline}। प्रशासनिक अधिकारियों और संबंधित विभाग ने इस मामले में तत्काल संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी किए हैं। आइए देखते हैं इस पूरे घटनाक्रम पर ग्राउंड रिपोर्ट।`;
 
-  const summary = `${headline} को लेकर विस्तृत रिपोर्ट सामने आई है। इस मामले में संबंधित अधिकारियों एवं स्थानीय प्रशासन द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है।\n\nघटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए हमारे साथ बने रहें।\n\n${tags.join(' ')}`;
+  const summaryPara1 = `${headline} को लेकर बड़ी और महत्वपूर्ण खबर सामने आई है। ${detectedLocation} में इस पूरे घटनाक्रम के बाद प्रशासनिक व संबंधित विभागों में हलचल तेज हो गई है।`;
+  const summaryPara2 = `प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व सूत्रों के अनुसार इस घटनाक्रम से जनजीवन व क्षेत्र में व्यापक चर्चा है तथा तथ्यों की गहराई से पड़ताल की जा रही है।`;
+  const summaryPara3 = `पुलिस व प्रशासन की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है और अग्रिम वैधानिक प्रक्रिया अमल में लाई जा रही है।`;
+
+  const summary = `${summaryPara1}\n\n${summaryPara2}\n\n${summaryPara3}\n\n${tags.join(' ')}`;
 
   return {
-    headline,
-    headlineOptions: [opt1, opt2, opt3],
+    headline: headlineOptions[0],
+    headlineOptions,
     highlightWords,
     formattedHeadline,
     location: detectedLocation,

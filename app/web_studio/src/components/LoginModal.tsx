@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { registerOrUpdateUser } from '../lib/userPlanManager';
 import {
   Lock,
   User,
@@ -32,7 +33,7 @@ export interface UserSocialLinks {
 export interface ReporterUser {
   username: string;
   name: string;
-  role: 'reporter' | 'admin' | 'bureau';
+  role: 'reporter' | 'admin' | 'superadmin' | 'bureau' | 'user';
   district?: string;
   email?: string;
   channelName?: string;
@@ -55,6 +56,29 @@ interface LoginModalProps {
 
 // Default pre-configured accounts
 const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
+  'admin.ainewsmaker@gmail.com': {
+    pass: 'Admin@ainewsmaker',
+    user: {
+      username: 'superadmin',
+      name: 'सुपर एडमिन (Super Admin)',
+      role: 'superadmin' as any,
+      district: 'हेडक्वार्टर सेंट्रल डेस्क',
+      email: 'admin.ainewsmaker@gmail.com',
+      planTier: 'ultra',
+    },
+  },
+  superadmin: {
+    pass: 'Admin@ainewsmaker',
+    user: {
+      username: 'superadmin',
+      name: 'सुपर एडमिन (Super Admin)',
+      role: 'superadmin' as any,
+      district: 'हेडक्वार्टर सेंट्रल डेस्क',
+      email: 'admin.ainewsmaker@gmail.com',
+      planTier: 'ultra',
+    },
+  },
+
   admin: {
     pass: 'news123',
     user: {
@@ -160,17 +184,27 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     const processGoogleUser = (email: string, displayName?: string) => {
       const cleanEmail = email.trim().toLowerCase();
-      const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail.startsWith('admin');
+      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'superadmin';
+      const isAdmin = isSuper;
       const prefix = cleanEmail.split('@')[0];
-      const defaultName = displayName || prefix.replace(/[._-]/g, ' ');
+      let existingUsername = '';
+      try {
+        const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
+        if (savedProfileStr) {
+          const parsed = JSON.parse(savedProfileStr);
+          if (parsed.username) existingUsername = parsed.username;
+        }
+      } catch {}
+
+      const defaultName = displayName || prefix.split('.')[0] || 'User';
 
       const user: ReporterUser = {
-        username: prefix,
+        username: existingUsername,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        role: isAdmin ? 'admin' : 'reporter',
+        role: isSuper ? 'superadmin' : 'user',
         email: cleanEmail,
         district: isAdmin ? 'सेंट्रल डेस्क' : 'डिजिटल डेस्क',
-        planTier: isAdmin ? 'enterprise' : 'basic',
+        planTier: isSuper ? 'ultra' : (isAdmin ? 'enterprise' : 'basic'),
       };
 
       try {
@@ -181,6 +215,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         customAccounts[prefix] = { pass: 'google_linked', user };
         localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
         localStorage.setItem('reporter_auth_session', JSON.stringify(user));
+      try {
+        registerOrUpdateUser({
+          email: cleanEmail,
+          name: user.name,
+          username: user.username,
+          role: user.role,
+          tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : 'basic'),
+          isLocked: !isAdmin && !isSuper,
+        });
+      } catch (gRegErr) {
+        console.warn('Error syncing Google user in LoginModal:', gRegErr);
+      }
       } catch (e) {}
 
       // Persist to server user-profile endpoint
@@ -390,6 +436,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       try {
         localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
         localStorage.setItem('reporter_auth_session', JSON.stringify(newUser));
+      try {
+        registerOrUpdateUser({
+          email: cleanUser.includes('@') ? cleanUser : `${cleanUser}@ainewsmaker.online`,
+          name: cleanName,
+          username: cleanUser,
+          role: signupRole,
+          tier: signupRole === 'admin' ? 'ultra' : 'basic',
+          isLocked: signupRole !== 'admin',
+        });
+      } catch (regErr) {
+        console.warn('Error syncing new user in LoginModal:', regErr);
+      }
       } catch (saveErr) {
         console.warn('Error storing new account:', saveErr);
       }

@@ -63,9 +63,9 @@ ${card.summary || ''}
 📍 स्थान: ${card.location || 'मध्य प्रदेश'}
 📅 दिनांक: ${card.date || 'आज'}
 
-#BreakingNews #HindiNews #${(card.location || 'MP').replace(/\s+/g, '')}News #${(card.category || 'News').replace(/\s+/g, '')} #BNWTV #AINewsMaker`;
+#BreakingNews #HindiNews #${(card.location || 'MP').replace(/\s+/g, '')}News #${(card.category || 'News').replace(/\s+/g, '')} #AINewsMaker`;
 
-  const anchorScriptText = `नमस्कार, मैं ब्रेकिंग न्यूज़ से। इस समय की बड़ी खबर आ रही है ${card.location || 'मध्य प्रदेश'} से। ${card.headline || ''}। अधिकारियों द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है। आइए देखते हैं पूरी रिपोर्ट।`;
+  const anchorScriptText = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर आ रही है ${card.location || 'मध्य प्रदेश'} से। ${card.headline || ''}। अधिकारियों द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है। आइए देखते हैं पूरी रिपोर्ट।`;
 
   const handleCopyCaption = () => {
     navigator.clipboard.writeText(captionText);

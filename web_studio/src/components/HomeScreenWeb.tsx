@@ -34,6 +34,7 @@ import {
   Sliders,
   Upload,
   Image as ImageIcon,
+  ArrowUp,
 } from 'lucide-react';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
@@ -178,6 +179,24 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [adminFilterDate, setAdminFilterDate] = useState<string>('');
   const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
+
+  // Back to Top button state & listener
+  const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      if (typeof window !== 'undefined') {
+        setShowBackToTop(window.scrollY > 300);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const [defaultThumbnailIds, setDefaultThumbnailIds] = useState<Set<string>>(() => {
     try {
@@ -1355,6 +1374,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Floating Back to Top Button */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="fixed bottom-20 right-4 z-40 px-3.5 py-2 bg-slate-900/90 hover:bg-slate-800 text-amber-400 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-1.5 text-xs font-black transition-all transform hover:scale-105 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
+          title="शीर्ष पर वापस जाएं"
+        >
+          <ArrowUp className="w-4 h-4 text-amber-400" />
+          <span>ऊपर जाएँ</span>
+        </button>
       )}
     </div>
   );

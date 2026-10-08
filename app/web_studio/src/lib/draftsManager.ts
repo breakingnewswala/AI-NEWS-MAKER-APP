@@ -12,7 +12,7 @@ const DEFAULT_SAMPLE_DRAFTS: NewsDraft[] = [
     location: 'शहडोल, मप्र',
     summary: 'शहडोल जिले में यातायात नियमों के उल्लंघन पर पुलिस एवं परिवहन विभाग ने संयुक्त कार्रवाई की। नेशनल हाईवे पर चलने वाले भारी वाहनों की सघन जांच की गई।\n\nनियम तोड़ने वाले 25 से अधिक वाहनों पर चालानी कार्रवाई कर जुर्माना वसूला गया।',
     anchorScript: 'नमस्कार, मैं ब्रेकिंग न्यूज़ से। शहडोल से बड़ी खबर जहां नेशनल हाईवे पर प्रशासन ने अवैध ओवरलोडिंग और तेज रफ्तार वाहनों के खिलाफ बड़ा अभियान छेड़ दिया है। कई वाहनों पर जुर्माना लगाया गया है। आइए देखते हैं पूरी रिपोर्ट।',
-    tags: ['#शहडोल', '#सड़कसुरक्षा', '#प्रशासन', '#BreakingNews', '#BNWTV'],
+    tags: ['#शहडोल', '#सड़कसुरक्षा', '#प्रशासन', '#BreakingNews', '#AINewsMaker'],
     thumbnailUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
     createdAt: Date.now() - 3600000 * 5,
     updatedAt: Date.now() - 3600000 * 5,
@@ -37,7 +37,7 @@ const DEFAULT_SAMPLE_DRAFTS: NewsDraft[] = [
     location: 'भोपाल, मप्र',
     summary: 'मध्य प्रदेश सरकार ने किसानों की सिंचाई सुविधा को सुगम बनाने के लिए सोलर पंप योजना के तहत भारी अनुदान की घोषणा की है।\n\nकृषि मंत्री ने कहा कि योजना से बिजली बिल का खर्च शून्य होगा और किसानों की आय में बढ़ोतरी होगी।',
     anchorScript: 'नमस्कार, किसानों के लिए बड़ी खुशखबरी। मध्य प्रदेश में सोलर पंप लगाने पर सरकार 80% तक की भारी सब्सिडी दे रही है। योजना का लाभ लेने के लिए किसान तुरंत ऑनलाइन आवेदन कर सकते हैं।',
-    tags: ['#किसान', '#सोलरपंप', '#मध्यप्रदेश', '#विकास', '#BNWTV'],
+    tags: ['#किसान', '#सोलरपंप', '#मध्यप्रदेश', '#विकास', '#AINewsMaker'],
     thumbnailUrl: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&auto=format&fit=crop&q=80',
     createdAt: Date.now() - 3600000 * 24,
     updatedAt: Date.now() - 3600000 * 24,
@@ -92,7 +92,7 @@ export function saveDraft(
   const location = cardData.location || 'मध्य प्रदेश';
   const summary = cardData.summary || '';
   const anchorScript = extraMeta?.anchorScript || '';
-  const tags = extraMeta?.tags || ['#BreakingNews', '#HindiNews', '#BNWTV'];
+  const tags = extraMeta?.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'];
   const thumbnailUrl = extraMeta?.thumbnailUrl || cardData.photoUrl || '';
 
   const newDraft: NewsDraft = {

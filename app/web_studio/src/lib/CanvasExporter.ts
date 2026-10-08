@@ -958,7 +958,19 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     ctx.fillStyle = '#FBBF24';
     ctx.textAlign = 'right';
     ctx.fillText('EXCLUSIVE', width - 36, 32);
-  } else if (card.showMasterBranding !== false) {
+  } else if (card.showMasterBranding === false) {
+    const activeHeaderPng = getActiveHeaderPng(card);
+    if (activeHeaderPng) {
+      try {
+        const headerImg = await loadImage(activeHeaderPng);
+        const headerAspect = headerImg.width / headerImg.height;
+        const drawH = width / headerAspect;
+        ctx.drawImage(headerImg, 0, 0, width, drawH);
+      } catch (err) {
+        console.warn('Custom header load error:', err);
+      }
+    }
+  } else {
     const activeHeaderPng = getActiveHeaderPng(card);
     if (card.frameDesign === 'custom-png') {
       if (!card.hideDefaultHeaderInCustomFrame) {
@@ -990,8 +1002,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   }
 
-  // Optional full frame transparent overlay PNG ONLY when custom-png template is selected
-  if (card.frameDesign === 'custom-png' && card.customFrameOverlayPng) {
+  // Optional full frame transparent overlay PNG when custom-png template is selected OR when frame overlay is uploaded
+  if ((card.frameDesign === 'custom-png' || card.customFrameOverlayPng) && card.customFrameOverlayPng) {
     try {
       const overlayImg = await loadImage(card.customFrameOverlayPng);
       ctx.drawImage(overlayImg, 0, 0, width, height);
@@ -1009,7 +1021,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   // 8. Permanent Theme Footer Bar (Exact reproduction of Footer.png)
   const activeFooter = getActiveFooterPng(card);
   const shouldDrawFooter =
-    card.showMasterBranding !== false &&
+    (card.showMasterBranding !== false || Boolean(activeFooter)) &&
     card.frameDesign !== 'jacket-default' &&
     !(card.frameDesign === 'custom-png' && card.hideDefaultFooterInCustomFrame);
 
@@ -1475,10 +1487,130 @@ async function drawGraphic001Canvas(
 ) {
   ctx.save();
 
-  // 1. TOP PHOTO AREA (0 to 715px ~53% of 1350)
-  const photoH = Math.round(height * 0.53); // ~715px
+  // 1. BACKGROUND: Deep Dark Charcoal / Black Linear Gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+  bgGrad.addColorStop(0, '#090A0D');
+  bgGrad.addColorStop(0.5, '#12151B');
+  bgGrad.addColorStop(1, '#090A0D');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  // 2. FOUR GOLD GEOMETRIC CORNER ACCENTS
+  const drawGoldCorner = (x: number, y: number, angleDeg: number) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((angleDeg * Math.PI) / 180);
+
+    // Outer gold polygon
+    const g1 = ctx.createLinearGradient(0, 0, 160, 160);
+    g1.addColorStop(0, '#FFE600');
+    g1.addColorStop(0.5, '#D4AF37');
+    g1.addColorStop(1, '#AA771C');
+    ctx.fillStyle = g1;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(160, 0);
+    ctx.lineTo(0, 160);
+    ctx.closePath();
+    ctx.fill();
+
+    // Mid gold polygon
+    const g2 = ctx.createLinearGradient(120, 0, 0, 120);
+    g2.addColorStop(0, '#FFF275');
+    g2.addColorStop(0.6, '#E5B80B');
+    g2.addColorStop(1, '#553B08');
+    ctx.fillStyle = g2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(110, 0);
+    ctx.lineTo(0, 110);
+    ctx.closePath();
+    ctx.fill();
+
+    // Inner bright gold polygon
+    ctx.fillStyle = '#FFE600';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(60, 0);
+    ctx.lineTo(0, 60);
+    ctx.closePath();
+    ctx.fill();
+
+    // Sharp gold diagonal lines
+    ctx.strokeStyle = '#FFE600';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, 185);
+    ctx.lineTo(185, 0);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#D4AF37';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 215);
+    ctx.lineTo(215, 0);
+    ctx.stroke();
+
+    ctx.restore();
+  };
+
+  drawGoldCorner(0, 0, 0); // Top-Left
+  drawGoldCorner(width, 0, 90); // Top-Right
+  drawGoldCorner(0, 1274, -90); // Bottom-Left (above footer)
+  drawGoldCorner(width, 1274, 180); // Bottom-Right (above footer)
+
+  // 3. TOP-LEFT LOGO AREA
+  if (customLogoImg) {
+    const scale = card.logoScale ?? 1.25;
+    const logoMaxW = 260;
+    const logoMaxH = 110;
+    const lRatio = customLogoImg.width / customLogoImg.height;
+    let lW = logoMaxW;
+    let lH = lW / lRatio;
+    if (lH > logoMaxH) {
+      lH = logoMaxH;
+      lW = lH * lRatio;
+    }
+    lW = Math.round(lW * scale);
+    lH = Math.round(lH * scale);
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
+    ctx.drawImage(customLogoImg, 42, 38, lW, lH);
+    ctx.restore();
+  } else {
+    // Default "YOUR LOGO" gold outline box
+    ctx.save();
+    const boxX = 42;
+    const boxY = 38;
+    const boxW = 220;
+    const boxH = 68;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+    ctx.fill();
+
+    ctx.strokeStyle = '#FFE600';
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#FFE600';
+    ctx.font = '900 28px "Poppins", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
+    ctx.restore();
+  }
+
+  // 4. TOP PHOTO AREA (Y = 0 to 680)
+  const photoH = 680;
   let hasValidPhoto = false;
-  if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg') {
+  if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg' && card.images.main !== '/assets/placeholder_news_photo.png') {
     try {
       const img = await loadImage(card.images.main);
       const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
@@ -1493,466 +1625,180 @@ async function drawGraphic001Canvas(
   }
 
   if (!hasValidPhoto) {
-    // Elegant Placeholder Photo Area matching the sample reference
-    const pGrad = ctx.createLinearGradient(0, 0, 0, photoH);
-    pGrad.addColorStop(0, '#1E293B');
-    pGrad.addColorStop(0.5, '#0F172A');
-    pGrad.addColorStop(1, '#020617');
-    ctx.fillStyle = pGrad;
-    ctx.fillRect(0, 0, width, photoH);
-
-    // Subtle photo placeholder center card
+    // Default Photo Placeholder Layers
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 2;
-    const phW = 440;
-    const phH = 140;
-    const phX = (width - phW) / 2;
-    const phY = (photoH - phH) / 2 + 30;
+
+    // Gold circular camera icon badge (center at x=540, y=240)
+    const camX = width / 2;
+    const camY = 240;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.strokeStyle = '#FFE600';
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
+    ctx.shadowBlur = 20;
     ctx.beginPath();
-    ctx.roundRect(phX, phY, phW, phH, 16);
+    ctx.arc(camX, camY, 68, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    ctx.fillStyle = '#FFE600';
+    ctx.beginPath();
+    ctx.arc(camX, camY, 44, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Camera icon drawing
+    ctx.fillStyle = '#090A0D';
+    ctx.beginPath();
+    ctx.roundRect(camX - 22, camY - 14, 44, 30, 6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(camX - 10, camY - 20, 20, 8, 3);
+    ctx.fill();
+    ctx.fillStyle = '#FFE600';
+    ctx.beginPath();
+    ctx.arc(camX, camY + 1, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Red pill badge: [🖼️ स्टेप 4 : फोटो जोड़ें]
+    const rPillW = 380;
+    const rPillH = 56;
+    const rPillX = (width - rPillW) / 2;
+    const rPillY = 345;
+    ctx.save();
+    ctx.shadowColor = 'rgba(220, 38, 38, 0.4)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#DC2626';
+    ctx.beginPath();
+    ctx.roundRect(rPillX, rPillY, rPillW, rPillH, rPillH / 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
 
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 36px "Poppins", sans-serif';
+    ctx.font = '900 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('YOUR PHOTO', width / 2, phY + 48);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.font = '700 22px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपकी फोटो रहेगी', width / 2, phY + 96);
+    ctx.fillText('🖼️ स्टेप 4 : फोटो जोड़ें', width / 2, rPillY + rPillH / 2);
     ctx.restore();
-  }
 
-  // 2. HEADER: If customHeaderPng is uploaded, draw it directly and HIDE default location & logo boxes
-  if (card.customHeaderPng) {
-    try {
-      const headerImg = await loadImage(card.customHeaderPng);
-      const headerRatio = headerImg.width / headerImg.height;
-      const hH = Math.min(Math.round(width / headerRatio), 160);
-      ctx.drawImage(headerImg, 0, 0, width, hH);
-    } catch (e) {
-      console.warn('Failed to load customHeaderPng', e);
-    }
-  } else {
-    // 2. LOCATION BOX (Upper-Left portion of photo)
-    // Rounded white box with red border #DC2626
-    if (card.showLocation !== false) {
-      const locBoxX = 36;
-      const locBoxY = 32;
-      const locBoxW = 290;
-      const locBoxH = 82;
-      const locRadius = 14;
-
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = 14;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 4;
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.roundRect(locBoxX, locBoxY, locBoxW, locBoxH, locRadius);
-      ctx.fill();
-
-      ctx.shadowColor = 'transparent';
-      ctx.strokeStyle = '#DC2626';
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
-
-      // Red Pin Icon on the left
-      const pinCenterX = locBoxX + 36;
-      const pinCenterY = locBoxY + locBoxH / 2;
-      ctx.fillStyle = '#DC2626';
-      ctx.beginPath();
-      ctx.arc(pinCenterX, pinCenterY - 4, 13, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(pinCenterX - 11, pinCenterY - 2);
-      ctx.lineTo(pinCenterX + 11, pinCenterY - 2);
-      ctx.lineTo(pinCenterX, pinCenterY + 14);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(pinCenterX, pinCenterY - 4, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Text inside Location Box (Clean actual location only)
-      const cleanLoc = (card.location || '')
-        .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
-        .replace(/[:\-–—]+$/, '')
-        .trim();
-
-      ctx.fillStyle = '#111827';
-      ctx.font = '900 24px "Noto Sans Devanagari", "Poppins", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(cleanLoc.slice(0, 24), locBoxX + 66, locBoxY + locBoxH / 2);
-      ctx.restore();
-    }
-
-    // 3. LOGO (Upper-Right portion of photo): Transparent / No-Background
-    if (customLogoImg) {
-      const scale = card.logoScale ?? 1.25;
-      const maxW = 300 * scale;
-      const maxH = 95 * scale;
-      const scaleFactor = Math.min(maxW / customLogoImg.width, maxH / customLogoImg.height, 1);
-      const drawW = customLogoImg.width * scaleFactor;
-      const drawH = customLogoImg.height * scaleFactor;
-      const drawX = width - drawW - 36;
-      const drawY = 32 + (95 - drawH) / 2;
-
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-      ctx.shadowBlur = 12;
-      ctx.shadowOffsetY = 3;
-      ctx.drawImage(customLogoImg, drawX, drawY, drawW, drawH);
-      ctx.restore();
-    } else {
-      // Clean subtle placeholder
-      const logoBoxW = 270;
-      const logoBoxH = 82;
-      const logoBoxX = width - logoBoxW - 36;
-      const logoBoxY = 32;
-      const logoRadius = 14;
-
-      ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-      ctx.beginPath();
-      ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-      ctx.fill();
-
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.font = '900 24px "Poppins", sans-serif';
-      ctx.fillText('YOUR LOGO', logoBoxX + logoBoxW / 2, logoBoxY + 38);
-
-      ctx.fillStyle = '#E2E8F0';
-      ctx.font = '700 15px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText('(पारदर्शी लोगो)', logoBoxX + logoBoxW / 2, logoBoxY + 65);
-      ctx.restore();
-    }
-  }
-
-  // 4. DATE (Left side of photo, 270° ROTATED, LOW OPACITY)
-  if (card.showDate !== false) {
-    ctx.save();
-    const dateText = (card.dateStr && card.dateStr.trim().length > 0)
-      ? card.dateStr.trim().toUpperCase()
-      : '25 SEP 2026';
-
-    ctx.translate(64, 460);
-    ctx.rotate(-Math.PI / 2); // 270 degrees
-
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 2;
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
-    ctx.font = '900 34px "Poppins", "Baloo 2", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.letterSpacing = '1.5px';
-    ctx.fillText(dateText, 0, 0);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
-    ctx.font = '700 15px "Poppins", sans-serif';
-    ctx.letterSpacing = '0.5px';
-    ctx.fillText('(DATE - ROTATE 270°)  LOW OPACITY', 0, 22);
-
-    ctx.restore();
-  }
-
-  // 5. BOTTOM SECTION BACKGROUND (Y = 715 to 1350)
-  ctx.save();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, photoH, width, height - photoH);
-
-  // Subtle geometric polygon watermark texture matching sample
-  ctx.fillStyle = '#F8FAFC';
-  ctx.beginPath();
-  ctx.moveTo(0, photoH + 60);
-  ctx.lineTo(240, photoH);
-  ctx.lineTo(120, photoH + 200);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#F1F5F9';
-  ctx.beginPath();
-  ctx.moveTo(width, photoH + 120);
-  ctx.lineTo(width - 260, photoH);
-  ctx.lineTo(width - 140, photoH + 260);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#F8FAFC';
-  ctx.beginPath();
-  ctx.moveTo(width / 2 - 180, height - 200);
-  ctx.lineTo(width / 2 + 200, height - 140);
-  ctx.lineTo(width / 2, height - 80);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // 6. FOOTER: If customFooterPng is uploaded, draw it directly and HIDE default fixed yellow footer
-  if (card.customFooterPng) {
-    try {
-      const footerImg = await loadImage(card.customFooterPng);
-      const footerRatio = footerImg.width / footerImg.height;
-      const fH = Math.min(Math.round(width / footerRatio), 140);
-      const fY = height - fH;
-      ctx.drawImage(footerImg, 0, fY, width, fH);
-    } catch (e) {
-      console.warn('Failed to load customFooterPng', e);
-    }
-  } else {
-    // 6. FIXED FOOTER STRIP AT BOTTOM (Y = 1240 to 1350, Height = 110)
-    const footerH = 110;
-    const footerY = height - footerH;
-    ctx.save();
-    ctx.fillStyle = '#FFE600'; // Solid Bright Yellow
-    ctx.fillRect(0, footerY, width, footerH);
-
-    ctx.strokeStyle = '#EAB308';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, footerY);
-    ctx.lineTo(width, footerY);
-    ctx.stroke();
-
-    // Social Media Icons (YouTube, Facebook, Instagram, WhatsApp)
-    const iconY = footerY + footerH / 2;
-    // YouTube
-    ctx.fillStyle = '#FF0000';
-    ctx.beginPath();
-    ctx.arc(60, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
+    // White Heading
     ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.moveTo(56, iconY - 8);
-    ctx.lineTo(68, iconY);
-    ctx.lineTo(56, iconY + 8);
-    ctx.closePath();
-    ctx.fill();
-
-    // Facebook
-    ctx.fillStyle = '#1877F2';
-    ctx.beginPath();
-    ctx.arc(114, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 24px "Poppins", sans-serif';
+    ctx.font = '900 44px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('f', 114, iconY);
+    ctx.fillText('कृपया अपनी न्यूज़ फोटो अपलोड करें', width / 2, 445);
 
-    // Instagram
-    const igGrad = ctx.createLinearGradient(147, iconY - 21, 189, iconY + 21);
-    igGrad.addColorStop(0, '#833AB4');
-    igGrad.addColorStop(0.5, '#FD1D1D');
-    igGrad.addColorStop(1, '#FCB045');
-    ctx.fillStyle = igGrad;
-    ctx.beginPath();
-    ctx.arc(168, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(158, iconY - 10, 20, 20, 5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(168, iconY, 5, 0, Math.PI * 2);
-    ctx.stroke();
+    // Gold Subtitle
+    ctx.fillStyle = '#FFE600';
+    ctx.font = '800 32px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं', width / 2, 505);
 
-    // WhatsApp
-    ctx.fillStyle = '#25D366';
-    ctx.beginPath();
-    ctx.arc(222, iconY, 21, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(222, iconY - 1, 9, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#25D366';
-    ctx.beginPath();
-    ctx.arc(222, iconY - 1, 6.5, 0, Math.PI * 2);
-    ctx.fill();
+    // Gray Note
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '600 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)', width / 2, 555);
 
-    // Divider 1
-    ctx.strokeStyle = '#CA8A04';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(260, footerY + 22);
-    ctx.lineTo(260, footerY + footerH - 22);
-    ctx.stroke();
-
-    // Social Handle: @BreakingNewsWala
-    const handleText = card.socialHandle || '@BreakingNewsWala';
-    ctx.fillStyle = '#000000';
-    ctx.font = '800 24px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(handleText, 280, iconY);
-    const handleWidth = ctx.measureText(handleText).width;
-
-    // Divider 2
-    const div2X = Math.max(540, 280 + handleWidth + 24);
-    ctx.beginPath();
-    ctx.moveTo(div2X, footerY + 22);
-    ctx.lineTo(div2X, footerY + footerH - 22);
-    ctx.stroke();
-
-    // Website with Globe icon
-    const siteX = div2X + 24;
-    ctx.strokeStyle = '#0284C7';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.arc(siteX + 14, iconY, 13, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(siteX + 14, iconY, 6, 13, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(siteX + 1, iconY);
-    ctx.lineTo(siteX + 27, iconY);
-    ctx.stroke();
-
-    const siteText = card.websiteUrl || 'ainewsmaker.online';
-    ctx.fillStyle = '#000000';
-    ctx.font = '800 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(siteText, siteX + 36, iconY);
-
-    // Contact Number (if enabled by admin/profile)
-    if (card.showMobileNumber !== false && card.whatsappNumber) {
-      const div3X = width - 260;
-      ctx.beginPath();
-      ctx.moveTo(div3X, footerY + 22);
-      ctx.lineTo(div3X, footerY + footerH - 22);
-      ctx.stroke();
-
-      const phoneText = card.whatsappNumber;
-      ctx.fillStyle = '#000000';
-      ctx.font = '800 22px "Poppins", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`📞 ${phoneText}`, div3X + 16, iconY);
-    }
     ctx.restore();
   }
 
-  // 7. DESCRIPTION CTA (Y = 1172)
-  // Horizontal Red Line across with centered pill: [📄 पूरी खबर डिस्क्रिप्शन में]
-  const ctaLineY = 1172;
+  // 5. RADIANT GLOWING GOLDEN DIVIDER LINE
   ctx.save();
-  ctx.strokeStyle = '#DC2626';
-  ctx.lineWidth = 3.5;
+  const divGrad = ctx.createLinearGradient(60, 685, width - 60, 685);
+  divGrad.addColorStop(0, 'rgba(255, 230, 0, 0)');
+  divGrad.addColorStop(0.5, '#FFE600');
+  divGrad.addColorStop(1, 'rgba(255, 230, 0, 0)');
+  ctx.strokeStyle = divGrad;
+  ctx.lineWidth = 4;
+  ctx.shadowColor = 'rgba(255, 230, 0, 0.85)';
+  ctx.shadowBlur = 18;
   ctx.beginPath();
-  ctx.moveTo(48, ctaLineY);
-  ctx.lineTo(width - 48, ctaLineY);
+  ctx.moveTo(60, 685);
+  ctx.lineTo(width - 60, 685);
   ctx.stroke();
-
-  const pillW = 520;
-  const pillH = 66;
-  const pillX = (width - pillW) / 2;
-  const pillY = ctaLineY - pillH / 2;
-
-  ctx.shadowColor = 'rgba(220, 38, 38, 0.35)';
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetY = 3;
-
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
-  ctx.fill();
-
-  ctx.shadowColor = 'transparent';
-
-  const docX = pillX + 44;
-  const docY = pillY + pillH / 2;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.roundRect(docX - 16, docY - 16, 28, 32, 4);
-  ctx.fill();
-  ctx.fillStyle = '#DC2626';
-  ctx.fillRect(docX - 11, docY - 9, 18, 3);
-  ctx.fillRect(docX - 11, docY - 2, 18, 3);
-  ctx.fillRect(docX - 11, docY + 5, 12, 3);
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 27px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('पूरी खबर डिस्क्रिप्शन में', pillX + pillW / 2 + 16, docY);
   ctx.restore();
 
-  // 8. HEADLINE AREA (Y = 730 to 1130)
-  // Centered, Maximum 3 Lines, Red Highlight support
-  const maxHeadlineW = width - 120;
-  const headlineAreaCenterY = (photoH + ctaLineY) / 2 - 15;
-  const hasUserHeadline = card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार';
+  // 6. LOWER HEADLINE SECTION (Y = 705 to 1250)
+  const hasUserHeadline = card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां');
 
   if (!hasUserHeadline) {
+    // Default Headline Placeholder Layers
     ctx.save();
+
+    // Yellow pill badge: [📄 स्टेप 3 : हेडलाइन लिखें]
+    const yPillW = 390;
+    const yPillH = 58;
+    const yPillX = (width - yPillW) / 2;
+    const yPillY = 770;
+    ctx.save();
+    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#FFE600';
+    ctx.beginPath();
+    ctx.roundRect(yPillX, yPillY, yPillW, yPillH, yPillH / 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+
+    ctx.fillStyle = '#090A0D';
+    ctx.font = '900 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.fillText('📄 स्टेप 3 : हेडलाइन लिखें', width / 2, yPillY + yPillH / 2);
+    ctx.restore();
 
-    const yourFont = '900 74px "Poppins", sans-serif';
-    ctx.font = yourFont;
-    const yourW = ctx.measureText('YOUR ').width;
-    const headW = ctx.measureText('HEADLINE').width;
-    const line1TotalW = yourW + headW;
-    const line1StartX = width / 2 - line1TotalW / 2;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#000000';
-    ctx.fillText('YOUR ', line1StartX, headlineAreaCenterY - 80);
-
-    ctx.fillStyle = '#DC2626';
-    ctx.fillText('HEADLINE', line1StartX + yourW, headlineAreaCenterY - 80);
-
+    // White subtitle
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '800 40px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#111827';
-    ctx.font = '900 58px "Baloo 2", sans-serif';
-    ctx.fillText('यहाँ आपकी हेडलाइन आएगी', width / 2, headlineAreaCenterY + 4);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('स्टेप 3 में जाकर अपनी मुख्य खबर की', width / 2, 875);
 
-    ctx.fillStyle = '#4B5563';
-    ctx.font = '700 36px "Baloo 2", sans-serif';
-    ctx.fillText('(अधिकतम 3 लाइन में)', width / 2, headlineAreaCenterY + 76);
+    // Big Gold Headline
+    ctx.save();
+    ctx.fillStyle = '#FFE600';
+    ctx.font = '900 70px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
+    ctx.fillText('हेडलाइन दर्ज करें', width / 2, 965);
+    ctx.restore();
+
+    // Gray Note
+    ctx.fillStyle = '#CBD5E1';
+    ctx.font = '600 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('आवश्यकता अनुसार दो या तीन लाइन में', width / 2, 1045);
+
     ctx.restore();
   } else {
+    // Render actual headline with Baloo 2 font and word highlights
     ctx.save();
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor || '#DC2626';
+    const highlightColor = card.highlightColor || '#FFE600';
+    const maxHeadlineW = width - 140;
 
-    let testFontSize = 66;
-    for (let s = 70; s >= 38; s -= 2) {
+    let testFontSize = 64;
+    for (let s = 68; s >= 38; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
-      if (testLines.length <= 3) {
+      if (testLines.length <= 4) {
         testFontSize = s;
         break;
       }
     }
 
     const headlineLineH = Math.round(testFontSize * 1.34);
-    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 3);
+    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
     const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = headlineAreaCenterY - totalHeadH / 2 + Math.round(headlineLineH * 0.45);
+    let startY = 960 - totalHeadH / 2 + Math.round(headlineLineH * 0.45);
 
     ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 4;
 
     for (const line of headlineLines) {
       let lineWidth = 0;
@@ -1962,7 +1808,7 @@ async function drawGraphic001Canvas(
 
       let curX = width / 2 - lineWidth / 2;
       for (const token of line) {
-        ctx.fillStyle = token.isHighlight ? highlightColor : '#111827';
+        ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
         ctx.fillText(token.text, curX, startY);
         curX += ctx.measureText(token.text + ' ').width;
       }
@@ -1971,19 +1817,83 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
+  // 7. BOTTOM WHITE DYNAMIC BRANDING FOOTER (Y = 1274 to 1350)
+  const footerY = 1274;
+  const footerH = 76;
+  ctx.save();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, footerY, width, footerH);
+
+  // Social Icons on Left
+  const iconY = footerY + footerH / 2;
+  const drawCircleIcon = (cx: number, cy: number, r: number, bg: string, text: string, txtColor = '#FFFFFF', isBold = true) => {
+    ctx.save();
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = txtColor;
+    ctx.font = `${isBold ? '900' : '700'} ${Math.round(r * 1.1)}px "Poppins", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, cx, cy);
+    ctx.restore();
+  };
+
+  // 6 Social circles
+  drawCircleIcon(36, iconY, 15, '#E1306C', '📷', '#FFFFFF');
+  drawCircleIcon(72, iconY, 15, '#1877F2', 'f', '#FFFFFF');
+  drawCircleIcon(108, iconY, 15, '#000000', '𝕏', '#FFFFFF');
+  drawCircleIcon(144, iconY, 15, '#111827', '@', '#FFFFFF');
+  drawCircleIcon(180, iconY, 15, '#DC2626', '▶', '#FFFFFF');
+  drawCircleIcon(216, iconY, 15, '#0A66C2', 'in', '#FFFFFF');
+
+  // Handle text
+  const handleText = card.socialHandle || '/@UserName';
+  ctx.fillStyle = '#0F172A';
+  ctx.font = '800 22px "Poppins", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(handleText, 246, iconY);
+
+  // Divider 1
+  const div1X = 490;
+  ctx.strokeStyle = '#CBD5E1';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(div1X, footerY + 16);
+  ctx.lineTo(div1X, footerY + footerH - 16);
+  ctx.stroke();
+
+  // Website Center
+  const siteText = card.websiteUrl ? card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '') : 'yourwebsite.com';
+  ctx.fillStyle = '#0F172A';
+  ctx.font = '800 22px "Poppins", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`🌐  ${siteText}`, div1X + 22, iconY);
+
+  // Divider 2
+  const div2X = 800;
+  ctx.beginPath();
+  ctx.moveTo(div2X, footerY + 16);
+  ctx.lineTo(div2X, footerY + footerH - 16);
+  ctx.stroke();
+
+  // WhatsApp Right
+  drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '📞', '#FFFFFF');
+  const phoneText = card.whatsappNumber || '+91 98765 43210';
+  ctx.fillStyle = '#0F172A';
+  ctx.font = '800 22px "Poppins", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(phoneText, div2X + 54, iconY);
+
+  ctx.restore();
+
   ctx.restore();
 }
 
-// ============================================================================
-// GRAPHIC 2 — NEWS GRAPHIC TEMPLATE (graphic_002)
-// Aspect Ratio: STRICT 4:5 (1080 x 1350)
-// Plan: ADVANCED
-// Outer Thin Orange Border (#EA580C)
-// Top Photo (53%), Location Box (top-left), Logo Box (top-right),
-// Off-white Textured Headline Area with Orange Keyword Accents (Max 3 lines),
-// "पूरी खबर कमेंट बॉक्स में" Single Line CTA with Flanking Red Lines,
-// Fixed Yellow Social Footer (#FFE600) with Fixed Footer Badge
-// ============================================================================
 async function drawGraphic002Canvas(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -3128,7 +3038,7 @@ async function drawGraphic004Canvas(
   const photoX = 20;
 
   const hasPhoto1 = card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg';
-  const secondPhotoUrl = card.secondaryPhoto || card.images?.secondary;
+  const secondPhotoUrl = card.secondaryPhoto || card.images?.second || (card.images as any)?.secondary;
   const hasPhoto2 = secondPhotoUrl && secondPhotoUrl.trim().length > 0;
 
   if (hasPhoto2 && hasPhoto1) {
@@ -4750,7 +4660,7 @@ async function drawEPaperJacketContent(
         ctx.fillStyle = '#4B5563';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`������ ${card.epaperPhotoCaption}`, startX + 8, curY + imgH + captionH / 2);
+        ctx.fillText(`������ ${card.epaperPhotoCaption}`, startX + 8, curY + imgH + captionH / 2);
       }
 
       // Photo 2
@@ -6409,9 +6319,7 @@ async function drawThemeFooterBar(
 
   // Clean social handle
   let displayHandle = (socialHandle || '').trim();
-  if (!displayHandle || displayHandle === '/BreakingNewsWala') {
-    displayHandle = '@BreakingNewsWala';
-  } else if (!displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
+  if (displayHandle && !displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
     displayHandle = `@${displayHandle}`;
   }
 
@@ -6430,8 +6338,8 @@ async function drawThemeFooterBar(
 
   // Active social icons to display
   const icons: ('youtube' | 'facebook' | 'instagram' | 'twitter' | 'telegram' | 'whatsapp')[] =
-    activeSocialIcons && activeSocialIcons.length > 0
-      ? activeSocialIcons
+    Array.isArray(activeSocialIcons)
+      ? (activeSocialIcons.filter((i) => ['youtube', 'facebook', 'instagram', 'twitter', 'telegram'].includes(i)) as any)
       : ['youtube', 'facebook', 'instagram', 'twitter'];
 
   // Base typography & sizing strictly in Arial
@@ -6623,22 +6531,63 @@ export async function generateCardCanvas(
   if (!element) throw new Error('Preview element not found');
 
   const htmlElement = element as HTMLElement;
+
+  // 1. Ensure fonts are loaded
+  if (typeof document !== 'undefined' && (document as any).fonts && (document as any).fonts.ready) {
+    try {
+      await (document as any).fonts.ready;
+    } catch {}
+  }
+
+  // 2. Ensure all nested images are loaded
+  const imgElements = Array.from(htmlElement.querySelectorAll('img'));
+  if (imgElements.length > 0) {
+    await Promise.all(
+      imgElements.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise<void>((res) => {
+          img.onload = () => res();
+          img.onerror = () => res();
+        });
+      })
+    );
+  }
+
+  // 3. Temporarily reset transform & border radius for true full-bleed output
   const origTransform = htmlElement.style.transform;
+  const origBorderRadius = htmlElement.style.borderRadius;
   htmlElement.style.transform = 'none';
+  htmlElement.style.borderRadius = '0px';
 
   try {
-    const canvas = await html2canvas(htmlElement, {
-      width: 1080,
-      height: 1350,
-      scale: 1,
+    const elemWidth = htmlElement.offsetWidth || 540;
+    const targetWidth = 1080;
+    const targetHeight = 1350;
+    const dynamicScale = targetWidth / elemWidth;
+
+    const rawCanvas = await html2canvas(htmlElement, {
+      scale: dynamicScale,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#0a0a0a',
       logging: false,
+      imageTimeout: 15000,
     });
-    return canvas;
+
+    // Create normalized 1080x1350 canvas
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = targetWidth;
+    finalCanvas.height = targetHeight;
+    const ctx = finalCanvas.getContext('2d');
+    if (ctx) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(rawCanvas, 0, 0, targetWidth, targetHeight);
+    }
+    return finalCanvas;
   } finally {
     htmlElement.style.transform = origTransform;
+    htmlElement.style.borderRadius = origBorderRadius;
   }
 }
 

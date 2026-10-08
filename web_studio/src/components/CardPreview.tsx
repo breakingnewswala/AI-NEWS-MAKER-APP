@@ -857,6 +857,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
           /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
           null
+        ) : card.showMasterBranding === false ? (
+          getActiveHeaderPng(card) ? (
+            <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
+          ) : null
         ) : card.frameDesign === 'custom-png' ? (
           !card.hideDefaultHeaderInCustomFrame && (
             <HeaderGraphic
@@ -879,8 +883,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         )}
       </div>
 
-      {/* Optional Full Frame Overlay PNG - ONLY active when custom-png frame is selected */}
-      {card.frameDesign === 'custom-png' && card.customFrameOverlayPng && (
+      {/* Optional Full Frame Overlay PNG - active when custom-png frame is selected OR when master branding is OFF */}
+      {(card.frameDesign === 'custom-png' || card.showMasterBranding === false) && card.customFrameOverlayPng && (
         <img
           src={card.customFrameOverlayPng}
           alt="Frame Overlay"

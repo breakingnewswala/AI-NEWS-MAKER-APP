@@ -50,6 +50,7 @@ import {
 import {
   isTemplateAvailableForUserPlan,
   getTemplateConfig,
+  GraphicPlanCategory,
 } from '../lib/graphicTemplatesRegistry';
 import {
   isTierSufficient,
@@ -220,11 +221,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const [internalMobileViewMode, setInternalMobileViewMode] = React.useState<'steps' | 'all'>('steps');
   const mobileViewMode = propMobileViewMode !== undefined ? propMobileViewMode : internalMobileViewMode;
   const setMobileViewMode = onToggleMobileViewMode || setInternalMobileViewMode;
-  const defaultFilter = effectiveAdmin ? 'all' : effectiveTier;
+  const defaultFilter = effectiveAdmin ? 'basic' : (effectiveTier === 'ultra' ? 'ultra' : effectiveTier === 'professional' ? 'professional' : effectiveTier === 'advanced' ? 'advanced' : 'basic');
   const [templatePlanFilter, setTemplatePlanFilter] = React.useState<string>(defaultFilter);
 
   React.useEffect(() => {
-    if (!effectiveAdmin) {
+    if (effectiveAdmin) {
+      if (templatePlanFilter === 'all') setTemplatePlanFilter('basic');
+    } else {
       if (effectiveTier === 'basic') setTemplatePlanFilter('basic');
       else if (effectiveTier === 'advanced') setTemplatePlanFilter('advanced');
       else if (effectiveTier === 'professional' && templatePlanFilter !== 'custom') setTemplatePlanFilter('professional');
@@ -232,42 +235,53 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     }
   }, [effectiveAdmin, effectiveTier]);
 
-  // Plan Categories for Step 1
+  // Plan Categories for Step 1: strictly 4 plan categories (Basic, Advance, Pro, VIP) + 5th Custom
   const planCategories = React.useMemo(() => {
+    const getCountForPlan = (category: GraphicPlanCategory) => {
+      return currentFrameOptions.filter((f) => {
+        const cfg = getTemplateConfig(f.id);
+        return cfg.isActive && cfg.allowedPlans.includes(category);
+      }).length;
+    };
+
+    const vipCount = currentFrameOptions.filter((f) => {
+      const cfg = getTemplateConfig(f.id);
+      return cfg.isActive;
+    }).length;
+
     if (effectiveAdmin) {
       return [
-        { id: 'all', label: 'सभी फ्रेम्स (All)', badge: `${currentFrameOptions.length + 1}` },
-        { id: 'basic', label: 'BASIC PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'basic').length}` },
-        { id: 'advanced', label: 'ADVANCE PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'advanced').length}` },
-        { id: 'professional', label: 'PRO PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'professional').length}` },
-        { id: 'ultra', label: 'VIP DESK PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'ultra').length}` },
-        { id: 'custom', label: 'CUSTOM FRAMES', badge: '1' },
+        { id: 'basic', label: 'Basic', badge: `${getCountForPlan('BASIC')}` },
+        { id: 'advanced', label: 'Advance', badge: `${getCountForPlan('ADVANCED')}` },
+        { id: 'professional', label: 'Pro', badge: `${getCountForPlan('PRO')}` },
+        { id: 'ultra', label: 'VIP', badge: `${vipCount}` },
+        { id: 'custom', label: 'Custom', badge: '1' },
       ];
     }
     if (effectiveTier === 'basic') {
       return [
-        { id: 'basic', label: 'BASIC PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'basic').length}` },
+        { id: 'basic', label: 'Basic', badge: `${getCountForPlan('BASIC')}` },
       ];
     }
     if (effectiveTier === 'advanced') {
       return [
-        { id: 'advanced', label: 'ADVANCE PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'advanced').length}` },
+        { id: 'advanced', label: 'Advance', badge: `${getCountForPlan('ADVANCED')}` },
       ];
     }
     if (effectiveTier === 'professional') {
       return [
-        { id: 'professional', label: 'PRO PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'professional').length}` },
-        { id: 'custom', label: 'CUSTOM FRAMES', badge: '1' },
+        { id: 'professional', label: 'Pro', badge: `${getCountForPlan('PRO')}` },
+        { id: 'custom', label: 'Custom', badge: '1' },
       ];
     }
     if (effectiveTier === 'ultra') {
       return [
-        { id: 'ultra', label: 'VIP DESK PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'ultra').length}` },
-        { id: 'custom', label: 'CUSTOM FRAMES', badge: '1' },
+        { id: 'ultra', label: 'VIP', badge: `${vipCount}` },
+        { id: 'custom', label: 'Custom', badge: '1' },
       ];
     }
     return [
-      { id: 'basic', label: 'BASIC PACKAGE FRAMES', badge: `${currentFrameOptions.filter((f) => f.requiredTier === 'basic').length}` },
+      { id: 'basic', label: 'Basic', badge: `${getCountForPlan('BASIC')}` },
     ];
   }, [effectiveAdmin, effectiveTier, currentFrameOptions]);
 
@@ -327,6 +341,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       5: 'step-location',
       6: 'step-header-footer',
       7: 'step-download',
+
     };
     const id = targetId || stepMap[newStep];
     if (id) {
@@ -349,6 +364,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     { step: 5, id: 'step-location', label: '5. लोकेशन, तारीख और वॉटरमार्क', shortLabel: 'लोकेशन-तारीख', icon: '📍' },
     { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
     { step: 7, id: 'step-download', label: '7. डाउनलोड', shortLabel: 'डाउनलोड', icon: '⬇️' },
+
   ];
 
   const activeHeaderPng = getActiveHeaderPng(card);
@@ -1019,42 +1035,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               );
             })}
           </div>
-
-          {/* Quick 1-Tap Horizontal Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 border-t border-neutral-800/60 pt-2">
-            {currentFrameOptions
-              .filter((f) => isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin))
-              .filter((f) => templatePlanFilter === 'all' || f.requiredTier === templatePlanFilter)
-              .map((frame, idx) => {
-                const isSelected = (card.frameDesign || 'jacket-original') === frame.id;
-                const isUnlocked = effectiveAdmin || isTierSufficient(effectiveTier, frame.requiredTier);
-                return (
-                  <button
-                    key={frame.id}
-                    type="button"
-                    onClick={() => {
-                      if (isUnlocked) {
-                        onChange({ frameDesign: frame.id });
-                      } else {
-                        const tierLabel = frame.requiredTier === 'ultra' ? 'VIP DESK' : PLAN_KEY_MAP[frame.requiredTier] || frame.requiredTier.toUpperCase();
-                        alert(`यह ${frame.name} टेम्पलेट केवल ${tierLabel} प्लान में उपलब्ध है। कृपया प्रोफ़ाइल में जाकर अपना प्लान अपग्रेड करें।`);
-                      }
-                    }}
-                    className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-black transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap shadow-xs ${
-                      isSelected
-                        ? 'bg-amber-400 text-neutral-950 ring-2 ring-amber-300 font-black'
-                        : isUnlocked
-                        ? 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
-                        : 'bg-neutral-950/80 text-neutral-500 border border-neutral-800/60'
-                    }`}
-                  >
-                    <span>T{idx + 1}</span>
-                    <span>{frame.name.split(' ')[0]}</span>
-                    {!isUnlocked && <Lock className="w-2.5 h-2.5 text-amber-500" />}
-                  </button>
-                );
-              })}
-          </div>
         </div>
 
         {/* Custom Header & Footer Active Banner for Eligible User */}
@@ -1102,20 +1082,26 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {currentFrameOptions
               .filter((f) => isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin))
               .filter((f) => {
-                if (effectiveAdmin) return templatePlanFilter === 'all' || f.requiredTier === templatePlanFilter;
                 if (templatePlanFilter === 'custom') return false;
+                const cfg = getTemplateConfig(f.id);
+                if (!cfg.isActive) return false;
+                if (templatePlanFilter === 'basic') return cfg.allowedPlans.includes('BASIC');
+                if (templatePlanFilter === 'advanced') return cfg.allowedPlans.includes('ADVANCED');
+                if (templatePlanFilter === 'professional') return cfg.allowedPlans.includes('PRO');
+                if (templatePlanFilter === 'ultra') return true; // VIP desk has access to all active templates
                 return true;
               })
               .map((f) => {
                 const isSelected = (card.frameDesign || 'graphic_001') === f.id;
-                const isUnlocked = effectiveAdmin || isTierSufficient(effectiveTier, f.requiredTier);
-                const planDisplay = f.requiredTier === 'basic' 
+                const isUnlocked = effectiveAdmin || isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin);
+                const cfg = getTemplateConfig(f.id);
+                const planDisplay = cfg.allowedPlans.includes('BASIC') 
                   ? { name: 'BASIC', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' }
-                  : f.requiredTier === 'advanced'
+                  : cfg.allowedPlans.includes('ADVANCED')
                   ? { name: 'ADVANCE', color: 'bg-blue-500/20 text-blue-400 border-blue-500/40' }
-                  : f.requiredTier === 'professional'
+                  : cfg.allowedPlans.includes('PRO')
                   ? { name: 'PRO', color: 'bg-purple-500/20 text-purple-400 border-purple-500/40' }
-                  : { name: 'VIP DESK', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+                  : { name: 'VIP', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
 
                 return (
                   <div
@@ -1165,9 +1151,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 );
               })}
 
-            {/* Custom Frame Card — strictly visible only to PRO, VIP DESK, and Admin */}
+            {/* Custom Frame Card — strictly visible only to PRO, VIP DESK, and Admin on Custom tab */}
             {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') &&
-              (templatePlanFilter === 'all' || templatePlanFilter === 'custom' || templatePlanFilter === 'professional' || templatePlanFilter === 'ultra') && (
+              templatePlanFilter === 'custom' && (
                 <div
                   onClick={() => onChange({ frameDesign: 'custom-png' })}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer relative overflow-hidden select-none ${
@@ -2341,6 +2327,132 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
         {/* Upload Buttons according to selected layout */}
         <div className="pt-2 border-t border-neutral-800/80 space-y-3">
+          {/* Internet Photo Search Workflow & Prompt Restoration */}
+          {(!card.images?.main || card.images.main.includes('placeholder_news_search') || card.images.main.includes('placeholder_news_photo')) && (
+            <div className="bg-gradient-to-br from-blue-950/70 via-slate-900 to-amber-950/40 border-2 border-blue-500/50 rounded-xl p-3.5 sm:p-4 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between gap-2 border-b border-blue-500/30 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
+                  <span className="text-xs sm:text-sm font-extrabold text-blue-300 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-blue-400" />
+                    इंटरनेट से संबंधित समाचार फोटो खोजें
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/40 px-2 py-0.5 rounded-full">
+                  स्टेप 4 गाइडेंस
+                </span>
+              </div>
+
+              <div className="bg-slate-950/80 border border-blue-500/20 rounded-lg p-3 text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1.5">
+                <p className="font-semibold text-amber-300">
+                  📌 <b>निर्देश:</b> इस खबर के विषय के अनुसार इंटरनेट पर संबंधित और वास्तविक समाचार फोटो खोजें। फोटो खबर के वास्तविक विषय, व्यक्ति, स्थान या घटना से संबंधित हो।
+                </p>
+                <p className="text-slate-300 text-[11px] sm:text-xs">
+                  ⚠️ गलत व्यक्ति, असंबंधित फोटो, logo, advertisement, stock image या unrelated image का उपयोग न करें। चुनी गई फोटो को डाउनलोड करके Graphic Studio के <b>Step 4 / Photos</b> में upload करें।
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {(() => {
+                  const searchQuery = (card.headline || card.title || 'ताज़ा समाचार')
+                    .replace(/\[\/?(yellow|red|white|cyan|green|orange|gold)\]/gi, '')
+                    .slice(0, 70)
+                    .trim();
+                  const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(searchQuery + (card.location ? ` ${card.location}` : ''))}`;
+                  return (
+                    <>
+                      <a
+                        href={searchUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-lg shadow-md flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer text-center"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>गूगल इमेज पर फोटो खोजें</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(searchQuery);
+                          alert('सर्च क्वेरी क्लिपबोर्ड में कॉपी हो गई!');
+                        }}
+                        className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-lg border border-slate-700 flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="सर्च टेक्स्ट कॉपी करें"
+                      >
+                        <span>क्वेरी कॉपी</span>
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Available Photos from News Article (Parts 16, 17) */}
+          {(() => {
+            let photos: string[] = [];
+            if (autoFillNews?.additionalPhotos && autoFillNews.additionalPhotos.length > 0) {
+              photos = autoFillNews.additionalPhotos;
+            } else {
+              try {
+                const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('studio_active_news_photos') : null;
+                if (raw) photos = JSON.parse(raw);
+              } catch {}
+            }
+            if (!photos || photos.length === 0) return null;
+
+            return (
+              <div className="bg-slate-900/90 border border-amber-500/40 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>इस समाचार की उपलब्ध फोटो (Available Photos from Article)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold">{photos.length} उपलब्ध</span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  कार्ड में मुख्य फोटो बनाने के लिए किसी भी फोटो पर क्लिक करें:
+                </p>
+                <div className="grid grid-cols-4 gap-2 pt-1">
+                  {photos.map((pUrl, pIdx) => {
+                    const isSelected = card.images.main === pUrl;
+                    return (
+                      <div
+                        key={pIdx}
+                        onClick={() => {
+                          onChange({
+                            images: {
+                              ...card.images,
+                              main: pUrl,
+                            },
+                          });
+                        }}
+                        className={`relative h-20 rounded-lg overflow-hidden border-2 cursor-pointer transition group shadow ${
+                          isSelected
+                            ? 'border-amber-400 ring-2 ring-amber-400/50 scale-102'
+                            : 'border-slate-700 hover:border-amber-300'
+                        }`}
+                      >
+                        <img src={pUrl} alt={`Article photo ${pIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                        <span className={`absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-black ${
+                          isSelected ? 'bg-amber-400 text-slate-950' : 'bg-black/75 text-white'
+                        }`}>
+                          {pIdx === 0 ? 'मुख्य' : `फोटो ${pIdx}`}
+                        </span>
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 p-0.5 bg-amber-400 text-slate-950 rounded-full">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="text-xs font-semibold text-neutral-300">
             तस्वीरें अपलोड करें:
           </div>
@@ -2669,22 +2781,22 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* STEP 5: लोकेशन (Location & District) */}
+      {/* STEP 5: लोकेशन, तारीख और वॉटरमार्क (Location, Date & Watermark) */}
       {/* ========================================================================= */}
       <div
         id="step-location"
         style={{ scrollMarginTop: '120px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-          mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
+          mobileViewMode === 'steps' && activeStep !== 5 ? 'hidden' : 'block'
         }`}
       >
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <MapPin className="w-4 h-4 text-red-500" />
-            स्टेप 5: लोकेशन (Location)
+            स्टेप 5: लोकेशन, तारीख और वॉटरमार्क
           </span>
           <span className="text-[11px] text-neutral-400">
-            स्थान व जिला • लोकेशन शो/हाइड
+            स्थान व जिला • दिनांक • वॉटरमार्क
           </span>
         </div>
 
@@ -2728,50 +2840,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <p className="text-[10px] text-neutral-400">
             * लोकेशन OFF करने पर चैनल लोगो या कोई फिक्स्ड एलिमेंट अपनी जगह से नहीं हिलेगा (दाएं कोने पर सुरक्षित रहेगा)।
           </p>
-        </div>
-
-        {/* Step 5 Mobile Nav Buttons */}
-        {mobileViewMode === 'steps' && (
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-            <button
-              type="button"
-              onClick={() => handleGoToStep(4)}
-              className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: फोटो</span>
-            </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 5 / {STEPS.length}</span>
-            <button
-              type="button"
-              onClick={() => handleGoToStep(6)}
-              className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-            >
-              <span>अगला: तारीख और वॉटरमार्क</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* STEP 6: तारीख और वॉटरमार्क (Date & Watermark) */}
-      {/* ========================================================================= */}
-      <div
-        id="step-date-watermark"
-        style={{ scrollMarginTop: '120px' }}
-        className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-          mobileViewMode === 'steps' && (activeStep !== 5 && activeStep !== 6) ? 'hidden' : 'block'
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-amber-400" />
-            स्टेप 6: तारीख व वॉटरमार्क (Date & Watermark)
-          </span>
-          <span className="text-[11px] text-neutral-400">
-            दिनांक शो/हाइड • वॉटरमार्क (ऑफ / प्रतीकात्मक फोटो / AI जनरेटेड)
-          </span>
         </div>
 
         {/* Date Stamp */}
@@ -2918,21 +2986,21 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           )}
         </div>
 
-        {/* Step 6 Mobile Nav Buttons */}
+        {/* Single Step 5 Mobile Nav Buttons */}
         {mobileViewMode === 'steps' && (
           <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
             <button
               type="button"
-              onClick={() => handleGoToStep(5)}
+              onClick={() => handleGoToStep(4)}
               className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: लोकेशन</span>
+              <span>पिछला: फोटो</span>
             </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 6 / {STEPS.length}</span>
+            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 5 / {STEPS.length}</span>
             <button
               type="button"
-              onClick={() => handleGoToStep(7)}
+              onClick={() => handleGoToStep(6)}
               className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
             >
               <span>अगला: हैडर और फुटर</span>
@@ -2949,13 +3017,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             id="step-header-footer"
             style={{ scrollMarginTop: '120px' }}
             className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-              mobileViewMode === 'steps' && (activeStep !== 6 && activeStep !== 7) ? 'hidden' : 'block'
+              mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
+
             }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-                स्टेप 7: हैडर और फुटर (Header & Footer)
+                स्टेप 6 : हैडर और फुटर (Header & Footer)
               </span>
               <span className="text-xs text-neutral-400 font-medium">
                 टॉप हेडर व बॉटम फुटर स्ट्रिप
@@ -3224,22 +3293,144 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <Globe className="w-4 h-4 text-blue-400" />
                   <span>मास्टर ब्रांडिंग (Master Branding)</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onChange({ showMasterBranding: card.showMasterBranding === false ? true : false })}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
-                    card.showMasterBranding !== false
-                      ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
-                      : 'bg-neutral-800 text-neutral-400 border-neutral-700'
-                  }`}
-                >
-                  {card.showMasterBranding !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                  <span>{card.showMasterBranding !== false ? 'चालू (ON)' : 'बंद (OFF)'}</span>
-                </button>
+                {canUseCustomHF ? (
+                  <button
+                    type="button"
+                    onClick={() => onChange({ showMasterBranding: card.showMasterBranding === false ? true : false })}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
+                      card.showMasterBranding !== false
+                        ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
+                        : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                    }`}
+                  >
+                    {card.showMasterBranding !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    <span>{card.showMasterBranding !== false ? 'चालू (ON)' : 'बंद (OFF)'}</span>
+                  </button>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    <span>केवल PRO / VIP DESK</span>
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-neutral-400 leading-relaxed">
                 हेडर लोगो, फुटर स्ट्रिप, सोशल हैंडल व वेबसाइट सीधे आपकी <strong>प्रोफ़ाइल</strong> से ऑटो-लिंक रहते हैं।
               </p>
+
+              {/* When Master Branding is OFF (PRO / VIP / Admin): Header PNG, Footer PNG & Complete Frame 4:5 */}
+              {canUseCustomHF && card.showMasterBranding === false && (
+                <div className="pt-2 border-t border-neutral-800/80 space-y-3">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-[11px]">
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <span>कस्टम PNG अपलोड (जब मास्टर ब्रांडिंग बंद हो):</span>
+                  </div>
+
+                  {/* 1. Header PNG */}
+                  <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-200">1. हेडर PNG (Header PNG)</span>
+                      {activeHeaderPng && (
+                        <button
+                          type="button"
+                          onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          हटाएं (Remove)
+                        </button>
+                      )}
+                    </div>
+                    {activeHeaderPng ? (
+                      <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
+                        <img src={activeHeaderPng} alt="Custom Header" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी हेडर पट्टी अपलोड करें।</p>
+                    )}
+                    <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-blue-300 border border-blue-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                      <span>{activeHeaderPng ? '🔄 नया हेडर PNG चुनें' : '📁 हेडर PNG अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleHeaderUpload(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* 2. Footer PNG */}
+                  <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-200">2. फुटर PNG (Footer PNG)</span>
+                      {activeFooterPng && (
+                        <button
+                          type="button"
+                          onClick={() => handleFooterReset()}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          हटाएं (Remove)
+                        </button>
+                      )}
+                    </div>
+                    {activeFooterPng ? (
+                      <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
+                        <img src={activeFooterPng} alt="Custom Footer" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी फुटर स्ट्रिप अपलोड करें।</p>
+                    )}
+                    <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                      <span>{activeFooterPng ? '🔄 नया फुटर PNG चुनें' : '📁 फुटर PNG अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFooterUpload(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* 3. Complete Frame (4:5 full layout) */}
+                  <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-200">3. कम्पलीट फ्रेम 4:5 (Complete Frame Overlay)</span>
+                      {card.customFrameOverlayPng && (
+                        <button
+                          type="button"
+                          onClick={() => onChange({ customFrameOverlayPng: undefined })}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          हटाएं (Remove)
+                        </button>
+                      )}
+                    </div>
+                    {card.customFrameOverlayPng ? (
+                      <div className="relative h-20 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
+                        <img src={card.customFrameOverlayPng} alt="Custom Frame Overlay" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-400">1080x1350 (4:5) फुल पारदर्शी फ्रेम जो सभी कंटेंट के सबसे ऊपर (Topmost Layer) दिखाई देगा।</p>
+                    )}
+                    <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-purple-300 border border-purple-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                      <span>{card.customFrameOverlayPng ? '🔄 नया 4:5 फ्रेम चुनें' : '📁 कम्पलीट 4:5 फ्रेम अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFrameOverlayUpload(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 3. Footer Style Customization (3 Blocks Center Aligned, No Partition Line) */}
@@ -3320,21 +3511,21 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               </div>
             </div>
 
-            {/* Step 7 Navigation Buttons */}
+            {/* Step 6 Navigation Buttons */}
             {mobileViewMode === 'steps' && (
               <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
                 <button
                   type="button"
-                  onClick={() => handleGoToStep(6)}
+                  onClick={() => handleGoToStep(5)}
                   className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>पिछला: तारीख व वॉटरमार्क</span>
+                  <span>पिछला: लोकेशन, तारीख और वॉटरमार्क</span>
                 </button>
-                <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 8 / {STEPS.length}</span>
+                <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 6 / {STEPS.length}</span>
                 <button
                   type="button"
-                  onClick={() => handleGoToStep(8)}
+                  onClick={() => handleGoToStep(7)}
                   className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
                 >
                   <span>अगला: डाउनलोड</span>
@@ -3347,9 +3538,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           
 
       {/* ========================================================================= */}
-      {/* STEP 8: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
+      {/* STEP 7: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
       {/* ========================================================================= */}
-      {(mobileViewMode === 'all' || activeStep === 7 || activeStep === 8) && (
+      {(mobileViewMode === 'all' || activeStep === 7) && (
+
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}
@@ -3358,7 +3550,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-amber-400 text-neutral-950 font-black flex items-center justify-center text-sm shadow-sm">
-                8
+                7
               </span>
               <h2 className="text-base sm:text-lg font-black text-white font-['Mukta']">
                 डाउनलोड (HD कार्ड एक्सपोर्ट)
@@ -3400,11 +3592,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
               <button
                 type="button"
-                onClick={() => handleGoToStep(7)}
+                onClick={() => handleGoToStep(6)}
                 className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
-                <span>पिछला: फुटर</span>
+                <span>पिछला: हैडर और फुटर</span>
               </button>
               <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 7 / {STEPS.length}</span>
               <button
@@ -3423,7 +3615,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       {/* ========================================================================= */}
       {/* STEP 7: कैप्शन (सोशल मीडिया कैप्शन व शेयर) */}
       {/* ========================================================================= */}
-      {(mobileViewMode === 'all' || activeStep === 8) && (
+      {(mobileViewMode === 'all' || activeStep === 7) && (
         <div
           id="step-caption"
           style={{ scrollMarginTop: '380px' }}

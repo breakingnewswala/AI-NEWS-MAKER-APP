@@ -3,6 +3,40 @@
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
 export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
+export const SUPER_ADMIN_EMAILS = [
+  'admin.ainewsmaker@gmail.com',
+  'admin@breakingnewswala.com',
+  'breakingnewswala.com@gmail.com',
+];
+
+export function isUserSuperAdmin(userOrEmail?: any): boolean {
+  if (!userOrEmail) return false;
+  if (typeof userOrEmail === 'string') {
+    const clean = userOrEmail.toLowerCase().trim();
+    return clean === 'superadmin' || SUPER_ADMIN_EMAILS.includes(clean);
+  }
+  const email = (userOrEmail.email || '').toLowerCase().trim();
+  const username = (userOrEmail.username || '').toLowerCase().trim();
+  const role = (userOrEmail.role || '').toLowerCase().trim();
+  return role === 'superadmin' || SUPER_ADMIN_EMAILS.includes(email) || username === 'superadmin';
+}
+
+export function isEffectiveSuperAdmin(user?: any): boolean {
+  if (!user) {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return isUserSuperAdmin(parsed);
+        }
+      } catch {}
+    }
+    return false;
+  }
+  return isUserSuperAdmin(user);
+}
+
 
 export interface UserSubscriptionInfo {
   tier: UserPlanTier;
@@ -478,6 +512,7 @@ export interface PlanUserRecord {
   userId: string;
   email: string;
   name?: string;
+  role?: 'superadmin' | 'admin' | 'reporter' | 'user';
   mobile?: string;
   channelName?: string;
   tier: UserPlanTier;
@@ -518,7 +553,12 @@ export function recordUserPlanAssignment(record: PlanUserRecord): void {
   }
 }
 
-export function assignPlanToUserManually(userEmail: string, tier: UserPlanTier, durationDays: number = 30): void {
+export function assignPlanToUserManually(
+  userEmail: string,
+  tier: UserPlanTier,
+  durationDays: number = 30,
+  activatedVia: string = 'Admin Manual Assignment'
+): void {
   const planDetail = getPlanDetail(tier);
   const now = Date.now();
   const expiresAt = now + durationDays * 24 * 60 * 60 * 1000;
@@ -529,7 +569,7 @@ export function assignPlanToUserManually(userEmail: string, tier: UserPlanTier, 
     planName: planDetail.planKey,
     activatedAt: now,
     expiresAt,
-    activatedVia: 'Admin Manual Assignment',
+    activatedVia,
   });
 }
 
@@ -733,15 +773,23 @@ export function getEffectiveUserTier(currentUser?: any): UserPlanTier {
 
 export function isUserAdmin(user: any): boolean {
   if (!user) return false;
-  const email = (user.email || user.username || '').toLowerCase();
-  const role = (user.role || '').toLowerCase();
-  return (
-    role === 'admin' ||
-    email === 'admin' ||
-    email === 'breakingnewswala.com@gmail.com' ||
-    email.includes('admin') ||
-    email.includes('editor')
-  );
+  if (isUserSuperAdmin(user)) return true;
+  const role = (user.role || "").toLowerCase().trim();
+  if (role === "admin" || role === "superadmin") return true;
+  
+  if (typeof window !== "undefined") {
+    try {
+      const email = (user.email || user.username || "").toLowerCase().trim();
+      if (email) {
+        const users = getPlanUsers();
+        const matched = users.find((u) => u.email.toLowerCase().trim() === email);
+        if (matched && (matched.role === "admin" || matched.role === "superadmin")) {
+          return true;
+        }
+      }
+    } catch {}
+  }
+  return false;
 }
 
 /**
@@ -887,12 +935,26 @@ export interface AccountUniquenessInput {
   currentEmail?: string;
 }
 
-export function checkAccountUniqueness(input: AccountUniquenessInput): { valid: boolean; error?: string } {
+export function checkAccountUniqueness(input: {
+  channelName?: string;
+  username?: string;
+  websiteUrl?: string;
+  currentEmail?: string;
+}): { valid: boolean; error?: string } {
+  const cleanEmail = (input.currentEmail || '').trim().toLowerCase();
+  const isPrivileged =
+    cleanEmail === 'admin.ainewsmaker@gmail.com' ||
+    cleanEmail === 'admin@breakingnewswala.com' ||
+    cleanEmail === 'breakingnewswala.com@gmail.com' ||
+    cleanEmail.includes('admin') ||
+    cleanEmail.includes('superadmin') ||
+    cleanEmail.includes('breakingnews');
+
   const cleanChannel = (input.channelName || '').trim().toLowerCase();
   const cleanUsername = (input.username || '').trim().toLowerCase().replace(/^@/, '');
 
   const reservedNames = ['admin', 'official', 'breakingnewswala', 'ainewsmaker', 'superadmin'];
-  if (reservedNames.includes(cleanChannel) || reservedNames.includes(cleanUsername)) {
+  if (!isPrivileged && (reservedNames.includes(cleanChannel) || reservedNames.includes(cleanUsername))) {
     return { valid: false, error: 'यह नाम सिस्टम द्वारा आरक्षित है।' };
   }
 
@@ -921,18 +983,21 @@ export function registerOrUpdateUser(userData: {
   isLocked?: boolean;
   username?: string;
   tier?: UserPlanTier;
-  role?: string;
+  role?: 'superadmin' | 'admin' | 'reporter' | 'user' | string;
 }): void {
   if (typeof window === 'undefined') return;
   try {
     const users = getPlanUsers();
     const cleanEmail = userData.email.toLowerCase().trim();
+    const isSuper = isUserSuperAdmin(cleanEmail);
+    const assignedRole = (isSuper ? 'superadmin' : (userData.role || 'user')) as any;
     const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
     if (idx >= 0) {
       users[idx] = {
         ...users[idx],
         email: cleanEmail,
         name: userData.name || users[idx].name,
+        role: users[idx].role || assignedRole,
         channelName: userData.channelName || users[idx].channelName,
         channelLogoUrl: userData.channelLogoUrl || users[idx].channelLogoUrl,
         mobile: userData.mobile || users[idx].mobile,
@@ -943,15 +1008,16 @@ export function registerOrUpdateUser(userData: {
         userId: `user-${Date.now()}`,
         email: cleanEmail,
         name: userData.name,
-        tier: 'basic',
-        planName: 'BASIC',
+        role: assignedRole,
+        tier: isSuper ? 'ultra' : (userData.tier || 'basic'),
+        planName: isSuper ? 'VIP DESK' : 'BASIC',
         channelName: userData.channelName,
         channelLogoUrl: userData.channelLogoUrl,
         mobile: userData.mobile,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : true,
         activatedAt: Date.now(),
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        activatedVia: 'Profile Registration',
+        expiresAt: Date.now() + (isSuper ? 3650 : 7) * 24 * 60 * 60 * 1000,
+        activatedVia: isSuper ? 'Super Admin Preset' : 'Profile Registration',
       });
     }
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
@@ -965,8 +1031,11 @@ export function registerOrUpdateUser(userData: {
 export interface LogoChangeRequest {
   id: string;
   userEmail: string;
+  userName?: string;
+  username?: string;
   channelName: string;
   currentLogoUrl?: string;
+  newLogoUrl?: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: number;
@@ -985,14 +1054,20 @@ export function submitLogoChangeRequest(
   userEmail: string,
   channelName: string,
   currentLogoUrl: string | undefined,
-  reason: string
+  reason: string,
+  newLogoUrl?: string,
+  userName?: string,
+  username?: string
 ): LogoChangeRequest {
   const reqs = getLogoChangeRequests();
   const newReq: LogoChangeRequest = {
     id: `req_${Date.now()}`,
     userEmail: userEmail.toLowerCase().trim(),
+    userName,
+    username,
     channelName,
     currentLogoUrl,
+    newLogoUrl,
     reason,
     status: 'pending',
     createdAt: Date.now(),
@@ -1035,6 +1110,30 @@ export function approveLogoChangeRequest(requestId: string): void {
         localStorage.setItem('unlocked_channel_profiles', JSON.stringify(unlocked));
       }
 
+      // When admin approves, if a new logo was uploaded, sync it as the user's permanent saved channel logo
+      if (req.newLogoUrl) {
+        try {
+          const userProfKey = `user_profile_${cleanEmail}`;
+          let prof: any = {};
+          const existingRaw = localStorage.getItem(userProfKey);
+          if (existingRaw) prof = JSON.parse(existingRaw);
+          prof.channelLogoUrl = req.newLogoUrl;
+          prof.channelLogoPngUrl = req.newLogoUrl;
+          localStorage.setItem(userProfKey, JSON.stringify(prof));
+
+          // Also update active session profile if it matches the current user
+          const activeProfRaw = localStorage.getItem('user_channel_profile');
+          if (activeProfRaw) {
+            const activeProf = JSON.parse(activeProfRaw);
+            activeProf.channelLogoUrl = req.newLogoUrl;
+            activeProf.channelLogoPngUrl = req.newLogoUrl;
+            localStorage.setItem('user_channel_profile', JSON.stringify(activeProf));
+          }
+        } catch (e) {
+          console.warn('Error applying approved logo:', e);
+        }
+      }
+
       try {
         const users = getPlanUsers();
         const u = users.find((x) => x.email.toLowerCase() === cleanEmail);
@@ -1044,6 +1143,7 @@ export function approveLogoChangeRequest(requestId: string): void {
         }
       } catch {}
 
+      window.dispatchEvent(new Event('channel_profile_updated'));
       window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
       window.dispatchEvent(new Event('ai_news_channel_profile_unlocked'));
       window.dispatchEvent(new Event('ai_news_plan_users_changed'));
@@ -1110,3 +1210,20 @@ export function rejectLogoChangeRequest(requestId: string): void {
 }
 
 
+
+export function adminDeleteUserRecord(emailOrUserId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const users = getPlanUsers();
+    const clean = emailOrUserId.toLowerCase().trim();
+    const filtered = users.filter(
+      (u) => u.email.toLowerCase().trim() !== clean && u.userId?.toLowerCase().trim() !== clean
+    );
+    localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(filtered));
+    window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    return true;
+  } catch (e) {
+    console.warn('Error deleting user record:', e);
+    return false;
+  }
+}

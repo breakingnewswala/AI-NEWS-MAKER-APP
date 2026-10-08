@@ -42,11 +42,6 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   footerIconStyle = 'color',
   showMasterBranding = true,
 }) => {
-  // If Master Branding is disabled, hide footer completely
-  if (showMasterBranding === false) {
-    return null;
-  }
-
   // If user provided custom Footer.png file, render it directly
   if (customFooterPng) {
     return (
@@ -58,6 +53,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         />
       </div>
     );
+  }
+
+  // If Master Branding is disabled and no custom footer PNG, hide footer completely
+  if (showMasterBranding === false) {
+    return null;
   }
 
   // Calculate Contrast & Colors

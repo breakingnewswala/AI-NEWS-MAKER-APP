@@ -53,7 +53,6 @@ export type TextBreakingBadgeStyle =
 export interface NewsCardImages {
   main: string;
   second?: string;
-  secondary?: string;
   third?: string;
   fourth?: string;
   insetCircle?: string;
@@ -380,6 +379,7 @@ export interface ChannelProfile {
   isLocked?: boolean;
   tier?: string;
   email?: string;
+
   channelNameHi: string;
   channelNameEn: string;
   channelLogoUrl: string;

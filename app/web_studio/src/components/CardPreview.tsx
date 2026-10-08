@@ -18,7 +18,7 @@ interface CardPreviewProps {
   onChange?: (updates: Partial<NewsCardData>) => void;
 }
 
-const FALLBACK_NEWS_BG = '/assets/placeholder_news_photo.svg';
+const FALLBACK_NEWS_BG = '/assets/placeholder_news_search_square.jpg';
 
 const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const target = e.currentTarget;
@@ -524,36 +524,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
         {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
           <div className="w-full h-full overflow-hidden relative">
-            {card.images?.main && card.images.main.trim().length > 0 && card.images.main !== FALLBACK_NEWS_BG && card.images.main !== '/assets/placeholder_news_photo.png' ? (
-              <img
-                src={mainPhotoSrc}
-                alt=""
-                className="w-full h-full object-cover transition-all duration-150"
-                style={mainStyle}
-                onError={handleImgError}
-              />
-            ) : (
-              /* Reference Template Instructional State Layer */
-              <div className="w-full h-full bg-gradient-to-br from-slate-900 via-neutral-900 to-black flex flex-col items-center justify-center p-4 text-center select-none relative">
-                {/* Subtle photo grid texture */}
-                <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-35 pointer-events-none" />
-                <div className="relative z-10 flex flex-col items-center max-w-[280px]">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-md mb-2">
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>स्टेप 4 : फोटो जोड़ें</span>
-                  </div>
-                  <h3 className="font-extrabold text-white text-sm sm:text-base tracking-wide font-['Baloo_2']">
-                    कृपया अपनी न्यूज फोटो अपलोड करें
-                  </h3>
-                  <p className="text-slate-300 text-[11px] sm:text-xs font-['Baloo_2'] mt-1 leading-snug">
-                    गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं
-                  </p>
-                  <span className="text-amber-300/90 text-[10px] sm:text-[11px] font-['Baloo_2'] mt-1 font-bold">
-                    (1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)
-                  </span>
-                </div>
-              </div>
-            )}
+            <img
+              src={mainPhotoSrc}
+              alt="News Photo"
+              className="w-full h-full object-cover transition-all duration-150"
+              style={mainStyle}
+              onError={handleImgError}
+            />
           </div>
         )}
 
@@ -880,6 +857,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
           /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
           null
+        ) : card.showMasterBranding === false ? (
+          getActiveHeaderPng(card) ? (
+            <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
+          ) : null
         ) : card.frameDesign === 'custom-png' ? (
           !card.hideDefaultHeaderInCustomFrame && (
             <HeaderGraphic
@@ -902,8 +883,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         )}
       </div>
 
-      {/* Optional Full Frame Overlay PNG - ONLY active when custom-png frame is selected */}
-      {card.frameDesign === 'custom-png' && card.customFrameOverlayPng && (
+      {/* Optional Full Frame Overlay PNG - active when custom-png frame is selected OR when master branding is OFF */}
+      {(card.frameDesign === 'custom-png' || card.showMasterBranding === false) && card.customFrameOverlayPng && (
         <img
           src={card.customFrameOverlayPng}
           alt="Frame Overlay"
@@ -953,201 +934,149 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
       {/* 3. BOTTOM SECTION: GRAPHIC 1 vs DEFAULT FRAME vs MORNING JACKET vs TEXT BREAKING vs SUPER BREAKING vs QUOTE vs STANDARD ORIGINAL */}
       {card.frameDesign === 'graphic_001' ? (
-        /* ================= GRAPHIC 1 (CLEAN 4:5 PHOTO NEWS, 270° DATE, TOP BOXES, RED CTA, YELLOW FOOTER) ================= */
-        <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none">
-          {/* Top Overlay: Location Box (Left), Logo Box (Right), 270° Date (Left edge) */}
-          <div className="relative w-full h-[53%] p-3 sm:p-5 flex flex-col justify-between">
-            {/* Top Header: Custom Header PNG hides default Location + Logo header */}
-            {card.customHeaderPng ? (
-              <div className="absolute top-0 inset-x-0 z-20 pointer-events-auto">
-                <img
-                  src={card.customHeaderPng}
-                  alt="Custom Header"
-                  className="w-full h-auto object-contain object-top drop-shadow-md block"
-                />
-              </div>
+        /* ================= GRAPHIC 1 (DEFAULT 4:5 PHOTO NEWS TEMPLATE — SAMPLE EXACT MATCH) ================= */
+        <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none bg-gradient-to-b from-[#090a0d] via-[#12151b] to-[#090a0d] overflow-hidden">
+          {/* SVG Definitions for Golden Metallic Gradients */}
+          <svg className="absolute w-0 h-0" aria-hidden="true">
+            <defs>
+              <linearGradient id="goldGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#FFE600" />
+                <stop offset="50%" stopColor="#D4AF37" />
+                <stop offset="100%" stopColor="#AA771C" />
+              </linearGradient>
+              <linearGradient id="goldGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#FFF275" />
+                <stop offset="60%" stopColor="#E5B80B" />
+                <stop offset="100%" stopColor="#553B08" />
+              </linearGradient>
+            </defs>
+          </svg>
+
+          {/* 4 Gold Geometric Corner Ribbons */}
+          <svg className="absolute top-0 left-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10" viewBox="0 0 120 120" fill="none">
+            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
+            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
+            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
+            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
+            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
+          </svg>
+
+          <svg className="absolute top-0 right-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 rotate-90" viewBox="0 0 120 120" fill="none">
+            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
+            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
+            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
+            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
+            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
+          </svg>
+
+          <svg className="absolute bottom-12 left-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 -rotate-90" viewBox="0 0 120 120" fill="none">
+            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
+            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
+            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
+            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
+            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
+          </svg>
+
+          <svg className="absolute bottom-12 right-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 rotate-180" viewBox="0 0 120 120" fill="none">
+            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
+            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
+            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
+            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
+            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
+          </svg>
+
+          {/* Top-Left Channel Logo Area */}
+          <div
+            className="absolute top-3 left-3 sm:top-5 sm:left-5 z-30 pointer-events-auto max-w-[45%]"
+            style={{
+              transform: `scale(${card.logoScale ?? 1.25})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            {card.customLogoUrl ? (
+              <img
+                src={card.customLogoUrl}
+                alt="Channel Logo"
+                className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"
+              />
             ) : (
-              <div className="flex items-start justify-between w-full pointer-events-auto">
-                {/* Location Box (Top Left): White with Red Border (Clean actual location only) */}
-                {card.showLocation !== false && card.location && card.location.trim() && (
-                  <div className="bg-white border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 shadow-lg max-w-[48%]">
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                      <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white" />
-                    </div>
-                    <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
-                      {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
-                    </span>
-                  </div>
-                )}
-
-                {/* Logo Box (Top Right): Transparent / No-Background (NO automatic yellow/white/colored background) */}
-                <div
-                  className="ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%]"
-                  style={{
-                    transform: `scale(${card.logoScale ?? 1.25})`,
-                    transformOrigin: 'top right',
-                  }}
-                >
-                  {card.customLogoUrl ? (
-                    <img
-                      src={card.customLogoUrl}
-                      alt="Channel Logo"
-                      className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]"
-                    />
-                  ) : (
-                    <div className="bg-black/30 backdrop-blur-xs border border-white/20 rounded-lg px-2.5 py-1 flex flex-col items-center justify-center text-center leading-tight">
-                      <span className="font-black text-xs sm:text-sm text-white font-['Poppins'] tracking-wider drop-shadow-xs">
-                        YOUR LOGO
-                      </span>
-                      <span className="font-medium text-[9px] sm:text-[10px] text-neutral-200 font-['Noto_Sans_Devanagari']">
-                        (पारदर्शी लोगो)
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Left Edge: Date rotated 270° (Vertical, Low Opacity) */}
-            {card.showDate !== false && (
-              <div className="absolute left-3 sm:left-4 bottom-12 pointer-events-none select-none origin-bottom-left -rotate-90 flex flex-col">
-                <span className="font-black text-white/80 tracking-widest text-sm sm:text-base font-['Poppins'] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                  {card.dateStr ? card.dateStr.trim().toUpperCase() : '25 SEP 2026'}
-                </span>
-                <span className="font-bold text-white/40 tracking-wider text-[8px] sm:text-[10px] font-['Poppins']">
-                  [DATE - ROTATE 270°] LOW OPACITY
+              <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/60 shadow-[0_0_12px_rgba(255,230,0,0.4)] flex items-center justify-center">
+                <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
+                  YOUR LOGO
                 </span>
               </div>
             )}
           </div>
 
-          {/* Bottom Area: White Headline Area (47%) + Red CTA + Yellow Fixed Footer */}
-          <div className="relative w-full h-[47%] bg-white flex flex-col justify-between overflow-hidden">
-            {/* Subtle Polygon Texture Background */}
-            <div className="absolute inset-0 pointer-events-none opacity-40">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-slate-100 [clip-path:polygon(100%_0,0_0,100%_100%)]" />
-              <div className="absolute bottom-0 left-0 w-40 h-40 bg-slate-100 [clip-path:polygon(0_100%,100%_100%,0_0)]" />
+          {/* Top Area: Photo Section (Height ~50%) */}
+          <div className="relative w-full h-[50%] flex items-center justify-center overflow-hidden z-20 pt-6">
+            <div className="w-full h-full relative overflow-hidden">
+              <img
+                src={mainPhotoSrc}
+                alt="News Photo"
+                onError={handleImgError}
+                className="w-full h-full object-cover"
+                style={{
+                  objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
+                  transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
+                }}
+              />
             </div>
+          </div>
 
-            {/* Headline Section: Max 3 Lines, Bold, Centered */}
-            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-8 py-2 text-center">
-              {/* Optional Reporter / User Name & Designation Badge */}
-              {card.showSpeaker !== false && (card.speakerName || card.speakerTitle) && (
-                <div className="mb-1.5 inline-flex items-center gap-1.5 bg-neutral-950 text-white border border-neutral-700 px-3 py-0.5 rounded-full text-[11px] sm:text-xs font-bold shadow-sm">
-                  <span className="text-amber-400 font-extrabold">{card.speakerTitle || 'विशेष संवाददाता'}</span>
-                  {card.speakerName && <span className="text-neutral-200">• {card.speakerName}</span>}
+          {/* Middle Radiant Glowing Golden Divider */}
+          <div className="relative w-full py-0.5 flex items-center justify-center z-20">
+            <div className="w-[92%] h-[2.5px] bg-gradient-to-r from-transparent via-[#FFE600] to-transparent shadow-[0_0_12px_rgba(255,230,0,0.85)]" />
+          </div>
+
+          {/* Lower Area: Headline Section (Height ~36%) */}
+          <div className="relative w-full flex-1 flex flex-col items-center justify-center text-center px-4 sm:px-6 py-2 z-20 overflow-hidden">
+            {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
+              <h1
+                className="font-black leading-snug tracking-tight text-white transition-all line-clamp-4 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]"
+                style={{
+                  fontFamily: card.headlineFontFamily || 'Baloo 2',
+                  fontSize: `${effectivePreviewFontSize}px`,
+                }}
+              >
+                {renderFormattedHeadline()}
+              </h1>
+            ) : (
+              /* Default Headline Placeholder Layers */
+              <div className="flex flex-col items-center justify-center text-center max-w-[92%]">
+                <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-0.5 sm:py-1 rounded-full bg-[#FFE600] text-neutral-950 font-black text-[11px] sm:text-xs shadow-md mb-2">
+                  <FileText className="w-3.5 h-3.5 text-neutral-950" />
+                  <span>स्टेप 3 : हेडलाइन लिखें</span>
                 </div>
-              )}
-              {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
-                <h1
-                  className="font-black leading-snug tracking-tight text-neutral-900 transition-all line-clamp-3"
-                  style={{
-                    fontFamily: card.headlineFontFamily || 'Baloo 2',
-                    fontSize: `${effectivePreviewFontSize}px`,
-                  }}
-                >
-                  {renderFormattedHeadline()}
+                <p className="font-bold text-xs sm:text-base text-white font-['Baloo_2'] leading-snug">
+                  स्टेप 3 में जाकर अपनी मुख्य खबर की
+                </p>
+                <h1 className="font-black text-lg sm:text-3xl text-[#FFE600] font-['Baloo_2'] leading-tight mt-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                  हेडलाइन दर्ज करें
                 </h1>
-              ) : (
-                <div className="flex flex-col items-center text-center max-w-[90%]">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-red-600 text-white font-black text-[11px] sm:text-xs shadow-xs mb-1.5">
-                    <span>स्टेप 3 : हेडलाइन लिखें</span>
-                  </div>
-                  <h2 className="font-black text-sm sm:text-xl text-neutral-950 font-['Baloo_2'] leading-snug">
-                    स्टेप 3 में जाकर अपनी मुख्य खबर की हेडलाइन दर्ज करें
-                  </h2>
-                  <span className="font-bold text-[10px] sm:text-xs text-neutral-500 font-['Baloo_2'] mt-0.5">
-                    (अधिकतम 3 लाइन में)
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Description CTA: Centered Red Pill with Horizontal Red Line */}
-            <div className="relative z-10 w-full px-4 sm:px-6 mb-2">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t-[2.5px] border-[#DC2626]" />
-                </div>
-                <div className="relative bg-[#DC2626] text-white px-4 sm:px-6 py-1.5 rounded-full shadow-md flex items-center gap-2 whitespace-nowrap">
-                  <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white shrink-0" />
-                  <span className="font-extrabold text-xs sm:text-sm tracking-wide font-['Baloo_2']">
-                    पूरी खबर डिस्क्रिप्शन में
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Fixed Footer: Dynamic user profile data, no unnecessary blank space */}
-            {card.customFooterPng ? (
-              <div className="relative z-10 w-full pointer-events-auto">
-                <img
-                  src={card.customFooterPng}
-                  alt="Custom Footer"
-                  className="w-full h-auto object-contain object-bottom drop-shadow-md block"
-                />
-              </div>
-            ) : (
-              <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto overflow-hidden">
-                {/* Left Social Icons: Respect active ones */}
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('youtube')) && (
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                      ▶
-                    </div>
-                  )}
-                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('facebook')) && (
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                      f
-                    </div>
-                  )}
-                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('instagram')) && (
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                      📷
-                    </div>
-                  )}
-                  {(!card.activeSocialIcons || card.activeSocialIcons.includes('whatsapp')) && (
-                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                      💬
-                    </div>
-                  )}
-                </div>
-
-                {/* Divider & Handle */}
-                <div className="h-5 w-px bg-[#CA8A04]" />
-                <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
-                  {card.socialHandle
-                    ? (card.socialHandle.startsWith('@') ? card.socialHandle : `@${card.socialHandle}`)
-                    : `@${(card.channelNameEn || card.brandTagline || 'ainewsmaker').toLowerCase().replace(/[^a-z0-9]/g, '')}`}
+                <span className="font-medium text-[10px] sm:text-xs text-neutral-300 font-['Baloo_2'] mt-1">
+                  आवश्यकता अनुसार दो या तीन लाइन में
                 </span>
-
-                {/* Website (Only if present, no blank space) */}
-                {card.websiteUrl && card.websiteUrl.trim().length > 0 && (
-                  <>
-                    <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
-                    <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
-                      <span className="text-sky-600 font-bold">🌐</span>
-                      <span>{card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '').trim()}</span>
-                    </div>
-                  </>
-                )}
-
-                {/* Contact Number (if present and enabled) */}
-                {card.showMobileNumber !== false && card.whatsappNumber && card.whatsappNumber.trim().length > 0 && (
-                  <>
-                    <div className="h-5 w-px bg-[#CA8A04]" />
-                    <div className="flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] shrink-0">
-                      <span className="text-green-600 font-bold">📞</span>
-                      <span>{card.whatsappNumber}</span>
-                    </div>
-                  </>
-                )}
               </div>
             )}
           </div>
-        </div>
-      ) : card.frameDesign === 'graphic_002' ? (
-        /* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
+
+          {/* Bottom Dynamic Branding Footer */}
+          <div className="relative z-30 w-full pointer-events-auto">
+            <FooterGraphic
+              socialHandle={card.socialHandle}
+              whatsappNumber={card.whatsappNumber}
+              customFooterPng={getActiveFooterPng(card)}
+              websiteUrl={card.websiteUrl}
+              showMobileNumber={card.showMobileNumber}
+              activeSocialIcons={card.activeSocialIcons}
+              footerBgColor={card.footerBgColor || '#FFFFFF'}
+              footerTextColor={card.footerTextColor || '#111827'}
+              footerIconStyle={card.footerIconStyle || 'color'}
+              showMasterBranding={card.showMasterBranding}
+            />
+          </div>
+        </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none">
           {/* Top Overlay: Location Box (Left), Logo Box (Right) */}
           <div className="relative w-full h-[53%] p-3 sm:p-5 flex flex-col justify-between">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NewsCardData, AIAnalysisResult, ChannelProfile, FrameDesign } from './types';
 import { INITIAL_PRESETS, PLACEHOLDER_NEWS_IMG } from './data/presets';
 import { CardPreview } from './components/CardPreview';
@@ -27,6 +27,7 @@ import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter } from './lib/profileConfig';
 import {
+  FolderOpen,
   Download,
   Copy,
   Check,
@@ -57,7 +58,7 @@ import {
   EyeOff,
   Bookmark,
 } from 'lucide-react';
-import { VideoStudioWeb } from './components/VideoStudioWeb';
+import { VideoStudioWeb } from './components/VideoStudioWeb'; 
 import { FRAME_OPTIONS } from './lib/HeaderDesigns';
 import { AutoFillNewsData } from './components/InlineAiNewsTools';
 import { AppTopBarWeb } from './components/AppTopBarWeb';
@@ -66,6 +67,11 @@ import { HomeScreenWeb } from './components/HomeScreenWeb';
 import { VideosScreenWeb } from './components/VideosScreenWeb';
 import { EPaperScreenWeb } from './components/EPaperScreenWeb';
 import { ProfileScreenWeb } from './components/ProfileScreenWeb';
+import { NewsroomScreenWeb } from './components/NewsroomScreenWeb';
+import { DraftsScreenWeb } from './components/DraftsScreenWeb';
+import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
+import { ExportScreenWeb } from './components/ExportScreenWeb';
+import { saveDraft } from './lib/draftsManager';
 import { isUserAdmin, setAdminSystemMode } from './lib/userPlanManager';
 import {
   NewsFeedPost,
@@ -76,6 +82,7 @@ import {
 } from './data/newsFeedData';
 
 type AppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'epaper' | 'profile';
+
 
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
@@ -194,6 +201,7 @@ export default function App() {
       if (path.includes('home')) return 'home';
       if (path.includes('video')) return 'videos';
       if (path.includes('newsroom') || path.includes('epaper')) return 'newsroom';
+
       return 'home';
     }
     return 'home';
@@ -214,6 +222,7 @@ export default function App() {
       if (['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(target)) {
         setCurrentTab(target);
         window.location.hash = target;
+
       }
     };
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -250,13 +259,23 @@ export default function App() {
     setIsSyncingNews(true);
     let loaded = false;
 
+    const getDeletedIds = (): Set<string> => {
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {}
+      return new Set();
+    };
+    const deletedIds = getDeletedIds();
+
     // 1. Try Firebase Storage cloud live database (works 100% on ainewsmaker.online, PWA, mobile)
     try {
       const fbRes = await fetch(`${CLOUD_STORAGE_NEWS_URL}&_t=${Date.now()}`, { cache: 'no-cache' });
       if (fbRes.ok) {
         const data = await fbRes.json();
         if (Array.isArray(data) && data.length > 0) {
-          setPosts(data);
+          const clean = data.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+          setPosts(clean);
           try {
             localStorage.setItem('app_news_posts_v2', JSON.stringify(data));
           } catch {}
@@ -275,7 +294,8 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (data && data.success && Array.isArray(data.posts) && data.posts.length > 0) {
-            setPosts(data.posts);
+            const clean = data.posts.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+            setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(data.posts));
             } catch {}
@@ -294,7 +314,8 @@ export default function App() {
         if (staticRes.ok) {
           const data = await staticRes.json();
           if (Array.isArray(data) && data.length > 0) {
-            setPosts(data);
+            const clean = data.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+            setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(data));
             } catch {}
@@ -365,7 +386,7 @@ export default function App() {
       }
       const savedSession = localStorage.getItem('reporter_auth_session');
       const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedSession || savedOnboarding === 'true') {
+      if (savedSession && savedOnboarding === 'true') {
         return true;
       }
       return false;
@@ -399,6 +420,7 @@ export default function App() {
 
   // Studio mode: Graphic Design vs Video Design (Web parity with Android)
   const [studioMode, setStudioMode] = useState<'graphic' | 'video'>('graphic');
+  const [studioInitialItem, setStudioInitialItem] = useState<VideoFeedItem | null>(null);
   const [studioInitialVideo, setStudioInitialVideo] = useState<string | null>(null);
   const [studioInitialHeadline, setStudioInitialHeadline] = useState<string | null>(null);
 
@@ -511,19 +533,27 @@ export default function App() {
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
-      if (e.detail) {
+        const activeSocialKeys = e.detail.socialIcons
+          ? Object.entries(e.detail.socialIcons)
+              .filter(([_, active]) => active)
+              .map(([key]) => key)
+          : undefined;
+
         setCard((prev) => ({
           ...prev,
           brandName: e.detail.channelNameHi || prev.brandName,
           brandTagline: e.detail.channelNameEn || prev.brandTagline,
+          channelNameHi: e.detail.channelNameHi || prev.channelNameHi,
+          channelNameEn: e.detail.channelNameEn || prev.channelNameEn,
           customLogoUrl: e.detail.channelLogoUrl || prev.customLogoUrl,
           customHeaderPng: e.detail.customHeaderPng !== undefined ? e.detail.customHeaderPng : prev.customHeaderPng,
           customFooterPng: e.detail.customFooterPng !== undefined ? e.detail.customFooterPng : prev.customFooterPng,
           socialHandle: e.detail.username ? (e.detail.username.startsWith('@') ? e.detail.username : `@${e.detail.username}`) : prev.socialHandle,
           websiteUrl: e.detail.websiteUrl || prev.websiteUrl,
           whatsappNumber: e.detail.mobileNumber || prev.whatsappNumber,
+          showMobileNumber: e.detail.showMobileNumber !== undefined ? e.detail.showMobileNumber : prev.showMobileNumber,
+          activeSocialIcons: activeSocialKeys !== undefined ? activeSocialKeys : prev.activeSocialIcons,
         }));
-      }
     };
     window.addEventListener('channel_profile_updated', handleProfileUpdated);
     return () => window.removeEventListener('channel_profile_updated', handleProfileUpdated);
@@ -607,9 +637,9 @@ export default function App() {
     }
   }, [card]);
 
-  // Synchronize card with saved channel profile whenever opening studio tab
+  // Synchronize card with saved channel profile whenever opening generator/studio tab
   useEffect(() => {
-    if (currentTab === 'studio') {
+    if (currentTab === 'studio' || currentTab === 'generator') {
       const savedProfile = getSavedChannelProfile();
       if (savedProfile) {
         const activeSocialKeys = Object.entries(savedProfile.socialIcons || {})
@@ -674,13 +704,13 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
+
   const [isMobilePreviewCollapsed, setIsMobilePreviewCollapsed] = useState(false);
 
   // App Version & Update Notification states
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
-  const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(false);
   const [autoFillNews, setAutoFillNews] = useState<AutoFillNewsData | null>(null);
   const [isStudioSelectorVisible, setIsStudioSelectorVisible] = useState<boolean>(true);
   const lastScrollYRef = useRef<number>(0);
@@ -726,6 +756,9 @@ export default function App() {
 
   // Expose bridge functions for Android Native communication
   useEffect(() => {
+    (window as any).showAppToast = (msg: string) => {
+      showToast(msg);
+    };
     (window as any).setStudioTemplate = (templateId: string) => {
       setCard((prev) => ({ ...prev, frameDesign: templateId as any }));
       showToast(`टेम्पलेट लागू किया: ${templateId}`);
@@ -767,7 +800,7 @@ export default function App() {
     };
     (window as any).onAutoFillNewsLink = (newsData: AutoFillNewsData) => {
       if (newsData) {
-        const effectiveLink = newsData.url || (newsData.title ? `https://breakingnewswala.com/news/${encodeURIComponent(newsData.title.slice(0, 30))}` : 'https://breakingnewswala.com');
+        const effectiveLink = newsData.url || (newsData.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(newsData.title.slice(0, 30))}` : 'https://www.ainewsmaker.online');
         const effectiveLoc = newsData.location || 'मध्य प्रदेश';
 
         setStudioMode('graphic');
@@ -801,7 +834,8 @@ export default function App() {
           scrollToStepById('step-ai');
         }, 150);
 
-        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
+        const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
         }
@@ -817,7 +851,7 @@ export default function App() {
         if (raw && raw.trim() !== '') {
           const parsed = JSON.parse(raw);
           if (parsed && (parsed.url || parsed.title || parsed.summary)) {
-            const effectiveLink = parsed.url || (parsed.title ? `https://breakingnewswala.com/news/${encodeURIComponent(parsed.title.slice(0, 30))}` : 'https://breakingnewswala.com');
+            const effectiveLink = parsed.url || (parsed.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(parsed.title.slice(0, 30))}` : 'https://www.ainewsmaker.online');
             const effectiveLoc = parsed.location || 'मध्य प्रदेश';
 
             setCard((prev) => ({
@@ -901,17 +935,30 @@ export default function App() {
 
   // Full reset / clean card to default template matching user specification
   const handleResetCard = () => {
-    const freshDate = getFormattedHindiDate();
+    // Check if active draft or saved drafts exist
+    const drafts = getSavedDrafts();
+    const activeDraft = currentDraftId ? drafts.find((d) => d.id === currentDraftId) : drafts[0];
+    if (activeDraft && activeDraft.cardData) {
+      setCard(activeDraft.cardData);
+      showToast(`📂 ड्राफ्ट रीस्टोर हुआ: ${activeDraft.title || 'सहेजा गया ड्राफ्ट'}`);
+      return;
+    }
+
     const savedProfile = getSavedChannelProfile();
+    const activeSocialKeys = savedProfile?.socialIcons
+      ? Object.entries(savedProfile.socialIcons).filter(([_, active]) => active).map(([key]) => key)
+      : ['instagram', 'facebook', 'twitter', 'youtube', 'whatsapp'];
+
     setCard((prev) => ({
       ...prev,
-      frameDesign: 'jacket-default',
-      headline: 'आपकी चुनी गयी खबर को यहां\nपर २-३ लाइन में लिखा जाएगा\nटेम्पलेट्स से पसंदीदा फ्रेम चुनें',
-      formattedHeadline: 'आपकी चुनी गयी खबर को यहां\nपर २-३ लाइन में लिखा जाएगा\nटेम्पलेट्स से पसंदीदा फ्रेम चुनें',
+      frameDesign: 'graphic_001',
+      headline: '',
+      formattedHeadline: '',
       highlightWords: [],
       headlineAlign: 'center',
-      location: 'खबर की लोकेशन',
+      location: '',
       summary: '',
+      category: 'ताज़ा खबर',
       images: {
         main: '',
         second: '',
@@ -925,21 +972,24 @@ export default function App() {
       channelNameEn: savedProfile?.channelNameEn || prev.channelNameEn || prev.brandTagline || '',
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
-        : (prev.socialHandle || ''),
-      whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '',
-      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || '',
+        : (prev.socialHandle || '/@UserName'),
+      whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '+91 98765 43210',
+      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || 'ainewsmaker.online',
       showMobileNumber: savedProfile?.showMobileNumber ?? prev.showMobileNumber ?? true,
+      activeSocialIcons: activeSocialKeys,
       customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : prev.customFooterPng,
       speakerName: '',
       speakerTitle: '',
-      dateStr: freshDate,
+      dateStr: '',
       showDate: false,
-      showLocation: true,
+      showLocation: false,
       showCallout: false,
       calloutTag: '',
       layout: 'single',
       aspectRatio: '4:5',
+      headlineFontSize: 28,
+      highlightColor: '#FFE600',
     }));
 
     try {
@@ -950,8 +1000,9 @@ export default function App() {
 
     // Fully reset AI Prompt & Link inputs
     setAiResetKey((prev) => prev + 1);
+    setActiveStep(1);
 
-    showToast('✨ डिफ़ॉल्ट टेम्पलेट रिफ्रेश हो गया!');
+    showToast('✨ डिफ़ॉल्ट 4:5 टेम्प्लेट रीसेट हो गया!');
   };
 
   const handleSaveDraft = () => {
@@ -1090,7 +1141,24 @@ export default function App() {
     showToast('✨ AI जनरेटेड फोटो कार्ड के बैकग्राउंड में सेट हो गई!');
   };
 
+  // Save current card into Drafts manager
+  const handleSaveCurrentCardAsDraft = () => {
+    saveDraft(card);
+    showToast('💾 न्यूज़ कार्ड ड्राफ्ट्स में सुरक्षित कर लिया गया!');
+  };
+
   // Export card to High-Res PNG or JPG (with full status, progress & robust blob downloading)
+  
+  const handleOpenDraftInStudio = (draft: any) => {
+    if (draft.card) {
+      setCard(draft.card);
+    }
+    setActiveDraftId(draft.id);
+    setCurrentTab('studio');
+    window.location.hash = 'studio';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleDownload = async (formatOverride?: 'png' | 'jpeg') => {
     if (downloading) return;
     const fmt: 'png' | 'jpeg' =
@@ -1102,13 +1170,17 @@ export default function App() {
       setDownloadProgressText('कैनवास तैयार हो रहा है...');
       let canvas: HTMLCanvasElement | null = null;
       try {
-        canvas = await renderCardToCanvas(card);
-      } catch (renderErr) {
-        console.warn('renderCardToCanvas fallback to html2canvas:', renderErr);
+        canvas = await generateCardCanvas('news-card-container');
+      } catch (domErr) {
+        console.warn('generateCardCanvas DOM capture fallback to renderCardToCanvas:', domErr);
       }
 
       if (!canvas) {
-        canvas = await generateCardCanvas('news-card-container');
+        try {
+          canvas = await renderCardToCanvas(card);
+        } catch (renderErr) {
+          console.error('renderCardToCanvas fallback failed:', renderErr);
+        }
       }
 
       if (!canvas) {
@@ -1136,7 +1208,13 @@ export default function App() {
   const handleCopyToClipboard = async () => {
     try {
       setDownloading(true);
-      const canvas = await renderCardToCanvas(card);
+      let canvas: HTMLCanvasElement | null = null;
+      try {
+        canvas = await generateCardCanvas('news-card-container');
+      } catch (e) {
+        canvas = await renderCardToCanvas(card);
+      }
+      if (!canvas) throw new Error('Canvas rendering failed');
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         try {
@@ -1209,10 +1287,39 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
-    const effectiveLink = post.sourceUrl || (post.id ? `https://breakingnewswala.com/news/${post.id}` : 'https://breakingnewswala.com');
+    const effectiveLink = post.sourceUrl || (post.id ? `https://www.ainewsmaker.online/news/${post.id}` : 'https://www.ainewsmaker.online');
     const effectiveLoc = post.district || post.location || 'मध्य प्रदेश';
 
     setStudioMode('graphic');
+
+    // Check if this specific card has the default photo toggled or missing image
+    const getDefaultThumbnailIds = (): Set<string> => {
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {}
+      return new Set();
+    };
+
+    const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id);
+    let targetImageForStudio = post.imageUrl || '/assets/placeholder_news_search_square.jpg';
+    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
+      targetImageForStudio = post.manualThumbnailUrl;
+    } else if (post.imageSource === 'default' || hasDefaultPhotoActive) {
+      targetImageForStudio = '/assets/placeholder_news_search_square.jpg';
+    }
+
+    // Collect all available photos for this article: primary + up to 3 additional photos
+    const articlePhotos: string[] = [targetImageForStudio];
+    if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
+      post.additionalPhotos.forEach((p) => {
+        if (p && !articlePhotos.includes(p)) articlePhotos.push(p);
+      });
+    }
+
+    try {
+      localStorage.setItem('studio_active_news_photos', JSON.stringify(articlePhotos));
+    } catch {}
 
     setCard((prev) => ({
       ...prev,
@@ -1222,7 +1329,7 @@ export default function App() {
       summary: post.summary,
       images: {
         ...prev.images,
-        main: post.imageUrl || prev.images.main,
+        main: targetImageForStudio,
       },
     }));
 
@@ -1230,11 +1337,12 @@ export default function App() {
       url: effectiveLink,
       title: post.title,
       summary: post.summary,
-      imageUrl: post.imageUrl,
+      imageUrl: targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,
       autoTrigger: true,
       timestamp: Date.now(),
+      additionalPhotos: articlePhotos,
     });
 
     setCurrentTab('studio');
@@ -1247,7 +1355,8 @@ export default function App() {
     }, 150);
 
     // Instantly copy social media caption to clipboard
-    const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n#BreakingNews #NewsCard #LiveUpdate @BreakingNewsWala`;
+    const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+    const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }
@@ -1255,6 +1364,7 @@ export default function App() {
 
   const handleOpenStudioWithVideo = (vid: VideoFeedItem) => {
     setStudioMode('video');
+    setStudioInitialItem(vid);
     setStudioInitialVideo(vid.videoUrl || null);
     setStudioInitialHeadline(vid.title);
     setCard((prev) => ({
@@ -1273,7 +1383,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOpenStudioWithEPaper = () => {
+  const handleOpenStudioWithEPaper = (edition?: any) => {
     setCard((prev) => ({
       ...prev,
       frameDesign: 'jacket-epaper',
@@ -1331,6 +1441,10 @@ export default function App() {
     setPosts(updated);
     try {
       localStorage.setItem('app_news_posts_v2', JSON.stringify(updated));
+      const raw = localStorage.getItem('app_deleted_news_ids_v1');
+      const set = new Set(raw ? JSON.parse(raw) : []);
+      set.add(postId);
+      localStorage.setItem('app_deleted_news_ids_v1', JSON.stringify(Array.from(set)));
     } catch {
       // ignore
     }
@@ -1377,23 +1491,21 @@ export default function App() {
               const cleanEmail = user.email?.toLowerCase().trim() || '';
               const userSpecificStr = cleanEmail ? localStorage.getItem(`user_profile_${cleanEmail}`) : null;
               const profileStr = userSpecificStr || localStorage.getItem('user_channel_profile');
-              const isOnboardingDone = localStorage.getItem('is_onboarding_completed') === 'true';
-              if (isOnboardingDone && profileStr) {
+              if (profileStr) {
                 const parsed = JSON.parse(profileStr);
-                if (parsed?.channelNameHi && parsed?.username) {
+                if (parsed?.channelNameHi) {
                   localStorage.setItem('user_channel_profile', JSON.stringify(parsed));
-                  setIsOnboardingCompleted(true);
-                  setCurrentTab('home');
-                  window.location.hash = 'home';
-                  showToast(`स्वागत है, ${user.name || parsed.fullName || 'रिपोर्टर'}!`);
-                  return;
                 }
               }
             } catch {
               // proceed
             }
-            // For new users without completed profile, keep onboarding pending
-            setIsOnboardingCompleted(false);
+            // Ensure onboarding is marked completed so the user enters the homepage immediately
+            setIsOnboardingCompleted(true);
+            localStorage.setItem('is_onboarding_completed', 'true');
+            setCurrentTab('home');
+            window.location.hash = 'home';
+            showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
           }}
           onCompleteDetails={(profile, updatedUser) => {
             handleSaveProfile(profile);
@@ -1435,11 +1547,15 @@ export default function App() {
 
       {/* Top Bar Navigation - Only visible in Web browser, hidden in native Android APK */}
       {!isAndroidEnvironment && (
-        <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
+        <div className={`sticky top-0 z-50 transition-all duration-300 ${isHeaderVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}>
           <AppTopBarWeb
             currentTab={currentTab}
             currentUser={currentUser}
-            onRefresh={() => setToastMessage('फ़ीड रीफ्रेश हो गई है!')}
+            onRefresh={async () => {
+              await fetchLiveNews();
+              window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+              setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
+            }}
             onNavigateToTab={(tab) => {
               setCurrentTab(tab);
               window.location.hash = tab;
@@ -1474,16 +1590,8 @@ export default function App() {
         />
       )}
 
-      {/* 2. Videos Feed Tab */}
-      {currentTab === 'videos' && (
-        <VideosScreenWeb
-          videos={videos}
-          onOpenStudioWithVideo={handleOpenStudioWithVideo}
-        />
-      )}
-
-      {/* 3. Studio Tab */}
-      {currentTab === 'studio' && (
+      {/* 2. News Generator / Studio Tab */}
+      {(currentTab === 'generator' || currentTab === 'studio') && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
           {/* Studio Type Selector: Smoothly collapses on scroll to maximize vertical editing space */}
           {!isAndroidEnvironment && (
@@ -1522,6 +1630,8 @@ export default function App() {
           {studioMode === 'video' ? (
             <div className="w-full">
               <VideoStudioWeb
+                currentUser={currentUser}
+                initialVideo={studioInitialItem}
                 initialVideoUrl={studioInitialVideo || undefined}
                 initialHeadline={studioInitialHeadline || undefined}
                 onBackToGraphic={() => updateStudioMode('graphic')}
@@ -1565,6 +1675,7 @@ export default function App() {
                           </>
                         )}
                       </button>
+
                     </div>
                   </div>
 
@@ -1586,9 +1697,9 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* 2. DEDICATED ACTION AREA JUST BELOW PREVIEW (Order: 1. JPG डाउनलोड करें, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
+                      {/* 2. DEDICATED ACTION AREA JUST BELOW PREVIEW (Order: 1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
                       <div className="w-full max-w-[min(100%,360px,calc((100vh-220px)*0.8))] mx-auto mt-2 grid grid-cols-4 gap-1.5">
-                        {/* 1. JPG डाउनलोड करें */}
+                        {/* 1. JPG डाउनलोड */}
                         <button
                           type="button"
                           onClick={() => handleDownload("jpeg")}
@@ -1597,7 +1708,7 @@ export default function App() {
                           title="कार्ड को 1080x1350 True 4:5 JPG में डाउनलोड करें"
                         >
                           <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                          <span className="truncate">{downloading ? "..." : "JPG डाउनलोड करें"}</span>
+                          <span className="truncate">{downloading ? "..." : "JPG डाउनलोड"}</span>
                         </button>
 
                         {/* 2. कैप्शन */}
@@ -1768,8 +1879,9 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 3 Buttons Row */}
-                    <div className="grid grid-cols-3 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
+                    {/* Action Bar below Preview: 4 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
+                      {/* 1. JPG डाउनलोड */}
                       <button
                         type="button"
                         onClick={() => handleDownload('jpeg')}
@@ -1778,27 +1890,40 @@ export default function App() {
                         title="कार्ड को HD JPG इमेज में डाउनलोड करें"
                       >
                         <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
-                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'डाउनलोड (JPG)'}</span>
+                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={handleResetCard}
-                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                        title="कार्ड रीसेट करें"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-                        <span>रिफ्रेश</span>
-                      </button>
-
+                      {/* 2. कैप्शन */}
                       <button
                         type="button"
                         onClick={() => setIsCaptionModalOpen(true)}
                         className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
                         title="कैप्शन और शेयर"
                       >
-                        <Share2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">कैप्शन एंड शेयर</span>
+                        <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <span className="truncate">कैप्शन</span>
+                      </button>
+
+                      {/* 3. ड्राफ्ट */}
+                      <button
+                        type="button"
+                        onClick={handleSaveCurrentCardAsDraft}
+                        className="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <span className="truncate">ड्राफ्ट</span>
+                      </button>
+
+                      {/* 4. रिफ्रेश */}
+                      <button
+                        type="button"
+                        onClick={handleResetCard}
+                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title="कार्ड रीसेट करें"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                        <span>रिफ्रेश</span>
                       </button>
                     </div>
 
@@ -1893,16 +2018,47 @@ export default function App() {
         </main>
       )}
 
-      {/* 4. Newsroom / E-Paper Tab */}
-      {(currentTab === 'epaper' || currentTab === 'newsroom') && (
-        <EPaperScreenWeb
-          onOpenStudioWithEPaper={handleOpenStudioWithEPaper}
-          onOpenDrafts={() => setIsDraftsModalOpen(true)}
+      {/* 2. Videos Tab (Rich Video News Feed) */}
+      {currentTab === 'videos' && (
+        <VideosScreenWeb
+          videos={videos}
+          currentUser={currentUser}
+          onOpenStudioWithVideo={(video) => {
+            handleOpenStudioWithVideo(video);
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onAdminAddVideo={(newVid) => {
+            setVideos((prev) => [newVid, ...prev]);
+          }}
         />
       )}
 
-      {/* 5. Profile & Control Panel Tab */}
-      {currentTab === 'profile' && (
+      {/* 4. Newsroom Tab (Drafts & Saved Projects Workspace) */}
+      {(currentTab === 'newsroom' || currentTab === 'drafts') && (
+        <NewsroomScreenWeb
+          onOpenStudioWithDraft={handleOpenDraftInStudio}
+          onNavigateToStudio={() => {
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateToVideos={() => {
+            setCurrentTab('videos');
+            window.location.hash = 'videos';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateToControlPanel={() => {
+            setCurrentTab('profile');
+            window.location.hash = 'profile';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
+
+      {/* 5. Profile & Control Panel Tab (10 Options + Channel Branding + Plans + APK Download) */}
+      {(currentTab === 'profile' || currentTab === 'export') && (
         <ProfileScreenWeb
           currentUser={currentUser}
           onLogout={handleLogout}
@@ -1912,10 +2068,11 @@ export default function App() {
             window.location.hash = 'studio';
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          onOpenOnboarding={() => setIsOnboardingOpen(true)}
-          categories={categories}
-          onAddCategory={handleAddCategory}
-          onDeleteCategory={handleDeleteCategory}
+          onNavigateToGenerator={() => {
+            setCurrentTab('studio');
+            window.location.hash = 'studio';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
         />
       )}
 
@@ -1923,6 +2080,7 @@ export default function App() {
       {!isAndroidEnvironment && (
         <AppBottomBarWeb
           currentTab={currentTab}
+          currentUser={currentUser}
           onSelectTab={(tab) => {
             setCurrentTab(tab);
             window.location.hash = tab;

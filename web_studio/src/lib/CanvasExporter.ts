@@ -958,7 +958,19 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     ctx.fillStyle = '#FBBF24';
     ctx.textAlign = 'right';
     ctx.fillText('EXCLUSIVE', width - 36, 32);
-  } else if (card.showMasterBranding !== false) {
+  } else if (card.showMasterBranding === false) {
+    const activeHeaderPng = getActiveHeaderPng(card);
+    if (activeHeaderPng) {
+      try {
+        const headerImg = await loadImage(activeHeaderPng);
+        const headerAspect = headerImg.width / headerImg.height;
+        const drawH = width / headerAspect;
+        ctx.drawImage(headerImg, 0, 0, width, drawH);
+      } catch (err) {
+        console.warn('Custom header load error:', err);
+      }
+    }
+  } else {
     const activeHeaderPng = getActiveHeaderPng(card);
     if (card.frameDesign === 'custom-png') {
       if (!card.hideDefaultHeaderInCustomFrame) {
@@ -990,8 +1002,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   }
 
-  // Optional full frame transparent overlay PNG ONLY when custom-png template is selected
-  if (card.frameDesign === 'custom-png' && card.customFrameOverlayPng) {
+  // Optional full frame transparent overlay PNG when custom-png template is selected OR when frame overlay is uploaded
+  if ((card.frameDesign === 'custom-png' || card.customFrameOverlayPng) && card.customFrameOverlayPng) {
     try {
       const overlayImg = await loadImage(card.customFrameOverlayPng);
       ctx.drawImage(overlayImg, 0, 0, width, height);
@@ -1009,7 +1021,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   // 8. Permanent Theme Footer Bar (Exact reproduction of Footer.png)
   const activeFooter = getActiveFooterPng(card);
   const shouldDrawFooter =
-    card.showMasterBranding !== false &&
+    (card.showMasterBranding !== false || Boolean(activeFooter)) &&
     card.frameDesign !== 'jacket-default' &&
     !(card.frameDesign === 'custom-png' && card.hideDefaultFooterInCustomFrame);
 

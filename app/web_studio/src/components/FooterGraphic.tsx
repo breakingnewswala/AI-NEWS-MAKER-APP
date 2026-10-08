@@ -42,11 +42,6 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   footerIconStyle = 'color',
   showMasterBranding = true,
 }) => {
-  // If Master Branding is disabled, hide footer completely
-  if (showMasterBranding === false) {
-    return null;
-  }
-
   // If user provided custom Footer.png file, render it directly
   if (customFooterPng) {
     return (
@@ -60,6 +55,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     );
   }
 
+  // If Master Branding is disabled and no custom footer PNG, hide footer completely
+  if (showMasterBranding === false) {
+    return null;
+  }
+
   // Calculate Contrast & Colors
   const luminance = getLuminance(footerBgColor);
   const isLightBg = luminance >= 0.5;
@@ -69,7 +69,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.25)' : 'rgba(255, 255, 255, 0.35)';
 
   const hasIcon = (name: string) => {
-    if (!activeSocialIcons || activeSocialIcons.length === 0) return true;
+    if (!activeSocialIcons || activeSocialIcons.length === 0) return false;
     return activeSocialIcons.includes(name);
   };
 
@@ -80,7 +80,9 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     : '';
 
   // Calculate active items count to adjust responsive font & icon sizes
-  const hasSocial = Boolean(displayHandle || (activeSocialIcons && activeSocialIcons.length > 0));
+  const socialPlatforms = ['youtube', 'facebook', 'instagram', 'twitter', 'telegram'];
+  const visibleSocialIcons = (activeSocialIcons || []).filter((icon) => socialPlatforms.includes(icon));
+  const hasSocial = Boolean(displayHandle || visibleSocialIcons.length > 0);
   const hasWeb = Boolean(cleanWebsite);
   const hasContact = Boolean(cleanPhone);
   const totalItemsCount = (hasSocial ? 1 : 0) + (hasWeb ? 1 : 0) + (hasContact ? 1 : 0);

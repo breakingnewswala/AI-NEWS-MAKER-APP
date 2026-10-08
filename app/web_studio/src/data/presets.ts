@@ -1,7 +1,7 @@
 import { NewsCardData } from '../types';
 
 // Crisp SVG demo images matching user samples
-export const PLACEHOLDER_NEWS_IMG = '/assets/placeholder_news_photo.png';
+export const PLACEHOLDER_NEWS_IMG = '/assets/placeholder_news_search_square.jpg';
 export const SAMPLE_BUS_IMG = '/assets/sample_news_bus.svg';
 export const SAMPLE_TRUCK_IMG = 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=900&auto=format&fit=crop&q=80';
 export const SAMPLE_WAREHOUSE_IMG = 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=900&auto=format&fit=crop&q=80';
@@ -12,24 +12,24 @@ export const SAMPLE_STUDENTS_IMG = 'https://images.unsplash.com/photo-1577896851
 export const INITIAL_PRESETS: NewsCardData[] = [
   {
     id: 'preset-graphic-1',
-    title: 'Graphic 1 (बेसिक 4:5 न्यूज़ जैकेट)',
+    title: 'Graphic 1 (Default 4:5 Template)',
     headline: '',
     formattedHeadline: '',
     highlightWords: [],
     headlineAlign: 'center',
-    location: 'स्थान दर्ज करें',
-    summary: 'Graphic 1 - Basic Plan Template',
+    location: '',
+    summary: 'Graphic 1 - Default 4:5 Template',
     category: 'ताज़ा खबर',
-    brandName: 'AI NEWS MAKER',
-    brandTagline: 'भारत के विश्वसनीय समाचार',
+    brandName: '',
+    brandTagline: '',
     brandLogoType: 'default',
-    calloutTag: 'पूरी खबर डिस्क्रिप्शन में',
-    showCallout: true,
+    calloutTag: '',
+    showCallout: false,
     newsUpdateBadge: '',
     showNewsUpdateBadge: false,
-    socialHandle: '@ainewsmaker',
-    websiteUrl: 'ainewsmaker.online',
-    whatsappNumber: '',
+    socialHandle: '/@UserName',
+    websiteUrl: 'yourwebsite.com',
+    whatsappNumber: '+91 98765 43210',
     frameDesign: 'graphic_001',
     layout: 'single',
     images: {
@@ -37,12 +37,12 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     },
     insetPosition: { x: 75, y: 60 },
     aspectRatio: '4:5',
-    headlineFontSize: 24,
+    headlineFontSize: 28,
     highlightColor: '#FFE600',
     darkOverlayOpacity: 0,
-    showDate: true,
-    dateStr: '25 SEP 2026',
-    showLocation: true,
+    showDate: false,
+    dateStr: '',
+    showLocation: false,
   },
   {
     id: 'preset-2',
@@ -261,7 +261,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     highlightWords: ['सकारात्मक सोच', 'निरंतर प्रयास'],
     location: '',
     showLocation: false,
-    summary: 'सकारात्मक सोच और निरंतर प्रयास ही हर सफलता की सच्ची कुंजी है। हर सुबह एक नया अवसर लेकर आती है, खुद पर विश्वास रखें और आगे बढ़ें।\n\n#ainewsmaker #MorningVibes #ThoughtOfTheDay #HindiQuotes #Suvichar #BNWTV',
+    summary: 'सकारात्मक सोच और निरंतर प्रयास ही हर सफलता की सच्ची कुंजी है। हर सुबह एक नया अवसर लेकर आती है, खुद पर विश्वास रखें और आगे बढ़ें।\n\n#ainewsmaker #MorningVibes #ThoughtOfTheDay #HindiQuotes #Suvichar #AINewsMaker',
     category: 'सुविचार',
     brandName: 'AI News Maker',
     brandTagline: 'भारत के जिलों से आपके दिलों तक',
@@ -297,7 +297,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     highlightWords: ['प्रशासन का बड़ा एक्शन'],
     location: '',
     showLocation: false,
-    summary: 'निवाड़ी जिले में बेतवा नदी तट पर चल रहे अवैध रेत खनन पर खनिज विभाग और पुलिस टीम ने संयुक्त कार्रवाई करते हुए पांच डंपर और दो पोकलेन मशीनें जब्त की हैं।\n\n#ainewsmaker #Epaper #NiwariNews #BreakingNews #BNWTV',
+    summary: 'निवाड़ी जिले में बेतवा नदी तट पर चल रहे अवैध रेत खनन पर खनिज विभाग और पुलिस टीम ने संयुक्त कार्रवाई करते हुए पांच डंपर और दो पोकलेन मशीनें जब्त की हैं।\n\n#ainewsmaker #Epaper #NiwariNews #BreakingNews #AINewsMaker',
     category: 'कार्रवाई',
     brandName: 'AI News Maker',
     brandTagline: 'भारत के जिलों से आपके दिलों तक',
