@@ -42,8 +42,10 @@ import {
   ChevronDown,
   FolderTree,
   PlusCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import {
+  isUserSuperAdmin,
   syncCloudUsers,
   adminUpdateCloudUser,
   adminDeleteCloudUser,
@@ -63,6 +65,7 @@ import {
   getPlanUsers,
   assignPlanToUserManually,
   adminUpdateUserRecord,
+  adminDeleteUserRecord,
   assignCustomHeaderFooterToUser,
   PLAN_KEY_MAP,
   LogoChangeRequest,
@@ -77,6 +80,9 @@ import {
   toggleAdminRssSource,
   deleteAdminRssSource,
   syncAllSourcesLive,
+  getSavedNewsChannels,
+  saveNewsChannel,
+  deleteSavedNewsChannel,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
@@ -86,6 +92,15 @@ import {
   addRestrictedChannel,
   deleteRestrictedChannel,
 } from '../lib/restrictedChannelsManager';
+import {
+  CategoryItem,
+  getAllCategories,
+  getActiveCategories,
+  addCategory,
+  updateCategoryName,
+  toggleCategoryStatus,
+  deleteCategoryItem,
+} from '../lib/categoryManager';
 interface AdminPlansAndPackagesManagerProps {
   currentUser?: any;
   onPlanChanged?: () => void;
@@ -108,6 +123,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // Sub-tabs: 10 main accordions in exact order
   const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('profile');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
+  const isSuperAdminUser = isUserSuperAdmin(currentUser);
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -194,40 +210,58 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   };
 
   // Single Unified Category Manager for RSS & Web Links (Synchronized with Home Feed)
-  const [feedCategories, setFeedCategories] = useState<string[]>(() => {
-    const defaults = ['देश / राष्ट्रीय', 'मध्य प्रदेश', 'उत्तर प्रदेश', 'बिहार', 'राजस्थान', 'विदेश', 'व्यापार', 'खेल', 'मनोरंजन', 'टेक्नोलॉजी', 'क्राइम / अपराध', 'विशेष रिपोर्ट'];
-    if (typeof window === 'undefined') return defaults;
-    try {
-      const saved = localStorage.getItem('ai_news_unified_categories_list') || localStorage.getItem('ai_news_rss_categories_list');
-      return saved ? JSON.parse(saved) : defaults;
-    } catch {
-      return defaults;
-    }
-  });
+  const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getAllCategories());
   const [newCatInput, setNewCatInput] = useState<string>('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState<string>('');
+
+  useEffect(() => {
+    const handleCatsUpdated = () => {
+      setFeedCategories(getAllCategories());
+    };
+    window.addEventListener('ai_news_categories_updated', handleCatsUpdated);
+    return () => window.removeEventListener('ai_news_categories_updated', handleCatsUpdated);
+  }, []);
 
   const handleAddCategoryUnified = (e: React.FormEvent) => {
     e.preventDefault();
     const cat = newCatInput.trim();
     if (!cat) return;
-    if (!feedCategories.includes(cat)) {
-      const updated = [...feedCategories, cat];
-      setFeedCategories(updated);
-      localStorage.setItem('ai_news_unified_categories_list', JSON.stringify(updated));
-      localStorage.setItem('ai_news_rss_categories_list', JSON.stringify(updated));
-      localStorage.setItem('ai_news_web_categories_list', JSON.stringify(updated));
+    try {
+      addCategory(cat);
+      setFeedCategories(getAllCategories());
       if (onAddCategory) onAddCategory(cat);
+      setNewCatInput('');
+    } catch (err: any) {
+      alert(err.message || 'त्रुटि');
     }
-    setNewCatInput('');
   };
 
-  const handleDeleteCategoryUnified = (catToDelete: string) => {
+  const handleStartEditCat = (cat: CategoryItem) => {
+    setEditingCatId(cat.id);
+    setEditingCatName(cat.name);
+  };
+
+  const handleSaveEditCat = (id: string) => {
+    if (!editingCatName.trim()) {
+      alert('श्रेणी का नाम खाली नहीं हो सकता');
+      return;
+    }
+    updateCategoryName(id, editingCatName.trim());
+    setFeedCategories(getAllCategories());
+    setEditingCatId(null);
+    setEditingCatName('');
+  };
+
+  const handleToggleCatStatus = (id: string) => {
+    toggleCategoryStatus(id);
+    setFeedCategories(getAllCategories());
+  };
+
+  const handleDeleteCategoryUnified = (id: string) => {
     if (feedCategories.length <= 1) return;
-    const updated = feedCategories.filter(c => c !== catToDelete);
-    setFeedCategories(updated);
-    localStorage.setItem('ai_news_unified_categories_list', JSON.stringify(updated));
-    localStorage.setItem('ai_news_rss_categories_list', JSON.stringify(updated));
-    localStorage.setItem('ai_news_web_categories_list', JSON.stringify(updated));
+    deleteCategoryItem(id);
+    setFeedCategories(getAllCategories());
   };
 
   // Logo Change Requests State
@@ -237,6 +271,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // RSS & Web Link Sources State
   const [rssSources, setRssSources] = useState<AdminRssSource[]>(() => getAdminRssSources());
   const [newSourceName, setNewSourceName] = useState<string>('');
+  const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
   const [newSourceUrl, setNewSourceUrl] = useState<string>('');
   const [newSourceType, setNewSourceType] = useState<'rss' | 'web'>('rss');
   const [newSourceCategory, setNewSourceCategory] = useState<string>('देश');
@@ -268,6 +303,108 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   // Plan Users State
   const [planUsers, setPlanUsers] = useState<PlanUserRecord[]>(() => getPlanUsers());
+  const [isAddUserOpen, setIsAddUserOpen] = useState<boolean>(false);
+  const [newUserName, setNewUserName] = useState<string>('');
+  const [newUserEmail, setNewUserEmail] = useState<string>('');
+  const [newUserPassword, setNewUserPassword] = useState<string>('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'user'>('user');
+  const [newUserPlan, setNewUserPlan] = useState<UserPlanTier>('basic');
+  const [newUserMobile, setNewUserMobile] = useState<string>('');
+  const [newUserChannel, setNewUserChannel] = useState<string>('');
+  const [addUserSuccessMsg, setAddUserSuccessMsg] = useState<string>('');
+  const [addUserErrorMsg, setAddUserErrorMsg] = useState<string>('');
+
+  // Website News Portal Manager State
+  const [newsPortals, setNewsPortals] = useState<Array<{ id: string; name: string; url: string; category: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('admin_news_portals_list');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      { id: 'p-1', name: 'आज तक (Aaj Tak)', url: 'https://aajtak.in', category: 'breaking' },
+      { id: 'p-2', name: 'दैनिक भास्कर (Dainik Bhaskar)', url: 'https://bhaskar.com', category: 'state' },
+      { id: 'p-3', name: 'एनडीटीवी (NDTV India)', url: 'https://ndtv.in', category: 'national' },
+      { id: 'p-4', name: 'ज़ी न्यूज़ (Zee News)', url: 'https://zeenews.india.com', category: 'breaking' },
+      { id: 'p-5', name: 'अमर उजाला (Amar Ujala)', url: 'https://amarujala.com', category: 'state' },
+      { id: 'p-6', name: 'खबरिदास न्यूज़ (Khabridas News)', url: 'https://khabridasnews.com', category: 'breaking' }
+    ];
+  });
+  const [newPortalName, setNewPortalName] = useState<string>('');
+  const [newPortalUrl, setNewPortalUrl] = useState<string>('');
+  const [newPortalCat, setNewPortalCat] = useState<string>('breaking');
+
+  const handleAddNewsPortal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPortalName.trim()) return;
+    const item = {
+      id: 'portal-' + Date.now(),
+      name: newPortalName.trim(),
+      url: newPortalUrl.trim() || 'https://' + newPortalName.trim().toLowerCase().replace(/[^a-z0-9]/g, '') + '.com',
+      category: newPortalCat,
+    };
+    const updated = [item, ...newsPortals];
+    setNewsPortals(updated);
+    saveNewsChannel(item.name);
+    setSavedChannels(getSavedNewsChannels());
+    localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
+    setNewPortalName('');
+    setNewPortalUrl('');
+  };
+
+  const handleDeleteNewsPortal = (id: string) => {
+    const updated = newsPortals.filter(p => p.id !== id);
+    setNewsPortals(updated);
+    localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
+  };
+
+  const handleSuperAdminAddUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddUserSuccessMsg('');
+    setAddUserErrorMsg('');
+
+    const email = newUserEmail.trim().toLowerCase();
+    const password = newUserPassword.trim();
+    const name = newUserName.trim();
+
+    if (!email || !password || !name) {
+      setAddUserErrorMsg('कृपया नाम, ईमेल और पासवर्ड भरें।');
+      return;
+    }
+
+    try {
+      // 1. Assign plan
+      assignPlanToUserManually(email, newUserPlan, 365, 'SuperAdmin Direct Creation');
+      
+      // 2. Save credentials in local storage
+      const customAccRaw = localStorage.getItem('reporter_custom_accounts');
+      const customAcc = customAccRaw ? JSON.parse(customAccRaw) : {};
+      customAcc[email] = {
+        pass: password,
+        user: {
+          username: email.split('@')[0],
+          name: name,
+          role: newUserRole,
+          email: email,
+          mobileNumber: newUserMobile.trim() || undefined,
+          channelName: newUserChannel.trim() || undefined,
+          planTier: newUserPlan,
+        },
+      };
+      localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAcc));
+
+      // 3. Refresh user list
+      setPlanUsers(getPlanUsers());
+      setAddUserSuccessMsg(`उपयोगकर्ता '${name}' (${email}) सफलतापूर्वक बनाया गया!`);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserMobile('');
+      setNewUserChannel('');
+    } catch (err: any) {
+      setAddUserErrorMsg(err.message || 'यूज़र बनाने में त्रुटि हुई।');
+    }
+  };
+
   const [manualUserEmail, setManualUserEmail] = useState<string>('');
   const [manualUserTier, setManualUserTier] = useState<UserPlanTier>('professional');
   const [manualDuration, setManualDuration] = useState<number>(30);
@@ -488,6 +625,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   };
 
   // Branding Editor Handlers
+  
+  const handleDeleteUser = (email: string, name?: string) => {
+    if (window.confirm(`क्या आप निश्चित रूप से यूज़र "${name || email}" का प्रोफाइल/अकाउंट डिलीट करना चाहते हैं?`)) {
+      adminDeleteUserRecord(email);
+      adminDeleteCloudUser(email).catch(() => {});
+      setPlanUsers(getPlanUsers());
+    }
+  };
+
   const handleOpenBrandingEditor = (user: PlanUserRecord) => {
     setEditingBrandingUser(user);
     setEditBrandNameHi(user.channelName || '');
@@ -550,6 +696,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         return <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-xs font-black rounded">PRO</span>;
       case 'ultra':
         return <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-black rounded shadow-xs shadow-purple-500/50">VIP DESK</span>;
+      default:
+        return <span className="px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-black rounded">BASIC</span>;
     }
   };
 
@@ -982,6 +1130,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'promocodes' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              
+            {!isSuperAdminUser ? (
+              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                    यह सेक्शन (<strong>5. प्रोमो कोड्स व कूपन मैनेजर</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
+                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
+                </div>
+              </div>
+            ) : (
         <div className="space-y-6">
           {/* Manual Payment Workflow Guide */}
           <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-xs text-slate-300 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -1312,6 +1477,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             )}
           </div>
         </div>
+              )}
             </div>
           )}
         </div>
@@ -1348,6 +1514,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'users' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              
+            {!isSuperAdminUser ? (
+              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                    यह सेक्शन (<strong>6. यूजर्स मैनेजर व रोल नियंत्रण</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
+                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
+                </div>
+              </div>
+            ) : (
         <div className="space-y-6">
           {/* 0. LOGO CHANGE REQUESTS MANAGEMENT CARD */}
           <div className="bg-gradient-to-br from-slate-900 via-amber-950/20 to-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
@@ -1371,7 +1554,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
               </div>
               <span className="px-3 py-1 bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[11px] font-black rounded-lg">
-                🔐 ONE-TIME SETUP UNLOCK
+                🔐 एकबारगी सेटअप अनलॉक
               </span>
             </div>
 
@@ -1401,6 +1584,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
                     <tr>
                       <th className="p-3">यूज़र विवरण</th>
+                      <th className="p-3">लोगो प्रिव्यू (नया / वर्तमान)</th>
                       <th className="p-3">चैनल नाम</th>
                       <th className="p-3">अनुरोध का कारण</th>
                       <th className="p-3">दिनांक</th>
@@ -1412,7 +1596,44 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     {logoRequests.map((req) => (
                       <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="p-3">
-                          <div className="font-bold text-white font-mono">{req.userEmail}</div>
+                          {(() => {
+                            const matchedUser = planUsers.find((u) => u.email.toLowerCase().trim() === req.userEmail.toLowerCase().trim());
+                            const name = req.userName || matchedUser?.name || 'यूज़र';
+                            const uname = req.username || matchedUser?.username;
+                            const unameFormatted = uname ? (uname.startsWith('@') ? uname : `@${uname}`) : '';
+                            return (
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-white text-xs">{name}</div>
+                                {unameFormatted && (
+                                  <div className="text-[11px] font-mono text-amber-300 font-bold">{unameFormatted}</div>
+                                )}
+                                <div className="text-[10px] font-mono text-slate-400">{req.userEmail}</div>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            {req.newLogoUrl ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-12 h-12 rounded-lg border-2 border-emerald-500/60 bg-slate-950 p-1 flex items-center justify-center overflow-hidden shadow-md">
+                                  <img src={req.newLogoUrl} alt="New Logo" className="max-w-full max-h-full object-contain" />
+                                </div>
+                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1 rounded">नया लोगो</span>
+                              </div>
+                            ) : null}
+                            {req.currentLogoUrl ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-10 h-10 rounded-lg border border-slate-700 bg-slate-950 p-1 flex items-center justify-center overflow-hidden opacity-75">
+                                  <img src={req.currentLogoUrl} alt="Current Logo" className="max-w-full max-h-full object-contain" />
+                                </div>
+                                <span className="text-[9px] text-slate-400">वर्तमान</span>
+                              </div>
+                            ) : null}
+                            {!req.newLogoUrl && !req.currentLogoUrl && (
+                              <span className="text-xs text-slate-500 italic">—</span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 font-semibold text-amber-300">
                           {req.channelName || '—'}
@@ -1489,7 +1710,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             )}
           </div>
 
-          {/* 1. SINGLE MANAGEMENT BOX: CUSTOM HEADER / FOOTER */}
+          {/* 1. कस्टम हेडर व फुटर प्रबंधन */}
           <div className="bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-3">
               <div className="flex items-center gap-2.5">
@@ -1536,7 +1757,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       {planUsers
                         .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
                         .map((u) => {
-                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : u.tier.toUpperCase();
+                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : (u.tier ? u.tier.toUpperCase() : 'BASIC');
                           return (
                             <option key={u.userId} value={u.email}>
                               ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{tierLabel}]
@@ -1549,7 +1770,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
                         .map((u) => (
                           <option key={u.userId} value={u.email}>
-                            {u.name ? `${u.name} (${u.email})` : u.email} — [{u.tier.toUpperCase()}]
+                            {u.name ? `${u.name} (${u.email})` : u.email} — [{(u.tier ? u.tier.toUpperCase() : 'BASIC')}]
                           </option>
                         ))}
                     </optgroup>
@@ -1744,12 +1965,137 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </form>
           </div>
 
+          {/* 2.5 SUPER ADMIN: ADD NEW USER / ADMIN (ईमेल व पासवर्ड के साथ नया यूज़र / एडमिन जोड़ें) */}
+          <div className="bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/50 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm sm:text-base font-black text-amber-300 flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-amber-400" />
+                  <span>➕ नया यूज़र या एडमिन जोड़ें (Add User / Admin)</span>
+                </h4>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  सुपर एडमिन सीधे यहाँ से किसी भी पत्रकार/यूज़र या एडमिन का ईमेल आईडी व पासवर्ड बनाकर अकाउंट जोड़ सकते हैं।
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddUserOpen(!isAddUserOpen)}
+                className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-1.5 shrink-0"
+              >
+                <span>{isAddUserOpen ? '✕ फॉर्म बंद करें' : '➕ नया यूज़र जोड़ें'}</span>
+              </button>
+            </div>
+
+            {isAddUserOpen && (
+              <form onSubmit={handleSuperAdminAddUser} className="bg-slate-950/90 border border-amber-500/40 rounded-xl p-4 space-y-4 animate-in slide-in-from-top-2">
+                {addUserSuccessMsg && (
+                  <div className="p-3 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>{addUserSuccessMsg}</span>
+                  </div>
+                )}
+                {addUserErrorMsg && (
+                  <div className="p-3 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-300 text-xs font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400" />
+                    <span>{addUserErrorMsg}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">पूरा नाम (Full Name) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      placeholder="उदा. राहुल शर्मा"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">ईमेल आईडी (Email / Login ID) *</label>
+                    <input
+                      type="email"
+                      required
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      placeholder="user@gmail.com"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">लॉगिन पासवर्ड (Password) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      placeholder="कम से कम 4 अक्षर (उदा. pass123)"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">रोल चयन (Role) *</label>
+                    <select
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-amber-300 font-bold focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="user">👤 सामान्य यूज़र / रिपोर्टर (User)</option>
+                      <option value="admin">🛡️ एडमिन (Admin)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">प्लान (Plan Tier) *</label>
+                    <select
+                      value={newUserPlan}
+                      onChange={(e) => setNewUserPlan(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-amber-300 font-bold focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="basic">BASIC (वॉटरमार्क सहित)</option>
+                      <option value="advanced">ADVANCE (फुल एचडी)</option>
+                      <option value="professional">PRO (वीडियो स्टूडियो)</option>
+                      <option value="ultra">VIP DESK (4K फ्रेम्स)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">मोबाइल नंबर (वैकल्पिक)</label>
+                    <input
+                      type="tel"
+                      value={newUserMobile}
+                      onChange={(e) => setNewUserMobile(e.target.value)}
+                      placeholder="9876543210"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4 text-slate-950" />
+                    <span>अकाउंट बनाएं व डेटाबेस में जोड़ें</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
           {/* 3. ADMIN USER CONTROL: ALL REGISTERED USERS DATABASE RECORDS */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span>ADMIN USER CONTROL: पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स</span>
+                  <span>पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स (लाइव डेटाबेस)</span>
                   <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-xs font-black rounded-full">
                     {planUsers.length}
                   </span>
@@ -1782,11 +2128,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/50">
                       <th className="p-3">User & Account Info</th>
+                      <th className="p-3">रोल नियंत्रण (Role)</th>
                       <th className="p-3">Channel Name & Logo</th>
-                      <th className="p-3">Profile / Branding Info</th>
+                      <th className="p-3">Profile / Branding</th>
                       <th className="p-3">Current Plan</th>
-                      <th className="p-3">Profile Lock Status</th>
-                      <th className="p-3">कस्टम H/F स्थिति</th>
+                      <th className="p-3">Profile Lock</th>
+                      <th className="p-3">एक्शन (Delete)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -1807,9 +2154,17 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           <td className="p-3">
                             <div className="font-bold text-white flex items-center gap-1.5">
                               <span>{u.name || u.email.split('@')[0]}</span>
-                              {u.role === 'admin' && (
-                                <span className="px-1.5 py-0.2 bg-red-600/80 text-white text-[9px] font-black rounded uppercase">
-                                  Admin
+                              {u.role === 'superadmin' ? (
+                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
+                                  👑 Super Admin
+                                </span>
+                              ) : u.role === 'admin' ? (
+                                <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9px] font-black rounded uppercase">
+                                  🛡️ Admin
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded uppercase">
+                                  👤 User
                                 </span>
                               )}
                             </div>
@@ -1817,6 +2172,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             {u.mobile && (
                               <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
                             )}
+                          </td>
+
+                          {/* Role Changer */}
+                          <td className="p-3">
+                            <select
+                              value={u.role || 'user'}
+                              onChange={(e) => {
+                                const newRole = e.target.value as any;
+                                adminUpdateUserRecord(u.email, { role: newRole });
+                                adminUpdateCloudUser(u.userId, { role: newRole });
+                                setPlanUsers(getPlanUsers());
+                              }}
+                              className="bg-slate-950 border border-slate-700 text-amber-300 rounded-lg px-2 py-1 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                            >
+                              <option value="superadmin">👑 सुपर एडमिन (Super Admin)</option>
+                              <option value="admin">🛡️ एडमिन (Admin)</option>
+                              <option value="user">👤 सामान्य यूज़र (User)</option>
+                            </select>
                           </td>
 
                           {/* Channel & Logo */}
@@ -1872,9 +2245,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           {/* Current Plan */}
                           <td className="p-3">
                             <div className="space-y-1.5">
-                              <div>{getTierBadge(u.tier)}</div>
+                              <div>{getTierBadge(u.tier || 'basic')}</div>
                               <select
-                                value={u.tier}
+                                value={u.tier || 'basic'}
                                 onChange={(e) => {
                                   const newTier = e.target.value as UserPlanTier;
                                   adminUpdateUserRecord(u.email, { tier: newTier });
@@ -1923,15 +2296,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             </div>
                           </td>
 
-                          {/* Custom H/F Assignment Status */}
+                          {/* Delete User & Danger Zone */}
                           <td className="p-3">
-                            {u.assignedCustomActive && (u.assignedHeaderUrl || u.assignedFooterUrl) ? (
-                              <span className="px-2 py-0.5 bg-purple-950 border border-purple-500 text-purple-300 rounded text-[10px] font-bold">
-                                ✨ असाइन्ड (Active)
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-500">डिफ़ॉल्ट</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`क्या आप यूजर "${u.name || u.email}" का प्रोफाइल व पूरा डेटाबेस हमेशा के लिए हटाना चाहते हैं?`)) {
+                                  adminDeleteUserRecord(u.email);
+                                  adminDeleteCloudUser(u.userId);
+                                  setPlanUsers(getPlanUsers());
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/60 text-rose-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                              title="यूज़र प्रोफाइल व डेटाबेस हटाएं"
+                            >
+                              <Trash2 className="w-3 h-3 text-rose-400" />
+                              <span>हटाएं</span>
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -2072,11 +2453,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
           )}
-        </div>
-            </div>
-          )}
-        </div>
-
 
           {/* EDIT USER MODAL (ADMIN POWER: CHANGE USERNAME, PLAN, PHONE, LOCK) */}
           {editingUser && (
@@ -2232,6 +2608,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
           )}
+        </div>
+            )}
+          </div>
+        )}
+      </div>
 
 
         {/* ========================================================================= */}
@@ -2275,7 +2656,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    7. RSS लिंक्स डैशबोर्ड (Live Production RSS Feeds)
+                    7. RSS लिंक्स डैशबोर्ड
                   </h3>
                   <p className="text-xs text-slate-300">
                     विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।
@@ -2352,14 +2733,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
 
-                        {/* Single Category Manager for RSS & Web Links (Synchronized with Home Feed) */}
+            {/* Single Category Manager for RSS & Web Links (Synchronized with Home Feed) */}
             <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
                   <FolderTree className="w-4 h-4 text-amber-400" />
                   <span className="text-xs font-bold text-white">एकल श्रेणी प्रबंधक (Single Category Manager - RSS, Web & Home Feed)</span>
                 </div>
-                <span className="text-[10px] text-amber-300 font-bold">{feedCategories.length} श्रेणियां सक्रिय</span>
+                <span className="text-[10px] text-amber-300 font-bold">{feedCategories.filter((c) => c.isActive).length} श्रेणियां सक्रिय</span>
               </div>
 
               <form onSubmit={handleAddCategoryUnified} className="flex items-center gap-2">
@@ -2367,7 +2748,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   type="text"
                   value={newCatInput}
                   onChange={(e) => setNewCatInput(e.target.value)}
-                  placeholder="नई श्रेणी का नाम जोड़ें (उदा. मध्य प्रदेश, क्राइम, टेक, राजनीति...)"
+                  placeholder="नई श्रेणी का नाम जोड़ें (उदा. खेती-किसानी, स्वास्थ्य, क्राइम, टेक...)"
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-400 focus:outline-hidden"
                 />
                 <button
@@ -2381,22 +2762,85 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="flex flex-wrap gap-2 pt-1">
                 {feedCategories.map((cat) => (
-                  <span
-                    key={cat}
-                    className="px-2.5 py-1 bg-slate-900 border border-slate-700 rounded-lg text-[11px] font-bold text-slate-200 flex items-center gap-1.5"
+                  <div
+                    key={cat.id}
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                      cat.isActive
+                        ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/80 text-slate-500 opacity-70'
+                    }`}
                   >
-                    <span>{cat}</span>
-                    {feedCategories.length > 1 && (
+                    {/* Active/Inactive Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCatStatus(cat.id)}
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-black cursor-pointer transition ${
+                        cat.isActive
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-500 border border-slate-700'
+                      }`}
+                      title={cat.isActive ? 'क्लिक करके निष्क्रिय करें' : 'क्लिक करके सक्रिय करें'}
+                    >
+                      {cat.isActive ? 'सक्रिय' : 'निष्क्रिय'}
+                    </button>
+
+                    {/* Category Name or Inline Edit Input */}
+                    {editingCatId === cat.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          className="px-2 py-0.5 bg-slate-950 border border-amber-400 rounded text-xs text-white focus:outline-hidden w-28 sm:w-36"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEditCat(cat.id);
+                            if (e.key === 'Escape') setEditingCatId(null);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditCat(cat.id)}
+                          className="px-1.5 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded cursor-pointer"
+                        >
+                          सेव
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCatId(null)}
+                          className="p-0.5 text-slate-400 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-semibold">{cat.name}</span>
+                    )}
+
+                    {/* Edit Button */}
+                    {editingCatId !== cat.id && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteCategoryUnified(cat)}
-                        className="text-slate-500 hover:text-red-400 transition cursor-pointer"
+                        onClick={() => handleStartEditCat(cat)}
+                        className="text-slate-400 hover:text-amber-400 transition cursor-pointer p-0.5"
+                        title="श्रेणी का नाम संपादित करें (Edit)"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                    )}
+
+                    {/* Delete Button */}
+                    {feedCategories.length > 1 && editingCatId !== cat.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategoryUnified(cat.id)}
+                        className="text-slate-500 hover:text-red-400 transition cursor-pointer p-0.5"
                         title="श्रेणी हटाएं"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
                     )}
-                  </span>
+                  </div>
                 ))}
               </div>
             </div>
@@ -2409,10 +2853,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   setRssMsg({ type: 'error', text: 'कृपया वैध RSS Feed XML URL दर्ज करें।' });
                   return;
                 }
-                const name = newSourceName.trim() || 'RSS Source';
+                const name = newSourceName.trim() || (savedChannels[0] || 'RSS Source');
+                saveNewsChannel(name);
+                setSavedChannels(getSavedNewsChannels());
                 addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
                 setRssSources(getAdminRssSources());
-                setNewSourceName('');
                 setNewSourceUrl('');
                 setRssMsg({ type: 'success', text: `नया RSS स्रोत "${name}" जोड़ा गया! वास्तविक RSS से समाचार प्राप्त किए जा रहे हैं...` });
                 syncAllSourcesLive().then((res) => {
@@ -2431,15 +2876,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल / स्रोत का नाम *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
+                  <label className="block text-slate-300 font-bold mb-1">चैनल चुनें (Select Channel) *</label>
+                  <select
+                    value={newSourceName || (savedChannels[0] || '')}
                     onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="उदा. आज तक लाइव RSS"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                  />
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                  >
+                    {savedChannels.map((ch) => (
+                      <option key={ch} value={ch}>{ch}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">RSS Feed XML URL *</label>
@@ -2457,10 +2903,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <select
                     value={newSourceCategory}
                     onChange={(e) => setNewSourceCategory(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -2526,14 +2972,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <button
                           type="button"
                           onClick={() => {
-                            if (confirm(`क्या आप स्रोत "${s.name}" हटाना चाहते हैं?`)) {
+                            if (confirm(`क्या आप RSS स्रोत "${s.name}" हटाना चाहते हैं?`)) {
                               deleteAdminRssSource(s.id);
                               setRssSources(getAdminRssSources());
                             }
                           }}
-                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
+                          className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                          title="हटाएं"
                         >
-                          हटाएँ
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -2543,13 +2990,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
-            </div>
-          )}
-        </div>
+      </div>
+    )}
+  </div>
 
 
         {/* ========================================================================= */}
-        {/* STEP 8: वेब लिंक्स डैशबोर्ड (WEB LINKS DASHBOARD)                         */}
+        {/* STEP 8: वेब लिंक्स मैनेजर (WEB LINKS DASHBOARD)                           */}
         {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
@@ -2563,15 +3010,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  8. वेब लिंक्स डैशबोर्ड
+                  8. वेब लिंक्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  लाइव वेब आर्टिकल स्क्रैपिंग लिंक्स प्रबंधन
+                  वेबसाइट एवं आर्टिकल वेब लिंक्स प्रबंधन व लाइव वेब स्क्रैपिंग
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+              <span className="px-2.5 py-1 bg-slate-950 text-cyan-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
                 {`${rssSources.filter(s => s.type === "web").length} वेब लिंक्स`}
               </span>
               <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'web' ? 'rotate-180 text-amber-400' : ''}`} />
@@ -2637,6 +3084,66 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
 
+            {/* Unified Website News Portal Manager */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-bold text-white">🌐 वेबसाइट न्यूज़ पोर्टल प्रबंधक (Website News Portal Manager - RSS & Web Links)</span>
+                </div>
+                <span className="text-[10px] text-cyan-300 font-bold">{newsPortals.length} न्यूज़ पोर्टल्स सक्रिय</span>
+              </div>
+
+              <form onSubmit={handleAddNewsPortal} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  required
+                  value={newPortalName}
+                  onChange={(e) => setNewPortalName(e.target.value)}
+                  placeholder="न्यूज़ चैनल / पोर्टल का नाम (उदा. अमर उजाला)"
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-hidden"
+                />
+                <input
+                  type="url"
+                  value={newPortalUrl}
+                  onChange={(e) => setNewPortalUrl(e.target.value)}
+                  placeholder="वेबसाइट URL (उदा. https://amarujala.com)"
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-hidden font-mono"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center justify-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ न्यूज़ पोर्टल जोड़ें</span>
+                </button>
+              </form>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
+                {newsPortals.map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-2 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between gap-1.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-bold text-slate-200 truncate">{p.name}</div>
+                      <div className="text-[9px] font-mono text-cyan-400/80 truncate">{p.url}</div>
+                    </div>
+                    {newsPortals.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteNewsPortal(p.id)}
+                        className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                        title="पोर्टल हटाएं"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Add New Web Source Form */}
             <form
               onSubmit={(e) => {
@@ -2646,7 +3153,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   return;
                 }
                 const name = newSourceName.trim() || 'Web Source';
-                addAdminRssSource(name, newSourceUrl, 'web', newSourceCategory);
+                saveNewsChannel(name);
+                  setSavedChannels(getSavedNewsChannels());
+                  addAdminRssSource(name, newSourceUrl, 'web', newSourceCategory);
                 setRssSources(getAdminRssSources());
                 setNewSourceName('');
                 setNewSourceUrl('');
@@ -2667,15 +3176,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">वेबसाइट / न्यूज़ पोर्टल का नाम *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSourceName}
+                  <label className="block text-slate-300 font-bold mb-1">चैनल / न्यूज़ पोर्टल चुनें (Select Channel) *</label>
+                  <select
+                    value={newSourceName || (savedChannels[0] || '')}
                     onChange={(e) => setNewSourceName(e.target.value)}
-                    placeholder="उदा. पीआईबी प्रेस रिलीज़"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
-                  />
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
+                  >
+                    {savedChannels.map((ch) => (
+                      <option key={ch} value={ch}>{ch}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">वेबसाइट / आर्टिकल URL *</label>
@@ -2693,10 +3203,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <select
                     value={newSourceCategory}
                     onChange={(e) => setNewSourceCategory(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -2815,6 +3325,23 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'restricted' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              
+            {!isSuperAdminUser ? (
+              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
+                    यह सेक्शन (<strong>9. प्रतिबंधित चैनल सुरक्षा सूची</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
+                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
+                </div>
+              </div>
+            ) : (
         <div className="space-y-6">
           {/* Top Explanation Banner */}
           <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
@@ -3110,6 +3637,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
+              )}
             </div>
           )}
         </div>

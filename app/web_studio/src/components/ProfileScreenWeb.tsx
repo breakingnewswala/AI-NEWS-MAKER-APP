@@ -1,3 +1,4 @@
+import { Smartphone, Download } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import {
   User,
@@ -36,15 +37,20 @@ import {
   ChevronDown,
   Film,
   Layers,
+  Mail,
+  MapPin,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { getApiUrl } from '../lib/apiConfig';
+import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import {
   getUserSubscription,
   setUserPlanTier,
   savePrimaryMobileNumber,
   isUserAdmin,
+  isUserSuperAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
   setAdminTestMode,
@@ -61,6 +67,7 @@ import {
   AdminSystemMode,
   isChannelProfileLocked,
   registerOrUpdateUser,
+  getPlanUsers,
   submitLogoChangeRequest,
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
@@ -99,21 +106,24 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      name: 'मुख्य संपादक',
-      email: 'editor@ainewsmaker.online',
-      role: 'admin',
-      district: 'सेंट्रल डेस्क'
+      name: currentUser?.name || 'यूज़र', email: currentUser?.email || '', role: 'user',
+      district: 'डिजिटल डेस्क'
     };
   })();
   const isAdmin = isUserAdmin(effectiveUser);
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
+      const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
+      if (cleanEmail) {
+        const specific = localStorage.getItem(`user_profile_${cleanEmail}`);
+        if (specific) return JSON.parse(specific);
+      }
       const saved = localStorage.getItem('user_channel_profile');
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      fullName: currentUser?.name || 'मुख्य संपादक',
+      fullName: currentUser?.name || 'यूज़र',
       channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
       channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
       channelLogoUrl: '/assets/ai_news_maker_logo.png',
@@ -126,7 +136,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         telegram: false,
         whatsapp: true,
       },
-      username: 'ainewsmaker',
+      username: currentUser?.username || '',
       mobileNumber: '96698-02408',
       showMobileNumber: true,
       websiteUrl: 'ainewsmaker.online',
@@ -138,9 +148,76 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const isLockedForUser = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoGifUrl));
   const [isLogoReqModalOpen, setIsLogoReqModalOpen] = useState(false);
   const [logoReqReason, setLogoReqReason] = useState("नया आधिकारिक चैनल लोगो अपडेट करना है");
+  const [newRequestedLogoUrl, setNewRequestedLogoUrl] = useState<string>('');
   const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
     getUserLogoChangeRequestStatus(currentUser?.email || '')
   );
+
+  // Manual Username Creation state & handler (Google Email != Username)
+  const [isUsernameEditing, setIsUsernameEditing] = useState(false);
+  const [manualUsernameInput, setManualUsernameInput] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+
+  const handleSaveManualUsername = () => {
+    const clean = manualUsernameInput.trim().replace(/^@/, '').toLowerCase();
+    if (!clean) {
+      setUsernameError('कृपया एक वैध यूज़रनेम दर्ज करें।');
+      return;
+    }
+    if (clean.length < 3 || clean.length > 20) {
+      setUsernameError('यूज़रनेम 3 से 20 अक्षरों के बीच होना चाहिए।');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(clean)) {
+      setUsernameError('केवल अंग्रेजी अक्षर, अंक और _ (underscore) मान्य हैं।');
+      return;
+    }
+
+    // Check availability against all registered users
+    const users = getPlanUsers();
+    const existing = users.find(u => u.username?.toLowerCase() === clean && u.email.toLowerCase() !== (currentUser?.email || '').toLowerCase());
+    if (existing) {
+      setUsernameError(`'${clean}' यूज़रनेम पहले से किसी अन्य यूज़र द्वारा उपयोग में है। कृपया दूसरा यूज़रनेम चुनें।`);
+      return;
+    }
+
+    const formattedUsername = `@${clean}`;
+    setChannelProfile(prev => ({ ...prev, username: formattedUsername }));
+
+    if (currentUser?.email) {
+      const emailKey = `user_profile_${currentUser.email.toLowerCase().trim()}`;
+      try {
+        const saved = localStorage.getItem(emailKey);
+        const obj = saved ? JSON.parse(saved) : {};
+        obj.username = formattedUsername;
+        localStorage.setItem(emailKey, JSON.stringify(obj));
+      } catch {}
+    }
+
+    try {
+      const sessStr = localStorage.getItem('reporter_auth_session');
+      if (sessStr) {
+        const sess = JSON.parse(sessStr);
+        sess.username = clean;
+        localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
+      }
+    } catch {}
+
+    setIsUsernameEditing(false);
+    setUsernameError('');
+    alert(`✅ आपका मनपसंद यूज़रनेम '${formattedUsername}' सफलतापूर्वक सेट हो गया!`);
+  };
+
+  const handleNewRequestedLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const res = ev.target?.result as string;
+      if (res) setNewRequestedLogoUrl(res);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     const handleLogoUpdates = () => {
@@ -371,7 +448,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     setRssChannelInput('');
     setRssUrlInput('');
     setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव हो गया!');
-    setTimeout(() => setRssSuccessMsg(''), 3500);
+    setTimeout(() => setRssSuccessMsg(''), 2000);
   };
 
   const handleToggleRssSource = (id: string) => {
@@ -654,7 +731,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       username: channelProfile.username,
       websiteUrl: channelProfile.websiteUrl,
       channelName: channelProfile.channelNameHi,
-      currentEmail: currentUser?.email,
+      currentEmail: effectiveUser?.email || currentUser?.email,
     });
     if (!uniqCheck.valid) {
       alert(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
@@ -674,6 +751,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
     localStorage.setItem('app_channel_name', channelProfile.channelNameHi);
     localStorage.setItem('app_channel_name_en', channelProfile.channelNameEn);
+    localStorage.setItem('user_profile_data', JSON.stringify(updatedProfile));
+
+    const cleanEmail = (effectiveUser?.email || currentUser?.email || '').toLowerCase().trim();
+    if (cleanEmail) {
+      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
+    }
 
     // Save into centralized profile_header_footer_json
     const headerFooterConfig = {
@@ -696,17 +779,59 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     };
     localStorage.setItem('profile_header_footer_json', JSON.stringify(headerFooterConfig));
 
-    // For non-admin users, permanently lock profile & record in admin database
+    // For non-admin users, lock profile status
     if (!isAdmin) {
       localStorage.setItem('is_channel_profile_locked', 'true');
-      registerOrUpdateUser({
-        name: currentUser?.name || channelProfile.fullName || 'संपादक',
-        email: currentUser?.email || 'user@breakingnewswala.com',
-        channelName: channelProfile.channelNameHi,
-        channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
-        mobile: channelProfile.mobileNumber,
-        isLocked: true,
-      });
+    }
+
+    // Register or sync user profile record in system database
+    registerOrUpdateUser({
+      name: channelProfile.fullName || currentUser?.name || 'संपादक',
+      email: cleanEmail || 'user@breakingnewswala.com',
+      channelName: channelProfile.channelNameHi,
+      channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
+      mobile: channelProfile.mobileNumber,
+      username: channelProfile.username,
+      isLocked: !isAdmin,
+    });
+
+    // Sync to backend cloud server API so cloud domain retains updated branding & logo across refreshes
+    try {
+      const serverPayload = {
+        ...updatedProfile,
+        email: cleanEmail,
+        fullName: channelProfile.fullName || currentUser?.name || 'संपादक',
+        username: channelProfile.username,
+        websiteUrl: channelProfile.websiteUrl,
+        channelNameHi: channelProfile.channelNameHi,
+        channelNameEn: channelProfile.channelNameEn,
+        channelLogoUrl: channelProfile.channelLogoUrl,
+      };
+      fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverPayload),
+      }).catch(() => {});
+
+      if (cleanEmail) {
+        fetch(getApiUrl('/api/admin/update-user'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: cleanEmail,
+            updates: {
+              name: channelProfile.fullName || currentUser?.name,
+              channelName: channelProfile.channelNameHi,
+              channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
+              mobile: channelProfile.mobileNumber,
+              websiteUrl: channelProfile.websiteUrl,
+              username: channelProfile.username,
+            },
+          }),
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Cloud server sync failed:', err);
     }
 
     // Dispatch update event for active studio card
@@ -875,7 +1000,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                     <div>
                       <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        <span>मेंबरशिप प्लान व अपग्रेड (Subscription Plans)</span>
+                        <span>मेंबरशिप प्लान व अपग्रेड</span>
                         <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-black rounded">
                           4 यूज़र स्तर
                         </span>
@@ -1046,7 +1171,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white">
-                      चैनल व लोगो विवरण (Channel & Logo Branding)
+                      चैनल व लोगो विवरण
                     </h3>
                     <p className="text-xs text-slate-400">
                       यह विवरण सीधे ग्राफिक डिजाइनिंग स्टूडियो के फुटर और कार्ड्स में सिंक होगा
@@ -1134,7 +1259,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition flex items-center gap-2 active:scale-95 border border-amber-300 ring-2 ring-amber-400/30"
                             >
                               <ShieldCheck className="w-4 h-4 text-slate-950 shrink-0" />
-                              <span>लोगो बदलने हेतु एडमिन से अनुरोध करें (Request to Admin)</span>
+                              <span>लोगो बदलने हेतु अनुरोध</span>
                             </button>
                           )}
                         </div>
@@ -1269,7 +1394,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         <span>
                           {saveSettingsSuccess
                             ? '✅ लोगो सुरक्षित! स्टूडियो में लागू हो गया'
-                            : '💾 चैनल लोगो सेव करें (Save Logo)'}
+                            : '💾 चैनल लोगो सेव करें'}
                         </span>
                       </button>
                     </div>
@@ -1295,7 +1420,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
                           title="लोगो को मूल डिफ़ॉल्ट पर रीसेट करें"
                         >
-                          <span>🔄 Logo Upload Reset</span>
+                          <span>🔄 एडमिन लोगो रीसेट (Reset Logo)</span>
                         </button>
                       )}
                     </div>
@@ -1303,69 +1428,158 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )}
               </div>
 
-              {/* Request Logo Change to Admin Modal for Normal Users */}
+              {/* लोगो बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
               {isLogoReqModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
                           <ShieldCheck className="w-5 h-5" />
                         </div>
                         <div>
-                          <h3 className="text-white font-bold text-sm sm:text-base font-['Baloo_2']">
+                          <h3 className="text-white font-bold text-base">
                             लोगो बदलने हेतु एडमिन से अनुरोध
                           </h3>
-                          <p className="text-[11px] text-slate-400">Request Logo Change to Admin</p>
+                          <p className="text-[11px] text-slate-400">
+                            नया लोगो अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें
+                          </p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setIsLogoReqModalOpen(false)}
-                        className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                        className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer"
                       >
                         ✕
                       </button>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
-                        <div className="w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0">
-                          <img
-                            src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl || '/assets/breaking_news_wala_logo.png'}
-                            alt="Current Logo"
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-white">
+                    <div className="space-y-4">
+                      {/* Current & New Logo Preview Side-by-Side */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* 1. Current Logo */}
+                        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                          <span className="text-[11px] font-bold text-slate-400 block">
+                            1. वर्तमान चैनल लोगो (Current Logo):
+                          </span>
+                          <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl || '/assets/ai_news_maker_logo.png'}
+                              alt="Current Logo"
+                              className="max-h-20 w-auto object-contain"
+                            />
+                          </div>
+                          <div className="text-[11px] text-slate-300 font-bold truncate">
                             {channelProfile.channelNameHi || 'वर्तमान चैनल'}
                           </div>
-                          <div className="text-[11px] text-slate-400 font-mono">
-                            {currentUser?.email || 'यूज़र'}
+                        </div>
+
+                        {/* 2. New Logo Upload & Preview */}
+                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2">
+                          <span className="text-[11px] font-bold text-amber-300 block flex items-center justify-between">
+                            <span>2. नया लोगो (New Logo Upload):</span>
+                            {newRequestedLogoUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setNewRequestedLogoUrl('')}
+                                className="text-[10px] text-red-400 hover:underline"
+                              >
+                                हटाएं
+                              </button>
+                            )}
+                          </span>
+                          <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                            {newRequestedLogoUrl ? (
+                              <img
+                                src={newRequestedLogoUrl}
+                                alt="New Logo Preview"
+                                className="max-h-20 w-auto object-contain"
+                              />
+                            ) : (
+                              <div className="text-center text-slate-500 space-y-1">
+                                <ImageIcon className="w-6 h-6 mx-auto opacity-60" />
+                                <span className="text-[10px] block">लोगो फ़ाइल चुनें</span>
+                              </div>
+                            )}
                           </div>
+                          <label className="w-full py-1.5 px-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition">
+                            <Upload className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{newRequestedLogoUrl ? 'लोगो बदलें' : '📁 नया लोगो चुनें'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/gif,image/*"
+                              onChange={handleNewRequestedLogoUpload}
+                              className="hidden"
+                            />
+                          </label>
                         </div>
                       </div>
 
+                      {/* Request Status Info if active */}
+                      {logoReqStatus !== 'none' && (
+                        <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs font-bold ${
+                          logoReqStatus === 'pending'
+                            ? 'bg-amber-950/70 border-amber-500/50 text-amber-300'
+                            : logoReqStatus === 'approved'
+                            ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
+                            : 'bg-rose-950/70 border-rose-500/50 text-rose-300'
+                        }`}>
+                          <span>वर्तमान स्थिति (Request Status):</span>
+                          <span>
+                            {logoReqStatus === 'pending'
+                              ? '⏳ लंबित (Admin Review Underway)'
+                              : logoReqStatus === 'approved'
+                              ? '✅ स्वीकृत (Approved)'
+                              : '❌ अस्वीकृत (Rejected)'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Reason Textarea */}
                       <div>
                         <label className="block text-xs font-bold text-slate-300 mb-1">
                           लोगो बदलने का कारण (Reason for Logo Change) *
                         </label>
                         <textarea
-                          rows={3}
+                          rows={2}
                           value={logoReqReason}
                           onChange={(e) => setLogoReqReason(e.target.value)}
-                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें (उदा. चैनल का नया लोगो जारी हुआ है)"
+                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें..."
                           className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500"
                         />
                       </div>
 
-                      <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300/90 leading-relaxed">
-                        ℹ️ अनुरोध सबमिट करने के बाद एडमिन द्वारा स्वीकृति मिलते ही आपका लोगो अनलॉक कर दिया जाएगा और आप नया लोगो अपलोड कर सकेंगे।
+                      {/* Support Email & Central Contact Number Display */}
+                      <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300">
+                        <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>आधिकारिक सहायता व सत्यापन डेस्क (Support Info):</span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-300">
+                          <div className="flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-slate-400" />
+                            <a
+                              href={`mailto:${APP_SUPPORT_CONFIG.supportEmail}`}
+                              className="text-amber-300 hover:underline font-mono"
+                            >
+                              {APP_SUPPORT_CONFIG.supportEmail}
+                            </a>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                            <a
+                              href={`tel:${APP_SUPPORT_CONFIG.supportPhone}`}
+                              className="text-emerald-300 hover:underline font-mono font-bold"
+                            >
+                              {APP_SUPPORT_CONFIG.supportPhone}
+                            </a>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                       <button
                         type="button"
                         onClick={() => setIsLogoReqModalOpen(false)}
@@ -1384,13 +1598,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             currentUser?.email || '',
                             channelProfile.channelNameHi || '',
                             channelProfile.channelLogoUrl,
-                            logoReqReason.trim()
+                            logoReqReason.trim(),
+                            newRequestedLogoUrl || undefined,
+                            currentUser?.name || channelProfile.fullName || 'यूज़र',
+                            channelProfile.username || currentUser?.username || ''
                           );
                           setLogoReqStatus('pending');
                           setIsLogoReqModalOpen(false);
-                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा स्वीकृति मिलते ही आप नया लोगो अपलोड कर सकेंगे।');
+                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।');
                         }}
-                        className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
+                        className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
                       >
                         अनुरोध सबमिट करें (Submit Request)
                       </button>
@@ -1541,6 +1758,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
                     }`}
                   />
+                </div>
+              </div>
+
+              {/* Registered Email Address (Gmail / Login ID) */}
+              <div className="pt-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
+                  <span>पंजीकृत ईमेल आईडी (Gmail / Login Email)</span>
+                  <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>सत्यापित खाता</span>
+                  </span>
+                </label>
+                <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm font-mono text-amber-300 select-all">
+                  <Globe className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="truncate">{currentUser?.email || effectiveUser?.email || 'Google Login Email'}</span>
                 </div>
               </div>
 
@@ -1706,7 +1938,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white flex items-center gap-2">
-                      <span>कस्टम हेडर व फुटर सेटिंग्स (Header & Footer Settings)</span>
+                      <span>कस्टम हेडर व फुटर सेटिंग्स</span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase">
                         PRO & VIP DESK ONLY
                       </span>
@@ -1968,78 +2200,180 @@ return (
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
         {/* User Identity & Active Plan Header Card */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-slate-950 text-2xl font-black shadow-lg">
-              {isAdmin ? '👑' : '📰'}
-            </div>
-            <div className="text-center sm:text-left">
-              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                <h2 className="text-lg font-black text-white">{currentUser?.name || 'मुख्य संपादक'}</h2>
-                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
-                  {isAdmin ? 'चीफ एडमिन' : 'संवाददाता'}
-                </span>
-                {/* Active Plan Tier Badge */}
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-sm ${
-                  subscription.tier === 'basic'
-                    ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
-                    : subscription.tier === 'advanced'
-                    ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
-                    : subscription.tier === 'professional'
-                    ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
-                    : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
-                }`}>
-                  <Crown className="w-3 h-3" />
-                  <span>{activePlanDetail.nameHi}</span>
-                </span>
+        {(() => {
+          const displayUserName = currentUser?.name || channelProfile.fullName || 'यूज़र';
+          const rawUsername = channelProfile.username || currentUser?.username || '';
+          const displayUsername = rawUsername ? (rawUsername.startsWith('@') ? rawUsername : `@${rawUsername}`) : '';
+          const displayLocation = reporterDistrict || channelProfile.location || currentUser?.district || '';
+          const displayEmail = currentUser?.email || (effectiveUser?.email && !effectiveUser.email.includes('editor@ainewsmaker') ? effectiveUser.email : '');
+
+          return (
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
+                {/* User Avatar / Channel Logo */}
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
+                  {channelProfile.channelLogoUrl ? (
+                    <img
+                      src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
+                      alt={displayUserName}
+                      className="w-full h-full object-contain rounded-xl"
+                    />
+                  ) : (
+                    <span className="text-2xl">{isAdmin ? '👑' : '📰'}</span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 flex flex-col items-center sm:items-start">
+                  {/* User Name & Admin / Plan Badge */}
+                  <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                    <h2 className="text-lg sm:text-xl font-black text-white">{displayUserName}</h2>
+                    {isAdmin && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
+                        {isUserSuperAdmin(effectiveUser || currentUser) ? '👑 सुपर एडमिन' : '🛡️ एडमिन'}
+                      </span>
+                    )}
+                    {/* Active Plan Tier Badge */}
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-xs ${
+                      subscription.tier === 'basic'
+                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                        : subscription.tier === 'advanced'
+                        ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
+                        : subscription.tier === 'professional'
+                        ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
+                        : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                    }`}>
+                      <Crown className="w-3 h-3" />
+                      <span>{activePlanDetail.nameHi}</span>
+                    </span>
+                  </div>
+
+                  {/* Username & Location - Clean & Real Data + Manual Username Creation */}
+                  <div className="flex flex-col items-center sm:items-start gap-1 w-full">
+                    <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap text-xs text-slate-300">
+                      {displayUsername ? (
+                        <div className="flex items-center gap-1.5 font-bold text-amber-300 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                          <span>{displayUsername}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualUsernameInput(displayUsername.replace(/^@/, ''));
+                              setIsUsernameEditing(!isUsernameEditing);
+                              setUsernameError('');
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-amber-300 ml-1 transition"
+                            title="यूज़रनेम बदलें"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsUsernameEditing(!isUsernameEditing);
+                            setUsernameError('');
+                          }}
+                          className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-[11px] font-black rounded-lg shadow cursor-pointer transition active:scale-95 flex items-center gap-1"
+                        >
+                          <span>✏️ अपना यूज़रनेम बनाएं (Set Username)</span>
+                        </button>
+                      )}
+
+                      {displayLocation && (
+                        <>
+                          <span className="text-slate-600">•</span>
+                          <span className="flex items-center gap-1 text-slate-300 font-medium">
+                            <MapPin className="w-3 h-3 text-red-400 shrink-0" />
+                            <span>{displayLocation}</span>
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Inline Manual Username Creation Form */}
+                    {isUsernameEditing && (
+                      <div className="mt-2 p-3 bg-slate-950 border border-amber-500/60 rounded-xl space-y-2 w-full max-w-sm animate-in fade-in duration-200 text-left">
+                        <label className="block text-[11px] font-bold text-amber-300">
+                          अपना मनपसंद यूज़रनेम चुनें (जैसे: rahul_sharma):
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-amber-400">@</span>
+                          <input
+                            type="text"
+                            value={manualUsernameInput}
+                            onChange={(e) => {
+                              setManualUsernameInput(e.target.value.toLowerCase().replace(/[^a-zA-Z0-9_]/g, ''));
+                              setUsernameError('');
+                            }}
+                            placeholder="username"
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-400 focus:outline-hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveManualUsername}
+                            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg transition cursor-pointer shrink-0"
+                          >
+                            सेव करें
+                          </button>
+                        </div>
+                        {usernameError && (
+                          <p className="text-[10px] text-red-400 font-bold leading-tight">
+                            ⚠️ {usernameError}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          * Google Email से यूज़रनेम स्वतः नहीं बनेगा। यूज़रनेम Unique होना आवश्यक है।
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Clean Email Display (No boxed container/border) */}
+                  {displayEmail && (
+                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-300 pt-0.5">
+                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="text-slate-200 font-mono">{displayEmail}</span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold ml-1">
+                        सत्यापित ID
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Primary Mobile Status */}
+                  <div className="flex items-center justify-center sm:justify-start gap-2 text-xs text-slate-400 pt-0.5">
+                    {subscription.isMobileLocked ? (
+                      <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
+                        <Lock className="w-3 h-3" />
+                        <span>प्राइमरी नंबर: +91 {subscription.primaryMobile}</span>
+                      </span>
+                    ) : (
+                      <span className="text-amber-400 text-xs flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Gmail Tracking ID */}
-              <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1 text-xs text-slate-300 font-medium">
-                <span className="px-1.5 py-0.5 bg-white/10 rounded text-[10px] text-amber-300 font-mono">
-                  Gmail:
-                </span>
-                <span className="text-amber-200 font-mono">
-                  {currentUser?.email || 'breakingnewswala.com@gmail.com'}
-                </span>
-                <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">
-                  सत्यापित ID
-                </span>
-              </div>
-
-              {/* Primary Mobile Status */}
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-1 text-xs text-slate-400">
-                {subscription.isMobileLocked ? (
-                  <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
-                    <Lock className="w-3 h-3" />
-                    <span>प्राइमरी नंबर: {subscription.primaryMobile}</span>
-                  </span>
-                ) : (
-                  <span className="text-amber-400 text-xs flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
-                  </span>
+              <div className="flex items-center justify-center sm:justify-end gap-2.5 flex-wrap">
+                {/* Primary Mobile Number Badge - Shown when locked via OTP */}
+                {subscription.isMobileLocked && (
+                  <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
+                    <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
+                      <span>+91 {subscription.primaryMobile}</span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800 flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>स्थायी लॉक</span>
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Primary Mobile Number Badge - Shown when locked via OTP */}
-            {subscription.isMobileLocked && (
-              <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
-                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
-                  <span>+91 {subscription.primaryMobile}</span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded border border-emerald-800 flex items-center gap-0.5">
-                    <Lock className="w-2.5 h-2.5" />
-                    <span>स्थायी लॉक</span>
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Global Plan Success Notice */}
         {planSuccessMsg && (
@@ -2230,6 +2564,35 @@ return (
               {normalUserTab === 'membership' && (
                 <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
                   {renderMembershipUpgradeSection()}
+
+      {/* MOBILE APK DOWNLOAD PROMINENT CARD */}
+      <div className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-emerald-950/90 border-2 border-emerald-500/80 rounded-2xl p-4 shadow-xl flex items-center justify-between flex-wrap gap-3 my-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
+            <Smartphone className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-white flex items-center gap-2">
+              <span>📲 एंड्रॉइड मोबाइल ऐप (Android APK) डाउनलोड करें</span>
+              <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                Official Mobile App
+              </span>
+            </h4>
+            <p className="text-xs text-emerald-200/90">
+              AI News Maker का आधिकारिक Android App अपने मोबाइल में इंस्टॉल करें और हाई-स्पीड न्यूज़ ग्राफिक व वीडियो बनाएं!
+            </p>
+          </div>
+        </div>
+        <a
+          href="/ainewsmaker-app.apk"
+          download="ainewsmaker-app.apk"
+          className="px-5 py-2.5 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95 shrink-0"
+        >
+          <Download className="w-4 h-4 text-slate-950" />
+          <span>APK डाउनलोड करें (Direct Download)</span>
+        </a>
+      </div>
+
                 </div>
               )}
             </div>

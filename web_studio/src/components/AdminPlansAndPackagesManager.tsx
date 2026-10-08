@@ -696,6 +696,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         return <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-xs font-black rounded">PRO</span>;
       case 'ultra':
         return <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-black rounded shadow-xs shadow-purple-500/50">VIP DESK</span>;
+      default:
+        return <span className="px-2 py-0.5 bg-slate-700 text-slate-200 text-xs font-black rounded">BASIC</span>;
     }
   };
 
@@ -1755,7 +1757,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       {planUsers
                         .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
                         .map((u) => {
-                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : u.tier.toUpperCase();
+                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : (u.tier ? u.tier.toUpperCase() : 'BASIC');
                           return (
                             <option key={u.userId} value={u.email}>
                               ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{tierLabel}]
@@ -1768,7 +1770,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
                         .map((u) => (
                           <option key={u.userId} value={u.email}>
-                            {u.name ? `${u.name} (${u.email})` : u.email} — [{u.tier.toUpperCase()}]
+                            {u.name ? `${u.name} (${u.email})` : u.email} — [{(u.tier ? u.tier.toUpperCase() : 'BASIC')}]
                           </option>
                         ))}
                     </optgroup>
@@ -2243,9 +2245,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           {/* Current Plan */}
                           <td className="p-3">
                             <div className="space-y-1.5">
-                              <div>{getTierBadge(u.tier)}</div>
+                              <div>{getTierBadge(u.tier || 'basic')}</div>
                               <select
-                                value={u.tier}
+                                value={u.tier || 'basic'}
                                 onChange={(e) => {
                                   const newTier = e.target.value as UserPlanTier;
                                   adminUpdateUserRecord(u.email, { tier: newTier });
@@ -2990,6 +2992,38 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
       </div>
     )}
+  </div>
+
+
+        {/* ========================================================================= */}
+        {/* STEP 8: वेब लिंक्स मैनेजर (WEB LINKS DASHBOARD)                           */}
+        {/* ========================================================================= */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'web' ? '' : 'web')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'web' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <span>8</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-sm sm:text-base font-black text-white block truncate">
+                  8. वेब लिंक्स मैनेजर
+                </span>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  वेबसाइट एवं आर्टिकल वेब लिंक्स प्रबंधन व लाइव वेब स्क्रैपिंग
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-cyan-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${rssSources.filter(s => s.type === "web").length} वेब लिंक्स`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'web' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
           {subTab === 'web' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">

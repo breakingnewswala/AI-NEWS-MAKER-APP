@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NewsCardData, AIAnalysisResult, ChannelProfile, FrameDesign } from './types';
 import { INITIAL_PRESETS, PLACEHOLDER_NEWS_IMG } from './data/presets';
 import { CardPreview } from './components/CardPreview';
@@ -693,16 +693,42 @@ export default function App() {
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string>(() => getActiveDraftId());
   const [downloading, setDownloading] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Auto-dismiss all toast notifications after exactly 2 seconds (2000 ms)
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
   const [isMobilePreviewCollapsed, setIsMobilePreviewCollapsed] = useState(false);
 
   // App Version & Update Notification states
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
-  const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(false);
   const [autoFillNews, setAutoFillNews] = useState<AutoFillNewsData | null>(null);
+  const [isStudioSelectorVisible, setIsStudioSelectorVisible] = useState<boolean>(true);
+  const lastScrollYRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStudioScroll = () => {
+      const currentY = window.scrollY;
+      if (currentY > 60 && currentY > lastScrollYRef.current) {
+        setIsStudioSelectorVisible(false);
+      } else if (currentY < lastScrollYRef.current || currentY <= 30) {
+        setIsStudioSelectorVisible(true);
+      }
+      lastScrollYRef.current = currentY;
+    };
+    window.addEventListener('scroll', handleStudioScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleStudioScroll);
+  }, []);
 
   // Proactive check on mount for Android Bridge ready and queued news data
   useEffect(() => {
@@ -901,7 +927,6 @@ export default function App() {
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Full reset / clean card to default template matching user specification
@@ -1508,7 +1533,7 @@ export default function App() {
 
       {/* Top Bar Navigation - Only visible in Web browser, hidden in native Android APK */}
       {!isAndroidEnvironment && (
-        <div className="sticky top-0 z-50 transition-all duration-300 translate-y-0 opacity-100">
+        <div className={`sticky top-0 z-50 transition-all duration-300 ${isHeaderVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}>
           <AppTopBarWeb
             currentTab={currentTab}
             currentUser={currentUser}
@@ -1554,9 +1579,11 @@ export default function App() {
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
-          {/* Studio Type Selector: Shown only in Web; in Android APK the native top mode bar handles this */}
+          {/* Studio Type Selector: Smoothly collapses on scroll to maximize vertical editing space */}
           {!isAndroidEnvironment && (
-            <div className="w-full mb-3">
+            <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
+              isStudioSelectorVisible ? 'max-h-20 opacity-100 mb-3' : 'max-h-0 opacity-0 mb-0 pointer-events-none'
+            }`}>
               <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
                 <button
                   type="button"

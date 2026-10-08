@@ -348,10 +348,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     ? combinedPosts.filter((p) => p.breaking)
     : combinedPosts.slice(0, 6);
 
-  // Identify highlights (exclusive / breaking) for Notification Board Carousel
+  // Identify highlights (exclusive / breaking) for Notification Board Carousel (up to 9 items for multi-item view)
   const highlightPosts = filteredPosts.filter((p) => p.isExclusive || p.breaking).length > 0
-    ? filteredPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 6)
-    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 5) : combinedPosts.slice(0, 5));
+    ? filteredPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 9)
+    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 9) : combinedPosts.slice(0, 9));
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -365,17 +365,38 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     return () => clearInterval(interval);
   }, [breakingPosts.length, isTickerHovered]);
 
-  // 2. Highlights Notification Board: Single News visible, auto-changes every 5 seconds
-  const [currentHighlightIndex, setCurrentHighlightIndex] = useState<number>(0);
-  const [isHighlightHovered, setIsHighlightHovered] = useState<boolean>(false);
+  // Track mobile vs desktop screen for Highlights Board (1 card on mobile, 3 cards on desktop/web)
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
 
   useEffect(() => {
-    if (highlightPosts.length <= 1 || isHighlightHovered) return;
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const highlightItemsPerPage = isMobileScreen ? 1 : 3;
+  const totalHighlightPages = Math.max(1, Math.ceil(highlightPosts.length / highlightItemsPerPage));
+  const [highlightPageIndex, setHighlightPageIndex] = useState<number>(0);
+  const [isHighlightHovered, setIsHighlightHovered] = useState<boolean>(false);
+
+  // Auto-slide Highlights pages every 5 seconds
+  useEffect(() => {
+    if (totalHighlightPages <= 1 || isHighlightHovered) return;
     const interval = setInterval(() => {
-      setCurrentHighlightIndex((prev) => (prev + 1) % highlightPosts.length);
+      setHighlightPageIndex((prev) => (prev + 1) % totalHighlightPages);
     }, 5000);
     return () => clearInterval(interval);
-  }, [highlightPosts.length, isHighlightHovered]);
+  }, [totalHighlightPages, isHighlightHovered]);
+
+  const safeHighlightPageIndex = highlightPageIndex % totalHighlightPages;
+  const visibleHighlightPosts = highlightPosts.slice(
+    safeHighlightPageIndex * highlightItemsPerPage,
+    safeHighlightPageIndex * highlightItemsPerPage + highlightItemsPerPage
+  );
 
   // Text-to-speech for Hindi full article
   const handleSpeak = (text: string, postId: string) => {
@@ -418,7 +439,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   };
 
   const currentTickerPost = breakingPosts[currentTickerIndex] || breakingPosts[0];
-  const currentHighlightPost = highlightPosts[currentHighlightIndex] || highlightPosts[0];
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
@@ -540,188 +560,210 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* 3. Highlights Notification Board (विशेष नोटिफिकेशन बोर्ड - Centered box, 1 news at a time, auto-sliding like mobile app) */}
-        {highlightPosts.length > 0 && currentHighlightPost && (
+        {/* 3. Highlights Notification Board (विशेष नोटिफिकेशन बोर्ड - 3 items on desktop, 1 on mobile, auto-scrolling) */}
+        {highlightPosts.length > 0 && visibleHighlightPosts.length > 0 && (
           <div
             onMouseEnter={() => setIsHighlightHovered(true)}
             onMouseLeave={() => setIsHighlightHovered(false)}
             className="w-full bg-slate-900 border-2 border-amber-500/80 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden transition-all"
           >
-            {/* Header: Title + Tag + Counter */}
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-3">
-              <div className="flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-amber-400 animate-pulse" />
-                <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide">
+            {/* Header: Title + Tag (Single line, full size) + Navigation (Removed 1 2 3 counter) */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 mb-4">
+              <div className="flex items-center gap-2 min-w-0">
+                <Megaphone className="w-5 h-5 text-amber-400 animate-pulse shrink-0" />
+                <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide truncate">
                   विशेष नोटिफिकेशन बोर्ड (HIGHLIGHTS)
                 </span>
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Full-size single line badge - never breaks to 2 lines */}
                 <span
-                  className={`px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider text-white ${
-                    currentHighlightPost.isExclusive
+                  className={`px-3 py-1 rounded-md text-xs font-black uppercase tracking-wider text-white whitespace-nowrap shrink-0 shadow ${
+                    visibleHighlightPosts[0]?.isExclusive
                       ? 'bg-amber-600'
-                      : currentHighlightPost.breaking
+                      : visibleHighlightPosts[0]?.breaking
                       ? 'bg-red-600'
                       : 'bg-indigo-600'
                   }`}
                 >
-                  {currentHighlightPost.isExclusive
+                  {visibleHighlightPosts[0]?.isExclusive
                     ? 'एक्सक्लूसिव'
-                    : currentHighlightPost.breaking
+                    : visibleHighlightPosts[0]?.breaking
                     ? 'सुपर ब्रेकिंग'
-                    : 'खास खबर'}
+                    : 'खास खबरें'}
                 </span>
 
-                <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
-                  {currentHighlightIndex + 1} / {highlightPosts.length}
-                </span>
-              </div>
-            </div>
-
-            {/* Media Image Banner for Special Notification */}
-            <div
-              onClick={() => onOpenStudioWithNews(currentHighlightPost)}
-              className="relative w-full h-44 sm:h-64 rounded-xl overflow-hidden bg-slate-950 mb-3 cursor-pointer group shadow-inner border border-slate-800"
-            >
-              <img
-                src={getPostThumbnail(currentHighlightPost)}
-                alt={currentHighlightPost.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-              <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-xs text-white">
-                <span className="px-2.5 py-1 bg-black/75 backdrop-blur-sm rounded-lg font-bold text-amber-300 border border-amber-500/30">
-                  {currentHighlightPost.categoryName}
-                </span>
-                <span className="px-2 py-1 bg-black/75 backdrop-blur-sm rounded-lg text-[11px] text-slate-300">
-                  {formatDynamicTime(currentHighlightPost.timestamp, currentHighlightPost.publishedTime)}
-                </span>
-              </div>
-            </div>
-
-            {/* Content: ONE Single News Item with Animated Transition */}
-            <div
-              key={currentHighlightPost.id}
-              className="space-y-2 animate-in fade-in duration-300"
-            >
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>{formatDynamicTime(currentHighlightPost.timestamp, currentHighlightPost.publishedTime)}</span>
-                <span>•</span>
-                <span className="text-amber-300 font-semibold">
-                  {currentHighlightPost.categoryName}
-                </span>
-                {canModerate && (
-                  <>
-                    <span>•</span>
-                    <span className="text-slate-400 font-medium">
-                      [चैनल: {cleanViewerChannel(currentHighlightPost.sourceChannel)}]
-                    </span>
-                  </>
+                {/* Arrow pagination (replaces the removed 1 2 3 / counter numbers) */}
+                {totalHighlightPages > 1 && (
+                  <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHighlightPageIndex(
+                          (prev) => (prev - 1 + totalHighlightPages) % totalHighlightPages
+                        )
+                      }
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                      title="पिछली खबरें"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHighlightPageIndex((prev) => (prev + 1) % totalHighlightPages)
+                      }
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                      title="अगली खबरें"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
-
-              <h2
-                onClick={() => onOpenStudioWithNews(currentHighlightPost)}
-                className="text-base sm:text-xl font-black text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug"
-                title="क्लिक करके स्टूडियो में कार्ड बनाएं"
-              >
-                {cleanViewerHeadline(currentHighlightPost.title)}
-              </h2>
-
-              <p className="text-xs sm:text-sm text-slate-300 line-clamp-3 leading-relaxed">
-                {currentHighlightPost.summary}
-              </p>
-
-              {/* Inline Full Content Reader (No modal popup!) */}
-              {expandedCardId === `highlight-${currentHighlightPost.id}` && (
-                <div className="mt-3 p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line animate-in fade-in duration-200">
-                  {currentHighlightPost.fullContent || currentHighlightPost.summary}
-                </div>
-              )}
             </div>
 
-            {/* Bottom Actions & Pagination Dots */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-3 border-t border-slate-800/80">
-              {/* Interactive Dots */}
-              <div className="flex items-center gap-1.5">
-                {highlightPosts.map((hp, idx) => (
+            {/* Grid of Highlight Cards: 3 on desktop, 2 on tablet, 1 on mobile (Proper 16:9 Thumbnail preview) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleHighlightPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-slate-950/80 border border-slate-800/90 hover:border-amber-500/60 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group shadow-md"
+                >
+                  <div>
+                    {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
+                    <div
+                      onClick={() => onOpenStudioWithNews(post)}
+                      className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 mb-2.5 cursor-pointer group/img shadow-inner border border-slate-800/80"
+                      title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                    >
+                      <img
+                        src={getPostThumbnail(post)}
+                        alt={post.title}
+                        className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+
+                      {/* Top Tag on Image */}
+                      <div className="absolute top-2 right-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider text-white shadow whitespace-nowrap ${
+                            post.isExclusive
+                              ? 'bg-amber-600'
+                              : post.breaking
+                              ? 'bg-red-600'
+                              : 'bg-indigo-600'
+                          }`}
+                        >
+                          {post.isExclusive ? 'एक्सक्लूसिव' : post.breaking ? 'सुपर ब्रेकिंग' : 'खास खबर'}
+                        </span>
+                      </div>
+
+                      {/* Bottom Info on Image */}
+                      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-white">
+                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md font-bold text-amber-300 border border-amber-500/30 truncate max-w-[55%] text-[11px]">
+                          {post.categoryName}
+                        </span>
+                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md text-[10px] text-slate-300">
+                          {formatDynamicTime(post.timestamp, post.publishedTime)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Meta info */}
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1.5">
+                      <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>{formatDynamicTime(post.timestamp, post.publishedTime)}</span>
+                      <span>•</span>
+                      <span className="text-amber-300 font-semibold truncate max-w-[40%]">
+                        {post.categoryName}
+                      </span>
+                      {canModerate && (
+                        <>
+                          <span>•</span>
+                          <span className="text-slate-400 font-medium truncate max-w-[35%]">
+                            [चैनल: {cleanViewerChannel(post.sourceChannel)}]
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Headline */}
+                    <h3
+                      onClick={() => onOpenStudioWithNews(post)}
+                      className="text-sm sm:text-base font-bold text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2 mb-1.5"
+                      title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                    >
+                      {cleanViewerHeadline(post.title)}
+                    </h3>
+
+                    {/* Summary */}
+                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed mb-2.5">
+                      {post.summary}
+                    </p>
+
+                    {/* Inline Full Content Reader (toggled by 'विवरण पढ़ें / पूरी खबर पढ़ें') */}
+                    {expandedCardId === `highlight-${post.id}` && (
+                      <div className="mb-2.5 p-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 leading-relaxed whitespace-pre-line animate-in fade-in duration-200">
+                        {post.fullContent || post.summary}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ONLY 2 Action Buttons (Share and Sound/TTS deleted as requested) */}
+                  <div className="flex items-center gap-2 pt-2.5 border-t border-slate-800/80 mt-auto">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedCardId(
+                          expandedCardId === `highlight-${post.id}`
+                            ? null
+                            : `highlight-${post.id}`
+                        )
+                      }
+                      className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      <span className="truncate">
+                        {expandedCardId === `highlight-${post.id}`
+                          ? 'संक्षिप्त करें'
+                          : 'पूरी खबर पढ़ें'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onOpenStudioWithNews(post)}
+                      className="flex-1 py-1.5 px-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                      <span>खबर से ग्राफिक बनाएं</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom: Page Indicator Dots */}
+            {totalHighlightPages > 1 && (
+              <div className="flex items-center justify-center gap-1.5 pt-3.5 mt-3 border-t border-slate-800/60">
+                {Array.from({ length: totalHighlightPages }).map((_, pIdx) => (
                   <button
-                    key={hp.id}
-                    onClick={() => setCurrentHighlightIndex(idx)}
+                    key={pIdx}
+                    type="button"
+                    onClick={() => setHighlightPageIndex(pIdx)}
                     className={`h-2 rounded-full transition-all cursor-pointer ${
-                      idx === currentHighlightIndex
+                      pIdx === safeHighlightPageIndex
                         ? 'w-6 bg-amber-400 shadow-md shadow-amber-400/30'
                         : 'w-2 bg-slate-700 hover:bg-slate-500'
                     }`}
-                    title={`खबर ${idx + 1}`}
+                    title={`पेज ${pIdx + 1}`}
                   />
                 ))}
               </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    setExpandedCardId(
-                      expandedCardId === `highlight-${currentHighlightPost.id}`
-                        ? null
-                        : `highlight-${currentHighlightPost.id}`
-                    )
-                  }
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5 text-slate-300" />
-                  <span>
-                    {expandedCardId === `highlight-${currentHighlightPost.id}`
-                      ? 'संक्षिप्त करें'
-                      : 'विवरण पढ़ें'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleSpeak(
-                      `${currentHighlightPost.title}. ${currentHighlightPost.summary}`,
-                      currentHighlightPost.id
-                    )
-                  }
-                  className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors border cursor-pointer ${
-                    isSpeaking && speakingPostId === currentHighlightPost.id
-                      ? 'bg-red-600 border-red-500 text-white animate-pulse'
-                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-amber-300'
-                  }`}
-                  title="ऑडियो सुनें"
-                >
-                  {isSpeaking && speakingPostId === currentHighlightPost.id ? (
-                    <VolumeX className="w-4 h-4" />
-                  ) : (
-                    <Volume2 className="w-4 h-4" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => handleShare(currentHighlightPost)}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors cursor-pointer"
-                  title="शेयर करें"
-                >
-                  {copiedId === currentHighlightPost.id ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Share2 className="w-4 h-4" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => onOpenStudioWithNews(currentHighlightPost)}
-                  className="px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                  <span>खबर से ग्राफिक बनाएं</span>
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         )}
 

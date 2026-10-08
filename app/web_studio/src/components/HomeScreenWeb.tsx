@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
+  Calendar,
   Sparkles,
   Flame,
   Share2,
@@ -30,11 +31,15 @@ import {
   Save,
   RefreshCw,
   Lock,
+  Sliders,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { NewsFeedPost, INITIAL_CATEGORIES } from '../data/newsFeedData';
+import { NewsFeedPost } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
-import { getActiveRssNewsPosts } from '../lib/rssSourceManager';
+import { getActiveRssNewsPosts, getSavedNewsChannels } from '../lib/rssSourceManager';
+import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
 
 // Category visual differentiation helper: professional, subtle color coding per category
 export function getCategoryVisualTheme(category?: string, categoryName?: string) {
@@ -151,6 +156,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   onOpenAdminLogin,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
+  const [customDateFilter, setCustomDateFilter] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [speakingPostId, setSpeakingPostId] = useState<string | null>(null);
@@ -160,6 +170,37 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const canModerate = isEffectiveAdmin(currentUser);
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
+
+  // Dynamic Unified Categories (Single Source of Truth from CategoryManager)
+  const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
+
+  // Admin Date & Channel Filter State (Visible only to Admin/SuperAdmin)
+  const [adminFilterDate, setAdminFilterDate] = useState<string>('');
+  const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
+  const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
+
+  const [defaultThumbnailIds, setDefaultThumbnailIds] = useState<Set<string>>(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
+      if (raw) return new Set(JSON.parse(raw));
+    } catch {}
+    return new Set();
+  });
+
+  const toggleDefaultThumbnail = (postId: string) => {
+    setDefaultThumbnailIds((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(postId)) {
+        updated.delete(postId);
+      } else {
+        updated.add(postId);
+      }
+      try {
+        localStorage.setItem('app_default_thumbnail_news_ids_v1', JSON.stringify(Array.from(updated)));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Active Admin RSS & Web Link Sources News Integration
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
@@ -171,19 +212,70 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleFeedRefresh = () => {
       if (onRefreshLiveNews) onRefreshLiveNews();
     };
+    const handleCategoriesUpdate = () => {
+      setFeedCategories(getActiveCategories());
+    };
+    const handleChannelsUpdate = () => {
+      setSavedChannels(getSavedNewsChannels());
+    };
+
     window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
     window.addEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
+    window.addEventListener('ai_news_unified_categories_updated', handleCategoriesUpdate);
+    window.addEventListener('ai_news_categories_updated', handleCategoriesUpdate);
+    window.addEventListener('ai_news_channels_updated', handleChannelsUpdate);
+
     return () => {
       window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
       window.removeEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
+      window.removeEventListener('ai_news_unified_categories_updated', handleCategoriesUpdate);
+      window.removeEventListener('ai_news_categories_updated', handleCategoriesUpdate);
+      window.removeEventListener('ai_news_channels_updated', handleChannelsUpdate);
     };
   }, [onRefreshLiveNews]);
 
   // Merge active RSS/Web posts with database news posts seamlessly
+  const getDeletedIds = (): Set<string> => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
+      if (raw) return new Set(JSON.parse(raw));
+    } catch {}
+    return new Set();
+  };
+
+  // Merge active RSS/Web posts with database news posts seamlessly & shuffle/interleave across categories
   const combinedPosts = useMemo(() => {
+    const deletedIds = getDeletedIds();
     const existingIds = new Set(posts.map((p) => p.id));
-    const newFromRss = activeRssPosts.filter((p) => !existingIds.has(p.id));
-    return [...newFromRss, ...posts];
+    const newFromRss = activeRssPosts.filter((p) => !existingIds.has(p.id) && !deletedIds.has(p.id));
+    const validPosts = posts.filter((p) => !deletedIds.has(p.id));
+
+    const rawList = [...newFromRss, ...validPosts];
+
+    // Interleave / shuffle by category for a balanced, dynamic feed
+    const categoryBuckets: Record<string, NewsFeedPost[]> = {};
+    for (const item of rawList) {
+      const cat = item.category || 'general';
+      if (!categoryBuckets[cat]) categoryBuckets[cat] = [];
+      categoryBuckets[cat].push(item);
+    }
+
+    const shuffled: NewsFeedPost[] = [];
+    const keys = Object.keys(categoryBuckets);
+    let maxLen = 0;
+    for (const k of keys) {
+      if (categoryBuckets[k].length > maxLen) maxLen = categoryBuckets[k].length;
+    }
+
+    for (let i = 0; i < maxLen; i++) {
+      for (const k of keys) {
+        if (i < categoryBuckets[k].length) {
+          shuffled.push(categoryBuckets[k][i]);
+        }
+      }
+    }
+
+    return shuffled.length > 0 ? shuffled : rawList;
   }, [posts, activeRssPosts]);
 
   const toggleSelectNews = (id: string) => {
@@ -206,21 +298,60 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   };
 
-  // Filter posts from combined feed (including active RSS/Web sources)
-  const filteredPosts = combinedPosts.filter((p) => {
-    if (selectedCategory === 'all') return true;
-    if (selectedCategory === 'breaking') return p.breaking;
-    return p.category === selectedCategory || p.categoryName.includes(selectedCategory);
-  });
+  // Thumbnail resolver supporting Source, Default, and Manual
+  const getPostThumbnail = (post: NewsFeedPost) => {
+    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
+      return post.manualThumbnailUrl;
+    }
+    if (post.imageSource === 'default' || defaultThumbnailIds.has(post.id)) {
+      return '/assets/placeholder_news_search_16x9.jpg';
+    }
+    return post.imageUrl || '/assets/placeholder_news_search_16x9.jpg';
+  };
+
+  // Filter posts from combined feed (Admin Date, Channel, & Dynamic Category Filters)
+  const filteredPosts = useMemo(() => {
+    return combinedPosts.filter((p) => {
+      // 1. Admin Date Filter (Strict India Timezone YYYY-MM-DD match)
+      if (canModerate && adminFilterDate) {
+        const pDate = new Date(p.timestamp || 0);
+        let istDateStr = '';
+        try {
+          istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(pDate);
+        } catch {
+          istDateStr = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}-${String(pDate.getDate()).padStart(2, '0')}`;
+        }
+        if (istDateStr !== adminFilterDate) return false;
+      }
+
+      // 2. Admin Channel Filter (Matches sourceChannel)
+      if (canModerate && adminFilterChannel) {
+        const cleanChan = cleanViewerChannel(p.sourceChannel).toLowerCase();
+        const filterChan = adminFilterChannel.toLowerCase();
+        if (!cleanChan.includes(filterChan) && !filterChan.includes(cleanChan)) {
+          return false;
+        }
+      }
+
+      // 3. Category Filter
+      if (selectedCategory === 'all') return true;
+      if (selectedCategory === 'breaking') return p.breaking;
+      const catObj = feedCategories.find((c) => c.id === selectedCategory);
+      const catName = catObj ? catObj.name.replace(/^[^a-zA-Z0-9\u0900-\u097F]+/, '').trim().toLowerCase() : selectedCategory.toLowerCase();
+      const postCat = (p.category || '').toLowerCase();
+      const postCatName = (p.categoryName || '').toLowerCase();
+      return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
+    });
+  }, [combinedPosts, canModerate, adminFilterDate, adminFilterChannel, selectedCategory, feedCategories]);
 
   const breakingPosts = combinedPosts.filter((p) => p.breaking).length > 0
     ? combinedPosts.filter((p) => p.breaking)
     : combinedPosts.slice(0, 6);
 
-  // Identify highlights (exclusive / breaking) for Notification Board Carousel
-  const highlightPosts = combinedPosts.filter((p) => p.isExclusive || p.breaking).length > 0
-    ? combinedPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 6)
-    : combinedPosts.slice(0, 5);
+  // Identify highlights (exclusive / breaking) for Notification Board Carousel (up to 9 items for multi-item view)
+  const highlightPosts = filteredPosts.filter((p) => p.isExclusive || p.breaking).length > 0
+    ? filteredPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 9)
+    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 9) : combinedPosts.slice(0, 9));
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -234,17 +365,38 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     return () => clearInterval(interval);
   }, [breakingPosts.length, isTickerHovered]);
 
-  // 2. Highlights Notification Board: Single News visible, auto-changes every 5 seconds
-  const [currentHighlightIndex, setCurrentHighlightIndex] = useState<number>(0);
-  const [isHighlightHovered, setIsHighlightHovered] = useState<boolean>(false);
+  // Track mobile vs desktop screen for Highlights Board (1 card on mobile, 3 cards on desktop/web)
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
 
   useEffect(() => {
-    if (highlightPosts.length <= 1 || isHighlightHovered) return;
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const highlightItemsPerPage = isMobileScreen ? 1 : 3;
+  const totalHighlightPages = Math.max(1, Math.ceil(highlightPosts.length / highlightItemsPerPage));
+  const [highlightPageIndex, setHighlightPageIndex] = useState<number>(0);
+  const [isHighlightHovered, setIsHighlightHovered] = useState<boolean>(false);
+
+  // Auto-slide Highlights pages every 5 seconds
+  useEffect(() => {
+    if (totalHighlightPages <= 1 || isHighlightHovered) return;
     const interval = setInterval(() => {
-      setCurrentHighlightIndex((prev) => (prev + 1) % highlightPosts.length);
+      setHighlightPageIndex((prev) => (prev + 1) % totalHighlightPages);
     }, 5000);
     return () => clearInterval(interval);
-  }, [highlightPosts.length, isHighlightHovered]);
+  }, [totalHighlightPages, isHighlightHovered]);
+
+  const safeHighlightPageIndex = highlightPageIndex % totalHighlightPages;
+  const visibleHighlightPosts = highlightPosts.slice(
+    safeHighlightPageIndex * highlightItemsPerPage,
+    safeHighlightPageIndex * highlightItemsPerPage + highlightItemsPerPage
+  );
 
   // Text-to-speech for Hindi full article
   const handleSpeak = (text: string, postId: string) => {
@@ -287,7 +439,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   };
 
   const currentTickerPost = breakingPosts[currentTickerIndex] || breakingPosts[0];
-  const currentHighlightPost = highlightPosts[currentHighlightIndex] || highlightPosts[0];
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
@@ -409,185 +560,298 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* 3. Highlights Notification Board (विशेष नोटिफिकेशन बोर्ड - Centered box, 1 news at a time, auto-sliding like mobile app) */}
-        {highlightPosts.length > 0 && currentHighlightPost && (
+        {/* 3. Highlights Notification Board (विशेष नोटिफिकेशन बोर्ड - 3 items on desktop, 1 on mobile, auto-scrolling) */}
+        {highlightPosts.length > 0 && visibleHighlightPosts.length > 0 && (
           <div
             onMouseEnter={() => setIsHighlightHovered(true)}
             onMouseLeave={() => setIsHighlightHovered(false)}
             className="w-full bg-slate-900 border-2 border-amber-500/80 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden transition-all"
           >
-            {/* Header: Title + Tag + Counter */}
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-3">
-              <div className="flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-amber-400 animate-pulse" />
-                <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide">
+            {/* Header: Title + Tag (Single line, full size) + Navigation (Removed 1 2 3 counter) */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 mb-4">
+              <div className="flex items-center gap-2 min-w-0">
+                <Megaphone className="w-5 h-5 text-amber-400 animate-pulse shrink-0" />
+                <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide truncate">
                   विशेष नोटिफिकेशन बोर्ड (HIGHLIGHTS)
                 </span>
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Full-size single line badge - never breaks to 2 lines */}
                 <span
-                  className={`px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider text-white ${
-                    currentHighlightPost.isExclusive
+                  className={`px-3 py-1 rounded-md text-xs font-black uppercase tracking-wider text-white whitespace-nowrap shrink-0 shadow ${
+                    visibleHighlightPosts[0]?.isExclusive
                       ? 'bg-amber-600'
-                      : currentHighlightPost.breaking
+                      : visibleHighlightPosts[0]?.breaking
                       ? 'bg-red-600'
                       : 'bg-indigo-600'
                   }`}
                 >
-                  {currentHighlightPost.isExclusive
+                  {visibleHighlightPosts[0]?.isExclusive
                     ? 'एक्सक्लूसिव'
-                    : currentHighlightPost.breaking
+                    : visibleHighlightPosts[0]?.breaking
                     ? 'सुपर ब्रेकिंग'
-                    : 'खास खबर'}
+                    : 'खास खबरें'}
                 </span>
 
-                <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded">
-                  {currentHighlightIndex + 1} / {highlightPosts.length}
-                </span>
-              </div>
-            </div>
-
-            {/* Content: ONE Single News Item with Animated Transition */}
-            <div
-              key={currentHighlightPost.id}
-              className="space-y-2 animate-in fade-in duration-300"
-            >
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>{formatDynamicTime(currentHighlightPost.timestamp, currentHighlightPost.publishedTime)}</span>
-                <span>•</span>
-                <span className="text-amber-300 font-semibold">
-                  {currentHighlightPost.categoryName}
-                </span>
-                {canModerate && (
-                  <>
-                    <span>•</span>
-                    <span className="text-slate-400 font-medium">
-                      [चैनल: {cleanViewerChannel(currentHighlightPost.sourceChannel)}]
-                    </span>
-                  </>
+                {/* Arrow pagination (replaces the removed 1 2 3 / counter numbers) */}
+                {totalHighlightPages > 1 && (
+                  <div className="flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHighlightPageIndex(
+                          (prev) => (prev - 1 + totalHighlightPages) % totalHighlightPages
+                        )
+                      }
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                      title="पिछली खबरें"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHighlightPageIndex((prev) => (prev + 1) % totalHighlightPages)
+                      }
+                      className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                      title="अगली खबरें"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
-
-              <h2
-                onClick={() => onOpenStudioWithNews(currentHighlightPost)}
-                className="text-base sm:text-xl font-black text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug"
-                title="क्लिक करके स्टूडियो में कार्ड बनाएं"
-              >
-                {cleanViewerHeadline(currentHighlightPost.title)}
-              </h2>
-
-              <p className="text-xs sm:text-sm text-slate-300 line-clamp-3 leading-relaxed">
-                {currentHighlightPost.summary}
-              </p>
-
-              {/* Inline Full Content Reader (No modal popup!) */}
-              {expandedCardId === `highlight-${currentHighlightPost.id}` && (
-                <div className="mt-3 p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line animate-in fade-in duration-200">
-                  {currentHighlightPost.fullContent || currentHighlightPost.summary}
-                </div>
-              )}
             </div>
 
-            {/* Bottom Actions & Pagination Dots */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-3 border-t border-slate-800/80">
-              {/* Interactive Dots */}
-              <div className="flex items-center gap-1.5">
-                {highlightPosts.map((hp, idx) => (
+            {/* Grid of Highlight Cards: 3 on desktop, 2 on tablet, 1 on mobile (Proper 16:9 Thumbnail preview) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleHighlightPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-slate-950/80 border border-slate-800/90 hover:border-amber-500/60 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group shadow-md"
+                >
+                  <div>
+                    {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
+                    <div
+                      onClick={() => onOpenStudioWithNews(post)}
+                      className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 mb-2.5 cursor-pointer group/img shadow-inner border border-slate-800/80"
+                      title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                    >
+                      <img
+                        src={getPostThumbnail(post)}
+                        alt={post.title}
+                        className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+
+                      {/* Top Tag on Image */}
+                      <div className="absolute top-2 right-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider text-white shadow whitespace-nowrap ${
+                            post.isExclusive
+                              ? 'bg-amber-600'
+                              : post.breaking
+                              ? 'bg-red-600'
+                              : 'bg-indigo-600'
+                          }`}
+                        >
+                          {post.isExclusive ? 'एक्सक्लूसिव' : post.breaking ? 'सुपर ब्रेकिंग' : 'खास खबर'}
+                        </span>
+                      </div>
+
+                      {/* Bottom Info on Image */}
+                      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-white">
+                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md font-bold text-amber-300 border border-amber-500/30 truncate max-w-[55%] text-[11px]">
+                          {post.categoryName}
+                        </span>
+                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md text-[10px] text-slate-300">
+                          {formatDynamicTime(post.timestamp, post.publishedTime)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Meta info */}
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1.5">
+                      <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>{formatDynamicTime(post.timestamp, post.publishedTime)}</span>
+                      <span>•</span>
+                      <span className="text-amber-300 font-semibold truncate max-w-[40%]">
+                        {post.categoryName}
+                      </span>
+                      {canModerate && (
+                        <>
+                          <span>•</span>
+                          <span className="text-slate-400 font-medium truncate max-w-[35%]">
+                            [चैनल: {cleanViewerChannel(post.sourceChannel)}]
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Headline */}
+                    <h3
+                      onClick={() => onOpenStudioWithNews(post)}
+                      className="text-sm sm:text-base font-bold text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2 mb-1.5"
+                      title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                    >
+                      {cleanViewerHeadline(post.title)}
+                    </h3>
+
+                    {/* Summary */}
+                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed mb-2.5">
+                      {post.summary}
+                    </p>
+
+                    {/* Inline Full Content Reader (toggled by 'विवरण पढ़ें / पूरी खबर पढ़ें') */}
+                    {expandedCardId === `highlight-${post.id}` && (
+                      <div className="mb-2.5 p-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 leading-relaxed whitespace-pre-line animate-in fade-in duration-200">
+                        {post.fullContent || post.summary}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ONLY 2 Action Buttons (Share and Sound/TTS deleted as requested) */}
+                  <div className="flex items-center gap-2 pt-2.5 border-t border-slate-800/80 mt-auto">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedCardId(
+                          expandedCardId === `highlight-${post.id}`
+                            ? null
+                            : `highlight-${post.id}`
+                        )
+                      }
+                      className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      <span className="truncate">
+                        {expandedCardId === `highlight-${post.id}`
+                          ? 'संक्षिप्त करें'
+                          : 'पूरी खबर पढ़ें'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onOpenStudioWithNews(post)}
+                      className="flex-1 py-1.5 px-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                      <span>खबर से ग्राफिक बनाएं</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom: Page Indicator Dots */}
+            {totalHighlightPages > 1 && (
+              <div className="flex items-center justify-center gap-1.5 pt-3.5 mt-3 border-t border-slate-800/60">
+                {Array.from({ length: totalHighlightPages }).map((_, pIdx) => (
                   <button
-                    key={hp.id}
-                    onClick={() => setCurrentHighlightIndex(idx)}
-                    className={`h-2 rounded-full transition-all ${
-                      idx === currentHighlightIndex
+                    key={pIdx}
+                    type="button"
+                    onClick={() => setHighlightPageIndex(pIdx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      pIdx === safeHighlightPageIndex
                         ? 'w-6 bg-amber-400 shadow-md shadow-amber-400/30'
                         : 'w-2 bg-slate-700 hover:bg-slate-500'
                     }`}
-                    title={`खबर ${idx + 1}`}
+                    title={`पेज ${pIdx + 1}`}
                   />
                 ))}
               </div>
+            )}
+          </div>
+        )}
 
-              {/* Action Buttons */}
+        {/* Admin Date & Channel Filter Bar (Visible strictly to authenticated Admin / Super Admin) */}
+        {canModerate && (
+          <div className="w-full bg-slate-900 border border-amber-500/40 rounded-2xl p-3 sm:p-4 shadow-xl space-y-2.5">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-amber-300">
+                  एडमिन फ़िल्टर (Admin Date & Channel Filter)
+                </span>
+              </div>
+              {(adminFilterDate || adminFilterChannel) && (
                 <button
-                  onClick={() =>
-                    setExpandedCardId(
-                      expandedCardId === `highlight-${currentHighlightPost.id}`
-                        ? null
-                        : `highlight-${currentHighlightPost.id}`
-                    )
-                  }
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
+                  type="button"
+                  onClick={() => {
+                    setAdminFilterDate('');
+                    setAdminFilterChannel('');
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
                 >
-                  <Eye className="w-3.5 h-3.5 text-slate-300" />
-                  <span>
-                    {expandedCardId === `highlight-${currentHighlightPost.id}`
-                      ? 'संक्षिप्त करें'
-                      : 'विवरण पढ़ें'}
-                  </span>
+                  <X className="w-3 h-3" />
+                  <span>फ़िल्टर हटाएं (Clear)</span>
                 </button>
+              )}
+            </div>
 
-                <button
-                  onClick={() =>
-                    handleSpeak(
-                      `${currentHighlightPost.title}. ${currentHighlightPost.summary}`,
-                      currentHighlightPost.id
-                    )
-                  }
-                  className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors border ${
-                    isSpeaking && speakingPostId === currentHighlightPost.id
-                      ? 'bg-red-600 border-red-500 text-white animate-pulse'
-                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-amber-300'
-                  }`}
-                  title="ऑडियो सुनें"
-                >
-                  {isSpeaking && speakingPostId === currentHighlightPost.id ? (
-                    <VolumeX className="w-4 h-4" />
-                  ) : (
-                    <Volume2 className="w-4 h-4" />
-                  )}
-                </button>
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
+              {/* Left 50%: Date Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  📅 तारीख चुनें (Date Filter)
+                </label>
+                <input
+                  type="date"
+                  value={adminFilterDate}
+                  onChange={(e) => setAdminFilterDate(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                />
+              </div>
 
-                <button
-                  onClick={() => handleShare(currentHighlightPost)}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors"
-                  title="शेयर करें"
+              {/* Right 50%: Channel Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  📰 चैनल चुनें (Channel Filter)
+                </label>
+                <select
+                  value={adminFilterChannel}
+                  onChange={(e) => setAdminFilterChannel(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                 >
-                  {copiedId === currentHighlightPost.id ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Share2 className="w-4 h-4" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => onOpenStudioWithNews(currentHighlightPost)}
-                  className="px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-transform active:scale-95"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                  <span>खबर से ग्राफिक बनाएं</span>
-                </button>
+                  <option value="">सभी चैनल (All Channels)</option>
+                  {savedChannels.map((ch) => (
+                    <option key={ch} value={ch}>{ch}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
         )}
 
-        {/* 4. Category Filter Chips */}
+        {/* 4. Category Filter Chips (Single Source of Truth from Category Manager) */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-          {INITIAL_CATEGORIES.map((cat) => {
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+              selectedCategory === 'all'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+            }`}
+          >
+            <span>सभी</span>
+          </button>
+
+          {feedCategories.map((cat) => {
             const active = selectedCategory === cat.id;
             return (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                   active
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black scale-105'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
                     : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
                 }`}
               >
-                {cat.name}
+                <span>{cat.name}</span>
               </button>
             );
           })}
@@ -607,6 +871,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const isSelected = selectedNewsIds.includes(post.id);
               const isHighlighted = post.isExclusive;
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
+              const isDefaultThumbActive = defaultThumbnailIds.has(post.id);
+              const displayThumbnail = getPostThumbnail(post);
 
               return (
                 <div
@@ -630,8 +896,49 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span>Select</span>
                       </label>
 
-                      <div className="flex items-center gap-1">
-                        {/* 1. Highlight Button */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {/* 1. Thumbnail Source Toggle (Source / Default / Manual) */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = post.imageSource || (defaultThumbnailIds.has(post.id) ? 'default' : 'source');
+                            let next: 'source' | 'default' | 'manual' = 'source';
+                            if (cur === 'source') {
+                              next = 'default';
+                              toggleDefaultThumbnail(post.id);
+                            } else if (cur === 'default') {
+                              if (post.manualThumbnailUrl) {
+                                next = 'manual';
+                              } else {
+                                setEditingPost(post);
+                                return;
+                              }
+                            } else {
+                              next = 'source';
+                            }
+                            if (onEditNews) {
+                              onEditNews({ ...post, imageSource: next });
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                            post.imageSource === 'manual'
+                              ? 'bg-purple-500/30 text-purple-300 border border-purple-500/60'
+                              : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
+                              ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                          }`}
+                          title="थंबनेल स्रोत बदलें (सोर्स / डिफ़ॉल्ट / मैन्युअल)"
+                        >
+                          <span>
+                            {post.imageSource === 'manual'
+                              ? '📷 मैन्युअल'
+                              : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
+                              ? '📷 डिफ़ॉल्ट'
+                              : '📷 सोर्स'}
+                          </span>
+                        </button>
+
+                        {/* 2. Highlight Button */}
                         <button
                           type="button"
                           onClick={() => onToggleHighlightNews && onToggleHighlightNews(post.id)}
@@ -646,7 +953,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span>{isHighlighted ? 'हाइलाइटेड' : 'हाइलाइट'}</span>
                         </button>
 
-                        {/* 2. Edit Button */}
+                        {/* 3. Edit Button */}
                         <button
                           type="button"
                           onClick={() => setEditingPost(post)}
@@ -657,7 +964,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span>एडिट</span>
                         </button>
 
-                        {/* 3. Delete Button */}
+                        {/* 4. Delete Button */}
                         <button
                           type="button"
                           onClick={() => {
@@ -677,7 +984,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div>
                     <div className="relative h-48 w-full overflow-hidden bg-slate-950">
                       <img
-                        src={post.imageUrl || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop'}
+                        src={displayThumbnail}
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
@@ -734,36 +1041,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center justify-between gap-2">
                     <button
                       onClick={() => onOpenStudioWithNews(post)}
-                      className="flex-1 py-2 bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                      className="flex-1 py-2 px-3 bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      खबर से ग्राफिक बनाएं
+                      <span>खबर से ग्राफिक बनाएं</span>
                     </button>
 
                     <button
                       onClick={() =>
                         setExpandedCardId(expandedCardId === post.id ? null : post.id)
                       }
-                      className={`p-2 rounded-xl transition-colors ${
+                      className={`py-2 px-3 rounded-xl transition-colors font-bold text-xs flex items-center justify-center gap-1.5 border ${
                         expandedCardId === post.id
-                          ? 'bg-amber-500 text-slate-950 font-bold'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
                       }`}
-                      title="पूरी खबर पढ़ें (विस्तार)"
+                      title="पूरी खबर पढ़ें"
                     >
-                      <FileText className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => handleShare(post)}
-                      className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors"
-                      title="शेयर करें"
-                    >
-                      {copiedId === post.id ? (
-                        <Check className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <Share2 className="w-4 h-4" />
-                      )}
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>{expandedCardId === post.id ? 'बंद करें' : 'पूरी खबर पढ़ें'}</span>
                     </button>
                   </div>
                 </div>
@@ -772,20 +1068,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         </div>
 
-        {/* Subtle Discreet Admin Login / Footer Note */}
-        <div className="pt-8 pb-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500 border-t border-slate-800/60">
+        {/* Footer Note */}
+        <div className="pt-8 pb-4 flex items-center justify-center text-[11px] text-slate-500 border-t border-slate-800/60">
           <span>AI News Maker • डिजिटल न्यूज़ स्टूडियो</span>
-          {onOpenAdminLogin && (
-            <button
-              type="button"
-              onClick={onOpenAdminLogin}
-              className="text-slate-500 hover:text-amber-400/90 flex items-center gap-1.5 transition-colors cursor-pointer py-1 px-2.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800"
-              title="एडमिन लॉग इन करें"
-            >
-              <Lock className="w-3 h-3 text-slate-500" />
-              <span>Admin Login</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -862,7 +1147,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <select
                     value={editingPost.category}
                     onChange={(e) => {
-                      const catObj = INITIAL_CATEGORIES.find((c) => c.id === e.target.value);
+                      const catObj = feedCategories.find((c) => c.id === e.target.value);
                       setEditingPost({
                         ...editingPost,
                         category: e.target.value,
@@ -871,12 +1156,161 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     }}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {INITIAL_CATEGORIES.filter((c) => c.id !== 'all').map((c) => (
+                    {feedCategories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* 1. Image Source & Manual Thumbnail Management (Parts 11, 12, 13) */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300">📷 थंबनेल इमेज स्रोत (Thumbnail Source)</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    {editingPost.imageSource === 'manual'
+                      ? 'मैन्युअल अपलोड'
+                      : editingPost.imageSource === 'default'
+                      ? 'डिफ़ॉल्ट ग्राफिक'
+                      : 'मूल सोर्स इमेज'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost({ ...editingPost, imageSource: 'source' })}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      (!editingPost.imageSource || editingPost.imageSource === 'source')
+                        ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    सोर्स (Source)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost({ ...editingPost, imageSource: 'default' })}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      editingPost.imageSource === 'default'
+                        ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    डिफ़ॉल्ट (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPost({ ...editingPost, imageSource: 'manual' })}
+                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      editingPost.imageSource === 'manual'
+                        ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    मैन्युअल (Manual)
+                  </button>
+                </div>
+
+                {/* If Manual is chosen, upload custom thumbnail */}
+                {editingPost.imageSource === 'manual' && (
+                  <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                    <label className="flex items-center justify-center gap-2 p-2.5 border-2 border-dashed border-amber-500/50 hover:border-amber-400 rounded-xl cursor-pointer text-xs text-amber-300 font-bold bg-amber-500/10 hover:bg-amber-500/20 transition">
+                      <Upload className="w-4 h-4 text-amber-400" />
+                      <span>{editingPost.manualThumbnailUrl ? 'थंबनेल बदलें' : 'मैन्युअल थंबनेल अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) {
+                                setEditingPost({
+                                  ...editingPost,
+                                  imageSource: 'manual',
+                                  manualThumbnailUrl: String(ev.target.result),
+                                });
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                    {editingPost.manualThumbnailUrl && (
+                      <div className="relative w-28 h-18 rounded-lg overflow-hidden border border-amber-400/60 shadow">
+                        <img src={editingPost.manualThumbnailUrl} alt="Manual thumbnail preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Additional Photos Section (Parts 14, 15 - Maximum 3) */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-cyan-300">📸 अतिरिक्त फ़ोटो (अतिरिक्त 3 फ़ोटो तक)</span>
+                  <span className="text-[10px] text-cyan-400 font-bold">
+                    {(editingPost.additionalPhotos || []).length} / 3 अपलोड
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {(editingPost.additionalPhotos || []).map((imgUrl, idx) => (
+                    <div key={idx} className="relative h-20 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 group">
+                      <img src={imgUrl} alt={`Additional ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = (editingPost.additionalPhotos || []).filter((_, i) => i !== idx);
+                          setEditingPost({ ...editingPost, additionalPhotos: updated });
+                        }}
+                        className="absolute top-1 right-1 p-1 bg-red-600/90 text-white rounded-md opacity-80 hover:opacity-100 transition cursor-pointer"
+                        title="फोटो हटाएं"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white font-bold">
+                        फोटो {idx + 1}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Upload button if less than 3 photos */}
+                  {(editingPost.additionalPhotos || []).length < 3 && (
+                    <label className="h-20 border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-xl flex flex-col items-center justify-center gap-1 cursor-pointer bg-cyan-500/5 hover:bg-cyan-500/15 transition text-cyan-300">
+                      <Upload className="w-4 h-4 text-cyan-400" />
+                      <span className="text-[10px] font-bold">+ फोटो जोड़ें</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              if (ev.target?.result) {
+                                const currentList = editingPost.additionalPhotos || [];
+                                if (currentList.length < 3) {
+                                  setEditingPost({
+                                    ...editingPost,
+                                    additionalPhotos: [...currentList, String(ev.target.result)],
+                                  });
+                                }
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
 

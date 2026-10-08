@@ -448,7 +448,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     setRssChannelInput('');
     setRssUrlInput('');
     setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव हो गया!');
-    setTimeout(() => setRssSuccessMsg(''), 3500);
+    setTimeout(() => setRssSuccessMsg(''), 2000);
   };
 
   const handleToggleRssSource = (id: string) => {

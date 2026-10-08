@@ -663,8 +663,17 @@ export default function App() {
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string>(() => getActiveDraftId());
   const [downloading, setDownloading] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Auto-dismiss all toast notifications after exactly 2 seconds (2000 ms)
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
   const [isMobilePreviewCollapsed, setIsMobilePreviewCollapsed] = useState(false);
 
   // App Version & Update Notification states
@@ -888,7 +897,6 @@ export default function App() {
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Full reset / clean card to default template matching user specification
