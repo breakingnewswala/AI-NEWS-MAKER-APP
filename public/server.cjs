@@ -727,15 +727,20 @@ app.post("/api/users/sync", (req, res) => {
     if (idx >= 0) {
       users[idx] = {
         ...users[idx],
-        ...profile,
+        fullName: profile.fullName || profile.name || users[idx].fullName || "",
+        channelName: profile.channelName || profile.channelNameHi || users[idx].channelName || "",
+        mobile: profile.mobile || profile.mobileNumber || users[idx].mobile || "",
+        channelLogoUrl: profile.channelLogoUrl || users[idx].channelLogoUrl || "",
+        websiteUrl: profile.websiteUrl || users[idx].websiteUrl || "",
+        socialIcons: profile.socialIcons || users[idx].socialIcons,
         lastLoginAt: now
       };
     } else {
       const newUser = {
         userId: profile.userId || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         email: cleanEmail,
-        fullName: profile.fullName || profile.username || "\u092F\u0942\u091C\u093C\u0930",
-        channelName: profile.channelName || "AI News Maker",
+        fullName: profile.fullName || profile.username || profile.name || "",
+        channelName: profile.channelName || profile.channelNameHi || "",
         mobile: profile.mobile || profile.mobileNumber || "",
         whatsappNumber: profile.whatsappNumber || profile.mobile || "",
         state: profile.state || "",
@@ -748,8 +753,8 @@ app.post("/api/users/sync", (req, res) => {
         createdAt: profile.createdAt || now,
         lastLoginAt: now,
         socialIcons: profile.socialIcons,
-        channelLogoUrl: profile.channelLogoUrl,
-        websiteUrl: profile.websiteUrl
+        channelLogoUrl: profile.channelLogoUrl || "",
+        websiteUrl: profile.websiteUrl || ""
       };
       users.unshift(newUser);
     }
@@ -1429,11 +1434,19 @@ function saveProfilesDatabase(data) {
 }
 app.get("/api/user-profile", (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
-  const email = (req.query.email || "").toString().trim().toLowerCase();
+  const email = (req.query.email || req.query.userId || req.query.uid || "").toString().trim().toLowerCase();
   const allProfiles = loadProfilesDatabase();
-  const match = Object.values(allProfiles).find(
-    (p) => username && p.username.toLowerCase() === username || email && p.email?.toLowerCase() === email
-  );
+  let match = null;
+  if (email) {
+    match = Object.values(allProfiles).find(
+      (p) => p.email && p.email.toLowerCase() === email || p.username && p.username.toLowerCase() === email
+    );
+  }
+  if (!match && username) {
+    match = Object.values(allProfiles).find(
+      (p) => p.username && p.username.toLowerCase() === username
+    );
+  }
   if (match) {
     return res.json({ success: true, profile: match });
   }
@@ -1445,7 +1458,7 @@ app.post("/api/user-profile", (req, res) => {
     if (!profile || !profile.username && !profile.email) {
       return res.status(400).json({ error: "Username or email is required" });
     }
-    const key = (profile.username || profile.email).trim().toLowerCase();
+    const key = (profile.email || profile.username).trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
     const reqUsername = (profile.username || "").toLowerCase().trim().replace(/[^a-z0-9_]/g, "");
     const reqWebsite = (profile.websiteUrl || "").toLowerCase().trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "");
@@ -1474,21 +1487,42 @@ app.post("/api/user-profile", (req, res) => {
     const updated = {
       ...existing,
       ...profile,
-      username: profile.username || existing.username || key,
-      fullName: profile.fullName || existing.fullName || "\u0938\u0902\u092A\u093E\u0926\u0915",
+      username: profile.username || existing.username || "",
+      fullName: profile.fullName || profile.name || existing.fullName || "",
       role: profile.role || existing.role || (key.includes("admin") ? "admin" : "reporter"),
-      email: profile.email || existing.email,
-      district: profile.district || existing.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
-      channelNameHi: profile.channelNameHi || existing.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameEn: profile.channelNameEn || existing.channelNameEn || "AI News Maker",
-      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      email: profile.email || existing.email || key,
+      district: profile.district || existing.district || "",
+      channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
+      channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
+      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || "",
       channelLogoPngUrl: profile.channelLogoPngUrl || existing.channelLogoPngUrl,
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
+      mobileNumber: profile.mobileNumber || profile.mobile || existing.mobileNumber || "",
+      websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
+      socialIcons: profile.socialIcons || existing.socialIcons,
       updatedAt: Date.now()
     };
     allProfiles[key] = updated;
     saveProfilesDatabase(allProfiles);
+    try {
+      let users = loadUsersDatabase();
+      const uIdx = users.findIndex((u) => u.email.toLowerCase() === key);
+      if (uIdx >= 0) {
+        users[uIdx] = {
+          ...users[uIdx],
+          fullName: updated.fullName || users[uIdx].fullName,
+          channelName: updated.channelNameHi || users[uIdx].channelName,
+          mobile: updated.mobileNumber || users[uIdx].mobile,
+          channelLogoUrl: updated.channelLogoUrl || users[uIdx].channelLogoUrl,
+          websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
+          socialIcons: updated.socialIcons || users[uIdx].socialIcons,
+          lastLoginAt: Date.now()
+        };
+        saveUsersDatabase(users);
+      }
+    } catch {
+    }
     return res.json({ success: true, profile: updated });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

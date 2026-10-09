@@ -183,30 +183,37 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
       e.preventDefault();
     }
 
-    const finalFullName = (fullName || userName || 'मुख्य संपादक').trim();
-    const finalHi = (channelNameHi || 'एआई न्यूज़ मेकर').trim();
-    const finalEn = (channelNameEn || 'AI News Maker').trim();
-    const finalUser = (username || finalEn).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'ainewsmaker';
+    const finalFullName = (fullName || userName || '').trim();
+    const finalHi = channelNameHi.trim();
+    const finalEn = channelNameEn.trim();
+    const finalUser = (username || finalEn || finalHi).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
 
     setErrorMsg('');
 
-    // Check account uniqueness and restricted brands
-    const uniqCheck = checkAccountUniqueness({
-      username: finalUser,
-      websiteUrl: websiteUrl.trim(),
-      channelName: finalHi,
-      currentEmail: (initialProfile as any)?.email,
-    });
-    if (!uniqCheck.valid) {
-      setErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+    if (!finalHi && !finalFullName) {
+      setErrorMsg('कृपया अपना नाम एवं चैनल का नाम दर्ज करें।');
       return;
+    }
+
+    // Check account uniqueness and restricted brands
+    if (finalUser) {
+      const uniqCheck = checkAccountUniqueness({
+        username: finalUser,
+        websiteUrl: websiteUrl.trim(),
+        channelName: finalHi,
+        currentEmail: (initialProfile as any)?.email,
+      });
+      if (!uniqCheck.valid) {
+        setErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+        return;
+      }
     }
 
     const profile: ChannelProfile = {
       fullName: finalFullName,
       channelNameHi: finalHi,
       channelNameEn: finalEn,
-      channelLogoUrl: channelLogoUrl || channelLogoPngUrl || channelLogoGifUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoUrl: channelLogoUrl || channelLogoPngUrl || channelLogoGifUrl || '',
       channelLogoPngUrl,
       channelLogoGifUrl,
       channelLogoType,

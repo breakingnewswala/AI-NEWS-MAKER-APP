@@ -96,16 +96,16 @@ export const DEFAULT_SOCIAL_ICONS = {
 };
 
 export const DEFAULT_PROFILE: ChannelProfile = {
-  fullName: 'यूज़र',
-  channelNameHi: 'AI News Maker App',
-  channelNameEn: 'AI News Maker',
-  channelLogoUrl: '/assets/ai_news_maker_logo.png',
+  fullName: '',
+  channelNameHi: '',
+  channelNameEn: '',
+  channelLogoUrl: '',
   channelLogoType: 'png',
   socialIcons: DEFAULT_SOCIAL_ICONS,
   username: '',
-  mobileNumber: '96698-02408',
+  mobileNumber: '',
   showMobileNumber: true,
-  websiteUrl: 'ainewsmaker.online',
+  websiteUrl: '',
 };
 
 interface ProfileScreenWebProps {
@@ -169,12 +169,44 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     } catch {}
     return {
       ...DEFAULT_PROFILE,
-      fullName: currentUser?.name || 'यूज़र',
-      channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
-      channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
+      fullName: currentUser?.name || '',
+      channelNameHi: localStorage.getItem('app_channel_name') || '',
+      channelNameEn: localStorage.getItem('app_channel_name_en') || '',
       username: currentUser?.username || '',
     };
   });
+
+  // Fetch Cloud Saved User Profile on Mount or User Change
+  useEffect(() => {
+    const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
+    if (!cleanEmail) return;
+    fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`))
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && data.profile) {
+          const cloudP = data.profile;
+          setChannelProfile((prev) => {
+            const merged = {
+              ...prev,
+              fullName: cloudP.fullName || cloudP.name || prev.fullName,
+              channelNameHi: cloudP.channelNameHi || cloudP.channelName || prev.channelNameHi,
+              channelNameEn: cloudP.channelNameEn || prev.channelNameEn,
+              channelLogoUrl: cloudP.channelLogoUrl || prev.channelLogoUrl,
+              username: cloudP.username || prev.username,
+              mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
+              websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
+              socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(cloudP.socialIcons || prev.socialIcons || {}) },
+            };
+            try {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(merged));
+              localStorage.setItem('user_channel_profile', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.email]);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const showToast = (msg: string) => {
