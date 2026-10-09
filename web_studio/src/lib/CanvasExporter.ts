@@ -1875,21 +1875,25 @@ async function drawGraphic001Canvas(
   ctx.textBaseline = 'middle';
   ctx.fillText(`🌐  ${siteText}`, div1X + 22, iconY);
 
-  // Divider 2
-  const div2X = 800;
-  ctx.beginPath();
-  ctx.moveTo(div2X, footerY + 16);
-  ctx.lineTo(div2X, footerY + footerH - 16);
-  ctx.stroke();
+  // Divider 2 & WhatsApp Right (only when Contact toggle is ON)
+  if (card.showMobileNumber !== false && card.whatsappNumber) {
+    const div2X = 800;
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(div2X, footerY + 16);
+    ctx.lineTo(div2X, footerY + footerH - 16);
+    ctx.stroke();
 
-  // WhatsApp Right
-  drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '📞', '#FFFFFF');
-  const phoneText = card.whatsappNumber || '+91 98765 43210';
-  ctx.fillStyle = '#0F172A';
-  ctx.font = '800 22px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(phoneText, div2X + 54, iconY);
+    // WhatsApp Green Circle
+    drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '✆', '#FFFFFF');
+    const phoneText = card.whatsappNumber;
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 22px "Poppins", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(phoneText, div2X + 54, iconY);
+  }
 
   ctx.restore();
 
@@ -2228,11 +2232,24 @@ async function drawGraphic002Canvas(
   // Contact Number (if enabled by admin/profile)
   if (card.showMobileNumber !== false && card.whatsappNumber) {
     const badgeX = width - orangeBorderW - 220;
+    // Green circle with WhatsApp icon
+    ctx.save();
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(badgeX + 12, iconY, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 14px "Noto Sans Devanagari", "Poppins", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✆', badgeX + 12, iconY);
+    ctx.restore();
+
     ctx.fillStyle = '#000000';
     ctx.font = '700 22px "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`📞 ${card.whatsappNumber}`, badgeX, iconY);
+    ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
   }
   ctx.restore();
 
@@ -2721,11 +2738,24 @@ async function drawGraphic003Canvas(
   // Contact Number (if enabled by admin/profile)
   if (card.showMobileNumber !== false && card.whatsappNumber) {
     const badgeX = width - 240;
-    ctx.fillStyle = '#F59E0B';
+    // Green circle with WhatsApp icon
+    ctx.save();
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(badgeX + 12, iconY, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 14px "Noto Sans Devanagari", "Poppins", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✆', badgeX + 12, iconY);
+    ctx.restore();
+
+    ctx.fillStyle = '#E2E8F0';
     ctx.font = '700 22px "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`📞 ${card.whatsappNumber}`, badgeX, iconY);
+    ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
   }
   ctx.restore();
 

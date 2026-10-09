@@ -513,6 +513,7 @@ export interface PlanUserRecord {
   userId: string;
   email: string;
   name?: string;
+  username?: string;
   role?: 'superadmin' | 'admin' | 'reporter' | 'user';
   mobile?: string;
   channelName?: string;

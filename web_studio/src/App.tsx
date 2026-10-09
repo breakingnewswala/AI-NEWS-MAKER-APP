@@ -707,6 +707,7 @@ export default function App() {
   const [currentDraftId, setCurrentDraftId] = useState<string>(() => getActiveDraftId());
   const [downloading, setDownloading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Auto-dismiss all toast notifications after exactly 2 seconds (2000 ms)
   useEffect(() => {
@@ -831,7 +832,8 @@ export default function App() {
           scrollToStepById('step-ai');
         }, 150);
 
-        const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+        const savedProf = getSavedChannelProfile();
+        const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
         const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
@@ -932,14 +934,8 @@ export default function App() {
 
   // Full reset / clean card to default template matching user specification
   const handleResetCard = () => {
-    // Check if active draft or saved drafts exist
-    const drafts = getSavedDrafts();
-    const activeDraft = currentDraftId ? drafts.find((d) => d.id === currentDraftId) : drafts[0];
-    if (activeDraft && activeDraft.cardData) {
-      setCard(activeDraft.cardData);
-      showToast(`📂 ड्राफ्ट रीस्टोर हुआ: ${activeDraft.title || 'सहेजा गया ड्राफ्ट'}`);
-      return;
-    }
+    // Clear active draft ID reference
+    setCurrentDraftId(null);
 
     const savedProfile = getSavedChannelProfile();
     const activeSocialKeys = savedProfile?.socialIcons
@@ -953,7 +949,7 @@ export default function App() {
       formattedHeadline: '',
       highlightWords: [],
       headlineAlign: 'center',
-      location: '',
+      location: savedProfile?.district || 'विशेष कवरेज',
       summary: '',
       category: 'ताज़ा खबर',
       images: {
@@ -999,7 +995,7 @@ export default function App() {
     setAiResetKey((prev) => prev + 1);
     setActiveStep(1);
 
-    showToast('✨ डिफ़ॉल्ट 4:5 टेम्प्लेट रीसेट हो गया!');
+    showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
   };
 
   const handleSaveDraft = () => {
@@ -1352,7 +1348,8 @@ export default function App() {
     }, 150);
 
     // Instantly copy social media caption to clipboard
-    const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+    const savedProf = getSavedChannelProfile();
+    const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
     const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
@@ -1542,25 +1539,23 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Bar Navigation - Permanent Fixed Header in Home, Video, Newsroom, Control Room. Hidden in Studio. */}
-      {!(currentTab === 'studio' || currentTab === 'generator') && (
-        <div className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md shadow-md">
-          <AppTopBarWeb
-            currentTab={currentTab}
-            currentUser={currentUser}
-            onRefresh={async () => {
-              await fetchLiveNews();
-              window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-              setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
-            }}
-            onNavigateToTab={(tab) => {
-              setCurrentTab(tab);
-              window.location.hash = tab;
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        </div>
-      )}
+      {/* Top Bar Navigation - Always visible in Home, Video, Newsroom, Control Room. In Studio: visible ONLY on Desktop (hidden md:block), preserving mobile & APK layout unchanged */}
+      <div className={`sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md shadow-md ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
+        <AppTopBarWeb
+          currentTab={currentTab}
+          currentUser={currentUser}
+          onRefresh={async () => {
+            await fetchLiveNews();
+            window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+            setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
+          }}
+          onNavigateToTab={(tab) => {
+            setCurrentTab(tab);
+            window.location.hash = tab;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      </div>
 
       {/* 1. Home Feed Tab */}
       {currentTab === 'home' && (
