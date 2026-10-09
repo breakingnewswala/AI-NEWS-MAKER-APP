@@ -1295,11 +1295,11 @@ export default function App() {
     };
 
     const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id);
-    let targetImageForStudio = post.imageUrl || '/assets/placeholder_news_search_square.jpg';
+    let targetImageForStudio = (post.imageUrl && !post.imageUrl.includes('placeholder')) ? post.imageUrl : '';
     if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
       targetImageForStudio = post.manualThumbnailUrl;
     } else if (post.imageSource === 'default' || hasDefaultPhotoActive) {
-      targetImageForStudio = '/assets/placeholder_news_search_square.jpg';
+      targetImageForStudio = '';
     }
 
     // Collect all available photos for this article: primary + up to 3 additional photos
@@ -1638,11 +1638,11 @@ export default function App() {
                   id="mobile-studio-workspace"
                   className="sticky top-0 z-30 w-full bg-slate-950/95 backdrop-blur-md border-b-2 border-slate-800 p-2 shadow-2xl transition-all"
                 >
-                  <div className="w-full flex items-start gap-2 max-w-lg mx-auto">
-                      {/* LEFT COLUMN (70% Width): 4:5 Live Preview + 4 Full-Width Action Buttons */}
-                      <div className="w-[70%] shrink-0 flex flex-col items-center">
-                        {/* 4:5 Proportional Live Preview */}
-                        <div className="w-full aspect-[4/5] rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-xl bg-black flex items-center justify-center relative">
+                  <div className="w-full flex flex-col items-center max-w-lg mx-auto">
+                      {/* TOP ROW: 70% Live Preview + 30% Steps Selector List */}
+                      <div className="w-full flex items-start gap-2">
+                        {/* 4:5 Proportional Live Preview (70% Width) */}
+                        <div className="w-[70%] shrink-0 aspect-[4/5] rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-xl bg-black flex items-center justify-center relative">
                           <CardPreview
                             card={card}
                             className="w-full h-full"
@@ -1651,95 +1651,95 @@ export default function App() {
                           />
                         </div>
 
-                        {/* 4 Action Buttons Control Bar (100% Viewport Width, White Container, Distinct Light Button Boxes) */}
-                        <div className="w-full mt-2 bg-white border border-slate-200/90 rounded-xl p-1.5 shadow-md">
-                          <div className="w-full grid grid-cols-4 gap-1.5">
-                            {/* 1. JPG (Download) */}
-                            <button
-                              type="button"
-                              onClick={() => handleDownload("jpeg")}
-                              disabled={downloading}
-                              className="py-1.5 px-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] sm:text-xs rounded-lg border border-amber-500 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95 disabled:opacity-50"
-                              title="1080x1350 True 4:5 JPG डाउनलोड"
-                            >
-                              <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                              <span className="truncate">{downloading ? "..." : "JPG"}</span>
-                            </button>
-
-                            {/* 2. Caption */}
-                            <button
-                              type="button"
-                              onClick={() => setIsCaptionModalOpen(true)}
-                              className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                              title="कैप्शन और सोशल शेयर"
-                            >
-                              <Share2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                              <span className="truncate">कैप्शन</span>
-                            </button>
-
-                            {/* 3. Draft */}
-                            <button
-                              type="button"
-                              onClick={handleSaveDraft}
-                              className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                              title="ड्राफ्ट सेव करें"
-                              aria-label="ड्राफ्ट सेव करें"
-                            >
-                              <Bookmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span className="truncate">Draft</span>
-                            </button>
-
-                            {/* 4. Refresh */}
-                            <button
-                              type="button"
-                              onClick={handleResetCard}
-                              className="py-1.5 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                              title="कार्ड को डिफ़ॉल्ट टेम्पलेट में रीसेट करें"
-                              aria-label="कार्ड रीसेट करें"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                              <span className="truncate">Refresh</span>
-                            </button>
+                        {/* Compact Editor Steps Selector List (30% Width) */}
+                        <div className="w-[30%] shrink-0 flex flex-col gap-1 overflow-y-auto h-[calc(70vw*1.25)] max-h-[420px] pr-0.5 scrollbar-thin">
+                          <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-0.5 flex items-center gap-1 shrink-0">
+                            <span>🛠️</span>
+                            <span>स्टेप्स</span>
                           </div>
-                        </div>
 
-                        {/* Distinct Horizontal Partition / Divider Line */}
-                        <div className="w-full border-b border-slate-800 my-1" />
+                          {STUDIO_STEPS.map((s) => {
+                            const isActive = activeStep === s.step;
+                            return (
+                              <button
+                                key={s.step}
+                                type="button"
+                                onClick={() => {
+                                  setActiveStep(s.step);
+                                  const el = document.getElementById('mobile-active-step-commands');
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }
+                                }}
+                                className={`w-full flex-1 max-h-[36px] py-1 px-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer text-left ${
+                                  isActive
+                                    ? "bg-amber-400 text-slate-950 shadow-md ring-1 ring-amber-300 font-black"
+                                    : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800"
+                                }`}
+                                title={s.title}
+                              >
+                                <span className="text-xs shrink-0">{s.icon}</span>
+                                <span className="truncate leading-tight">{s.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
-                      {/* RIGHT COLUMN (30% Width): Compact Editor Steps Selector List */}
-                      <div className="w-[30%] shrink-0 flex flex-col gap-1 overflow-y-auto h-[calc(70vw*1.25+38px)] pr-0.5 scrollbar-thin">
-                        <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-0.5 flex items-center gap-1 shrink-0">
-                          <span>🛠️</span>
-                          <span>स्टेप्स</span>
-                        </div>
+                      {/* FULL-WIDTH CONTROL BAR (100% Viewport Width Container, Edge-to-Edge) */}
+                      <div className="w-[100vw] relative left-[calc(-50vw+50%)] my-2 bg-white border-y border-slate-200/90 py-1.5 shadow-md">
+                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-4 gap-1.5">
+                          {/* 1. JPG (Download) */}
+                          <button
+                            type="button"
+                            onClick={() => handleDownload("jpeg")}
+                            disabled={downloading}
+                            className="py-2 px-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] sm:text-xs rounded-lg border border-amber-500 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95 disabled:opacity-50"
+                            title="1080x1350 True 4:5 JPG डाउनलोड"
+                          >
+                            <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                            <span className="truncate">{downloading ? "..." : "JPG"}</span>
+                          </button>
 
-                        {STUDIO_STEPS.map((s) => {
-                          const isActive = activeStep === s.step;
-                          return (
-                            <button
-                              key={s.step}
-                              type="button"
-                              onClick={() => {
-                                setActiveStep(s.step);
-                                const el = document.getElementById('mobile-active-step-commands');
-                                if (el) {
-                                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
-                              }}
-                              className={`w-full flex-1 max-h-[36px] py-1 px-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer text-left ${
-                                isActive
-                                  ? "bg-amber-400 text-slate-950 shadow-md ring-1 ring-amber-300 font-black"
-                                  : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800"
-                              }`}
-                              title={s.title}
-                            >
-                              <span className="text-xs shrink-0">{s.icon}</span>
-                              <span className="truncate leading-tight">{s.name}</span>
-                            </button>
-                          );
-                        })}
+                          {/* 2. Caption */}
+                          <button
+                            type="button"
+                            onClick={() => setIsCaptionModalOpen(true)}
+                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                            title="कैप्शन और सोशल शेयर"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span className="truncate">कैप्शन</span>
+                          </button>
+
+                          {/* 3. Draft */}
+                          <button
+                            type="button"
+                            onClick={handleSaveDraft}
+                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                            title="ड्राफ्ट सेव करें"
+                            aria-label="ड्राफ्ट सेव करें"
+                          >
+                            <Bookmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">Draft</span>
+                          </button>
+
+                          {/* 4. Refresh */}
+                          <button
+                            type="button"
+                            onClick={handleResetCard}
+                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                            title="कार्ड को डिफ़ॉल्ट टेम्पलेट में रीसेट करें"
+                            aria-label="कार्ड रीसेट करें"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                            <span className="truncate">Refresh</span>
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Distinct Horizontal Partition / Divider Line */}
+                      <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-700/80 shadow-sm" />
                   </div>
                 </div>
 
