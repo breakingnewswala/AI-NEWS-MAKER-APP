@@ -392,9 +392,22 @@ export function saveTemplateConfig(templateId: string, update: Partial<TemplateP
       isActive: true,
       version: 'v1.0',
     };
-    configs[templateId] = { ...current, ...update };
+    const updatedConfig = { ...current, ...update };
+    configs[templateId] = updatedConfig;
     localStorage.setItem(STORAGE_KEY_TEMPLATE_CONFIGS, JSON.stringify(configs));
-    window.dispatchEvent(new CustomEvent('template_plans_updated', { detail: { templateId, config: configs[templateId] } }));
+    window.dispatchEvent(new CustomEvent('template_plans_updated', { detail: { templateId, config: updatedConfig } }));
+
+    // Async sync with cloud backend API
+    fetch('/api/admin/save-template-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        templateId,
+        allowedPlans: updatedConfig.allowedPlans,
+        isActive: updatedConfig.isActive,
+        customName: updatedConfig.customName,
+      }),
+    }).catch((err) => console.warn('Cloud template sync warning:', err));
   } catch (e) {
     console.error('Failed to save template config', e);
   }

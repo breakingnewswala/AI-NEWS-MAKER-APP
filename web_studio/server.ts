@@ -4513,6 +4513,58 @@ Strictly return valid JSON object matching these keys.`;
   }
 });
 
+// Template Manager Configuration & Plan Assignment Persistence
+const TEMPLATE_CONFIGS_FILE = path.join(process.cwd(), "news_template_configs.json");
+
+function getStoredTemplateConfigs(): Record<string, any> {
+  try {
+    if (fs.existsSync(TEMPLATE_CONFIGS_FILE)) {
+      const data = fs.readFileSync(TEMPLATE_CONFIGS_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.warn("Failed to read news_template_configs.json:", e);
+  }
+  return {
+    graphic_001: { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" },
+    graphic_002: { allowedPlans: ["ADVANCED"], isActive: true, version: "v1.0" },
+    graphic_003: { allowedPlans: ["PRO"], isActive: true, version: "v1.0" },
+    graphic_004: { allowedPlans: ["VIP DESK"], isActive: true, version: "v1.0" },
+  };
+}
+
+app.get("/api/template-configs", (_req, res) => {
+  res.json({
+    success: true,
+    configs: getStoredTemplateConfigs(),
+  });
+});
+
+app.post("/api/admin/save-template-config", (req, res) => {
+  try {
+    const { templateId, allowedPlans, isActive, customName } = req.body;
+    if (!templateId) {
+      return res.status(400).json({ error: "templateId is required" });
+    }
+    const current = getStoredTemplateConfigs();
+    const existing = current[templateId] || { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" };
+    current[templateId] = {
+      ...existing,
+      ...(allowedPlans && Array.isArray(allowedPlans) ? { allowedPlans } : {}),
+      ...(typeof isActive === "boolean" ? { isActive } : {}),
+      ...(customName ? { customName: String(customName).trim() } : {}),
+    };
+    fs.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
+    return res.json({
+      success: true,
+      message: `Template config updated for ${templateId}`,
+      configs: current,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // App Version Configuration & In-App Update Management
 let appVersionData = {
   version: "1.2.0",

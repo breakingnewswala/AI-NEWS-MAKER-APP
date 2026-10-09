@@ -3727,6 +3727,53 @@ Strictly return valid JSON object matching these keys.`;
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var TEMPLATE_CONFIGS_FILE = import_path.default.join(process.cwd(), "news_template_configs.json");
+function getStoredTemplateConfigs() {
+  try {
+    if (import_fs.default.existsSync(TEMPLATE_CONFIGS_FILE)) {
+      const data = import_fs.default.readFileSync(TEMPLATE_CONFIGS_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.warn("Failed to read news_template_configs.json:", e);
+  }
+  return {
+    graphic_001: { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" },
+    graphic_002: { allowedPlans: ["ADVANCED"], isActive: true, version: "v1.0" },
+    graphic_003: { allowedPlans: ["PRO"], isActive: true, version: "v1.0" },
+    graphic_004: { allowedPlans: ["VIP DESK"], isActive: true, version: "v1.0" }
+  };
+}
+app.get("/api/template-configs", (_req, res) => {
+  res.json({
+    success: true,
+    configs: getStoredTemplateConfigs()
+  });
+});
+app.post("/api/admin/save-template-config", (req, res) => {
+  try {
+    const { templateId, allowedPlans, isActive, customName } = req.body;
+    if (!templateId) {
+      return res.status(400).json({ error: "templateId is required" });
+    }
+    const current = getStoredTemplateConfigs();
+    const existing = current[templateId] || { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" };
+    current[templateId] = {
+      ...existing,
+      ...allowedPlans && Array.isArray(allowedPlans) ? { allowedPlans } : {},
+      ...typeof isActive === "boolean" ? { isActive } : {},
+      ...customName ? { customName: String(customName).trim() } : {}
+    };
+    import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
+    return res.json({
+      success: true,
+      message: `Template config updated for ${templateId}`,
+      configs: current
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var appVersionData = {
   version: "1.2.0",
   versionCode: 10200,
