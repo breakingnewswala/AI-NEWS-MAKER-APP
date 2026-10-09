@@ -85,6 +85,13 @@ import {
   getActiveCustomFrameId,
   CustomFrameItem,
 } from '../lib/customFramesManager';
+import {
+  getAdminRssSources,
+  addAdminRssSource,
+  toggleAdminRssSource,
+  deleteAdminRssSource,
+  syncAllSourcesLive,
+} from '../lib/rssSourceManager';
 
 export const DEFAULT_SOCIAL_ICONS = {
   youtube: true,
@@ -487,71 +494,44 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     if (!rssChannelInput.trim() || !rssUrlInput.trim()) return;
 
     const catObj = (categories || []).find((c) => c.id === rssCategoryInput);
-    const newSource: RssFeedSource = {
-      id: `rss-${Date.now()}`,
-      channelName: rssChannelInput.trim(),
-      category: rssCategoryInput,
-      categoryName: catObj?.name || 'ताज़ा खबर',
-      url: rssUrlInput.trim(),
-      isActive: true,
-      lastSync: 'अभी जोड़ा गया',
-    };
+    const urlLower = rssUrlInput.trim().toLowerCase();
+    const isWebType = !urlLower.includes('.xml') && !urlLower.includes('rss') && !urlLower.includes('feed');
 
-    const updated = [newSource, ...rssSources];
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+    // Add source to system manager & trigger backend live sync
+    addAdminRssSource(
+      rssChannelInput.trim(),
+      rssUrlInput.trim(),
+      isWebType ? 'web' : 'rss',
+      catObj?.name || 'देश'
+    );
 
-    // Automatically make available in Home Feed
-    onAddNewPost({
-      title: `🔴 [${newSource.channelName}] लाइव अपडेट: ${newSource.categoryName} पर बड़ी खबर`,
-      summary: `यह समाचार ${newSource.channelName} के वेब/RSS स्रोत (${newSource.url}) से होम फ़ीड में स्वचालित रूप से सक्रिय किया गया है।`,
-      sourceChannel: newSource.channelName,
-      sourceUrl: newSource.url,
-      category: newSource.category,
-      categoryName: newSource.categoryName,
-      publishedTime: 'अभी-अभी (Admin Source)',
-      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
-      breaking: true,
-      isExclusive: false,
+    syncAllSourcesLive().then(() => {
+      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
     });
 
     setRssChannelInput('');
     setRssUrlInput('');
-    setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव हो गया!');
-    setTimeout(() => setRssSuccessMsg(''), 2000);
+    setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव सिंक हो गया!');
+    setTimeout(() => setRssSuccessMsg(''), 4000);
   };
 
   const handleToggleRssSource = (id: string) => {
-    const updated = rssSources.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s));
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+    toggleAdminRssSource(id);
+    syncAllSourcesLive();
   };
 
   const handleDeleteRssSource = (id: string) => {
-    const updated = rssSources.filter((s) => s.id !== id);
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+    deleteAdminRssSource(id);
+    syncAllSourcesLive();
   };
 
-  const handleSyncRssSource = (source: RssFeedSource) => {
-    onAddNewPost({
-      title: `🔴 [${source.channelName}] लाइव अपडेट: ${source.categoryName} पर बड़ी खबर`,
-      summary: `यह समाचार ${source.channelName} के लाइव फीड ${source.url} से स्वचालित रूप से आयात किया गया है।`,
-      sourceChannel: source.channelName,
-      sourceUrl: source.url,
-      category: source.category,
-      categoryName: source.categoryName,
-      publishedTime: 'अभी-अभी (RSS सिंक)',
-      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
-      breaking: true,
-      isExclusive: false,
+  const handleSyncRssSource = (source: any) => {
+    setRssSuccessMsg(`${source.channelName || source.name || 'स्रोत'} का लाइव सिंक प्रारंभ हो रहा है...`);
+    syncAllSourcesLive().then((res) => {
+      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      setRssSuccessMsg(`✅ ${source.channelName || source.name || 'स्रोत'} का लाइव सिंक पूर्ण हो गया! (${res.totalNewItems || 0} ताज़ा समाचार फ़ीड में जुड़े)`);
+      setTimeout(() => setRssSuccessMsg(''), 4000);
     });
-
-    const updated = rssSources.map((s) => (s.id === source.id ? { ...s, lastSync: 'अभी सिंक हुआ' } : s));
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
-    setRssSuccessMsg(`${source.channelName} का RSS सिंक हो गया और ताज़ा खबर लाइव फ़ीड में पोस्ट हो गई!`);
-    setTimeout(() => setRssSuccessMsg(''), 4000);
   };
 
   const [reporterDistrict, setReporterDistrict] = useState<string>(() => currentUser?.district || 'भोपाल / सेंट्रल डेस्क');
@@ -581,6 +561,26 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       window.removeEventListener('channel_profile_updated', handleProfileSync);
       window.removeEventListener('storage', handleProfileSync);
     };
+  }, []);
+
+  // Sync RSS sources list in real time when updated by admin
+  useEffect(() => {
+    const syncRss = () => {
+      const sources = getAdminRssSources();
+      const mapped = sources.map((s) => ({
+        id: s.id,
+        channelName: s.name,
+        category: s.category || 'breaking',
+        categoryName: s.category || 'ब्रेकिंग न्यूज़',
+        url: s.url,
+        isActive: s.isActive,
+        lastSync: s.lastFetchedAt ? `${Math.round((Date.now() - s.lastFetchedAt) / 60000)} मिनट पूर्व` : 'सक्रिय',
+      }));
+      setRssSources(mapped);
+    };
+    syncRss();
+    window.addEventListener('ai_news_admin_rss_sources_updated', syncRss);
+    return () => window.removeEventListener('ai_news_admin_rss_sources_updated', syncRss);
   }, []);
 
   // 4:5 Custom Frames State for PRO & VIP DESK

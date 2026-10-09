@@ -1223,6 +1223,28 @@ app.post("/api/admin/rss-sources", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "Source ID is required" });
+    let sources = loadRssSourcesDatabase();
+    const targetSource = sources.find((s) => s.id === id);
+    sources = sources.filter((s) => s.id !== id);
+    saveRssSourcesDatabase(sources);
+    if (targetSource) {
+      let posts = loadNewsDatabase();
+      posts = posts.filter((p) => {
+        if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
+        if (targetSource.url && p.sourceUrl === targetSource.url) return false;
+        return true;
+      });
+      saveNewsDatabase(posts);
+    }
+    return res.json({ success: true, sources });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/admin/rss-sync", async (_req, res) => {
   try {
     const sources = loadRssSourcesDatabase();
@@ -1594,7 +1616,45 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
 app.get("/api/admin/users", (req, res) => {
   try {
     const allProfiles = loadProfilesDatabase();
-    return res.json({ success: true, users: Object.values(allProfiles) });
+    const allUsersDb = loadUsersDatabase();
+    const mergedMap = {};
+    if (Array.isArray(allUsersDb)) {
+      for (const u of allUsersDb) {
+        if (!u.email) continue;
+        const key = u.email.toLowerCase().trim();
+        mergedMap[key] = {
+          userId: u.userId || u.id || `usr_${key}`,
+          email: u.email,
+          name: u.fullName || u.name || "\u092F\u0942\u091C\u093C\u0930",
+          username: u.username || "",
+          channelName: u.channelName || "",
+          mobile: u.mobile || "",
+          channelLogoUrl: u.channelLogoUrl || "",
+          websiteUrl: u.websiteUrl || "",
+          socialIcons: u.socialIcons || {},
+          tier: u.tier || "basic",
+          role: u.role || (u.email === "admin.ainewsmaker@gmail.com" ? "admin" : "user"),
+          createdAt: u.createdAt || Date.now()
+        };
+      }
+    }
+    if (allProfiles && typeof allProfiles === "object") {
+      for (const [k, p] of Object.entries(allProfiles)) {
+        const key = (p.email || k).toLowerCase().trim();
+        mergedMap[key] = {
+          ...mergedMap[key] || {},
+          ...p,
+          userId: p.userId || p.id || mergedMap[key]?.userId || `usr_${key}`,
+          email: p.email || mergedMap[key]?.email || key,
+          name: p.fullName || p.name || mergedMap[key]?.name || "\u092F\u0942\u091C\u093C\u0930",
+          channelName: p.channelNameHi || p.channelName || mergedMap[key]?.channelName || "",
+          mobile: p.mobileNumber || p.mobile || mergedMap[key]?.mobile || "",
+          channelLogoUrl: p.channelLogoUrl || mergedMap[key]?.channelLogoUrl || "",
+          websiteUrl: p.websiteUrl || mergedMap[key]?.websiteUrl || ""
+        };
+      }
+    }
+    return res.json({ success: true, users: Object.values(mergedMap) });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

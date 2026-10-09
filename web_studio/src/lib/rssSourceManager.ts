@@ -120,6 +120,10 @@ export function toggleAdminRssSource(id: string): AdminRssSource[] {
 export function deleteAdminRssSource(id: string): AdminRssSource[] {
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
+  fetch(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+  }
   return list;
 }
 
