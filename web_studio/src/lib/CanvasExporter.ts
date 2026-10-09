@@ -1660,55 +1660,57 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
-  // 4B. TOP-LEFT LOGO AREA (TOP Layer — Rendered over photo)
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const logoMaxW = 260;
-    const logoMaxH = 110;
-    const lRatio = customLogoImg.width / customLogoImg.height;
-    let lW = logoMaxW;
-    let lH = lW / lRatio;
-    if (lH > logoMaxH) {
-      lH = logoMaxH;
-      lW = lH * lRatio;
+  // 4B. TOP-LEFT LOGO AREA (TOP Layer — Rendered over photo, only when showMasterBranding is not false)
+  if (card.showMasterBranding !== false) {
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const logoMaxW = 260;
+      const logoMaxH = 110;
+      const lRatio = customLogoImg.width / customLogoImg.height;
+      let lW = logoMaxW;
+      let lH = lW / lRatio;
+      if (lH > logoMaxH) {
+        lH = logoMaxH;
+        lW = lH * lRatio;
+      }
+      lW = Math.round(lW * scale);
+      lH = Math.round(lH * scale);
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetY = 4;
+      ctx.drawImage(customLogoImg, 42, 38, lW, lH);
+      ctx.restore();
+    } else {
+      // Default "YOUR LOGO" gold outline box
+      ctx.save();
+      const boxX = 42;
+      const boxY = 38;
+      const boxW = 220;
+      const boxH = 68;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+      ctx.fill();
+
+      ctx.strokeStyle = '#FFE600';
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#FFE600';
+      ctx.font = '900 28px "Poppins", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
+      ctx.restore();
     }
-    lW = Math.round(lW * scale);
-    lH = Math.round(lH * scale);
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 4;
-    ctx.drawImage(customLogoImg, 42, 38, lW, lH);
-    ctx.restore();
-  } else {
-    // Default "YOUR LOGO" gold outline box
-    ctx.save();
-    const boxX = 42;
-    const boxY = 38;
-    const boxW = 220;
-    const boxH = 68;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 12);
-    ctx.fill();
-
-    ctx.strokeStyle = '#FFE600';
-    ctx.lineWidth = 3.5;
-    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-    ctx.shadowBlur = 12;
-    ctx.stroke();
-
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#FFE600';
-    ctx.font = '900 28px "Poppins", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
-    ctx.restore();
   }
 
-  // 4C. TOP-RIGHT LOCATION BOX
+  // 4C. TOP-RIGHT LOCATION BOX (Sleek Glassmorphic Badge with glowing amber pin)
   if (card.showLocation !== false && card.location && card.location.trim()) {
     const cleanLoc = card.location
       .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
@@ -1716,42 +1718,41 @@ async function drawGraphic001Canvas(
       .trim();
     if (cleanLoc) {
       ctx.save();
-      ctx.font = '800 22px "Noto Sans Devanagari", sans-serif';
+      ctx.font = '700 20px "Noto Sans Devanagari", sans-serif';
       const locTextW = ctx.measureText(cleanLoc).width;
-      const locW = Math.min(420, locTextW + 68);
-      const locH = 56;
+      const locW = Math.min(420, locTextW + 58);
+      const locH = 46;
       const locX = width - locW - 42;
       const locY = 38;
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.shadowColor = 'rgba(0,0,0,0.4)';
-      ctx.shadowBlur = 12;
+      // Dark glassmorphic background
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 10;
       ctx.shadowOffsetY = 2;
       ctx.beginPath();
-      ctx.roundRect(locX, locY, locW, locH, 14);
+      ctx.roundRect(locX, locY, locW, locH, 23);
       ctx.fill();
 
-      ctx.strokeStyle = '#DC2626';
-      ctx.lineWidth = 3;
+      // Delicate gold/amber accent border
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
+      // Glowing pin
       ctx.shadowColor = 'transparent';
-      ctx.fillStyle = '#DC2626';
-      ctx.beginPath();
-      ctx.arc(locX + 26, locY + 28, 14, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '900 14px Arial, sans-serif';
+      ctx.fillStyle = '#F59E0B';
+      ctx.font = '900 16px Arial, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('📍', locX + 26, locY + 28);
+      ctx.fillText('📍', locX + 22, locY + 23);
 
-      ctx.fillStyle = '#0F172A';
-      ctx.font = '800 22px "Noto Sans Devanagari", sans-serif';
+      // Clean text
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = '700 20px "Noto Sans Devanagari", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(cleanLoc, locX + 50, locY + 29);
+      ctx.fillText(cleanLoc, locX + 40, locY + 23);
       ctx.restore();
     }
   }
@@ -1871,82 +1872,114 @@ async function drawGraphic001Canvas(
   }
 
   // 7. BOTTOM WHITE DYNAMIC BRANDING FOOTER (Y = 1274 to 1350)
-  const footerY = 1274;
-  const footerH = 76;
-  ctx.save();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, footerY, width, footerH);
-
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2;
-  const drawCircleIcon = (cx: number, cy: number, r: number, bg: string, text: string, txtColor = '#FFFFFF', isBold = true) => {
+  if (card.showMasterBranding !== false) {
+    const footerY = 1274;
+    const footerH = 76;
     ctx.save();
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = txtColor;
-    ctx.font = `${isBold ? '900' : '700'} ${Math.round(r * 1.1)}px "Poppins", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, cx, cy);
-    ctx.restore();
-  };
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, footerY, width, footerH);
 
-  // 6 Social circles
-  drawCircleIcon(36, iconY, 15, '#E1306C', '📷', '#FFFFFF');
-  drawCircleIcon(72, iconY, 15, '#1877F2', 'f', '#FFFFFF');
-  drawCircleIcon(108, iconY, 15, '#000000', '𝕏', '#FFFFFF');
-  drawCircleIcon(144, iconY, 15, '#111827', '@', '#FFFFFF');
-  drawCircleIcon(180, iconY, 15, '#DC2626', '▶', '#FFFFFF');
-  drawCircleIcon(216, iconY, 15, '#0A66C2', 'in', '#FFFFFF');
+    // Social Icons on Left
+    const iconY = footerY + footerH / 2;
+    const drawCircleIcon = (cx: number, cy: number, r: number, bg: string, text: string, txtColor = '#FFFFFF', isBold = true) => {
+      ctx.save();
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = txtColor;
+      ctx.font = `${isBold ? '900' : '700'} ${Math.round(r * 1.1)}px "Poppins", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, cx, cy);
+      ctx.restore();
+    };
 
-  // Handle text
-  const handleText = card.socialHandle || '/@UserName';
-  ctx.fillStyle = '#0F172A';
-  ctx.font = '800 22px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(handleText, 246, iconY);
+    // 6 Social circles
+    drawCircleIcon(36, iconY, 15, '#E1306C', '📷', '#FFFFFF');
+    drawCircleIcon(72, iconY, 15, '#1877F2', 'f', '#FFFFFF');
+    drawCircleIcon(108, iconY, 15, '#000000', '𝕏', '#FFFFFF');
+    drawCircleIcon(144, iconY, 15, '#111827', '@', '#FFFFFF');
+    drawCircleIcon(180, iconY, 15, '#DC2626', '▶', '#FFFFFF');
+    drawCircleIcon(216, iconY, 15, '#0A66C2', 'in', '#FFFFFF');
 
-  // Divider 1
-  const div1X = 490;
-  ctx.strokeStyle = '#CBD5E1';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(div1X, footerY + 16);
-  ctx.lineTo(div1X, footerY + footerH - 16);
-  ctx.stroke();
-
-  // Website Center
-  const siteText = card.websiteUrl ? card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '') : 'yourwebsite.com';
-  ctx.fillStyle = '#0F172A';
-  ctx.font = '800 22px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`🌐  ${siteText}`, div1X + 22, iconY);
-
-  // Divider 2 & WhatsApp Right (only when Contact toggle is ON)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const div2X = 800;
-    ctx.strokeStyle = '#CBD5E1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(div2X, footerY + 16);
-    ctx.lineTo(div2X, footerY + footerH - 16);
-    ctx.stroke();
-
-    // WhatsApp Green Circle
-    drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '✆', '#FFFFFF');
-    const phoneText = card.whatsappNumber;
+    // Handle text
+    const handleText = card.socialHandle || '/@UserName';
     ctx.fillStyle = '#0F172A';
     ctx.font = '800 22px "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(phoneText, div2X + 54, iconY);
+    ctx.fillText(handleText, 246, iconY);
+
+    // Divider 1
+    const div1X = 490;
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(div1X, footerY + 16);
+    ctx.lineTo(div1X, footerY + footerH - 16);
+    ctx.stroke();
+
+    // Website Center
+    const siteText = card.websiteUrl ? card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '') : 'yourwebsite.com';
+    ctx.fillStyle = '#0F172A';
+    ctx.font = '800 22px "Poppins", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`🌐  ${siteText}`, div1X + 22, iconY);
+
+    // Divider 2 & WhatsApp Right (only when Contact toggle is ON)
+    if (card.showMobileNumber !== false && card.whatsappNumber) {
+      const div2X = 800;
+      ctx.strokeStyle = '#CBD5E1';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(div2X, footerY + 16);
+      ctx.lineTo(div2X, footerY + footerH - 16);
+      ctx.stroke();
+
+      // WhatsApp Green Circle
+      drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '✆', '#FFFFFF');
+      const phoneText = card.whatsappNumber;
+      ctx.fillStyle = '#0F172A';
+      ctx.font = '800 22px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(phoneText, div2X + 54, iconY);
+    }
+
+    ctx.restore();
   }
 
-  ctx.restore();
+  // Custom Header PNG (Mode 1: Header + Footer combo)
+  const activeHeader = getActiveHeaderPng(card);
+  if (activeHeader) {
+    try {
+      const hImg = await loadImage(activeHeader);
+      const hAspect = hImg.width / hImg.height;
+      const drawH = width / hAspect;
+      ctx.drawImage(hImg, 0, 0, width, drawH);
+    } catch {}
+  }
+
+  // Custom Footer PNG (Mode 1: Header + Footer combo)
+  const activeFooter = getActiveFooterPng(card);
+  if (activeFooter) {
+    try {
+      const fImg = await loadImage(activeFooter);
+      const fAspect = fImg.width / fImg.height;
+      const drawH = width / fAspect;
+      ctx.drawImage(fImg, 0, height - drawH, width, drawH);
+    } catch {}
+  }
+
+  // Custom 4:5 Master Frame Overlay (Mode 2: 4:5 Full Frame)
+  if (card.customFrameOverlayPng) {
+    try {
+      const overlayImg = await loadImage(card.customFrameOverlayPng);
+      ctx.drawImage(overlayImg, 0, 0, width, height);
+    } catch {}
+  }
 
   // 8. TOPMOST VISUAL LAYERS: WATERMARK & DATE STAMP
   drawPhotoDisclaimerWatermark(ctx, width, height, card);
@@ -2078,74 +2111,76 @@ async function drawGraphic002Canvas(
 
   // 3. LOGO BOX (Top-Right of photo)
   // Warm ivory/white rounded box with orange/red border #EA580C
-  const logoBoxW = 290;
-  const logoBoxH = 82;
-  const logoBoxX = width - logoBoxW - 36;
-  const logoBoxY = 32;
-  const logoRadius = 14;
+  if (card.showMasterBranding !== false) {
+    const logoBoxW = 290;
+    const logoBoxH = 82;
+    const logoBoxX = width - logoBoxW - 36;
+    const logoBoxY = 32;
+    const logoRadius = 14;
 
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 14;
-  ctx.shadowOffsetY = 4;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
 
-  ctx.fillStyle = '#FFFBEB';
-  ctx.beginPath();
-  ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-  ctx.fill();
+    ctx.fillStyle = '#FFFBEB';
+    ctx.beginPath();
+    ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
+    ctx.fill();
 
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#EA580C';
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#EA580C';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
 
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const maxLogoW = (logoBoxW - 24) * scale;
-    const maxLogoH = (logoBoxH - 18) * scale;
-    const logoRatio = customLogoImg.width / customLogoImg.height;
-    let renderW = maxLogoW;
-    let renderH = maxLogoW / logoRatio;
-    if (renderH > maxLogoH) {
-      renderH = maxLogoH;
-      renderW = maxLogoH * logoRatio;
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const maxLogoW = (logoBoxW - 24) * scale;
+      const maxLogoH = (logoBoxH - 18) * scale;
+      const logoRatio = customLogoImg.width / customLogoImg.height;
+      let renderW = maxLogoW;
+      let renderH = maxLogoW / logoRatio;
+      if (renderH > maxLogoH) {
+        renderH = maxLogoH;
+        renderW = maxLogoH * logoRatio;
+      }
+      const renderX = logoBoxX + (logoBoxW - renderW) / 2;
+      const renderY = logoBoxY + (logoBoxH - renderH) / 2;
+      ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
+    } else {
+      // Globe / Icon circle on left
+      const globeCenterX = logoBoxX + 36;
+      const globeCenterY = logoBoxY + logoBoxH / 2;
+
+      const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
+      gGrad.addColorStop(0, '#2563EB');
+      gGrad.addColorStop(0.5, '#0284C7');
+      gGrad.addColorStop(1, '#F59E0B');
+      ctx.fillStyle = gGrad;
+      ctx.beginPath();
+      ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Continent silhouettes inside globe
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
+      ctx.fill();
+
+      // Logo text (Line 1: YOUR LOGO in orange-red, Line 2: Hindi subtext)
+      const logoTextX = logoBoxX + 66;
+      ctx.fillStyle = '#DC2626';
+      ctx.font = '900 23px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
     }
-    const renderX = logoBoxX + (logoBoxW - renderW) / 2;
-    const renderY = logoBoxY + (logoBoxH - renderH) / 2;
-    ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
-  } else {
-    // Globe / Icon circle on left
-    const globeCenterX = logoBoxX + 36;
-    const globeCenterY = logoBoxY + logoBoxH / 2;
-
-    const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
-    gGrad.addColorStop(0, '#2563EB');
-    gGrad.addColorStop(0.5, '#0284C7');
-    gGrad.addColorStop(1, '#F59E0B');
-    ctx.fillStyle = gGrad;
-    ctx.beginPath();
-    ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Continent silhouettes inside globe
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
-    ctx.fill();
-
-    // Logo text (Line 1: YOUR LOGO in orange-red, Line 2: Hindi subtext)
-    const logoTextX = logoBoxX + 66;
-    ctx.fillStyle = '#DC2626';
-    ctx.font = '900 23px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
-
-    ctx.fillStyle = '#111827';
-    ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
+    ctx.restore();
   }
-  ctx.restore();
 
   // 4. BOTTOM AREA (Headline + CTA + Footer)
   // Background: Warm off-white subtle paper tone (#FAF8F5)
@@ -2167,146 +2202,148 @@ async function drawGraphic002Canvas(
   ctx.restore();
 
   // 5. FIXED FOOTER (110px at bottom: Y = 1240 to 1350)
-  const footerH = 110;
-  const footerY = height - footerH;
-  ctx.save();
-  ctx.fillStyle = '#FFE600';
-  ctx.fillRect(orangeBorderW, footerY, width - orangeBorderW * 2, footerH - orangeBorderW);
-
-  // Top border line of footer
-  ctx.strokeStyle = '#EAB308';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(orangeBorderW, footerY);
-  ctx.lineTo(width - orangeBorderW, footerY);
-  ctx.stroke();
-
-  // Social Icons
-  const iconY = footerY + footerH / 2 - 4;
-  const iconRadius = 18;
-  let curIconX = orangeBorderW + 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = '#CA8A04';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 26);
-  ctx.lineTo(curIconX, footerY + footerH - 30);
-  ctx.stroke();
-
-  // Handle
-  curIconX += 16;
-  ctx.fillStyle = '#000000';
-  ctx.font = '900 25px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = '#CA8A04';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 26);
-  ctx.lineTo(curIconX, footerY + footerH - 30);
-  ctx.stroke();
-
-  // Website
-  curIconX += 16;
-  ctx.fillStyle = '#0284C7';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#000000';
-  ctx.font = '700 24px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Contact Number (if enabled by admin/profile)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const badgeX = width - orangeBorderW - 220;
-    // Green circle with WhatsApp icon
+  if (card.showMasterBranding !== false) {
+    const footerH = 110;
+    const footerY = height - footerH;
     ctx.save();
-    ctx.fillStyle = '#25D366';
+    ctx.fillStyle = '#FFE600';
+    ctx.fillRect(orangeBorderW, footerY, width - orangeBorderW * 2, footerH - orangeBorderW);
+
+    // Top border line of footer
+    ctx.strokeStyle = '#EAB308';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(badgeX + 12, iconY, 13, 0, Math.PI * 2);
+    ctx.moveTo(orangeBorderW, footerY);
+    ctx.lineTo(width - orangeBorderW, footerY);
+    ctx.stroke();
+
+    // Social Icons
+    const iconY = footerY + footerH / 2 - 4;
+    const iconRadius = 18;
+    let curIconX = orangeBorderW + 40;
+
+    // YouTube Red
+    ctx.fillStyle = '#DC2626';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 14px "Noto Sans Devanagari", "Poppins", sans-serif';
+    ctx.beginPath();
+    ctx.moveTo(curIconX - 4, iconY - 7);
+    ctx.lineTo(curIconX + 7, iconY);
+    ctx.lineTo(curIconX - 4, iconY + 7);
+    ctx.closePath();
+    ctx.fill();
+
+    // Facebook Blue
+    curIconX += 44;
+    ctx.fillStyle = '#1877F2';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 22px "Poppins", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('✆', badgeX + 12, iconY);
-    ctx.restore();
+    ctx.fillText('f', curIconX, iconY + 2);
 
+    // Instagram Gradient
+    curIconX += 44;
+    const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
+    igGrad.addColorStop(0, '#FFDC80');
+    igGrad.addColorStop(0.3, '#F77737');
+    igGrad.addColorStop(0.6, '#F56040');
+    igGrad.addColorStop(0.8, '#FD1D1D');
+    igGrad.addColorStop(1, '#833AB4');
+    ctx.fillStyle = igGrad;
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // WhatsApp Green
+    curIconX += 44;
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Vertical Separator
+    curIconX += 34;
+    ctx.strokeStyle = '#CA8A04';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(curIconX, footerY + 26);
+    ctx.lineTo(curIconX, footerY + footerH - 30);
+    ctx.stroke();
+
+    // Handle
+    curIconX += 16;
     ctx.fillStyle = '#000000';
-    ctx.font = '700 22px "Poppins", sans-serif';
+    ctx.font = '900 25px "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
+    const handleText = card.socialHandle || '@YourChannel';
+    ctx.fillText(handleText, curIconX, iconY);
+    curIconX += ctx.measureText(handleText).width + 16;
+
+    // Vertical Separator
+    ctx.strokeStyle = '#CA8A04';
+    ctx.beginPath();
+    ctx.moveTo(curIconX, footerY + 26);
+    ctx.lineTo(curIconX, footerY + footerH - 30);
+    ctx.stroke();
+
+    // Website
+    curIconX += 16;
+    ctx.fillStyle = '#0284C7';
+    ctx.font = '24px "Noto Color Emoji", sans-serif';
+    ctx.fillText('🌐', curIconX, iconY);
+    curIconX += 32;
+    ctx.fillStyle = '#000000';
+    ctx.font = '700 24px "Poppins", sans-serif';
+    const siteText = card.websiteUrl || 'yourwebsite.com';
+    ctx.fillText(siteText, curIconX, iconY);
+
+    // Contact Number (if enabled by admin/profile)
+    if (card.showMobileNumber !== false && card.whatsappNumber) {
+      const badgeX = width - orangeBorderW - 220;
+      // Green circle with WhatsApp icon
+      ctx.save();
+      ctx.fillStyle = '#25D366';
+      ctx.beginPath();
+      ctx.arc(badgeX + 12, iconY, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 14px "Noto Sans Devanagari", "Poppins", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✆', badgeX + 12, iconY);
+      ctx.restore();
+
+      ctx.fillStyle = '#000000';
+      ctx.font = '700 22px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
+    }
+    ctx.restore();
   }
-  ctx.restore();
 
   // 6. DESCRIPTION CTA (Y = 1172)
   // Horizontal Red Line across with centered pill: [📄 पूरी खबर कमेंट बॉक्स में]
@@ -2603,216 +2640,220 @@ async function drawGraphic003Canvas(
   }
 
   // 4. TOP-RIGHT LOGO BOX
-  const logoBoxW = 290;
-  const logoBoxH = 84;
-  const logoBoxX = width - logoBoxW - 36;
-  const logoBoxY = 36;
-  const logoRadius = 14;
+  if (card.showMasterBranding !== false) {
+    const logoBoxW = 290;
+    const logoBoxH = 84;
+    const logoBoxX = width - logoBoxW - 36;
+    const logoBoxY = 36;
+    const logoRadius = 14;
 
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 4;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
-  ctx.beginPath();
-  ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-  ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    ctx.beginPath();
+    ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
+    ctx.fill();
 
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#F59E0B';
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const maxLogoW = (logoBoxW - 24) * scale;
-    const maxLogoH = (logoBoxH - 18) * scale;
-    const logoRatio = customLogoImg.width / customLogoImg.height;
-    let renderW = maxLogoW;
-    let renderH = maxLogoW / logoRatio;
-    if (renderH > maxLogoH) {
-      renderH = maxLogoH;
-      renderW = maxLogoH * logoRatio;
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const maxLogoW = (logoBoxW - 24) * scale;
+      const maxLogoH = (logoBoxH - 18) * scale;
+      const logoRatio = customLogoImg.width / customLogoImg.height;
+      let renderW = maxLogoW;
+      let renderH = maxLogoW / logoRatio;
+      if (renderH > maxLogoH) {
+        renderH = maxLogoH;
+        renderW = maxLogoH * logoRatio;
+      }
+      const renderX = logoBoxX + (logoBoxW - renderW) / 2;
+      const renderY = logoBoxY + (logoBoxH - renderH) / 2;
+      ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
+    } else {
+      // Globe / Icon circle on left
+      const globeCenterX = logoBoxX + 36;
+      const globeCenterY = logoBoxY + logoBoxH / 2;
+
+      const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
+      gGrad.addColorStop(0, '#2563EB');
+      gGrad.addColorStop(0.5, '#0284C7');
+      gGrad.addColorStop(1, '#F59E0B');
+      ctx.fillStyle = gGrad;
+      ctx.beginPath();
+      ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
+      ctx.fill();
+
+      const logoTextX = logoBoxX + 66;
+      ctx.fillStyle = '#DC2626';
+      ctx.font = '900 23px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
     }
-    const renderX = logoBoxX + (logoBoxW - renderW) / 2;
-    const renderY = logoBoxY + (logoBoxH - renderH) / 2;
-    ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
-  } else {
-    // Globe / Icon circle on left
-    const globeCenterX = logoBoxX + 36;
-    const globeCenterY = logoBoxY + logoBoxH / 2;
-
-    const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
-    gGrad.addColorStop(0, '#2563EB');
-    gGrad.addColorStop(0.5, '#0284C7');
-    gGrad.addColorStop(1, '#F59E0B');
-    ctx.fillStyle = gGrad;
-    ctx.beginPath();
-    ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
-    ctx.fill();
-
-    const logoTextX = logoBoxX + 66;
-    ctx.fillStyle = '#DC2626';
-    ctx.font = '900 23px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
-
-    ctx.fillStyle = '#111827';
-    ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
+    ctx.restore();
   }
-  ctx.restore();
 
   // 5. FIXED FOOTER (100px at bottom: Y = 1250 to 1350)
-  const footerH = 100;
-  const footerY = height - footerH;
+  if (card.showMasterBranding !== false) {
+    const footerH = 100;
+    const footerY = height - footerH;
 
-  ctx.save();
-  // Semi-transparent deep dark background with backdrop feel
-  ctx.fillStyle = 'rgba(10, 15, 29, 0.95)';
-  ctx.fillRect(0, footerY, width, footerH);
-
-  // Top Accent Gold/Amber Line
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, footerY);
-  ctx.lineTo(width, footerY);
-  ctx.stroke();
-
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2;
-  const iconRadius = 18;
-  let curIconX = 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 24);
-  ctx.stroke();
-
-  // Handle
-  curIconX += 16;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 24px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 24);
-  ctx.stroke();
-
-  // Website
-  curIconX += 16;
-  ctx.fillStyle = '#38BDF8';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#E2E8F0';
-  ctx.font = '700 23px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Contact Number (if enabled by admin/profile)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const badgeX = width - 240;
-    // Green circle with WhatsApp icon
     ctx.save();
-    ctx.fillStyle = '#25D366';
+    // Semi-transparent deep dark background with backdrop feel
+    ctx.fillStyle = 'rgba(10, 15, 29, 0.95)';
+    ctx.fillRect(0, footerY, width, footerH);
+
+    // Top Accent Gold/Amber Line
+    ctx.strokeStyle = '#F59E0B';
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(badgeX + 12, iconY, 13, 0, Math.PI * 2);
+    ctx.moveTo(0, footerY);
+    ctx.lineTo(width, footerY);
+    ctx.stroke();
+
+    // Social Icons on Left
+    const iconY = footerY + footerH / 2;
+    const iconRadius = 18;
+    let curIconX = 40;
+
+    // YouTube Red
+    ctx.fillStyle = '#DC2626';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 14px "Noto Sans Devanagari", "Poppins", sans-serif';
+    ctx.beginPath();
+    ctx.moveTo(curIconX - 4, iconY - 7);
+    ctx.lineTo(curIconX + 7, iconY);
+    ctx.lineTo(curIconX - 4, iconY + 7);
+    ctx.closePath();
+    ctx.fill();
+
+    // Facebook Blue
+    curIconX += 44;
+    ctx.fillStyle = '#1877F2';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 22px "Poppins", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('✆', badgeX + 12, iconY);
-    ctx.restore();
+    ctx.fillText('f', curIconX, iconY + 2);
 
-    ctx.fillStyle = '#E2E8F0';
-    ctx.font = '700 22px "Poppins", sans-serif';
+    // Instagram Gradient
+    curIconX += 44;
+    const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
+    igGrad.addColorStop(0, '#FFDC80');
+    igGrad.addColorStop(0.3, '#F77737');
+    igGrad.addColorStop(0.6, '#F56040');
+    igGrad.addColorStop(0.8, '#FD1D1D');
+    igGrad.addColorStop(1, '#833AB4');
+    ctx.fillStyle = igGrad;
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // WhatsApp Green
+    curIconX += 44;
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Vertical Separator
+    curIconX += 34;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(curIconX, footerY + 24);
+    ctx.lineTo(curIconX, footerY + footerH - 24);
+    ctx.stroke();
+
+    // Handle
+    curIconX += 16;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 24px "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
+    const handleText = card.socialHandle || '@YourChannel';
+    ctx.fillText(handleText, curIconX, iconY);
+    curIconX += ctx.measureText(handleText).width + 16;
+
+    // Vertical Separator
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.beginPath();
+    ctx.moveTo(curIconX, footerY + 24);
+    ctx.lineTo(curIconX, footerY + footerH - 24);
+    ctx.stroke();
+
+    // Website
+    curIconX += 16;
+    ctx.fillStyle = '#38BDF8';
+    ctx.font = '24px "Noto Color Emoji", sans-serif';
+    ctx.fillText('🌐', curIconX, iconY);
+    curIconX += 32;
+    ctx.fillStyle = '#E2E8F0';
+    ctx.font = '700 23px "Poppins", sans-serif';
+    const siteText = card.websiteUrl || 'yourwebsite.com';
+    ctx.fillText(siteText, curIconX, iconY);
+
+    // Contact Number (if enabled by admin/profile)
+    if (card.showMobileNumber !== false && card.whatsappNumber) {
+      const badgeX = width - 240;
+      // Green circle with WhatsApp icon
+      ctx.save();
+      ctx.fillStyle = '#25D366';
+      ctx.beginPath();
+      ctx.arc(badgeX + 12, iconY, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 14px "Noto Sans Devanagari", "Poppins", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✆', badgeX + 12, iconY);
+      ctx.restore();
+
+      ctx.fillStyle = '#E2E8F0';
+      ctx.font = '700 22px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
+    }
+    ctx.restore();
   }
-  ctx.restore();
 
   // 6. LARGE BOLD HEADLINE DIRECT OVERLAY ON PHOTO (Y = 820 to 1220)
   // Directly on dark gradient overlay, Max 3 Lines, Crisp White with Golden-Yellow Highlight
@@ -2932,87 +2973,89 @@ async function drawGraphic004Canvas(
   ctx.fillRect(0, 0, width, height);
 
   // 2. TOP CENTER LOGO WITH FLANKING ACCENT LINES (Y: ~16 to ~96)
-  const logoBoxW = 310;
-  const logoBoxH = 78;
-  const logoBoxX = (width - logoBoxW) / 2;
-  const logoBoxY = 18;
-  const logoRadius = 14;
-  const lineY = logoBoxY + logoBoxH / 2;
+  if (card.showMasterBranding !== false) {
+    const logoBoxW = 310;
+    const logoBoxH = 78;
+    const logoBoxX = (width - logoBoxW) / 2;
+    const logoBoxY = 18;
+    const logoRadius = 14;
+    const lineY = logoBoxY + logoBoxH / 2;
 
-  // Left & Right Horizontal Black Rules
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(24, lineY);
-  ctx.lineTo(logoBoxX - 14, lineY);
-  ctx.stroke();
+    // Left & Right Horizontal Black Rules
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(24, lineY);
+    ctx.lineTo(logoBoxX - 14, lineY);
+    ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(logoBoxX + logoBoxW + 14, lineY);
-  ctx.lineTo(width - 24, lineY);
-  ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(logoBoxX + logoBoxW + 14, lineY);
+    ctx.lineTo(width - 24, lineY);
+    ctx.stroke();
 
-  // Centered Logo Container
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 3;
+    // Centered Logo Container
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
 
-  ctx.fillStyle = '#FFFBEB';
-  ctx.beginPath();
-  ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-  ctx.fill();
+    ctx.fillStyle = '#FFFBEB';
+    ctx.beginPath();
+    ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
+    ctx.fill();
 
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#EA580C';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#EA580C';
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const maxLogoW = (logoBoxW - 24) * scale;
-    const maxLogoH = (logoBoxH - 16) * scale;
-    const logoRatio = customLogoImg.width / customLogoImg.height;
-    let renderW = maxLogoW;
-    let renderH = maxLogoW / logoRatio;
-    if (renderH > maxLogoH) {
-      renderH = maxLogoH;
-      renderW = maxLogoH * logoRatio;
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const maxLogoW = (logoBoxW - 24) * scale;
+      const maxLogoH = (logoBoxH - 16) * scale;
+      const logoRatio = customLogoImg.width / customLogoImg.height;
+      let renderW = maxLogoW;
+      let renderH = maxLogoW / logoRatio;
+      if (renderH > maxLogoH) {
+        renderH = maxLogoH;
+        renderW = maxLogoH * logoRatio;
+      }
+      const renderX = logoBoxX + (logoBoxW - renderW) / 2;
+      const renderY = logoBoxY + (logoBoxH - renderH) / 2;
+      ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
+    } else {
+      // Globe / Icon circle on left
+      const globeCenterX = logoBoxX + 42;
+      const globeCenterY = logoBoxY + logoBoxH / 2;
+
+      const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
+      gGrad.addColorStop(0, '#2563EB');
+      gGrad.addColorStop(0.5, '#0284C7');
+      gGrad.addColorStop(1, '#F59E0B');
+      ctx.fillStyle = gGrad;
+      ctx.beginPath();
+      ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
+      ctx.fill();
+
+      const logoTextX = logoBoxX + 74;
+      ctx.fillStyle = '#DC2626';
+      ctx.font = '900 23px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 36);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 63);
     }
-    const renderX = logoBoxX + (logoBoxW - renderW) / 2;
-    const renderY = logoBoxY + (logoBoxH - renderH) / 2;
-    ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
-  } else {
-    // Globe / Icon circle on left
-    const globeCenterX = logoBoxX + 42;
-    const globeCenterY = logoBoxY + logoBoxH / 2;
-
-    const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
-    gGrad.addColorStop(0, '#2563EB');
-    gGrad.addColorStop(0.5, '#0284C7');
-    gGrad.addColorStop(1, '#F59E0B');
-    ctx.fillStyle = gGrad;
-    ctx.beginPath();
-    ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
-    ctx.fill();
-
-    const logoTextX = logoBoxX + 74;
-    ctx.fillStyle = '#DC2626';
-    ctx.font = '900 23px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 36);
-
-    ctx.fillStyle = '#111827';
-    ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 63);
+    ctx.restore();
   }
-  ctx.restore();
 
   // 3. MAIN HEADLINE SECTION (Y: 106 to 340)
   // Very Bold, Dominant Centered Typography (Line 1 Black, Line 2 Bright Red #DC2626)
@@ -3330,147 +3373,149 @@ async function drawGraphic004Canvas(
   }
 
   // 8. FIXED SOLID BLACK FOOTER (Y: 1240 to 1350, Height: 110px)
-  const footerH = 110;
-  const footerY = height - footerH;
+  if (card.showMasterBranding !== false) {
+    const footerH = 110;
+    const footerY = height - footerH;
 
-  ctx.save();
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, footerY, width, footerH);
+    ctx.save();
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, footerY, width, footerH);
 
-  // Top white border
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(0, footerY);
-  ctx.lineTo(width, footerY);
-  ctx.stroke();
+    // Top white border
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, footerY);
+    ctx.lineTo(width, footerY);
+    ctx.stroke();
 
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2 - 2;
-  const iconRadius = 18;
-  let curIconX = 40;
+    // Social Icons on Left
+    const iconY = footerY + footerH / 2 - 2;
+    const iconRadius = 18;
+    let curIconX = 40;
 
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
+    // YouTube Red
+    ctx.fillStyle = '#DC2626';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.moveTo(curIconX - 4, iconY - 7);
+    ctx.lineTo(curIconX + 7, iconY);
+    ctx.lineTo(curIconX - 4, iconY + 7);
+    ctx.closePath();
+    ctx.fill();
 
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
+    // Facebook Blue
+    curIconX += 44;
+    ctx.fillStyle = '#1877F2';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 22px "Poppins", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('f', curIconX, iconY + 2);
 
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
+    // Instagram Gradient
+    curIconX += 44;
+    const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
+    igGrad.addColorStop(0, '#FFDC80');
+    igGrad.addColorStop(0.3, '#F77737');
+    igGrad.addColorStop(0.6, '#F56040');
+    igGrad.addColorStop(0.8, '#FD1D1D');
+    igGrad.addColorStop(1, '#833AB4');
+    ctx.fillStyle = igGrad;
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
+    ctx.stroke();
 
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
+    // WhatsApp Green
+    curIconX += 44;
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#25D366';
+    ctx.beginPath();
+    ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
+    ctx.fill();
 
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 26);
-  ctx.stroke();
+    // Vertical Separator
+    curIconX += 34;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(curIconX, footerY + 24);
+    ctx.lineTo(curIconX, footerY + footerH - 26);
+    ctx.stroke();
 
-  // Handle (in Yellow #FFE600)
-  curIconX += 16;
-  ctx.fillStyle = '#FFE600';
-  ctx.font = '900 25px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
+    // Handle (in Yellow #FFE600)
+    curIconX += 16;
+    ctx.fillStyle = '#FFE600';
+    ctx.font = '900 25px "Poppins", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const handleText = card.socialHandle || '@YourChannel';
+    ctx.fillText(handleText, curIconX, iconY);
+    curIconX += ctx.measureText(handleText).width + 16;
 
-  // Vertical Separator
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 26);
-  ctx.stroke();
+    // Vertical Separator
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.moveTo(curIconX, footerY + 24);
+    ctx.lineTo(curIconX, footerY + footerH - 26);
+    ctx.stroke();
 
-  // Website (in Yellow #FFE600 with Blue Globe)
-  curIconX += 16;
-  ctx.fillStyle = '#0284C7';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#FFE600';
-  ctx.font = '700 24px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
+    // Website (in Yellow #FFE600 with Blue Globe)
+    curIconX += 16;
+    ctx.fillStyle = '#0284C7';
+    ctx.font = '24px "Noto Color Emoji", sans-serif';
+    ctx.fillText('🌐', curIconX, iconY);
+    curIconX += 32;
+    ctx.fillStyle = '#FFE600';
+    ctx.font = '700 24px "Poppins", sans-serif';
+    const siteText = card.websiteUrl || 'yourwebsite.com';
+    ctx.fillText(siteText, curIconX, iconY);
 
-  // Right Date Badge: DATE / यहाँ तारीख आएगी (White Rounded Box on Black)
-  const badgeW = 160;
-  const badgeH = 74;
-  const badgeX = width - badgeW - 24;
-  const badgeY = footerY + (footerH - badgeH) / 2;
+    // Right Date Badge: DATE / यहाँ तारीख आएगी (White Rounded Box on Black)
+    const badgeW = 160;
+    const badgeH = 74;
+    const badgeX = width - badgeW - 24;
+    const badgeY = footerY + (footerH - badgeH) / 2;
 
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 10);
-  ctx.stroke();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 10);
+    ctx.stroke();
 
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 18px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('DATE', badgeX + badgeW / 2, badgeY + 34);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 18px "Poppins", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('DATE', badgeX + badgeW / 2, badgeY + 34);
 
-  ctx.fillStyle = '#E5E7EB';
-  ctx.font = '700 13px "Noto Sans Devanagari", sans-serif';
-  const dateStr = card.date && card.date.trim().length > 0 ? card.date.trim() : 'यहाँ तारीख आएगी';
-  ctx.fillText(dateStr, badgeX + badgeW / 2, badgeY + 58);
-  ctx.restore();
+    ctx.fillStyle = '#E5E7EB';
+    ctx.font = '700 13px "Noto Sans Devanagari", sans-serif';
+    const dateStr = card.date && card.date.trim().length > 0 ? card.date.trim() : 'यहाँ तारीख आएगी';
+    ctx.fillText(dateStr, badgeX + badgeW / 2, badgeY + 58);
+    ctx.restore();
+  }
 
   // 9. CRISP OUTER BLACK FRAME BORDER (8px)
   ctx.save();

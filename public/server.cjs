@@ -1553,20 +1553,23 @@ app.get("/api/custom-frames", (req, res) => {
   const all = loadCustomFramesDatabase();
   if (!userId) return res.json({ success: true, frames: all });
   const cleanId = String(userId).toLowerCase().trim();
-  const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId);
+  const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === "general");
   return res.json({ success: true, frames: userFrames });
 });
 app.post("/api/custom-frames", (req, res) => {
   try {
     const payload = req.body;
-    if (!payload || !payload.assetUrl) {
-      return res.status(400).json({ error: "Frame asset URL is required" });
+    if (!payload || !payload.assetUrl && !payload.headerUrl && !payload.footerUrl) {
+      return res.status(400).json({ error: "Frame asset URL or Header/Footer is required" });
     }
     const newFrame = {
       id: payload.id || `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       userId: (payload.userId || "general").toLowerCase().trim(),
-      name: (payload.name || "\u0915\u0938\u094D\u091F\u092E 4:5 \u092B\u094D\u0930\u0947\u092E").trim(),
-      assetUrl: payload.assetUrl,
+      name: (payload.name || "\u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E").trim(),
+      assetUrl: payload.assetUrl || payload.headerUrl || payload.footerUrl || "",
+      headerUrl: payload.headerUrl,
+      footerUrl: payload.footerUrl,
+      frameType: payload.frameType || (payload.headerUrl || payload.footerUrl ? "header_footer" : "full_4_5"),
       aspectRatio: "4:5",
       createdAt: Date.now()
     };

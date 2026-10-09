@@ -89,3 +89,58 @@ export function getProfileHeaderFooter(templateId: string): ProfileHeaderFooterC
     return null;
   }
 }
+
+export function getPermanentUserLogo(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    // 1. Android Bridge
+    if ((window as any).AndroidBridge?.getChannelProfile) {
+      const nativeJson = (window as any).AndroidBridge.getChannelProfile();
+      if (nativeJson && nativeJson !== '{}') {
+        const parsed = JSON.parse(nativeJson);
+        if (parsed?.channelLogoUrl) return parsed.channelLogoUrl;
+      }
+    }
+    // 2. user_channel_profile
+    const userChan = localStorage.getItem('user_channel_profile');
+    if (userChan) {
+      const p = JSON.parse(userChan);
+      if (p?.channelLogoUrl) return p.channelLogoUrl;
+      if (p?.channelLogoPngUrl) return p.channelLogoPngUrl;
+      if (p?.channelLogoGifUrl) return p.channelLogoGifUrl;
+    }
+    // 3. user_profile_data
+    const userProf = localStorage.getItem('user_profile_data');
+    if (userProf) {
+      const p = JSON.parse(userProf);
+      if (p?.channelLogoUrl) return p.channelLogoUrl;
+      if (p?.logoUrl) return p.logoUrl;
+    }
+    // 4. profile_header_footer_json
+    const hf = localStorage.getItem('profile_header_footer_json');
+    if (hf) {
+      const p = JSON.parse(hf);
+      if (p?.templates?.graphic_001?.customLogoUrl) return p.templates.graphic_001.customLogoUrl;
+    }
+    // 5. reporter_auth_session
+    const authSess = localStorage.getItem('reporter_auth_session');
+    if (authSess) {
+      const u = JSON.parse(authSess);
+      if (u?.channelLogoUrl) return u.channelLogoUrl;
+      if (u?.email) {
+        const uEmailProf = localStorage.getItem(`user_profile_${u.email.toLowerCase().trim()}`);
+        if (uEmailProf) {
+          const ep = JSON.parse(uEmailProf);
+          if (ep?.channelLogoUrl) return ep.channelLogoUrl;
+        }
+      }
+    }
+    // 6. reporter_current_user
+    const repCurr = localStorage.getItem('reporter_current_user');
+    if (repCurr) {
+      const u = JSON.parse(repCurr);
+      if (u?.channelLogoUrl) return u.channelLogoUrl;
+    }
+  } catch {}
+  return '';
+}

@@ -26,7 +26,8 @@ import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/Ste
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
 import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
-import { getProfileHeaderFooter } from './lib/profileConfig';
+import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
+import { syncAllSourcesLive } from './lib/rssSourceManager';
 import {
   FolderOpen,
   Download,
@@ -288,25 +289,30 @@ export default function App() {
       console.warn('Cloud storage news fetch failed:', err);
     }
 
-    // 2. Try backend API (/api/news-posts)
-    if (!loaded) {
-      try {
-        const baseUrl = getApiBaseUrl();
-        const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}`, { cache: 'no-cache' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && Array.isArray(data.posts) && data.posts.length > 0) {
-            const clean = data.posts.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
-            setPosts(clean);
+    // 2. Always fetch backend API (/api/news-posts) to sync live RSS, Web Links & Raw News posts
+    try {
+      const baseUrl = getApiBaseUrl();
+      const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
+        if (Array.isArray(apiPosts) && apiPosts.length > 0) {
+          const cleanApi = apiPosts.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+          setPosts((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const newFromApi = cleanApi.filter((p: NewsFeedPost) => !existingIds.has(p.id));
+            if (newFromApi.length === 0) return prev;
+            const merged = [...newFromApi, ...prev];
             try {
-              localStorage.setItem('app_news_posts_v2', JSON.stringify(data.posts));
+              localStorage.setItem('app_news_posts_v2', JSON.stringify(merged));
             } catch {}
-            loaded = true;
-          }
+            return merged;
+          });
+          loaded = true;
         }
-      } catch (err) {
-        console.warn('API news fetch failed:', err);
       }
+    } catch (err) {
+      console.warn('API news fetch failed:', err);
     }
 
     // 3. Try local static /news_database.json fallback
@@ -942,23 +948,24 @@ export default function App() {
       ? Object.entries(savedProfile.socialIcons).filter(([_, active]) => active).map(([key]) => key)
       : ['instagram', 'facebook', 'twitter', 'youtube', 'whatsapp'];
 
+
     setCard((prev) => ({
       ...prev,
       frameDesign: 'graphic_001',
-      headline: '',
-      formattedHeadline: '',
-      highlightWords: [],
+      headline: 'स्टेप 3 में जाकर अपनी मुख्य खबर की\nहेडलाइन दर्ज करें\nआवश्यकता अनुसार दो या तीन लाइन में',
+      formattedHeadline: 'स्टेप 3 में जाकर अपनी मुख्य खबर की\n[yellow]हेडलाइन दर्ज करें[/yellow]\nआवश्यकता अनुसार दो या तीन लाइन में',
+      highlightWords: ['हेडलाइन', 'दर्ज', 'करें'],
       headlineAlign: 'center',
       location: savedProfile?.district || 'विशेष कवरेज',
       summary: '',
       category: 'ताज़ा खबर',
       images: {
-        main: '/assets/default_refresh_thumbnail.jpg',
+        main: '',
         second: '',
       },
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
-      customLogoUrl: savedProfile?.channelLogoUrl || prev.customLogoUrl || '',
+      customLogoUrl: prev.customLogoUrl || savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
       brandName: savedProfile?.channelNameHi || prev.brandName || prev.channelNameHi || '',
       brandTagline: savedProfile?.channelNameEn || prev.brandTagline || prev.channelNameEn || '',
       channelNameHi: savedProfile?.channelNameHi || prev.channelNameHi || prev.brandName || '',
@@ -983,6 +990,7 @@ export default function App() {
       aspectRatio: '4:5',
       headlineFontSize: 28,
       highlightColor: '#FFE600',
+      showMasterBranding: true,
     }));
 
     try {
@@ -1546,6 +1554,7 @@ export default function App() {
           currentTab={currentTab}
           currentUser={currentUser}
           onRefresh={async () => {
+            await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
             window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
             setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
@@ -1572,6 +1581,7 @@ export default function App() {
           onEditNews={handleEditNews}
           onDeleteNews={handleDeleteNews}
           onRefreshLiveNews={async () => {
+            await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
             setToastMessage('लाइव खबरें क्लाउड से सिंक हो गईं!');
           }}

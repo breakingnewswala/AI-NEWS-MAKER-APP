@@ -6,6 +6,9 @@ export interface CustomFrame {
   userId?: string;
   name: string;
   assetUrl: string;
+  headerUrl?: string;
+  footerUrl?: string;
+  frameType?: 'full_4_5' | 'header_footer';
   aspectRatio: '4:5';
   createdAt: number;
 }
@@ -54,12 +57,18 @@ export async function fetchCustomFrames(userId?: string): Promise<CustomFrame[]>
 export async function saveCustomFrameToCloud(frame: {
   name: string;
   assetUrl: string;
+  headerUrl?: string;
+  footerUrl?: string;
+  frameType?: 'full_4_5' | 'header_footer';
   userId?: string;
 }): Promise<CustomFrame | null> {
   const newFrame: CustomFrame = {
     id: `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     name: frame.name.trim() || 'कस्टम 4:5 फ्रेम',
-    assetUrl: frame.assetUrl,
+    assetUrl: frame.assetUrl || frame.headerUrl || frame.footerUrl || '',
+    headerUrl: frame.headerUrl,
+    footerUrl: frame.footerUrl,
+    frameType: frame.frameType || (frame.headerUrl || frame.footerUrl ? 'header_footer' : 'full_4_5'),
     userId: frame.userId || 'general',
     aspectRatio: '4:5',
     createdAt: Date.now(),
@@ -95,11 +104,17 @@ export function saveCustomFrame(data: {
   userId?: string;
   name: string;
   assetUrl: string;
+  headerUrl?: string;
+  footerUrl?: string;
+  frameType?: 'full_4_5' | 'header_footer';
 }): CustomFrameItem {
   const frame: CustomFrameItem = {
     id: `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    name: data.name.trim() || 'कस्टम 4:5 फ्रेम',
-    assetUrl: data.assetUrl,
+    name: data.name.trim() || 'कस्टम फ्रेम',
+    assetUrl: data.assetUrl || data.headerUrl || data.footerUrl || '',
+    headerUrl: data.headerUrl,
+    footerUrl: data.footerUrl,
+    frameType: data.frameType || (data.headerUrl || data.footerUrl ? 'header_footer' : 'full_4_5'),
     userId: data.userId || 'general',
     aspectRatio: '4:5',
     createdAt: Date.now(),

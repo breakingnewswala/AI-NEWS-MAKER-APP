@@ -45,6 +45,8 @@ import {
   getApprovedRssIds,
   approveRssPost,
   isRssPostApproved,
+  fetchAdminRssSourcesFromBackend,
+  syncAllSourcesLive,
 } from '../lib/rssSourceManager';
 import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
 
@@ -305,11 +307,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
 
   useEffect(() => {
+    // Automatically load backend RSS & Web link sources and perform live sync on mount
+    fetchAdminRssSourcesFromBackend().then(() => {
+      syncAllSourcesLive().catch(() => {});
+    }).catch(() => {});
+
     const handleRssUpdate = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
       setApprovedRssIds(getApprovedRssIds());
     };
     const handleFeedRefresh = () => {
+      setActiveRssPosts(getActiveRssNewsPosts());
       if (onRefreshLiveNews) onRefreshLiveNews();
       setApprovedRssIds(getApprovedRssIds());
     };

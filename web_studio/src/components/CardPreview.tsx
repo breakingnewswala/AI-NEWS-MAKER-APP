@@ -988,36 +988,38 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
           {/* Top Header Row: Top-Left Channel Logo Area & Top-Right Location Box */}
           <div className="absolute top-3 left-3 right-3 sm:top-5 sm:left-5 sm:right-5 z-30 pointer-events-auto flex items-start justify-between">
-            {/* Logo Area */}
-            <div
-              className="max-w-[45%]"
-              style={{
-                transform: `scale(${card.logoScale ?? 1.25})`,
-                transformOrigin: 'top left',
-              }}
-            >
-              {card.customLogoUrl ? (
-                <img
-                  src={card.customLogoUrl}
-                  alt="Channel Logo"
-                  className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"
-                />
-              ) : (
-                <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/60 shadow-[0_0_12px_rgba(255,230,0,0.4)] flex items-center justify-center">
-                  <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
-                    YOUR LOGO
-                  </span>
-                </div>
-              )}
-            </div>
+            {/* Logo Area (Hidden when Master Branding is OFF) */}
+            {card.showMasterBranding !== false && (
+              <div
+                className="max-w-[45%]"
+                style={{
+                  transform: `scale(${card.logoScale ?? 1.25})`,
+                  transformOrigin: 'top left',
+                }}
+              >
+                {card.customLogoUrl ? (
+                  <img
+                    src={card.customLogoUrl}
+                    alt="Channel Logo"
+                    className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] bg-transparent"
+                  />
+                ) : (
+                  <div className="border border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs shadow-[0_0_12px_rgba(255,230,0,0.35)] flex items-center justify-center">
+                    <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
+                      YOUR LOGO
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Top-Right Location Box */}
+            {/* Top-Right Location Box: Rich, sleek, refined glassmorphic badge with golden pin */}
             {card.showLocation !== false && card.location && card.location.trim() && (
-              <div className="bg-white border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-lg max-w-[48%]">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white fill-white" />
+              <div className="bg-black/60 backdrop-blur-md border border-[#FFE600]/60 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.85)] max-w-[48%]">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#FFE600] to-amber-500 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(255,230,0,0.5)]">
+                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-950 stroke-[2.5]" />
                 </div>
-                <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
                   {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                 </span>
               </div>
@@ -1050,7 +1052,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
                   {/* Red pill badge */}
                   <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4.5 py-1 rounded-full bg-[#DC2626] text-white font-black text-xs sm:text-sm shadow-lg mb-2">
-                    <span>🖼️ स्टेप 4 : फोटो जोड़ें</span>
+                    <span>📸 स्टेप 4 : फोटो जोड़ें</span>
                   </div>
 
                   <h2 className="font-extrabold text-xs sm:text-base text-white font-['Baloo_2'] leading-snug">
@@ -1124,50 +1126,42 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           {/* Top Overlay: Location Box (Left), Logo Box (Right) */}
           <div className="relative w-full h-[53%] p-3 sm:p-5 flex flex-col justify-between">
             <div className="flex items-start justify-between w-full pointer-events-auto">
-              {/* Location Box (Top Left): White Rounded Box with Red Border */}
+              {/* Location Box (Top Left): Sleek glassmorphic badge with orange border & pin */}
               {card.showLocation !== false && card.location && card.location.trim() && (
-                <div className="bg-white border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 shadow-lg max-w-[48%]">
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                    <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white" />
+                <div className="bg-black/60 backdrop-blur-md border border-[#EA580C]/80 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-lg max-w-[48%]">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#EA580C] to-amber-500 flex items-center justify-center shrink-0 shadow-xs">
+                    <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                   </div>
-                  <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                  <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
                     {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                   </span>
                 </div>
               )}
 
-              {/* Logo Box (Top Right): Clean Transparent Logo or Placeholder Box */}
-              <div
-                className={`ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%] ${
-                  card.customLogoUrl ? '' : 'bg-[#FFFBEB] border-2 border-[#EA580C] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 gap-2 shadow-lg min-w-[130px] sm:min-w-[160px]'
-                }`}
-                style={{
-                  transform: `scale(${card.logoScale ?? 1.25})`,
-                  transformOrigin: 'top right',
-                }}
-              >
-                {card.customLogoUrl ? (
-                  <img
-                    src={card.customLogoUrl}
-                    alt="Channel Logo"
-                    className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]"
-                  />
-                ) : (
-                  <>
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-amber-400 flex items-center justify-center text-white text-xs sm:text-sm font-bold shadow-xs shrink-0">
-                      🌍
-                    </div>
-                    <div className="flex flex-col leading-tight">
-                      <span className="font-black text-xs sm:text-sm text-[#DC2626] font-['Poppins'] tracking-wider">
+              {/* Logo Box (Top Right): Clean Transparent Logo (Hidden when Master Branding is OFF) */}
+              {card.showMasterBranding !== false && (
+                <div
+                  className="ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%]"
+                  style={{
+                    transform: `scale(${card.logoScale ?? 1.25})`,
+                    transformOrigin: 'top right',
+                  }}
+                >
+                  {card.customLogoUrl ? (
+                    <img
+                      src={card.customLogoUrl}
+                      alt="Channel Logo"
+                      className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] bg-transparent"
+                    />
+                  ) : (
+                    <div className="border border-[#EA580C] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs flex items-center justify-center shadow-md">
+                      <span className="font-black text-xs sm:text-sm text-[#EA580C] font-['Poppins'] tracking-wider">
                         YOUR LOGO
                       </span>
-                      <span className="font-bold text-[9px] sm:text-[11px] text-neutral-900 font-['Noto_Sans_Devanagari']">
-                        यहाँ आपका लोगो रहेगा
-                      </span>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1289,50 +1283,42 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
           {/* Top Row: Location & Date Pill (Top-Left) & Channel Logo (Top-Right) */}
           <div className="relative z-20 w-full p-3 sm:p-5 flex items-start justify-between pointer-events-auto">
-            {/* Top-Left: Location & Date Pill */}
+            {/* Top-Left: Location & Date Pill: Sleek glassmorphic badge with golden pin */}
             {card.showLocation !== false && card.location && card.location.trim() && (
-              <div className="bg-white/95 backdrop-blur-md border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 shadow-xl max-w-[48%]">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                  <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white" />
+              <div className="bg-black/60 backdrop-blur-md border border-amber-500/70 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-xl max-w-[48%]">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center shrink-0 shadow-xs">
+                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-950 stroke-[2.5]" />
                 </div>
-                <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
                   {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                 </span>
               </div>
             )}
 
-            {/* Top-Right: Logo Box (Clean Transparent Logo or Placeholder Box) */}
-            <div
-              className={`ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%] ${
-                card.customLogoUrl ? '' : 'bg-white/95 backdrop-blur-md border-2 border-amber-500 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 gap-2 shadow-xl min-w-[130px] sm:min-w-[160px]'
-              }`}
-              style={{
-                transform: `scale(${card.logoScale ?? 1.25})`,
-                transformOrigin: 'top right',
-              }}
-            >
-              {card.customLogoUrl ? (
-                <img
-                  src={card.customLogoUrl}
-                  alt="Channel Logo"
-                  className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]"
-                />
-              ) : (
-                <>
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-amber-400 flex items-center justify-center text-white text-xs sm:text-sm font-bold shadow-xs shrink-0">
-                    🌍
-                  </div>
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-black text-xs sm:text-sm text-[#DC2626] font-['Poppins'] tracking-wider">
+            {/* Top-Right: Logo Box (Hidden when Master Branding is OFF) */}
+            {card.showMasterBranding !== false && (
+              <div
+                className="ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%]"
+                style={{
+                  transform: `scale(${card.logoScale ?? 1.25})`,
+                  transformOrigin: 'top right',
+                }}
+              >
+                {card.customLogoUrl ? (
+                  <img
+                    src={card.customLogoUrl}
+                    alt="Channel Logo"
+                    className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] bg-transparent"
+                  />
+                ) : (
+                  <div className="border border-amber-400 rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs flex items-center justify-center shadow-lg">
+                    <span className="font-black text-xs sm:text-sm text-amber-400 font-['Poppins'] tracking-wider">
                       YOUR LOGO
                     </span>
-                    <span className="font-bold text-[9px] sm:text-[11px] text-neutral-900 font-['Noto_Sans_Devanagari']">
-                      यहाँ आपका लोगो रहेगा
-                    </span>
                   </div>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Lower Readability Gradient & Direct Headline Overlay + Bottom Footer */}
@@ -1432,34 +1418,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t-[1.5px] sm:border-t-2 border-black" />
               </div>
-              <div
-                className="relative bg-[#FFFBEB] border-2 border-[#EA580C] rounded-xl px-2.5 py-0.5 sm:px-3.5 sm:py-1 flex items-center gap-1.5 shadow-xs transition-transform max-w-[65%]"
-                style={{
-                  transform: `scale(${card.logoScale ?? 1.25})`,
-                }}
-              >
-                {card.customLogoUrl ? (
-                  <img
-                    src={card.customLogoUrl}
-                    alt="Channel Logo"
-                    className="max-h-6 sm:max-h-8 w-auto object-contain drop-shadow-xs"
-                  />
-                ) : (
-                  <>
-                    <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-amber-400 flex items-center justify-center text-white text-[9px] sm:text-[10px] font-bold shadow-xs shrink-0">
-                      🌍
-                    </div>
-                    <div className="flex flex-col leading-tight">
-                      <span className="font-black text-[10px] sm:text-[11px] text-[#DC2626] font-['Poppins'] tracking-wider">
+              {card.showMasterBranding !== false && (
+                <div
+                  className="relative px-2.5 py-0.5 sm:px-3.5 sm:py-1 flex items-center gap-1.5 transition-transform max-w-[65%]"
+                  style={{
+                    transform: `scale(${card.logoScale ?? 1.25})`,
+                  }}
+                >
+                  {card.customLogoUrl ? (
+                    <img
+                      src={card.customLogoUrl}
+                      alt="Channel Logo"
+                      className="max-h-6 sm:max-h-8 w-auto object-contain drop-shadow-xs bg-transparent"
+                    />
+                  ) : (
+                    <div className="border border-neutral-900 rounded-md px-2 py-0.5 bg-white/80">
+                      <span className="font-black text-[10px] sm:text-[11px] text-neutral-950 font-['Poppins'] tracking-wider">
                         YOUR LOGO
                       </span>
-                      <span className="font-bold text-[7.5px] sm:text-[8.5px] text-neutral-900 font-['Noto_Sans_Devanagari']">
-                        यहाँ आपका लोगो रहेगा
-                      </span>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Row 2: Main Headline (Centered, High Impact, Line 1 Black, Line 2 Red) */}
@@ -1594,31 +1574,33 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             )}
 
-            {/* Top Right: Custom Logo or Crisp Bold 'YOUR LOGO' with dynamic logo scaling */}
-            <div
-              className="ml-auto flex flex-col items-end pointer-events-auto transition-transform"
-              style={{
-                transform: `scale(${card.logoScale ?? 1.25})`,
-                transformOrigin: 'top right',
-              }}
-            >
-              {card.customLogoUrl ? (
-                <img
-                  src={card.customLogoUrl}
-                  alt="Logo"
-                  className="h-12 sm:h-16 w-auto object-contain max-w-[150px]"
-                />
-              ) : (
-                <div className="flex flex-col text-right leading-[0.88] select-none">
-                  <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
-                    YOUR
-                  </span>
-                  <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
-                    LOGO
-                  </span>
-                </div>
-              )}
-            </div>
+            {/* Top Right: Custom Logo or Crisp Bold 'YOUR LOGO' with dynamic logo scaling (Hidden when Master Branding is OFF) */}
+            {card.showMasterBranding !== false && (
+              <div
+                className="ml-auto flex flex-col items-end pointer-events-auto transition-transform"
+                style={{
+                  transform: `scale(${card.logoScale ?? 1.25})`,
+                  transformOrigin: 'top right',
+                }}
+              >
+                {card.customLogoUrl ? (
+                  <img
+                    src={card.customLogoUrl}
+                    alt="Logo"
+                    className="h-12 sm:h-16 w-auto object-contain max-w-[150px] bg-transparent"
+                  />
+                ) : (
+                  <div className="flex flex-col text-right leading-[0.88] select-none">
+                    <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
+                      YOUR
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
+                      LOGO
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Optional Middle Photo if user uploaded an image */}

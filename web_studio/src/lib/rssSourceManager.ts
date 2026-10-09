@@ -216,10 +216,11 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
       try {
         const postsRes = await fetch('/api/news-posts');
         if (postsRes.ok) {
-          const allPosts = await postsRes.json();
-          if (Array.isArray(allPosts)) {
-            const rssAndWebOnly = allPosts.filter(
-              (p: any) => p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-'))
+          const rawPosts = await postsRes.json();
+          const postsList = Array.isArray(rawPosts) ? rawPosts : (rawPosts?.posts || []);
+          if (Array.isArray(postsList)) {
+            const rssAndWebOnly = postsList.filter(
+              (p: any) => p && p.id && (String(p.id).startsWith('rss-') || String(p.id).startsWith('web-'))
             );
             setSyncedRssNewsPosts(rssAndWebOnly);
           }

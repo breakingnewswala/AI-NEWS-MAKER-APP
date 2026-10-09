@@ -13,9 +13,9 @@ export const INITIAL_PRESETS: NewsCardData[] = [
   {
     id: 'preset-graphic-1',
     title: 'Basic Graphic — Default',
-    headline: '',
-    formattedHeadline: '',
-    highlightWords: [],
+    headline: 'स्टेप 3 में जाकर अपनी मुख्य खबर की\nहेडलाइन दर्ज करें\nआवश्यकता अनुसार दो या तीन लाइन में',
+    formattedHeadline: 'स्टेप 3 में जाकर अपनी मुख्य खबर की\n[yellow]हेडलाइन दर्ज करें[/yellow]\nआवश्यकता अनुसार दो या तीन लाइन में',
+    highlightWords: ['हेडलाइन', 'दर्ज', 'करें'],
     headlineAlign: 'center',
     location: '',
     summary: 'Basic Graphic - Default 4:5 Template',
@@ -43,6 +43,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showDate: false,
     dateStr: '',
     showLocation: false,
+    showMasterBranding: true,
   },
   {
     id: 'preset-2',

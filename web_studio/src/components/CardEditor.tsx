@@ -44,6 +44,7 @@ import {
 import {
   saveCustomFrame,
   getCustomFrames,
+  deleteCustomFrame,
   CustomFrameItem,
 } from '../lib/customFramesManager';
 import {
@@ -218,6 +219,20 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       setSelectedFooterDesignTab(card.frameDesign);
     }
   }, [card.frameDesign]);
+
+  // Master Branding custom frames sub-mode and saved catalog state
+  const [customBrandingSubTab, setCustomBrandingSubTab] = React.useState<'hf' | 'full'>('hf');
+  const [savedCustomFramesList, setSavedCustomFramesList] = React.useState<CustomFrameItem[]>(() =>
+    getCustomFrames(currentUser?.email || currentUser?.username)
+  );
+
+  React.useEffect(() => {
+    const handleFramesUpdated = () => {
+      setSavedCustomFramesList(getCustomFrames(currentUser?.email || currentUser?.username));
+    };
+    window.addEventListener('ai_news_custom_frames_updated', handleFramesUpdated);
+    return () => window.removeEventListener('ai_news_custom_frames_updated', handleFramesUpdated);
+  }, [currentUser]);
 
   // Mobile active step navigation (1 to 6)
   const [internalActiveStep, setInternalActiveStep] = React.useState<number>(1);
@@ -555,23 +570,57 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       if (e.target?.result) {
         const frameDataUrl = e.target.result as string;
         const frameName =
-          window.prompt('कृपया कस्टम फ्रेम का नाम दर्ज करें (Enter Frame Name):', 'माय कस्टम फ्रेम 4:5') ||
+          window.prompt('कृपया 4:5 कस्टम फ्रेम का नाम दर्ज करें (Enter Frame Name):', 'माय 4:5 मास्टर फ्रेम') ||
           'कस्टम 4:5 फ्रेम';
 
         saveCustomFrame({
           userId: currentUser?.email || currentUser?.username || 'general',
-          name: frameName,
+          name: frameName.trim(),
           assetUrl: frameDataUrl,
+          frameType: 'full_4_5',
         });
 
+        // Set full frame, disable master branding, and clear header/footer so they don't overlap
         onChange({
           customFrameOverlayPng: frameDataUrl,
+          customHeaderPng: undefined,
+          customFooterPng: undefined,
           frameDesign: 'custom-png',
           showMasterBranding: false,
         });
+
+        setSavedCustomFramesList(getCustomFrames(currentUser?.email || currentUser?.username));
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle saving Header + Footer combo as a custom frame preset
+  const handleSaveHeaderFooterCombo = () => {
+    if (!activeHeaderPng && !activeFooterPng) {
+      alert('कृपया पहले हेडर या फुटर PNG अपलोड करें!');
+      return;
+    }
+    const frameName =
+      window.prompt('कृपया हेडर+फुटर फ्रेम का नाम दर्ज करें (Enter Frame Name):', 'माय हेडर-फुटर फ्रेम') ||
+      'हेडर-फुटर कॉम्बो';
+
+    saveCustomFrame({
+      userId: currentUser?.email || currentUser?.username || 'general',
+      name: frameName.trim(),
+      assetUrl: activeHeaderPng || activeFooterPng || '',
+      headerUrl: activeHeaderPng,
+      footerUrl: activeFooterPng,
+      frameType: 'header_footer',
+    });
+
+    // Clear 4:5 frame overlay so header+footer combo displays cleanly
+    onChange({
+      customFrameOverlayPng: undefined,
+      showMasterBranding: false,
+    });
+    setSavedCustomFramesList(getCustomFrames(currentUser?.email || currentUser?.username));
+    alert(`"${frameName}" कस्टम फ्रेम्स में सुरक्षित कर लिया गया है!`);
   };
 
   // Handle Custom Brand/Channel Logo upload
@@ -3061,118 +3110,248 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             हेडर लोगो व फुटर ब्रैंडिंग सीधे आपकी प्रोफ़ाइल से ऑटो-लिंक रहते हैं। प्रो/VIP यूज़र मास्टर ब्रांडिंग बंद कर सकते हैं।
           </p>
 
-          {/* When Master Branding is OFF (PRO / VIP / Admin): Header PNG & Footer PNG (NOT for Basic Frame) */}
+          {/* When Master Branding is OFF (PRO / VIP / Admin): Header & Footer Combo or 4:5 Full Frame */}
           {canUseCustomHF && card.showMasterBranding === false && card.frameDesign !== 'basic' && card.frameDesign !== 'jacket-basic' && (
             <div className="pt-2 border-t border-neutral-800/80 space-y-3">
-              <div className="flex items-center gap-1.5 text-amber-300 font-bold text-[11px]">
-                <Layers className="w-3.5 h-3.5 text-amber-400" />
-                <span>कस्टम PNG अपलोड (मास्टर ब्रांडिंग बंद होने पर):</span>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+                  <Layers className="w-3.5 h-3.5 text-amber-400" />
+                  <span>कस्टम ब्रांडिंग मोड चुनें:</span>
+                </span>
               </div>
 
-              {/* 1. Header PNG */}
-              <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-200">1. हेडर PNG (Header PNG)</span>
-                  {activeHeaderPng && (
-                    <button
-                      type="button"
-                      onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
-                      className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                    >
-                      हटाएं (Remove)
-                    </button>
-                  )}
-                </div>
-                {activeHeaderPng ? (
-                  <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
-                    <img src={activeHeaderPng} alt="Custom Header" className="max-h-full max-w-full object-contain" />
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी हेडर पट्टी अपलोड करें।</p>
-                )}
-                <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-blue-300 border border-blue-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
-                  <span>{activeHeaderPng ? '🔄 नया हेडर PNG चुनें' : '📁 हेडर PNG अपलोड करें'}</span>
-                  <input
-                    type="file"
-                    accept="image/png"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleHeaderUpload(file);
-                    }}
-                  />
-                </label>
+              {/* Sub-mode selector tabs */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-neutral-900 rounded-lg border border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setCustomBrandingSubTab('hf')}
+                  className={`py-1.5 px-2 rounded text-[11px] font-bold transition-all text-center cursor-pointer ${
+                    customBrandingSubTab === 'hf'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  1. हेडर + फुटर कॉम्बो
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomBrandingSubTab('full')}
+                  className={`py-1.5 px-2 rounded text-[11px] font-bold transition-all text-center cursor-pointer ${
+                    customBrandingSubTab === 'full'
+                      ? 'bg-yellow-500 text-neutral-950 font-black shadow-sm'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  2. 4:5 मास्टर फ्रेम
+                </button>
               </div>
 
-              {/* 2. Footer PNG */}
-              <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-200">2. फुटर PNG (Footer PNG)</span>
-                  {activeFooterPng && (
-                    <button
-                      type="button"
-                      onClick={() => handleFooterReset()}
-                      className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                    >
-                      हटाएं (Remove)
-                    </button>
-                  )}
-                </div>
-                {activeFooterPng ? (
-                  <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
-                    <img src={activeFooterPng} alt="Custom Footer" className="max-h-full max-w-full object-contain" />
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी फुटर स्ट्रिप अपलोड करें।</p>
-                )}
-                <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
-                  <span>{activeFooterPng ? '🔄 नया फुटर PNG चुनें' : '📁 फुटर PNG अपलोड करें'}</span>
-                  <input
-                    type="file"
-                    accept="image/png"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFooterUpload(file);
-                    }}
-                  />
-                </label>
-              </div>
+              {/* SUB-MODE 1: Header + Footer Combo */}
+              {customBrandingSubTab === 'hf' && (
+                <div className="space-y-2.5 p-2 bg-neutral-900/90 border border-blue-900/40 rounded-lg">
+                  <p className="text-[10px] text-neutral-400">
+                    पारदर्शी हेडर और फुटर अपलोड करें। दोनों एक साथ सहेजने पर मास्टर फुल फ्रेम नहीं जाएगी।
+                  </p>
 
-              {/* 3. Full Frame PNG (4:5) */}
-              <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-200">3. फुल फ्रेम PNG (4:5 Full Frame Overlay)</span>
-                  {card.customFrameOverlayPng && (
-                    <button
-                      type="button"
-                      onClick={() => onChange({ customFrameOverlayPng: undefined })}
-                      className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                    >
-                      हटाएं (Remove)
-                    </button>
-                  )}
-                </div>
-                {card.customFrameOverlayPng ? (
-                  <div className="relative h-16 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
-                    <img src={card.customFrameOverlayPng} alt="Custom Frame" className="max-h-full max-w-full object-contain" />
+                  {/* 1. Header PNG */}
+                  <div className="p-2 bg-neutral-950 border border-neutral-800 rounded space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-200">हेडर PNG (Header)</span>
+                      {activeHeaderPng && (
+                        <button
+                          type="button"
+                          onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          हटाएं
+                        </button>
+                      )}
+                    </div>
+                    {activeHeaderPng ? (
+                      <div className="relative h-12 bg-neutral-900 rounded border border-neutral-700 flex items-center justify-center p-1">
+                        <img src={activeHeaderPng} alt="Header" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-500">कस्टम पारदर्शी हेडर पट्टी अपलोड करें।</p>
+                    )}
+                    <label className="block text-center py-1 px-2 bg-neutral-800 hover:bg-neutral-700 text-blue-300 border border-blue-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                      <span>{activeHeaderPng ? '🔄 हेडर बदलें' : '📁 हेडर PNG अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleHeaderUpload(file);
+                        }}
+                      />
+                    </label>
                   </div>
-                ) : (
-                  <p className="text-[10px] text-neutral-400">संपूर्ण 4:5 (1080x1350) पारदर्शी कस्टम फ्रेम अपलोड करें।</p>
-                )}
-                <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-yellow-300 border border-yellow-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
-                  <span>{card.customFrameOverlayPng ? '🔄 नया 4:5 फ्रेम बदलें' : '📁 4:5 फुल फ्रेम PNG अपलोड करें'}</span>
-                  <input
-                    type="file"
-                    accept="image/png"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFrameOverlayUpload(file);
-                    }}
-                  />
-                </label>
-              </div>
+
+                  {/* 2. Footer PNG */}
+                  <div className="p-2 bg-neutral-950 border border-neutral-800 rounded space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-200">फुटर PNG (Footer)</span>
+                      {activeFooterPng && (
+                        <button
+                          type="button"
+                          onClick={() => handleFooterReset()}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          हटाएं
+                        </button>
+                      )}
+                    </div>
+                    {activeFooterPng ? (
+                      <div className="relative h-12 bg-neutral-900 rounded border border-neutral-700 flex items-center justify-center p-1">
+                        <img src={activeFooterPng} alt="Footer" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-500">कस्टम पारदर्शी फुटर स्ट्रिप अपलोड करें।</p>
+                    )}
+                    <label className="block text-center py-1 px-2 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                      <span>{activeFooterPng ? '🔄 फुटर बदलें' : '📁 फुटर PNG अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFooterUpload(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Save Header + Footer Combo Button */}
+                  <button
+                    type="button"
+                    onClick={handleSaveHeaderFooterCombo}
+                    className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-lg shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+                  >
+                    <span>💾</span>
+                    <span>हेडर + फुटर कॉम्बो सहेजें (Save Preset)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* SUB-MODE 2: 4:5 Master Frame */}
+              {customBrandingSubTab === 'full' && (
+                <div className="space-y-2.5 p-2 bg-neutral-900/90 border border-yellow-900/40 rounded-lg">
+                  <p className="text-[10px] text-neutral-400">
+                    सम्पूर्ण 4:5 पारदर्शी मास्टर फ्रेम अपलोड करें। इसे सहेजते समय नाम पूछा जाएगा और हेडर/फुटर स्वतः हट जाएंगे।
+                  </p>
+
+                  <div className="p-2 bg-neutral-950 border border-neutral-800 rounded space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-200">4:5 मास्टर फ्रेम PNG</span>
+                      {card.customFrameOverlayPng && (
+                        <button
+                          type="button"
+                          onClick={() => onChange({ customFrameOverlayPng: undefined })}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                        >
+                          हटाएं
+                        </button>
+                      )}
+                    </div>
+                    {card.customFrameOverlayPng ? (
+                      <div className="relative h-20 bg-neutral-900 rounded border border-neutral-700 flex items-center justify-center p-1">
+                        <img src={card.customFrameOverlayPng} alt="Custom 4:5 Frame" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-500">1080x1350 पारदर्शी PNG फ्रेम अपलोड करें।</p>
+                    )}
+                    <label className="block text-center py-2 px-2 bg-yellow-500 hover:bg-yellow-400 text-neutral-950 rounded text-xs font-black cursor-pointer shadow-md transition-all">
+                      <span>{card.customFrameOverlayPng ? '🔄 नई 4:5 मास्टर फ्रेम बदलें' : '📁 4:5 मास्टर फ्रेम PNG अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFrameOverlayUpload(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Saved Custom Frames Catalog (Visible to Pro, VIP & Admin) */}
+              {savedCustomFramesList.length > 0 && (
+                <div className="pt-2 border-t border-neutral-800 space-y-2">
+                  <div className="flex items-center justify-between text-neutral-300 font-bold text-[11px]">
+                    <span className="flex items-center gap-1.5">
+                      <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                      <span>आपकी सहेजी गई कस्टम फ्रेम्स ({savedCustomFramesList.length}):</span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {savedCustomFramesList.map((f) => (
+                      <div
+                        key={f.id}
+                        className="p-2 bg-neutral-900/90 border border-neutral-700/80 rounded-lg flex flex-col justify-between gap-1.5 text-[10px]"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold text-white truncate max-w-[90px]" title={f.name}>
+                            {f.name}
+                          </span>
+                          <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-neutral-800 text-amber-300 border border-neutral-700 shrink-0">
+                            {f.frameType === 'header_footer' ? 'हेडर+फुटर' : '4:5 फ्रेम'}
+                          </span>
+                        </div>
+                        <div className="h-10 bg-black/60 rounded flex items-center justify-center p-0.5 overflow-hidden">
+                          {f.assetUrl ? (
+                            <img src={f.assetUrl} alt={f.name} className="max-h-full max-w-full object-contain" />
+                          ) : (
+                            <span className="text-neutral-500 text-[9px]">PNG फ़ाइल</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (f.frameType === 'header_footer') {
+                                onChange({
+                                  customHeaderPng: f.headerUrl,
+                                  customFooterPng: f.footerUrl,
+                                  customFrameOverlayPng: undefined,
+                                  showMasterBranding: false,
+                                });
+                              } else {
+                                onChange({
+                                  customFrameOverlayPng: f.assetUrl,
+                                  customHeaderPng: undefined,
+                                  customFooterPng: undefined,
+                                  frameDesign: 'custom-png',
+                                  showMasterBranding: false,
+                                });
+                              }
+                            }}
+                            className="flex-1 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-center cursor-pointer transition active:scale-95 text-[10px]"
+                          >
+                            लागू करें
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`क्या आप फ्रेम "${f.name}" को हटाना चाहते हैं?`)) {
+                                deleteCustomFrame(f.id);
+                                setSavedCustomFramesList(getCustomFrames(currentUser?.email || currentUser?.username));
+                              }
+                            }}
+                            className="p-1 bg-red-900/60 hover:bg-red-800 text-red-300 rounded cursor-pointer transition shrink-0"
+                            title="हटाएं"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
