@@ -715,8 +715,8 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       multiple
                       className="hidden"
                       onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        files.forEach((file) => {
+                        const files: File[] = Array.from(e.target.files || []);
+                        files.forEach((file: File) => {
                           const reader = new FileReader();
                           reader.onload = (ev) => {
                             if (ev.target?.result) {

@@ -36,12 +36,10 @@ module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var import_url = require("url");
 var import_genai = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
-var import_meta = {};
-var safeFilename = typeof __filename !== "undefined" ? __filename : typeof import_meta !== "undefined" && import_meta.url ? (0, import_url.fileURLToPath)(import_meta.url) : process.cwd();
+var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
@@ -74,6 +72,16 @@ var GEMINI_MODELS_POOL = [
   "gemini-3.8-flash",
   "gemini-3.1-flash-lite"
 ];
+function cleanErrorMessage(err) {
+  const raw = String(err?.message || err || "");
+  if (raw.includes("503") || raw.toLowerCase().includes("high demand") || raw.toLowerCase().includes("unavailable")) {
+    return "AI \u092E\u0949\u0921\u0932 \u092A\u0930 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0932\u094B\u0921 \u0939\u0948 (503 High Demand)\u0964 \u0915\u0941\u091B \u0938\u0947\u0915\u0902\u0921 \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u0907\u0928\u092A\u0941\u091F \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u0947 \u0924\u0948\u092F\u093E\u0930 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964";
+  }
+  if (raw.includes("429") || raw.toLowerCase().includes("resource_exhausted") || raw.toLowerCase().includes("quota")) {
+    return "\u0926\u0948\u0928\u093F\u0915 \u092F\u093E \u092A\u094D\u0930\u0924\u093F \u092E\u093F\u0928\u091F AI \u0932\u093F\u092E\u093F\u091F \u092A\u093E\u0930 \u0939\u094B \u0917\u0908 \u0939\u0948 (429 Rate Limit)\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964";
+  }
+  return raw || "\u0938\u0930\u094D\u0935\u0930 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908";
+}
 function getCategoryFallbackImage(category = "general") {
   const cat = (category || "").toLowerCase();
   if (cat.includes("crime") || cat.includes("\u0905\u092A\u0930\u093E\u0927")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80";
@@ -2171,16 +2179,6 @@ function getOpenAIClient() {
     openaiClient = new import_openai.default({ apiKey: apiKey.trim() });
   }
   return openaiClient;
-}
-function cleanErrorMessage(err) {
-  const raw = String(err?.message || err || "");
-  if (raw.includes("503") || raw.toLowerCase().includes("high demand") || raw.toLowerCase().includes("unavailable")) {
-    return "AI \u092E\u0949\u0921\u0932 \u092A\u0930 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0932\u094B\u0921 \u0939\u0948 (503 High Demand)\u0964 \u0915\u0941\u091B \u0938\u0947\u0915\u0902\u0921 \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u0907\u0928\u092A\u0941\u091F \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u0947 \u0924\u0948\u092F\u093E\u0930 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964";
-  }
-  if (raw.includes("429") || raw.toLowerCase().includes("resource_exhausted") || raw.toLowerCase().includes("quota")) {
-    return "\u0926\u0948\u0928\u093F\u0915 \u092F\u093E \u092A\u094D\u0930\u0924\u093F \u092E\u093F\u0928\u091F AI \u0932\u093F\u092E\u093F\u091F \u092A\u093E\u0930 \u0939\u094B \u0917\u0908 \u0939\u0948 (429 Rate Limit)\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964";
-  }
-  return raw || "AI \u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u093F\u0937\u094D\u092A\u093E\u0926\u093F\u0924 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908";
 }
 var TEMPLATE_CONFIG_REGISTRY = {
   graphic_001: {

@@ -6,7 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 
-const safeFilename = typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : process.cwd());
+const safeFilename = typeof __filename !== 'undefined' ? __filename : process.cwd();
 const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(safeFilename);
 
 dotenv.config();
@@ -52,9 +52,14 @@ const GEMINI_MODELS_POOL = [
 ];
 
 function cleanErrorMessage(err: any): string {
-  if (typeof err === 'string') return err;
-  if (err?.message) return err.message;
-  return 'सर्वर त्रुटि हुई';
+  const raw = String(err?.message || err || "");
+  if (raw.includes("503") || raw.toLowerCase().includes("high demand") || raw.toLowerCase().includes("unavailable")) {
+    return "AI मॉडल पर वर्तमान में अत्यधिक लोड है (503 High Demand)। कुछ सेकंड बाद पुनः प्रयास करें या इनपुट टेक्स्ट से तैयार ड्राफ्ट का उपयोग करें।";
+  }
+  if (raw.includes("429") || raw.toLowerCase().includes("resource_exhausted") || raw.toLowerCase().includes("quota")) {
+    return "दैनिक या प्रति मिनट AI लिमिट पार हो गई है (429 Rate Limit)। कृपया कुछ समय बाद पुनः प्रयास करें।";
+  }
+  return raw || "सर्वर त्रुटि हुई";
 }
 
 function getCategoryFallbackImage(category: string = 'general'): string {
@@ -986,7 +991,10 @@ const USERS_DB_FILE = path.join(process.cwd(), "users_accounts_db.json");
 interface StoredUserAccount {
   userId: string;
   email: string;
+  id?: string;
   fullName?: string;
+  name?: string;
+  username?: string;
   channelName?: string;
   mobile?: string;
   whatsappNumber?: string;
@@ -2591,18 +2599,6 @@ function getOpenAIClient(): OpenAI {
     openaiClient = new OpenAI({ apiKey: apiKey.trim() });
   }
   return openaiClient;
-}
-
-// User-friendly error message cleaner for 503/429/transient errors
-function cleanErrorMessage(err: any): string {
-  const raw = String(err?.message || err || "");
-  if (raw.includes("503") || raw.toLowerCase().includes("high demand") || raw.toLowerCase().includes("unavailable")) {
-    return "AI मॉडल पर वर्तमान में अत्यधिक लोड है (503 High Demand)। कुछ सेकंड बाद पुनः प्रयास करें या इनपुट टेक्स्ट से तैयार ड्राफ्ट का उपयोग करें।";
-  }
-  if (raw.includes("429") || raw.toLowerCase().includes("resource_exhausted") || raw.toLowerCase().includes("quota")) {
-    return "दैनिक या प्रति मिनट AI लिमिट पार हो गई है (429 Rate Limit)। कृपया कुछ समय बाद पुनः प्रयास करें।";
-  }
-  return raw || "AI अनुरोध निष्पादित करने में त्रुटि हुई";
 }
 
 // Template Configuration Registry for AI Generation Constraints
