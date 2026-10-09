@@ -132,10 +132,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         color: effectiveTextColor,
         fontFamily: 'Arial, Helvetica, sans-serif',
       }}
-      className={`w-full border-t border-neutral-200/50 px-2 sm:px-4 ${pyClass} flex items-center justify-center shadow-inner select-none overflow-hidden text-center whitespace-nowrap`}
+      className={`w-full border-t border-neutral-200/50 px-1.5 sm:px-4 ${pyClass} flex items-center justify-center shadow-inner select-none overflow-hidden text-center`}
     >
       {/* Master Branding Active Blocks: Strict order ONE (Social) -> TWO (Website) -> THREE (Contact) */}
-      <div className="flex items-center justify-center gap-2 sm:gap-3.5 max-w-full overflow-hidden flex-wrap text-center">
+      <div className="flex items-center justify-center gap-1.5 sm:gap-3.5 max-w-full overflow-hidden flex-nowrap sm:flex-nowrap text-center text-ellipsis">
         {/* Section 1: Social Media Icons + Handle */}
         {hasSocial && (
           <div className="flex items-center justify-center gap-1 sm:gap-1.5 shrink-0">

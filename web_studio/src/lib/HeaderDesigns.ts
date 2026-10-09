@@ -21,8 +21,8 @@ export interface FrameOption {
 
 export const GRAPHIC_1_FRAME_OPTION: FrameOption = {
   id: 'graphic_001',
-  name: 'Graphic 1 (बेसिक 4:5)',
-  description: 'बेसिक प्लान: 4:5 पोर्ट्रेट, टॉप लोकेशन व लोगो बॉक्स, 270° डेट, 3-लाइन हेडलाइन, "पूरी खबर डिस्क्रिप्शन में" और फिक्स्ड येलो फुटर।',
+  name: 'बेसिक फ्रेम (Basic Frame)',
+  description: 'बेसिक प्लान: 4:5 सैंपल न्यूज़ ग्राफ़िक फ्रेम लेआउट।',
   badge: 'BASIC',
   requiredTier: 'basic',
   planCategory: 'BASIC',
@@ -31,54 +31,12 @@ export const GRAPHIC_1_FRAME_OPTION: FrameOption = {
   aspectRatio: '4:5',
 };
 
-export const GRAPHIC_2_FRAME_OPTION: FrameOption = {
-  id: 'graphic_002',
-  name: 'Graphic 2 (एडवांस 4:5)',
-  description: 'एडवांस प्लान: 4:5 पोर्ट्रेट, आउटर ऑरेंज बॉर्डर, 3-लाइन हेडलाइन, कमेंट बॉक्स CTA, फिक्स्ड येलो फुटर।',
-  badge: 'ADVANCE',
-  requiredTier: 'advanced',
-  planCategory: 'ADVANCED',
-  categoryLabel: 'ADVANCE PACKAGE FRAMES',
-  graphicNumber: 2,
-  aspectRatio: '4:5',
-};
-
-export const GRAPHIC_3_FRAME_OPTION: FrameOption = {
-  id: 'graphic_003',
-  name: 'Graphic 3 (प्रो 4:5)',
-  description: 'प्रो प्लान: 4:5 पोर्ट्रेट, 2-लाइन हेडलाइन एरिया, मॉडर्न मिनिमल डिज़ाइन, हाई-इम्पैक्ट विज़ुअल।',
-  badge: 'PRO',
-  requiredTier: 'professional',
-  planCategory: 'PRO',
-  categoryLabel: 'PRO PACKAGE FRAMES',
-  graphicNumber: 3,
-  aspectRatio: '4:5',
-};
-
-export const GRAPHIC_4_FRAME_OPTION: FrameOption = {
-  id: 'graphic_004',
-  name: 'Graphic 4 (वीआईपी डेस्क 4:5)',
-  description: 'वीआईपी डेस्क: 4:5 पोर्ट्रेट, 2-लाइन हेडलाइन, कॉम्पैक्ट फोटो लेआउट, प्रीमियम कस्टम ब्रांडिंग।',
-  badge: 'VIP DESK',
-  requiredTier: 'ultra',
-  planCategory: 'VIP DESK',
-  categoryLabel: 'VIP DESK PACKAGE FRAMES',
-  graphicNumber: 4,
-  aspectRatio: '4:5',
-};
-
 export const REPORTER_ALLOWED_FRAMES: FrameDesign[] = [
   'graphic_001',
-  'graphic_002',
-  'graphic_003',
-  'graphic_004',
 ];
 
 export const FRAME_OPTIONS: FrameOption[] = [
   GRAPHIC_1_FRAME_OPTION,
-  GRAPHIC_2_FRAME_OPTION,
-  GRAPHIC_3_FRAME_OPTION,
-  GRAPHIC_4_FRAME_OPTION,
 ];
 
 export function registerFrameOption(option: FrameOption) {
