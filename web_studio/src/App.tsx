@@ -533,7 +533,7 @@ export default function App() {
             ? savedProfile.username
             : `@${savedProfile.username}`
           : initial.socialHandle,
-        whatsappNumber: savedProfile.mobileNumber || initial.whatsappNumber,
+        whatsappNumber: savedProfile.whatsappNumber || '',
         websiteUrl: savedProfile.websiteUrl || initial.websiteUrl,
         showMobileNumber: savedProfile.showMobileNumber,
         activeSocialIcons: activeSocialKeys,
@@ -569,7 +569,7 @@ export default function App() {
           customFooterPng: e.detail.customFooterPng !== undefined ? e.detail.customFooterPng : prev.customFooterPng,
           socialHandle: e.detail.username ? (e.detail.username.startsWith('@') ? e.detail.username : `@${e.detail.username}`) : prev.socialHandle,
           websiteUrl: e.detail.websiteUrl || prev.websiteUrl,
-          whatsappNumber: e.detail.mobileNumber || prev.whatsappNumber,
+          whatsappNumber: e.detail.whatsappNumber !== undefined ? e.detail.whatsappNumber : prev.whatsappNumber,
           showMobileNumber: e.detail.showMobileNumber !== undefined ? e.detail.showMobileNumber : prev.showMobileNumber,
           activeSocialIcons: activeSocialKeys !== undefined ? activeSocialKeys : prev.activeSocialIcons,
         }));
@@ -609,7 +609,7 @@ export default function App() {
           ? profile.username
           : `@${profile.username}`
         : prev.socialHandle,
-      whatsappNumber: profile.mobileNumber || prev.whatsappNumber,
+      whatsappNumber: profile.whatsappNumber || '',
       websiteUrl: profile.websiteUrl || prev.websiteUrl,
       showMobileNumber: profile.showMobileNumber,
       activeSocialIcons: activeSocialKeys,
@@ -677,7 +677,7 @@ export default function App() {
               ? savedProfile.username
               : `@${savedProfile.username}`
             : prev.socialHandle,
-          whatsappNumber: savedProfile.mobileNumber || prev.whatsappNumber,
+          whatsappNumber: savedProfile.whatsappNumber || '',
           websiteUrl: savedProfile.websiteUrl || prev.websiteUrl,
           showMobileNumber: savedProfile.showMobileNumber !== undefined ? savedProfile.showMobileNumber : prev.showMobileNumber,
           activeSocialIcons: activeSocialKeys.length > 0 ? activeSocialKeys : prev.activeSocialIcons,
@@ -973,9 +973,9 @@ export default function App() {
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
         : (prev.socialHandle || '/@UserName'),
-      whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '+91 98765 43210',
-      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || 'ainewsmaker.online',
-      showMobileNumber: savedProfile?.showMobileNumber ?? prev.showMobileNumber ?? true,
+      whatsappNumber: savedProfile?.whatsappNumber || '',
+      websiteUrl: savedProfile?.websiteUrl || '',
+      showMobileNumber: savedProfile?.showMobileNumber ?? false,
       activeSocialIcons: activeSocialKeys,
       customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : prev.customFooterPng,
@@ -983,6 +983,7 @@ export default function App() {
       speakerTitle: '',
       dateStr: '',
       showDate: false,
+      showWatermark: false,
       showLocation: false,
       showCallout: false,
       calloutTag: '',
@@ -1324,6 +1325,10 @@ export default function App() {
 
     setCard((prev) => ({
       ...prev,
+      frameDesign: 'graphic_001',
+      showDate: false,
+      showWatermark: false,
+      showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
       headline: post.title,
       location: effectiveLoc,
       category: post.categoryName,

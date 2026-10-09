@@ -393,7 +393,6 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     } else if (
       card.layout === 'single' ||
       !card.layout ||
-      card.layout === 'inset-circle' ||
       (card.layout === 'full' && isSuperBreaking)
     ) {
       // Single Image / Constrained photo: stops at photoBottomY
@@ -528,46 +527,6 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, topH - 2, width, 4); // Horizontal line
       ctx.fillRect(halfW - 2, 0, 4, photoBottomY); // Vertical line
-    }
-
-    // Draw Inset Circle if layout is inset-circle (Round Circle Image)
-    if (card.layout === 'inset-circle' && card.images.insetCircle) {
-      const insetImg = await loadImage(card.images.insetCircle);
-      const cx = (card.insetPosition.x / 100) * width;
-      const cy = (card.insetPosition.y / 100) * photoBottomY;
-      const radius = width * 0.155; // ~168px radius
-
-      // Inset photo crop & zoom settings
-      const icPos = card.imagePositions?.insetCircle;
-      const icCropX = (icPos?.x ?? 50) / 100;
-      const icCropY = (icPos?.y ?? 50) / 100;
-      const icZoom = icPos?.zoom ?? 1.0;
-
-      // Circular shadow background
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-      ctx.shadowBlur = 32;
-      ctx.shadowOffsetY = 16;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-
-      // Circular clipped photo with custom crop & zoom
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius - 4, 0, Math.PI * 2);
-      ctx.clip();
-      drawImageCover(ctx, insetImg, cx - radius, cy - radius, radius * 2, radius * 2, icCropX, icCropY, icZoom);
-      ctx.restore();
-
-      // White circular stroke border
-      ctx.save();
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
     }
   } catch (imgErr) {
     console.warn('Canvas image load warning:', imgErr);
@@ -1492,104 +1451,176 @@ async function drawGraphic001Canvas(
 
   // 1. BACKGROUND: Deep Dark Charcoal / Black Linear Gradient
   const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-  bgGrad.addColorStop(0, '#090A0D');
-  bgGrad.addColorStop(0.5, '#12151B');
-  bgGrad.addColorStop(1, '#090A0D');
+  bgGrad.addColorStop(0, '#090A0E');
+  bgGrad.addColorStop(0.5, '#0E1118');
+  bgGrad.addColorStop(1, '#090A0E');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // 2. FOUR GOLD GEOMETRIC CORNER ACCENTS
-  const drawGoldCorner = (x: number, y: number, angleDeg: number) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((angleDeg * Math.PI) / 180);
-
-    // Outer gold polygon
-    const g1 = ctx.createLinearGradient(0, 0, 160, 160);
-    g1.addColorStop(0, '#FFE600');
-    g1.addColorStop(0.5, '#D4AF37');
-    g1.addColorStop(1, '#AA771C');
-    ctx.fillStyle = g1;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(160, 0);
-    ctx.lineTo(0, 160);
-    ctx.closePath();
-    ctx.fill();
-
-    // Mid gold polygon
-    const g2 = ctx.createLinearGradient(120, 0, 0, 120);
-    g2.addColorStop(0, '#FFF275');
-    g2.addColorStop(0.6, '#E5B80B');
-    g2.addColorStop(1, '#553B08');
-    ctx.fillStyle = g2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(110, 0);
-    ctx.lineTo(0, 110);
-    ctx.closePath();
-    ctx.fill();
-
-    // Inner bright gold polygon
-    ctx.fillStyle = '#FFE600';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(60, 0);
-    ctx.lineTo(0, 60);
-    ctx.closePath();
-    ctx.fill();
-
-    // Sharp gold diagonal lines
-    ctx.strokeStyle = '#FFE600';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(0, 185);
-    ctx.lineTo(185, 0);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#D4AF37';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(0, 215);
-    ctx.lineTo(215, 0);
-    ctx.stroke();
-
-    ctx.restore();
-  };
-
-  drawGoldCorner(0, 0, 0); // Top-Left
-  drawGoldCorner(width, 0, 90); // Top-Right
-  drawGoldCorner(0, 1274, -90); // Bottom-Left (above footer)
-  drawGoldCorner(width, 1274, 180); // Bottom-Right (above footer)
-
-  // Note: Logo and top corners are rendered after photo so they remain the TOP layer
-
-  // 4. TOP PHOTO AREA (Y = 0 to 680)
+  // 2. TOP PHOTO AREA (Y = 0 to 680, ~50% Height)
   const photoH = 680;
-  let hasValidPhoto = false;
-  if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg' && card.images.main !== '/assets/placeholder_news_photo.png') {
+  let hasValidMainPhoto = Boolean(
+    card.images?.main &&
+    card.images.main.trim().length > 0 &&
+    !card.images.main.includes('placeholder_news_photo') &&
+    !card.images.main.includes('placeholder_news_search')
+  );
+
+  const mCrop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
+  const sCrop = card.imagePositions?.second || { x: 50, y: 50, zoom: 1 };
+  const tCrop = card.imagePositions?.third || { x: 50, y: 50, zoom: 1 };
+  const foCrop = card.imagePositions?.fourth || { x: 50, y: 50, zoom: 1 };
+
+  const mCropX = (mCrop.x ?? 50) / 100;
+  const mCropY = (mCrop.y ?? 50) / 100;
+  const mZoom = Math.max(1, mCrop.zoom || 1);
+
+  const sCropX = (sCrop.x ?? 50) / 100;
+  const sCropY = (sCrop.y ?? 50) / 100;
+  const sZoom = Math.max(1, sCrop.zoom || 1);
+
+  const tCropX = (tCrop.x ?? 50) / 100;
+  const tCropY = (tCrop.y ?? 50) / 100;
+  const tZoom = Math.max(1, tCrop.zoom || 1);
+
+  const foCropX = (foCrop.x ?? 50) / 100;
+  const foCropY = (foCrop.y ?? 50) / 100;
+  const foZoom = Math.max(1, foCrop.zoom || 1);
+
+  const canvasFilterStr = getCanvasFilterString(card.imageFilters);
+
+  if (hasValidMainPhoto) {
     try {
-      const img = await loadImage(card.images.main);
-      const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
-      const cropX = (crop.x ?? 50) / 100;
-      const cropY = (crop.y ?? 50) / 100;
-      const zoom = Math.max(1, crop.zoom || 1);
-      drawImageCover(ctx, img, 0, 0, width, photoH, cropX, cropY, zoom);
-      hasValidPhoto = true;
+      const mainImg = await loadImage(card.images.main);
+      const layout = card.layout || 'single';
+
+      if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
+        // Layout 1: Single Full Image across top 50%
+        drawImageCover(ctx, mainImg, 0, 0, width, photoH, mCropX, mCropY, mZoom, canvasFilterStr);
+      } else if (layout === 'split-v') {
+        // Layout 2: 35% Top, 65% Bottom
+        const topH = Math.round(photoH * 0.35);
+        const bottomH = photoH - topH;
+        drawImageCover(ctx, mainImg, 0, 0, width, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, topH - 2, width, 4);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+      } else if (layout === 'double') {
+        // Layout 3: 50% Top, 50% Bottom
+        const halfH = Math.round(photoH * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, width, halfH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, halfH - 2, width, 4);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+      } else if (layout === 'double-h' || layout === 'split-h') {
+        // Layout 4: 50-50 Left & Right (साइड-बाई-साइड)
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, halfW - 2, photoH, mCropX, mCropY, mZoom, canvasFilterStr);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(halfW - 2, 0, 4, photoH);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+      } else if (layout === 'grid-3') {
+        // Layout 5: 2 on Top, 1 Wide at Bottom
+        const topH = Math.round(photoH * 0.52);
+        const bottomH = photoH - topH;
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, halfW - 2, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+
+        if (card.images?.third) {
+          const thirdImg = await loadImage(card.images.third);
+          drawImageCover(ctx, thirdImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        }
+      } else if (layout === 'grid-3-bottom') {
+        // Layout 6: 1 Wide on Top, 2 at Bottom
+        const topH = Math.round(photoH * 0.48);
+        const bottomH = photoH - topH;
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, width, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+
+        if (card.images?.third) {
+          const thirdImg = await loadImage(card.images.third);
+          drawImageCover(ctx, thirdImg, halfW + 2, topH + 2, halfW - 2, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, topH + 2, halfW - 2, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        }
+      } else if (layout === 'grid-4') {
+        // Layout 7: 4 Images (2x2 Grid)
+        const halfH = Math.round(photoH * 0.5);
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, halfW - 2, halfH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+
+        if (card.images?.third) {
+          const thirdImg = await loadImage(card.images.third);
+          drawImageCover(ctx, thirdImg, 0, halfH + 2, halfW - 2, halfH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, halfH + 2, halfW - 2, halfH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        }
+
+        if (card.images?.fourth) {
+          const fourthImg = await loadImage(card.images.fourth);
+          drawImageCover(ctx, fourthImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
+        } else if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
+        }
+      }
     } catch (e) {
-      console.warn('Failed to load main image for graphic_001', e);
+      console.warn('Failed to load photos for graphic_001:', e);
+      hasValidMainPhoto = false;
     }
   }
 
-  if (!hasValidPhoto) {
-    // Default Photo Placeholder Layers
+  if (!hasValidMainPhoto) {
+    // Sleek Photo Placeholder with Camera Icon
     ctx.save();
-
-    // Gold circular camera icon badge (center at x=540, y=240)
     const camX = width / 2;
     const camY = 240;
-    ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+
+    // Dark Camera Circle
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.strokeStyle = '#FFE600';
     ctx.lineWidth = 3.5;
     ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
@@ -1605,7 +1636,7 @@ async function drawGraphic001Canvas(
     ctx.arc(camX, camY, 44, 0, Math.PI * 2);
     ctx.fill();
 
-    // Camera icon drawing
+    // Camera glyph
     ctx.fillStyle = '#090A0D';
     ctx.beginPath();
     ctx.roundRect(camX - 22, camY - 14, 44, 30, 6);
@@ -1617,42 +1648,31 @@ async function drawGraphic001Canvas(
     ctx.beginPath();
     ctx.arc(camX, camY + 1, 9, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
 
-    // Red pill badge: [🖼️ स्टेप 4 : फोटो जोड़ें]
+    // Red step badge
     const rPillW = 380;
     const rPillH = 56;
     const rPillX = (width - rPillW) / 2;
     const rPillY = 345;
-    ctx.save();
-    ctx.shadowColor = 'rgba(220, 38, 38, 0.4)';
-    ctx.shadowBlur = 14;
     ctx.fillStyle = '#DC2626';
     ctx.beginPath();
     ctx.roundRect(rPillX, rPillY, rPillW, rPillH, rPillH / 2);
     ctx.fill();
-    ctx.shadowColor = 'transparent';
 
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '900 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🖼️ स्टेप 4 : फोटो जोड़ें', width / 2, rPillY + rPillH / 2);
-    ctx.restore();
+    ctx.fillText('📸 स्टेप 4 : फोटो जोड़ें', width / 2, rPillY + rPillH / 2);
 
-    // White Heading
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 44px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.font = '900 42px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.fillText('कृपया अपनी न्यूज़ फोटो अपलोड करें', width / 2, 445);
 
-    // Gold Subtitle
     ctx.fillStyle = '#FFE600';
-    ctx.font = '800 32px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.font = '800 30px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.fillText('गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं', width / 2, 505);
 
-    // Gray Note
     ctx.fillStyle = '#94A3B8';
     ctx.font = '600 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.fillText('(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)', width / 2, 555);
@@ -1660,7 +1680,93 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
-  // 4B. TOP-LEFT LOGO AREA (TOP Layer — Rendered over photo, only when showMasterBranding is not false)
+  // 3. ANGULAR RED GEOMETRIC FRAME CUTS (Left & Right Sides)
+  ctx.save();
+  // Left Side Red Facets
+  ctx.fillStyle = '#DC2626';
+  ctx.beginPath();
+  ctx.moveTo(0, 520);
+  ctx.lineTo(85, 680);
+  ctx.lineTo(40, 1020);
+  ctx.lineTo(0, 1080);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#991B1B';
+  ctx.beginPath();
+  ctx.moveTo(0, 560);
+  ctx.lineTo(50, 680);
+  ctx.lineTo(0, 850);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#FF4444';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 520);
+  ctx.lineTo(85, 680);
+  ctx.lineTo(40, 1020);
+  ctx.stroke();
+
+  // Right Side Red Facets (Symmetrical)
+  ctx.fillStyle = '#DC2626';
+  ctx.beginPath();
+  ctx.moveTo(width, 520);
+  ctx.lineTo(width - 85, 680);
+  ctx.lineTo(width - 40, 1020);
+  ctx.lineTo(width, 1080);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#991B1B';
+  ctx.beginPath();
+  ctx.moveTo(width, 560);
+  ctx.lineTo(width - 50, 680);
+  ctx.lineTo(width, 850);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#FF4444';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(width, 520);
+  ctx.lineTo(width - 85, 680);
+  ctx.lineTo(width - 40, 1020);
+  ctx.stroke();
+  ctx.restore();
+
+  // 4. RADIANT FIERY ORANGE DIVIDER BEAM (Y = 675 to 695)
+  ctx.save();
+  // Dark backing bar
+  ctx.fillStyle = '#090A0E';
+  ctx.fillRect(0, 672, width, 18);
+
+  // Intense glowing orange light streak
+  const divGrad = ctx.createLinearGradient(40, 681, width - 40, 681);
+  divGrad.addColorStop(0, 'rgba(255, 106, 0, 0)');
+  divGrad.addColorStop(0.3, '#FF6A00');
+  divGrad.addColorStop(0.5, '#FFF2D6');
+  divGrad.addColorStop(0.7, '#FF6A00');
+  divGrad.addColorStop(1, 'rgba(255, 106, 0, 0)');
+  ctx.strokeStyle = divGrad;
+  ctx.lineWidth = 5;
+  ctx.shadowColor = 'rgba(255, 106, 0, 0.9)';
+  ctx.shadowBlur = 24;
+  ctx.beginPath();
+  ctx.moveTo(40, 681);
+  ctx.lineTo(width - 40, 681);
+  ctx.stroke();
+
+  // Central lens flare radial blur
+  const flareGrad = ctx.createRadialGradient(width / 2, 681, 0, width / 2, 681, 260);
+  flareGrad.addColorStop(0, 'rgba(255, 230, 140, 0.85)');
+  flareGrad.addColorStop(0.4, 'rgba(255, 106, 0, 0.45)');
+  flareGrad.addColorStop(1, 'rgba(255, 106, 0, 0)');
+  ctx.fillStyle = flareGrad;
+  ctx.fillRect(width / 2 - 260, 661, 520, 40);
+  ctx.restore();
+
+  // 5. TOP-LEFT LOGO AREA (TOP Layer over photo)
   if (card.showMasterBranding !== false) {
     if (customLogoImg) {
       const scale = card.logoScale ?? 1.25;
@@ -1683,13 +1789,13 @@ async function drawGraphic001Canvas(
       ctx.drawImage(customLogoImg, 42, 38, lW, lH);
       ctx.restore();
     } else {
-      // Default "YOUR LOGO" gold outline box
+      // Default "YOUR LOGO" Box matching media sample
       ctx.save();
       const boxX = 42;
       const boxY = 38;
       const boxW = 220;
       const boxH = 68;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
       ctx.beginPath();
       ctx.roundRect(boxX, boxY, boxW, boxH, 12);
       ctx.fill();
@@ -1710,149 +1816,152 @@ async function drawGraphic001Canvas(
     }
   }
 
-  // 4C. TOP-RIGHT LOCATION BOX (Sleek Glassmorphic Badge with glowing amber pin)
+  // 6. TOP-RIGHT LOCATION BOX (White rounded pill with red pin square, strictly hidden when showLocation is false)
   if (card.showLocation !== false && card.location && card.location.trim()) {
     const cleanLoc = card.location
       .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
       .replace(/[:\-–—]+$/, '')
       .trim();
+
     if (cleanLoc) {
       ctx.save();
-      ctx.font = '700 20px "Noto Sans Devanagari", sans-serif';
+      ctx.font = '800 24px "Noto Sans Devanagari", sans-serif';
       const locTextW = ctx.measureText(cleanLoc).width;
-      const locW = Math.min(420, locTextW + 58);
-      const locH = 46;
+      const locW = Math.min(460, locTextW + 86);
+      const locH = 60;
       const locX = width - locW - 42;
       const locY = 38;
 
-      // Dark glassmorphic background
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-      ctx.shadowBlur = 10;
-      ctx.shadowOffsetY = 2;
+      // Crisp White Box
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = '#FFFFFF';
       ctx.beginPath();
-      ctx.roundRect(locX, locY, locW, locH, 23);
+      ctx.roundRect(locX, locY, locW, locH, 14);
       ctx.fill();
 
-      // Delicate gold/amber accent border
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+      ctx.strokeStyle = '#E2E8F0';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-
-      // Glowing pin
       ctx.shadowColor = 'transparent';
-      ctx.fillStyle = '#F59E0B';
-      ctx.font = '900 16px Arial, sans-serif';
+
+      // Red Square Badge for Pin Icon
+      const pinBoxW = 46;
+      const pinBoxH = 46;
+      const pinBoxX = locX + 7;
+      const pinBoxY = locY + 7;
+      ctx.fillStyle = '#DC2626';
+      ctx.beginPath();
+      ctx.roundRect(pinBoxX, pinBoxY, pinBoxW, pinBoxH, 10);
+      ctx.fill();
+
+      // Pin Glyph
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 22px Arial, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('📍', locX + 22, locY + 23);
+      ctx.fillText('📍', pinBoxX + pinBoxW / 2, pinBoxY + pinBoxH / 2);
 
-      // Clean text
-      ctx.fillStyle = '#F8FAFC';
-      ctx.font = '700 20px "Noto Sans Devanagari", sans-serif';
+      // Location Text (Bold Dark Black)
+      ctx.fillStyle = '#090A0E';
+      ctx.font = '800 24px "Noto Sans Devanagari", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(cleanLoc, locX + 40, locY + 23);
+      ctx.fillText(cleanLoc, locX + 64, locY + locH / 2);
       ctx.restore();
     }
   }
 
-  // 5. RADIANT GLOWING GOLDEN DIVIDER LINE
-  ctx.save();
-  const divGrad = ctx.createLinearGradient(60, 685, width - 60, 685);
-  divGrad.addColorStop(0, 'rgba(255, 230, 0, 0)');
-  divGrad.addColorStop(0.5, '#FFE600');
-  divGrad.addColorStop(1, 'rgba(255, 230, 0, 0)');
-  ctx.strokeStyle = divGrad;
-  ctx.lineWidth = 4;
-  ctx.shadowColor = 'rgba(255, 230, 0, 0.85)';
-  ctx.shadowBlur = 18;
-  ctx.beginPath();
-  ctx.moveTo(60, 685);
-  ctx.lineTo(width - 60, 685);
-  ctx.stroke();
-  ctx.restore();
-
-  // 6. LOWER HEADLINE SECTION (Y = 705 to 1250)
-  const hasUserHeadline = card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां');
-
-  if (!hasUserHeadline) {
-    // Default Headline Placeholder Layers
+  // 7. DATE & WATERMARK OVERLAY ON PHOTO (Default OFF, visible only when toggled ON)
+  if (card.showDate !== false && card.dateStr && card.dateStr.trim()) {
     ctx.save();
-
-    // Yellow pill badge: [📄 स्टेप 3 : हेडलाइन लिखें]
-    const yPillW = 390;
-    const yPillH = 58;
-    const yPillX = (width - yPillW) / 2;
-    const yPillY = 770;
-    ctx.save();
-    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#FFE600';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.beginPath();
-    ctx.roundRect(yPillX, yPillY, yPillW, yPillH, yPillH / 2);
+    ctx.roundRect(42, 615, 300, 44, 8);
     ctx.fill();
-    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-    ctx.fillStyle = '#090A0D';
-    ctx.font = '900 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('📄 स्टेप 3 : हेडलाइन लिखें', width / 2, yPillY + yPillH / 2);
-    ctx.restore();
-
-    // White subtitle
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '800 40px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = '700 20px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('स्टेप 3 में जाकर अपनी मुख्य खबर की', width / 2, 875);
+    ctx.fillText(`📅  ${card.dateStr}`, 56, 637);
+    ctx.restore();
+  }
 
-    // Big Gold Headline
+  if (card.photoDisclaimerType === 'representative' || card.photoDisclaimerType === 'ai' || (card.showWatermark && card.photoDisclaimerType !== 'none')) {
     ctx.save();
+    const tagText = card.photoWatermarkTag || (card.photoDisclaimerType === 'ai' ? 'AI जनरेटेड' : 'प्रतीकात्मक फोटो');
+    ctx.font = '800 20px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    const tagW = ctx.measureText(tagText).width + 36;
+    const tagX = width - tagW - 42;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.beginPath();
+    ctx.roundRect(tagX, 615, tagW, 44, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 230, 0, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
     ctx.fillStyle = '#FFE600';
-    ctx.font = '900 70px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-    ctx.fillText('हेडलाइन दर्ज करें', width / 2, 965);
-    ctx.restore();
-
-    // Gray Note
-    ctx.fillStyle = '#CBD5E1';
-    ctx.font = '600 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('आवश्यकता अनुसार दो या तीन लाइन में', width / 2, 1045);
-
+    ctx.fillText(tagText, tagX + tagW / 2, 637);
     ctx.restore();
-  } else {
-    // Render actual headline with Baloo 2 font and word highlights
-    ctx.save();
+  }
+
+  // 8. MIDDLE WHITE HEADLINE BOX (Y = 725 to 1035, Height = 310, Width = 960)
+  ctx.save();
+  const boxX = 60;
+  const boxY = 725;
+  const boxW = width - 120;
+  const boxH = 310;
+
+  // Drop Shadow + White Background Box
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+  ctx.shadowBlur = 32;
+  ctx.shadowOffsetY = 10;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, boxW, boxH, 20);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+
+  const hasUserHeadline = Boolean(
+    card.headline &&
+    card.headline.trim().length > 0 &&
+    card.headline.trim() !== 'ताज़ा समाचार' &&
+    !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
+    !card.headline.includes('आपकी चुनी गयी खबर को यहां')
+  );
+
+  if (hasUserHeadline) {
+    // Render actual headline with max 3 lines bold black text
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor || '#FFE600';
-    const maxHeadlineW = width - 140;
+    const highlightColor = (card.highlightColor && card.highlightColor !== '#FFE600') ? card.highlightColor : '#DC2626';
+    const maxHeadlineW = boxW - 80;
 
-    let testFontSize = 64;
-    for (let s = 68; s >= 38; s -= 2) {
+    let testFontSize = 58;
+    for (let s = 62; s >= 36; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
-      if (testLines.length <= 4) {
+      if (testLines.length <= 3) {
         testFontSize = s;
         break;
       }
     }
 
-    const headlineLineH = Math.round(testFontSize * 1.34);
-    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
+    const headlineLineH = Math.round(testFontSize * 1.32);
+    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 3);
     const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = 960 - totalHeadH / 2 + Math.round(headlineLineH * 0.45);
+    let startY = boxY + boxH / 2 - totalHeadH / 2 + Math.round(headlineLineH * 0.42);
 
     ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetY = 4;
 
     for (const line of headlineLines) {
       let lineWidth = 0;
@@ -1862,24 +1971,89 @@ async function drawGraphic001Canvas(
 
       let curX = width / 2 - lineWidth / 2;
       for (const token of line) {
-        ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
+        ctx.fillStyle = token.isHighlight ? highlightColor : '#090A0E';
         ctx.fillText(token.text, curX, startY);
         curX += ctx.measureText(token.text + ' ').width;
       }
       startY += headlineLineH;
     }
-    ctx.restore();
-  }
+  } else {
+    // Default 3-Line Sample Headline matching Media Sample
+    ctx.fillStyle = '#090A0E';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-  // 7. BOTTOM WHITE DYNAMIC BRANDING FOOTER (Y = 1274 to 1350)
+    ctx.font = '900 56px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('यहाँ आपकी न्यूज़ की', width / 2, boxY + 75);
+
+    ctx.font = '900 64px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('हेडलाइन की दूसरी लाइन', width / 2, boxY + 155);
+
+    ctx.font = '900 56px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('यहाँ तीसरी लाइन आएगी', width / 2, boxY + 235);
+  }
+  ctx.restore();
+
+  // 9. CENTERED CTA RIBBON (Y = 1065 to 1145)
+  // Yellow Pill Base + Red Slanted Trapezoid + White Text "पूरी खबर डिस्क्रिप्शन में ..."
+  ctx.save();
+  const ctaBaseW = 660;
+  const ctaBaseH = 76;
+  const ctaBaseX = (width - ctaBaseW) / 2;
+  const ctaBaseY = 1065;
+
+  // Yellow pill base
+  ctx.shadowColor = 'rgba(255, 230, 0, 0.45)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = '#FFE600';
+  ctx.beginPath();
+  ctx.roundRect(ctaBaseX, ctaBaseY, ctaBaseW, ctaBaseH, ctaBaseH / 2);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+
+  // Red slanted ribbon
+  const ribbonW = 580;
+  const ribbonH = 58;
+  const ribbonX = (width - ribbonW) / 2;
+  const ribbonY = ctaBaseY + 9;
+  const skew = 14;
+
+  ctx.fillStyle = '#DC2626';
+  ctx.beginPath();
+  ctx.moveTo(ribbonX + skew, ribbonY);
+  ctx.lineTo(ribbonX + ribbonW, ribbonY);
+  ctx.lineTo(ribbonX + ribbonW - skew, ribbonY + ribbonH);
+  ctx.lineTo(ribbonX, ribbonY + ribbonH);
+  ctx.closePath();
+  ctx.fill();
+
+  // Crisp White Text
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '900 32px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('पूरी खबर डिस्क्रिप्शन में ...', width / 2, ribbonY + ribbonH / 2);
+  ctx.restore();
+
+  // 10. BOTTOM WHITE DYNAMIC MASTER BRANDING FOOTER (Y = 1255 to 1350)
   if (card.showMasterBranding !== false) {
-    const footerY = 1274;
-    const footerH = 76;
+    const footerY = 1260;
+    const footerH = 90;
+
+    // Thin divider line above footer
     ctx.save();
+    ctx.strokeStyle = 'rgba(203, 213, 225, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(60, footerY - 8);
+    ctx.lineTo(width - 60, footerY - 8);
+    ctx.stroke();
+
+    // White Footer Box
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, footerY, width, footerH);
 
-    // Social Icons on Left
     const iconY = footerY + footerH / 2;
     const drawCircleIcon = (cx: number, cy: number, r: number, bg: string, text: string, txtColor = '#FFFFFF', isBold = true) => {
       ctx.save();
@@ -1896,56 +2070,41 @@ async function drawGraphic001Canvas(
     };
 
     // 6 Social circles
-    drawCircleIcon(36, iconY, 15, '#E1306C', '📷', '#FFFFFF');
-    drawCircleIcon(72, iconY, 15, '#1877F2', 'f', '#FFFFFF');
-    drawCircleIcon(108, iconY, 15, '#000000', '𝕏', '#FFFFFF');
-    drawCircleIcon(144, iconY, 15, '#111827', '@', '#FFFFFF');
-    drawCircleIcon(180, iconY, 15, '#DC2626', '▶', '#FFFFFF');
-    drawCircleIcon(216, iconY, 15, '#0A66C2', 'in', '#FFFFFF');
+    drawCircleIcon(46, iconY, 18, '#E1306C', '📷', '#FFFFFF');
+    drawCircleIcon(88, iconY, 18, '#1877F2', 'f', '#FFFFFF');
+    drawCircleIcon(130, iconY, 18, '#000000', '𝕏', '#FFFFFF');
+    drawCircleIcon(172, iconY, 18, '#111827', '@', '#FFFFFF');
+    drawCircleIcon(214, iconY, 18, '#DC2626', '▶', '#FFFFFF');
+    drawCircleIcon(256, iconY, 18, '#0A66C2', 'in', '#FFFFFF');
 
     // Handle text
     const handleText = card.socialHandle || '/@UserName';
     ctx.fillStyle = '#0F172A';
-    ctx.font = '800 22px "Poppins", sans-serif';
+    ctx.font = '800 24px "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(handleText, 246, iconY);
+    ctx.fillText(handleText, 290, iconY);
 
-    // Divider 1
-    const div1X = 490;
-    ctx.strokeStyle = '#CBD5E1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(div1X, footerY + 16);
-    ctx.lineTo(div1X, footerY + footerH - 16);
-    ctx.stroke();
-
-    // Website Center
-    const siteText = card.websiteUrl ? card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '') : 'yourwebsite.com';
-    ctx.fillStyle = '#0F172A';
-    ctx.font = '800 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`🌐  ${siteText}`, div1X + 22, iconY);
-
-    // Divider 2 & WhatsApp Right (only when Contact toggle is ON)
-    if (card.showMobileNumber !== false && card.whatsappNumber) {
-      const div2X = 800;
+    // WhatsApp Contact (Only if genuinely configured and showMobileNumber is not false)
+    if (card.showMobileNumber !== false && card.whatsappNumber && card.whatsappNumber.trim()) {
+      const divX = 760;
       ctx.strokeStyle = '#CBD5E1';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(div2X, footerY + 16);
-      ctx.lineTo(div2X, footerY + footerH - 16);
+      ctx.moveTo(divX, footerY + 18);
+      ctx.lineTo(divX, footerY + footerH - 18);
       ctx.stroke();
 
       // WhatsApp Green Circle
-      drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '✆', '#FFFFFF');
-      const phoneText = card.whatsappNumber;
+      drawCircleIcon(divX + 38, iconY, 18, '#25D366', '✆', '#FFFFFF');
+      const phoneText = card.whatsappNumber.startsWith('+') || card.whatsappNumber.startsWith('/')
+        ? card.whatsappNumber
+        : `+91 ${card.whatsappNumber}`;
       ctx.fillStyle = '#0F172A';
-      ctx.font = '800 22px "Poppins", sans-serif';
+      ctx.font = '800 24px "Poppins", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(phoneText, div2X + 54, iconY);
+      ctx.fillText(phoneText, divX + 68, iconY);
     }
 
     ctx.restore();

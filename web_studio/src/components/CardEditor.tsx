@@ -408,8 +408,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           ? 'फोटो 1 (ऊपर बाईं)'
           : card.layout === 'grid-3-bottom'
           ? 'फोटो 1 (ऊपर चौड़ी)'
-          : card.layout === 'inset-circle'
-          ? 'मुख्य बैकग्राउंड फोटो'
           : 'मुख्य फोटो (Photo 1)',
     },
   ];
@@ -454,13 +452,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     availableCropPhotos.push({
       key: 'fourth',
       label: 'फोटो 4 (नीचे दाईं)',
-    });
-  }
-
-  if (card.layout === 'inset-circle' || card.images.insetCircle) {
-    availableCropPhotos.push({
-      key: 'insetCircle',
-      label: '⭕ गोल सर्कल फोटो (Arrow Connected)',
     });
   }
 
@@ -2429,14 +2420,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           </div>
         )}
 
-        {card.layout === 'inset-circle' && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ राउंड सर्कल मोड: मुख्य बैकग्राउंड फोटो + गोल कटआउट (सर्कल पोर्ट्रेट फोटो)।</span>
-            <span className="text-[11px] font-bold bg-yellow-500 text-neutral-950 px-2 py-0.5 rounded">
-              Round Circle
-            </span>
-          </div>
-        )}
+
 
         {/* Upload Buttons according to selected layout */}
         <div className="pt-2 border-t border-neutral-800/80 space-y-3">
@@ -2681,78 +2665,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               </div>
             )}
 
-            {/* Inset Circle Photo (for inset-circle) */}
-            {card.layout === 'inset-circle' && (
-              <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
-                <div className="text-[11px] font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
-                  <span>सर्कल इनसेट फोटो (नेता/अधिकारी/छात्र)</span>
-                </div>
-                <label className="flex items-center justify-center gap-2 p-2 border border-dashed border-neutral-700 hover:border-neutral-500 rounded-md cursor-pointer text-xs text-neutral-400 hover:text-white bg-neutral-900/50 transition-all">
-                  <CircleDot className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>सर्कल फोटो अपलोड करें</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleFileUpload('insetCircle', f);
-                    }}
-                  />
-                </label>
-              </div>
-            )}
           </div>
-
-          {/* If Inset Circle: Position Controls */}
-          {card.layout === 'inset-circle' && (
-            <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80 space-y-3 text-xs">
-              <div className="font-semibold text-neutral-300 flex items-center justify-between">
-                <span>सर्कल फोटो की पोजीशन (X & Y Slider):</span>
-                <span className="text-neutral-500">
-                  X: {card.insetPosition.x}% | Y: {card.insetPosition.y}%
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] text-neutral-400">दाएं - बाएं (X):</label>
-                  <input
-                    type="range"
-                    min="20"
-                    max="90"
-                    value={card.insetPosition.x}
-                    onChange={(e) =>
-                      onChange({
-                        insetPosition: {
-                          ...card.insetPosition,
-                          x: Number(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full accent-yellow-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-neutral-400">ऊपर - नीचे (Y):</label>
-                  <input
-                    type="range"
-                    min="15"
-                    max="80"
-                    value={card.insetPosition.y}
-                    onChange={(e) =>
-                      onChange({
-                        insetPosition: {
-                          ...card.insetPosition,
-                          y: Number(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full accent-yellow-400"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
           {/* 3.1 Photo Crop & Move Controls (Left, Right, Center, Up, Down, Zoom) */}

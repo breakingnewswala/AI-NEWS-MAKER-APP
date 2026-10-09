@@ -904,7 +904,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           customHeaderPng: effectiveHeaderPng,
           customFooterPng: effectiveFooterPng,
           socialHandle: channelProfile.username ? (channelProfile.username.startsWith('@') ? channelProfile.username : `@${channelProfile.username}`) : '',
-          whatsappNumber: channelProfile.mobileNumber,
+          whatsappNumber: channelProfile.whatsappNumber || '',
           isConfigured: true,
         },
       },
@@ -1948,7 +1948,24 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-slate-300">
-                      संपर्क नंबर (फुटर में प्रदर्शन हेतु)
+                      प्राइमरी मोबाइल नंबर (OTP / लॉगिन)
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={channelProfile.mobileNumber}
+                    onChange={(e) =>
+                      setChannelProfile((p) => ({ ...p, mobileNumber: e.target.value }))
+                    }
+                    placeholder="9876543210"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-300">
+                      अलग WhatsApp नंबर (केवल फुटर हेतु)
                     </label>
                     <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
                       <input
@@ -1960,20 +1977,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             showMobileNumber: e.target.checked,
                           }))
                         }
-                        className="rounded accent-amber-500"
+                        className="rounded accent-emerald-500"
                       />
-                      <span>ग्राफ़िक में नंबर दिखाएं</span>
+                      <span>फुटर में दिखाएं</span>
                     </label>
                   </div>
                   <input
                     type="text"
-                    value={channelProfile.mobileNumber}
+                    value={channelProfile.whatsappNumber || ''}
                     onChange={(e) =>
-                      setChannelProfile((p) => ({ ...p, mobileNumber: e.target.value }))
+                      setChannelProfile((p) => ({ ...p, whatsappNumber: e.target.value }))
                     }
-                    placeholder="96698-02408"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                    placeholder="+91 98765 43210"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-emerald-400 focus:outline-hidden font-mono"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    * WhatsApp केवल तभी दिखेगा जब यहाँ अलग WhatsApp नंबर दिया गया हो और चेकबॉक्स चालू हो। प्राइमरी/OTP नंबर कभी विकल्प नहीं बनेगा।
+                  </p>
                 </div>
 
                 <div>

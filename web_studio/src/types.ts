@@ -396,6 +396,7 @@ export interface ChannelProfile {
   };
   username: string; // derived from English Channel Name
   mobileNumber: string;
+  whatsappNumber?: string;
   showMobileNumber: boolean; // visible on card or not
   websiteUrl: string; // direct without https:// or www
   highlightColor?: string; // Default word highlight color (e.g. '#FFE600', '#EF4444', etc.)

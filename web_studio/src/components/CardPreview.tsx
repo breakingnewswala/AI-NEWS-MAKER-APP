@@ -259,21 +259,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
       const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
       const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
 
-      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses crisp WHITE text on dark canvas)
-      const baseTextColor = (isGraphic1 || isGraphic3)
-        ? '#FFFFFF'
-        : (isGraphic2 || isGraphic4 || isIvory || isDefault)
+      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses crisp BLACK text on white headline box)
+      const baseTextColor = (isGraphic1 || isGraphic2 || isGraphic4 || isIvory || isDefault)
         ? '#000000'
-        : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'));
+        : (isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')));
 
-      const highlightColor = (isGraphic1 || isGraphic3)
+      const highlightColor = isGraphic1
+        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
+        : isGraphic3
         ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
         : isGraphic4
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
         : isGraphic2
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C')
-        : isGraphic1
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#FFE600')
         : isIvory
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#B45309')
         : isEmerald
@@ -739,47 +737,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           </div>
         )}
 
-        {/* Layout 5: Round Circle Image (Background + Inset circular portrait + Red 3D Curved Arrow) */}
-        {card.layout === 'inset-circle' && (
-          <div className="relative w-full h-full overflow-hidden">
-            <img
-              src={card.images.main}
-              alt=""
-              className="w-full h-full object-cover transition-all duration-150"
-              style={mainStyle}
-              onError={handleImgError}
-            />
-
-            {/* Inset Circle Photo with Red Curved Pointer Arrow */}
-            {card.images.insetCircle && (
-              <div
-                className="absolute z-15 pointer-events-none"
-                style={{
-                  left: `${card.insetPosition.x}%`,
-                  top: `${card.insetPosition.y}%`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-              >
-                {/* Circular cutout with proportional sizing matching CanvasExporter (31% width) */}
-                <div
-                  className="relative rounded-full border-[4px] sm:border-[5px] border-white shadow-[0_16px_40px_rgba(0,0,0,0.95)] overflow-hidden bg-neutral-800 shrink-0 ring-2 ring-black/40"
-                  style={{
-                    width: `${Math.round(containerWidth * 0.31)}px`,
-                    height: `${Math.round(containerWidth * 0.31)}px`,
-                  }}
-                >
-                  <img
-                    src={card.images.insetCircle}
-                    alt="Inset portrait"
-                    className="w-full h-full object-cover transition-all duration-150"
-                    style={insetCircleStyle}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Optional user-controlled dark overlay */}
         {card.darkOverlayOpacity > 0 && (
           <div
@@ -936,190 +893,147 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
       {/* 3. BOTTOM SECTION: GRAPHIC 1 vs DEFAULT FRAME vs MORNING JACKET vs TEXT BREAKING vs SUPER BREAKING vs QUOTE vs STANDARD ORIGINAL */}
       {card.frameDesign === 'graphic_001' ? (
         /* ================= GRAPHIC 1 (DEFAULT 4:5 PHOTO NEWS TEMPLATE — SAMPLE EXACT MATCH) ================= */
-        <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none bg-gradient-to-b from-[#090a0d] via-[#12151b] to-[#090a0d] overflow-hidden">
-          {/* SVG Definitions for Golden Metallic Gradients */}
-          <svg className="absolute w-0 h-0" aria-hidden="true">
-            <defs>
-              <linearGradient id="goldGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#FFE600" />
-                <stop offset="50%" stopColor="#D4AF37" />
-                <stop offset="100%" stopColor="#AA771C" />
-              </linearGradient>
-              <linearGradient id="goldGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#FFF275" />
-                <stop offset="60%" stopColor="#E5B80B" />
-                <stop offset="100%" stopColor="#553B08" />
-              </linearGradient>
-            </defs>
-          </svg>
-
-          {/* 4 Gold Geometric Corner Ribbons */}
-          <svg className="absolute top-0 left-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          <svg className="absolute top-0 right-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 rotate-90" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          <svg className="absolute bottom-12 left-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 -rotate-90" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          <svg className="absolute bottom-12 right-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 rotate-180" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          {/* Top Header Row: Top-Left Channel Logo Area & Top-Right Location Box */}
-          <div className="absolute top-3 left-3 right-3 sm:top-5 sm:left-5 sm:right-5 z-30 pointer-events-auto flex items-start justify-between">
-            {/* Logo Area (Hidden when Master Branding is OFF) */}
-            {card.showMasterBranding !== false && (
-              <div
-                className="max-w-[45%]"
-                style={{
-                  transform: `scale(${card.logoScale ?? 1.25})`,
-                  transformOrigin: 'top left',
-                }}
-              >
-                {card.customLogoUrl ? (
-                  <img
-                    src={card.customLogoUrl}
-                    alt="Channel Logo"
-                    className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] bg-transparent"
-                  />
-                ) : (
-                  <div className="border border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs shadow-[0_0_12px_rgba(255,230,0,0.35)] flex items-center justify-center">
-                    <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
-                      YOUR LOGO
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Top-Right Location Box: Rich, sleek, refined glassmorphic badge with golden pin */}
-            {card.showLocation !== false && card.location && card.location.trim() && (
-              <div className="bg-black/60 backdrop-blur-md border border-[#FFE600]/60 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.85)] max-w-[48%]">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#FFE600] to-amber-500 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(255,230,0,0.5)]">
-                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-950 stroke-[2.5]" />
-                </div>
-                <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
-                  {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Top Area: Photo Section (Height ~50%) */}
-          <div className="relative w-full h-[50%] flex items-center justify-center overflow-hidden z-20 pt-6">
-            <div className="w-full h-full relative overflow-hidden">
-              {card.images?.main && card.images.main.trim().length > 0 && !card.images.main.includes('placeholder') ? (
-                <img
-                  src={card.images.main}
-                  alt="News Photo"
-                  onError={handleImgError}
-                  className="w-full h-full object-cover"
+        <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none overflow-hidden">
+          {/* Top Half: Transparent Photo Viewport with Framing Accents & Header Controls */}
+          <div className="relative w-full h-[53%] flex flex-col justify-between p-3 sm:p-5">
+            {/* Top Header Row: Top-Left Channel Logo Area & Top-Right Location Box */}
+            <div className="flex items-start justify-between w-full pointer-events-auto z-30">
+              {/* Logo Area (Hidden when Master Branding is OFF) */}
+              {card.showMasterBranding !== false && (
+                <div
+                  className="max-w-[48%]"
                   style={{
-                    objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
-                    transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
+                    transform: `scale(${card.logoScale ?? 1.25})`,
+                    transformOrigin: 'top left',
                   }}
-                />
-              ) : (
-                /* Default Photo Placeholder Visual (Matching approved Image 3 sample) */
-                <div className="w-full h-full bg-gradient-to-b from-[#111622] via-[#0d1019] to-[#090a0d] flex flex-col items-center justify-center text-center p-4">
-                  {/* Golden circle with Camera Icon */}
-                  <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-full border-2 border-[#FFE600] bg-black/60 shadow-[0_0_20px_rgba(255,230,0,0.35)] flex items-center justify-center mb-2.5">
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#FFE600] flex items-center justify-center shadow-inner">
-                      <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-950 stroke-[2.5]" />
+                >
+                  {card.customLogoUrl ? (
+                    <img
+                      src={card.customLogoUrl}
+                      alt="Channel Logo"
+                      className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] bg-transparent"
+                    />
+                  ) : (
+                    <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-1 bg-black/85 backdrop-blur-xs shadow-[0_0_12px_rgba(255,230,0,0.35)] flex items-center justify-center">
+                      <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
+                        YOUR LOGO
+                      </span>
                     </div>
-                  </div>
+                  )}
+                </div>
+              )}
 
-                  {/* Red pill badge */}
-                  <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4.5 py-1 rounded-full bg-[#DC2626] text-white font-black text-xs sm:text-sm shadow-lg mb-2">
-                    <span>📸 स्टेप 4 : फोटो जोड़ें</span>
+              {/* Top-Right Location Box: White rounded box with red pin, strictly hidden if showLocation is false */}
+              {card.showLocation !== false && card.location && card.location.trim() && (
+                <div className="bg-white rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 max-w-[48%] ml-auto pointer-events-auto">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-md bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
+                    <MapPin className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-white stroke-[2.5]" />
                   </div>
-
-                  <h2 className="font-extrabold text-xs sm:text-base text-white font-['Baloo_2'] leading-snug">
-                    कृपया अपनी न्यूज़ फोटो अपलोड करें
-                  </h2>
-                  <p className="font-bold text-xs sm:text-sm text-[#FFE600] font-['Baloo_2'] mt-0.5">
-                    गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं
-                  </p>
-                  <span className="font-medium text-[10px] sm:text-xs text-slate-400 font-['Baloo_2'] mt-1">
-                    (1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)
+                  <span className="font-bold text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                    {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                   </span>
+                </div>
+              )}
+            </div>
+
+            {/* Optional Safe Margin Date & Disclaimer Tags on Photo (Default OFF) */}
+            <div className="flex items-end justify-between w-full pointer-events-auto z-30 pb-1">
+              {/* Date Stamp (Visible only when user toggles ON) */}
+              {card.showDate !== false && card.dateStr && card.dateStr.trim() && (
+                <div className="bg-black/60 backdrop-blur-xs border border-white/30 rounded-md px-2 py-0.5 text-[10px] sm:text-xs text-white font-medium">
+                  📅 {card.dateStr}
+                </div>
+              )}
+
+              {/* Watermark / Disclaimer Tag (Visible only when user toggles ON) */}
+              {(card.photoDisclaimerType === 'representative' || card.photoDisclaimerType === 'ai' || (card.showWatermark && card.photoDisclaimerType !== 'none')) && (
+                <div className="ml-auto bg-black/65 backdrop-blur-xs border border-yellow-400/40 rounded-md px-2 py-0.5 text-[10px] sm:text-xs text-yellow-300 font-bold">
+                  {card.photoWatermarkTag || (card.photoDisclaimerType === 'ai' ? 'AI जनरेटेड' : 'प्रतीकात्मक फोटो')}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Middle Radiant Glowing Golden Divider */}
-          <div className="relative w-full py-0.5 flex items-center justify-center z-20">
-            <div className="w-[92%] h-[2.5px] bg-gradient-to-r from-transparent via-[#FFE600] to-transparent shadow-[0_0_12px_rgba(255,230,0,0.85)]" />
+          {/* Middle Radiant Fiery Divider Beam: Dark horizontal bar + glowing orange/amber neon streak */}
+          <div className="relative w-full z-25 pointer-events-none">
+            {/* Dark backing bar */}
+            <div className="w-full h-4 bg-gradient-to-b from-neutral-950 to-[#0A0D14]" />
+            {/* Intense glowing amber/orange light beam */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3.5px] bg-gradient-to-r from-transparent via-[#FF6A00] to-transparent shadow-[0_0_16px_#FF5500,0_0_32px_#FFAA00]" />
+            {/* Central lens flare hot spot */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-48 sm:w-64 h-5 bg-radial from-amber-300/90 via-orange-500/50 to-transparent blur-[2px]" />
           </div>
 
-          {/* Lower Area: Headline Section (Height ~36%) */}
-          <div className="relative w-full flex-1 flex flex-col items-center justify-center text-center px-4 sm:px-6 py-2 z-20 overflow-hidden">
-            {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
-              <h1
-                className="font-black leading-snug tracking-tight text-white transition-all line-clamp-4 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]"
-                style={{
-                  fontFamily: card.headlineFontFamily || 'Baloo 2',
-                  fontSize: `${effectivePreviewFontSize}px`,
-                }}
-              >
-                {renderFormattedHeadline()}
-              </h1>
-            ) : (
-              /* Default Headline Placeholder Layers */
-              <div className="flex flex-col items-center justify-center text-center max-w-[92%]">
-                <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-0.5 sm:py-1 rounded-full bg-[#FFE600] text-neutral-950 font-black text-[11px] sm:text-xs shadow-md mb-2">
-                  <FileText className="w-3.5 h-3.5 text-neutral-950" />
-                  <span>स्टेप 3 : हेडलाइन लिखें</span>
-                </div>
-                <p className="font-bold text-xs sm:text-base text-white font-['Baloo_2'] leading-snug">
-                  स्टेप 3 में जाकर अपनी मुख्य खबर की
-                </p>
-                <h1 className="font-black text-lg sm:text-3xl text-[#FFE600] font-['Baloo_2'] leading-tight mt-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                  हेडलाइन दर्ज करें
-                </h1>
-                <span className="font-medium text-[10px] sm:text-xs text-neutral-300 font-['Baloo_2'] mt-1">
-                  आवश्यकता अनुसार दो या तीन लाइन में
-                </span>
+          {/* Bottom Area (Height ~47%): Dark Charcoal Background with Angular Red Borders, White Headline Box, CTA Ribbon & White Footer */}
+          <div className="relative w-full h-[47%] bg-gradient-to-b from-[#090A0E] via-[#0E1118] to-[#090A0E] flex flex-col justify-between overflow-hidden">
+            {/* Left Angular Red Geometric Cuts */}
+            <svg className="absolute top-0 left-0 w-20 sm:w-28 h-full pointer-events-none z-10" viewBox="0 0 100 240" preserveAspectRatio="none" fill="none">
+              <polygon points="0,0 45,0 15,120 0,160" fill="#DC2626" opacity="0.9" />
+              <polygon points="0,0 25,0 0,100" fill="#991B1B" opacity="0.95" />
+              <polygon points="0,140 20,120 5,200 0,220" fill="#DC2626" opacity="0.8" />
+              <line x1="45" y1="0" x2="15" y2="120" stroke="#FF4444" strokeWidth="2.5" />
+            </svg>
+
+            {/* Right Angular Red Geometric Cuts */}
+            <svg className="absolute top-0 right-0 w-20 sm:w-28 h-full pointer-events-none z-10 scale-x-[-1]" viewBox="0 0 100 240" preserveAspectRatio="none" fill="none">
+              <polygon points="0,0 45,0 15,120 0,160" fill="#DC2626" opacity="0.9" />
+              <polygon points="0,0 25,0 0,100" fill="#991B1B" opacity="0.95" />
+              <polygon points="0,140 20,120 5,200 0,220" fill="#DC2626" opacity="0.8" />
+              <line x1="45" y1="0" x2="15" y2="120" stroke="#FF4444" strokeWidth="2.5" />
+            </svg>
+
+            {/* Middle Content: White Textured Headline Box + CTA Ribbon */}
+            <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-4 sm:px-8 py-2 text-center pointer-events-auto">
+              {/* White Headline Container Box (Matching approved sample) */}
+              <div className="w-[92%] sm:w-[90%] bg-white rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.95)] px-4 sm:px-7 py-3 sm:py-4 flex flex-col items-center justify-center border border-slate-100">
+                {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
+                  <h1
+                    className="font-black leading-snug tracking-tight text-neutral-950 transition-all line-clamp-3 text-center"
+                    style={{
+                      fontFamily: card.headlineFontFamily || 'Baloo 2',
+                      fontSize: `${effectivePreviewFontSize}px`,
+                    }}
+                  >
+                    {renderFormattedHeadline()}
+                  </h1>
+                ) : (
+                  /* Default 3-Line Sample Headline Matching Media Sample */
+                  <div className="flex flex-col items-center justify-center text-center font-['Baloo_2'] font-black leading-snug text-neutral-950">
+                    <span className="text-base sm:text-2xl">यहाँ आपकी न्यूज़ की</span>
+                    <span className="text-lg sm:text-3xl text-neutral-950">हेडलाइन की दूसरी लाइन</span>
+                    <span className="text-base sm:text-2xl">यहाँ तीसरी लाइन आएगी</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Bottom Dynamic Branding Footer */}
-          <div className="relative z-30 w-full pointer-events-auto">
-            <FooterGraphic
-              socialHandle={card.socialHandle}
-              whatsappNumber={card.whatsappNumber}
-              customFooterPng={getActiveFooterPng(card)}
-              websiteUrl={card.websiteUrl}
-              showMobileNumber={card.showMobileNumber}
-              activeSocialIcons={card.activeSocialIcons}
-              footerBgColor={card.footerBgColor || '#FFFFFF'}
-              footerTextColor={card.footerTextColor || '#111827'}
-              footerIconStyle={card.footerIconStyle || 'color'}
-              showMasterBranding={card.showMasterBranding}
-            />
+              {/* Centered CTA Ribbon: Yellow Pill Base + Red Angled Banner */}
+              <div className="mt-2.5 sm:mt-3 inline-flex items-center justify-center">
+                <div className="bg-[#FFE600] rounded-full px-5 sm:px-8 py-1 sm:py-1.5 shadow-[0_4px_16px_rgba(255,230,0,0.4)] flex items-center justify-center">
+                  <div className="bg-[#DC2626] rounded-md px-4 sm:px-6 py-0.5 sm:py-1 -skew-x-6 shadow-xs flex items-center justify-center">
+                    <span className="skew-x-6 text-white font-black text-xs sm:text-sm font-['Baloo_2'] tracking-wide whitespace-nowrap">
+                      पूरी खबर डिस्क्रिप्शन में ...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom White Master Branding Footer */}
+            <div className="relative z-30 w-full pointer-events-auto">
+              <div className="w-[90%] h-[1px] bg-slate-400/30 mx-auto mb-0.5" />
+              <FooterGraphic
+                socialHandle={card.socialHandle}
+                whatsappNumber={card.whatsappNumber}
+                customFooterPng={getActiveFooterPng(card)}
+                websiteUrl={undefined}
+                showMobileNumber={card.showMobileNumber}
+                activeSocialIcons={card.activeSocialIcons}
+                footerBgColor={card.footerBgColor || '#FFFFFF'}
+                footerTextColor={card.footerTextColor || '#111827'}
+                footerIconStyle={card.footerIconStyle || 'color'}
+                showMasterBranding={card.showMasterBranding}
+              />
+            </div>
           </div>
         </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none">

@@ -3785,9 +3785,18 @@ Source URL: ${rawLink}
           fetchedArticleSnippet = "";
         }
 
+        const hasRealFacts = Boolean(
+          (effectiveArticleTitle && effectiveArticleTitle.trim().length > 5) ||
+          (effectiveArticleDesc && effectiveArticleDesc.trim().length > 10) ||
+          (articleBodySnippets && articleBodySnippets.trim().length > 20)
+        );
+        if (!hasRealFacts) {
+          fetchedArticleSnippet = "";
+        }
+
         if (!effectiveInput && !fetchedArticleSnippet && rawLink) {
           return res.status(400).json({
-            error: "इस लिंक से समाचार सामग्री पढ़ी नहीं जा सकी। कृपया समाचार का मुख्य टेक्स्ट कॉपी करके सीधे इनपुट बॉक्स में पेस्ट करें।",
+            error: "इस लिंक से समाचार सामग्री (Article Content) प्राप्त नहीं हो सकी। कृपया समाचार का वास्तविक टेक्स्ट कॉपी करके पेस्ट करें।",
           });
         }
       } else {
@@ -3821,18 +3830,20 @@ Factual designations like मुख्यमंत्री, प्रधान�
 - Strict Maximum Lines: ${targetMaxLines} lines (${targetMaxLines === 2 ? "सख्ती से 2 लाइन्स, लगभग 8-14 शब्द" : "सख्ती से 3 लाइन्स, लगभग 12-20 शब्द"})
 - Headline के अंत में full stop, पूर्णविराम (।), comma, hyphen या कोई विराम चिह्न न लगाएं।
 
-★ HEADLINE OPTIONS (3 TO 4 DISTINCT OPTIONS):
-Generate 3 to 4 distinct, powerful Hindi headline options matching template capacity:
-- Option 1 (हाई-इम्पैक्ट / ब्रेकिंग न्यूज़ स्टाइल)
-- Option 2 (तथ्यात्मक व विस्तृत जानकारी स्टाइल)
-- Option 3 (तात्कालिक एक्शन या सवालिया स्टाइल)
-- Option 4 (व्यापक प्रभाव व मुख्य निर्णय स्टाइल)
+★ HEADLINE OPTIONS (NORMALLY 4 DISTINCT FACTUAL OPTIONS):
+Generate normally 4 distinct, factual, and publishable Hindi headline options matching template capacity and source facts:
+- Option 1 (हाई-इम्पैक्ट / मुख्य तथ्य आधारित स्टाइल)
+- Option 2 (विस्तृत तथ्यात्मक जानकारी स्टाइल)
+- Option 3 (तात्कालिक निर्णय या एक्शन स्टाइल)
+- Option 4 (व्यापक प्रभाव व घटनाक्रम स्टाइल)
+All headlines must strictly relate to this news story. No unrelated, repetitive, or fabricated headlines.
+If the source lacks sufficient facts, provide fewer options (2 or 3); NEVER fabricate false options to meet a count quota.
 
-★ DETAILED 3-PARAGRAPH CAPTION / SUMMARY:
-Generate a detailed, newsroom-quality Hindi caption/summary in approximately 3 structured paragraphs based on the actual news content:
-- Paragraph 1: मुख्य घटना, समय, स्थान व प्रमुख घटनाक्रम।
-- Paragraph 2: पृष्ठभूमि, कारण, संबंधित व्यक्ति/कार्रवाई, प्रत्यक्षदर्शियों का कहना व जांच।
-- Paragraph 3: पुलिस/प्रशासन का एक्शन, वर्तमान स्थिति, आगामी प्रक्रिया व प्रभाव।
+★ CAPTION / SUMMARY (NORMALLY 2 CONCISE PARAGRAPHS, MAX 3):
+Generate a factual, rich, and newsroom-quality Hindi caption in normally 2 concise but substantive paragraphs:
+- Paragraph 1: मुख्य घटना, समय, स्थान, संबंधित व्यक्ति व मुख्य निर्णय।
+- Paragraph 2: पृष्ठभूमि, कारण, प्रशासन/पुलिस का एक्शन व वर्तमान स्थिति।
+(Provide a 3rd paragraph ONLY if valuable additional facts exist in the source text; never invent facts).
 Exactly one blank line before hashtags.
 Hashtag order (MANDATORY):
 - FIRST HASHTAG: ${userHashtag}
@@ -3857,19 +3868,16 @@ ${customPrompt ? `यूज़र का विशेष निर्देश /
 संपादकीय निर्देश व सख्त नियम (MANDATORY RULES):
 1. आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन: हेडलाइन, हेडलाइन विकल्पों और विवरण में से 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी' जैसे सभी औपचारिक व पीआर शब्दों को पूरी तरह हटा दें। सीधे नेता या अधिकारी का पद और नाम लिखें।
 2. हेडलाइन: टेम्पलेट अनुसार ${targetMaxLines === 2 ? "8-14" : "12-20"} शब्द, स्पष्ट, व्याकरण सम्मत हिंदी, बिना आदरसूचक शब्दों के। हेडलाइन के अंत में कोई पूर्णविराम (।) न लगाएं। कभी भी URL या वेबसाइट लिंक को हेडलाइन न बनाएं।
-3. 3 से 4 हेडलाइन विकल्प (headlineOptions):
-   - विकल्प 1: हाई-इम्पैक्ट / ब्रेकिंग न्यूज़ स्टाइल
-   - विकल्प 2: तथ्यात्मक व विस्तृत जानकारी स्टाइल
-   - विकल्प 3: तात्कालिक एक्शन या सवालिया स्टाइल
-   - विकल्प 4: व्यापक प्रभाव व मुख्य निर्णय स्टाइल
+3. हेडलाइन विकल्प (headlineOptions):
+   - सामान्यतः 4 अलग, तथ्यपरक और प्रकाशन योग्य हिंदी हेडलाइन्स बनाएं।
+   - सभी हेडलाइन्स उसी खबर से संबंधित हों। कोई असंबंधित, दोहराव वाली या मनगढ़ंत हेडलाइन न हो।
+   - यदि स्रोत में पर्याप्त तथ्य नहीं हैं, तो कम विकल्प (2 या 3) दें; गलत विकल्प बनाकर संख्या पूरी न करें।
 4. हाईलाइट शब्द (highlightWords): 2-4 मुख्य शब्द जिन्हें ग्राफिक में पीले रंग (Yellow) में दिखाना है।
 5. formattedHeadline: हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow] लगाएं।
-6. लोकेशन (location): संबंधित शहर, जिला या राज्य (उदा. "शहडोल, मप्र", "भोपाल", "रीवा")।
+6. लोकेशन (location): संबंधित शहर, जिला या राज्य (स्रोत अनुसार वास्तविक उपलब्ध स्थान, मनगढ़ंत न बनाएं)।
 7. सोशल मीडिया विवरण (summary / caption):
-   - अनिवार्य रूप से 3 विस्तृत पैराग्राफ में पूरी निष्पक्ष खबर लिखें ताकि पाठक को लगे कि पूरी खबर विवरण में मिल गई है:
-     * पैराग्राफ 1: घटना का मुख्य विवरण, समय, स्थान व प्रमुख घटनाक्रम।
-     * पैराग्राफ 2: पृष्ठभूमि, कारण, प्रत्यक्षदर्शियों का कहना व जांच की बातें।
-     * पैराग्राफ 3: पुलिस/प्रशासन की कार्रवाई, वर्तमान स्थिति और आगे की प्रक्रिया।
+   - सामान्यतः 2 संक्षिप्त लेकिन सारगर्भित पैराग्राफ में लिखें। स्रोत में उपयोगी अतिरिक्त जानकारी होने पर अधिकतम 3 पैराग्राफ रखें।
+   - नाम, स्थान, तारीख, घटनाक्रम और अन्य तथ्य स्रोत के अनुसार सही हों। अनावश्यक बातें और अपुष्ट दावे न जोड़ें।
    - ठीक एक खाली लाइन छोड़कर अंत में हैशटैग लगाएं।
    - हैशटैग क्रम (MUST): सबसे पहला हैशटैग ${userHashtag}, बीच में 4-6 प्रासंगिक हैशटैग, और सबसे अंतिम हैशटैग अनिवार्य रूप से #AINewsMaker होना चाहिए। (#breakingnewswala या #BNWTV कभी न लगाएं)।
 8. category: न्यूज़ श्रेणी (हादसा / अपराध / राजनीति / प्रशासन / विकास)।
@@ -4028,17 +4036,16 @@ JSON Format:
           .map((h: string) => sanitizePressNoteFlattery(h).replace(/[।\.\,\!\?\:\-]+$/g, "").trim())
           .filter((h: string) => !isInvalidUrlHeadline(h) && Boolean(h));
 
-        // Ensure 3 to 4 distinct options based on the actual headline
-        if (parsedData.headline && !parsedData.headlineOptions.includes(parsedData.headline)) {
-          parsedData.headlineOptions.unshift(parsedData.headline);
+        // Deduplicate while preserving order
+        const uniqueOpts = [];
+        for (const opt of parsedData.headlineOptions) {
+          if (!uniqueOpts.includes(opt)) uniqueOpts.push(opt);
         }
-        if (parsedData.headlineOptions.length < 3 && parsedData.headline) {
-          const loc = parsedData.location || "राष्ट्रीय डेस्क";
-          parsedData.headlineOptions.push(`${parsedData.headline}: मामले में आधिकारिक संज्ञान, जांच व समीक्षा शुरू`);
-          parsedData.headlineOptions.push(`बड़ा एक्शन: ${loc} से जुड़ा महत्वपूर्ण घटनाक्रम, नए नियमों पर मंथन`);
-          parsedData.headlineOptions.push(`ग्राउंड रिपोर्ट: पूरे घटनाक्रम को लेकर व्यापक चर्चा, आगामी प्रक्रिया तेज`);
+        if (parsedData.headline && !uniqueOpts.includes(parsedData.headline)) {
+          uniqueOpts.unshift(parsedData.headline);
         }
-        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 4);
+        // STRICT EDITORIAL RULE: Never fabricate generic filler options if source lacks facts
+        parsedData.headlineOptions = uniqueOpts.slice(0, 4);
       }
 
       if (parsedData.formattedHeadline) {
@@ -4086,8 +4093,8 @@ function cleanHeadlineText(text: string): string {
   return cleaned;
 }
 
-// MODULE 2: Dedicated Caption Generator Endpoint
-app.post("/api/generate-caption", (req, res) => {
+// MODULE 2: Fast Static Caption Formatter Endpoint (for offline/instant quick copy)
+app.post("/api/format-static-caption", (req, res) => {
   try {
     const { headline, location, content, linkUrl, channelUsername, username } = req.body;
     const cleanH = cleanHeadlineText(headline || "");
@@ -4760,19 +4767,18 @@ app.post("/api/generate-caption", async (req, res) => {
       return res.status(400).json({ error: "Headline is required" });
     }
 
-    let styleDirective = `1. समाचार को कम से कम 2 पैराग्राफ, और यदि घटना/मामले में बिंदु या विवरण अधिक हैं तो 3 पूर्ण पैराग्राफ में विस्तार से लिखें।`;
+    let styleDirective = `1. समाचार को सामान्यतः 2 संक्षिप्त लेकिन सारगर्भित पैराग्राफ में लिखें। स्रोत में उपयोगी अतिरिक्त जानकारी होने पर अधिकतम 3 पैराग्राफ रखें। नाम, स्थान, तारीख, घटनाक्रम और अन्य तथ्य स्रोत के अनुसार सही हों।`;
     if (style === 'detailed_3_para') {
-      styleDirective = `1. समाचार को अनिवार्य रूप से ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में लिखें (Full 3 Detailed Paragraphs):
-   - पहला पैराग्राफ: घटना का मुख्य विवरण, समय, स्थान व प्रमुख घटनाक्रम।
-   - दूसरा पैराग्राफ: पृष्ठभूमि, कारण, प्रत्यक्षदर्शियों का कहना व जांच की बातें।
-   - तीसरा पैराग्राफ: पुलिस/प्रशासन की कार्रवाई, वर्तमान स्थिति और आगे की प्रक्रिया।`;
+      styleDirective = `1. समाचार को 2 संक्षिप्त लेकिन सारगर्भित पैराग्राफ में लिखें (अतिरिक्त ठोस तथ्य होने पर अधिकतम 3 पैराग्राफ):
+   - पहला पैराग्राफ: मुख्य घटना, समय, स्थान, संबंधित व्यक्ति व मुख्य निर्णय।
+   - दूसरा पैराग्राफ: पृष्ठभूमि, कारण, प्रशासन/पुलिस का एक्शन व वर्तमान स्थिति।`;
     } else if (style === 'bullet_points') {
       styleDirective = `1. समाचार का पहला पैराग्राफ संक्षिप्त विवरण दें, उसके बाद 3-4 मुख्य बिंदु (बुलेट पॉइंट्स) में विस्तृत तथ्य दें, और अंत में 1 पैराग्राफ वर्तमान स्थिति का दें।`;
     } else if (style === 'short') {
-      styleDirective = `1. समाचार को 2 बहुत ही आकर्षक, संक्षिप्त व वायरल पैराग्राफ में लिखें।`;
+      styleDirective = `1. समाचार को 2 बहुत ही आकर्षक, संक्षिप्त व सारगर्भित पैराग्राफ में लिखें।`;
     }
 
-    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल "ब्रेकिंग न्यूज़ वाला" के वरिष्ठ संपादक हैं।
+    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल "एआई न्यूज़ मेकर" के वरिष्ठ संपादक हैं।
 कृपया निम्नलिखित समाचार के लिए इंस्टाग्राम और फेसबुक पोस्ट का विस्तृत, प्रामाणिक और प्रभावशाली कैप्शन तैयार करें:
 
 हेडलाइन: "${headline}"
