@@ -12,13 +12,13 @@ export const SAMPLE_STUDENTS_IMG = 'https://images.unsplash.com/photo-1577896851
 export const INITIAL_PRESETS: NewsCardData[] = [
   {
     id: 'preset-graphic-1',
-    title: 'Graphic 1 (Default 4:5 Template)',
+    title: 'Basic Graphic — Default',
     headline: '',
     formattedHeadline: '',
     highlightWords: [],
     headlineAlign: 'center',
     location: '',
-    summary: 'Graphic 1 - Default 4:5 Template',
+    summary: 'Basic Graphic - Default 4:5 Template',
     category: 'ताज़ा खबर',
     brandName: '',
     brandTagline: '',
@@ -33,7 +33,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     frameDesign: 'graphic_001',
     layout: 'single',
     images: {
-      main: '/assets/preview_placeholder.jpg',
+      main: '',
     },
     insetPosition: { x: 75, y: 60 },
     aspectRatio: '4:5',

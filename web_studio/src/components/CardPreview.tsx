@@ -892,28 +892,29 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         />
       )}
 
-      {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED or प्रतीकात्मक फोटो): Vertical along Left Wall, Rotated 90° - Inside Safe Zone */}
+      {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED (प्रतीकात्मक फोटो)): Vertical along Left Wall, Rotated 90° - Topmost Visual Layer */}
       {(card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
+        card.showWatermark ||
         (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (
         <div
-          className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
-          style={{ width: '28px', height: '140px' }}
+          className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
+          style={{ width: '28px', height: '160px' }}
         >
-          <div className="absolute -rotate-90 whitespace-nowrap bg-black/65 backdrop-blur-[2px] border border-white/25 px-3 py-0.5 sm:py-1 rounded-sm shadow-md flex items-center justify-center">
-            <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] text-white/90 px-1 inline-block font-['Baloo_2',sans-serif]">
+          <div className="absolute -rotate-90 whitespace-nowrap bg-black/80 backdrop-blur-md border border-white/30 px-3 py-1 rounded-md shadow-xl flex items-center justify-center">
+            <span className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-[0.16em] text-white px-1 inline-block font-['Baloo_2',sans-serif] drop-shadow">
               {card.photoDisclaimerType === 'representative'
                 ? card.representativePhotoText || 'प्रतीकात्मक फोटो'
-                : card.aiGeneratedText || 'AI GENERATED'}
+                : card.aiGeneratedText || 'AI GENERATED (प्रतीकात्मक फोटो)'}
             </span>
           </div>
         </div>
       )}
 
-      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Inside Safe Zone */}
-      {card.showDate !== false && card.frameDesign !== 'graphic_001' && card.frameDesign !== 'graphic_002' && card.frameDesign !== 'graphic_003' && card.frameDesign !== 'graphic_004' && card.frameDesign !== 'jacket-default' && card.frameDesign !== 'jacket-text-breaking' && card.frameDesign !== 'jacket-morning' && card.frameDesign !== 'jacket-epaper' && (
+      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Topmost Visual Layer */}
+      {card.showDate !== false && (
         <div
-          className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
+          className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
           style={{ width: '24px', height: '180px' }}
         >
           <div
@@ -921,7 +922,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             style={{ transform: 'rotate(90deg)' }}
           >
             <span
-              className="font-bold tracking-wider text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] font-['Baloo_2',sans-serif]"
+              className="font-bold tracking-wider text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] font-['Baloo_2',sans-serif]"
               style={{
                 fontSize: `${Math.max(10, Math.min(13, Math.round(20 * previewScale)))}px`,
               }}
@@ -985,24 +986,39 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
           </svg>
 
-          {/* Top-Left Channel Logo Area */}
-          <div
-            className="absolute top-3 left-3 sm:top-5 sm:left-5 z-30 pointer-events-auto max-w-[45%]"
-            style={{
-              transform: `scale(${card.logoScale ?? 1.25})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            {card.customLogoUrl ? (
-              <img
-                src={card.customLogoUrl}
-                alt="Channel Logo"
-                className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"
-              />
-            ) : (
-              <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/60 shadow-[0_0_12px_rgba(255,230,0,0.4)] flex items-center justify-center">
-                <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
-                  YOUR LOGO
+          {/* Top Header Row: Top-Left Channel Logo Area & Top-Right Location Box */}
+          <div className="absolute top-3 left-3 right-3 sm:top-5 sm:left-5 sm:right-5 z-30 pointer-events-auto flex items-start justify-between">
+            {/* Logo Area */}
+            <div
+              className="max-w-[45%]"
+              style={{
+                transform: `scale(${card.logoScale ?? 1.25})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              {card.customLogoUrl ? (
+                <img
+                  src={card.customLogoUrl}
+                  alt="Channel Logo"
+                  className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"
+                />
+              ) : (
+                <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/60 shadow-[0_0_12px_rgba(255,230,0,0.4)] flex items-center justify-center">
+                  <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
+                    YOUR LOGO
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Top-Right Location Box */}
+            {card.showLocation !== false && card.location && card.location.trim() && (
+              <div className="bg-white border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-lg max-w-[48%]">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
+                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white fill-white" />
+                </div>
+                <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                  {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                 </span>
               </div>
             )}
@@ -1011,16 +1027,43 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           {/* Top Area: Photo Section (Height ~50%) */}
           <div className="relative w-full h-[50%] flex items-center justify-center overflow-hidden z-20 pt-6">
             <div className="w-full h-full relative overflow-hidden">
-              <img
-                src={mainPhotoSrc}
-                alt="News Photo"
-                onError={handleImgError}
-                className="w-full h-full object-cover"
-                style={{
-                  objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
-                  transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
-                }}
-              />
+              {card.images?.main && card.images.main.trim().length > 0 && !card.images.main.includes('placeholder') ? (
+                <img
+                  src={card.images.main}
+                  alt="News Photo"
+                  onError={handleImgError}
+                  className="w-full h-full object-cover"
+                  style={{
+                    objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
+                    transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
+                  }}
+                />
+              ) : (
+                /* Default Photo Placeholder Visual (Matching approved Image 3 sample) */
+                <div className="w-full h-full bg-gradient-to-b from-[#111622] via-[#0d1019] to-[#090a0d] flex flex-col items-center justify-center text-center p-4">
+                  {/* Golden circle with Camera Icon */}
+                  <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-full border-2 border-[#FFE600] bg-black/60 shadow-[0_0_20px_rgba(255,230,0,0.35)] flex items-center justify-center mb-2.5">
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#FFE600] flex items-center justify-center shadow-inner">
+                      <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-950 stroke-[2.5]" />
+                    </div>
+                  </div>
+
+                  {/* Red pill badge */}
+                  <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4.5 py-1 rounded-full bg-[#DC2626] text-white font-black text-xs sm:text-sm shadow-lg mb-2">
+                    <span>🖼️ स्टेप 4 : फोटो जोड़ें</span>
+                  </div>
+
+                  <h2 className="font-extrabold text-xs sm:text-base text-white font-['Baloo_2'] leading-snug">
+                    कृपया अपनी न्यूज़ फोटो अपलोड करें
+                  </h2>
+                  <p className="font-bold text-xs sm:text-sm text-[#FFE600] font-['Baloo_2'] mt-0.5">
+                    गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं
+                  </p>
+                  <span className="font-medium text-[10px] sm:text-xs text-slate-400 font-['Baloo_2'] mt-1">
+                    (1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

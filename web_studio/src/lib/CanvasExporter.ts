@@ -1082,6 +1082,10 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   }
 
+  // 10. Always render Watermark and Date Stamp on the TOPMOST visual layer of the canvas
+  drawPhotoDisclaimerWatermark(ctx, width, height, card);
+  drawDateStamp(ctx, width, height, card);
+
   return canvas;
 }
 
@@ -1705,6 +1709,54 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
+  // 4C. TOP-RIGHT LOCATION BOX
+  if (card.showLocation !== false && card.location && card.location.trim()) {
+    const cleanLoc = card.location
+      .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
+      .replace(/[:\-–—]+$/, '')
+      .trim();
+    if (cleanLoc) {
+      ctx.save();
+      ctx.font = '800 22px "Noto Sans Devanagari", sans-serif';
+      const locTextW = ctx.measureText(cleanLoc).width;
+      const locW = Math.min(420, locTextW + 68);
+      const locH = 56;
+      const locX = width - locW - 42;
+      const locY = 38;
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 2;
+      ctx.beginPath();
+      ctx.roundRect(locX, locY, locW, locH, 14);
+      ctx.fill();
+
+      ctx.strokeStyle = '#DC2626';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#DC2626';
+      ctx.beginPath();
+      ctx.arc(locX + 26, locY + 28, 14, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 14px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('📍', locX + 26, locY + 28);
+
+      ctx.fillStyle = '#0F172A';
+      ctx.font = '800 22px "Noto Sans Devanagari", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(cleanLoc, locX + 50, locY + 29);
+      ctx.restore();
+    }
+  }
+
   // 5. RADIANT GLOWING GOLDEN DIVIDER LINE
   ctx.save();
   const divGrad = ctx.createLinearGradient(60, 685, width - 60, 685);
@@ -1896,6 +1948,10 @@ async function drawGraphic001Canvas(
   }
 
   ctx.restore();
+
+  // 8. TOPMOST VISUAL LAYERS: WATERMARK & DATE STAMP
+  drawPhotoDisclaimerWatermark(ctx, width, height, card);
+  drawDateStamp(ctx, width, height, card);
 
   ctx.restore();
 }
@@ -5712,7 +5768,7 @@ function drawSpeakerAttribution(
   ctx.restore();
 }
 
-// Vertical Photo Disclaimer Watermark along Left Edge/Wall, Rotated 90° (AI GENERATED or प्रतीकात्मक फोटो)
+// Vertical Photo Disclaimer Watermark along Left Edge/Wall, Rotated 90° (AI GENERATED (प्रतीकात्मक फोटो))
 function drawPhotoDisclaimerWatermark(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -5722,6 +5778,7 @@ function drawPhotoDisclaimerWatermark(
   const isDisclaimerActive =
     card.photoDisclaimerType === 'ai' ||
     card.photoDisclaimerType === 'representative' ||
+    card.showWatermark ||
     (card.showAiGenerated && card.photoDisclaimerType !== 'none');
 
   if (!isDisclaimerActive) return;
@@ -5729,40 +5786,68 @@ function drawPhotoDisclaimerWatermark(
   const disclaimerText =
     card.photoDisclaimerType === 'representative'
       ? card.representativePhotoText || 'प्रतीकात्मक फोटो'
-      : card.aiGeneratedText || 'AI GENERATED';
+      : card.aiGeneratedText || 'AI GENERATED (प्रतीकात्मक फोटो)';
 
   ctx.save();
   // Placed right along the left wall of the photo area
-  const x = 22;
+  const x = Math.max(34, Math.round(width * 0.038));
   const y = height * 0.44;
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
 
-  ctx.font = '800 14px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-  if ('letterSpacing' in ctx) {
-    (ctx as any).letterSpacing = '2px';
-  }
+  ctx.font = '800 16px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   // Generous horizontal space (44px padding) before and after text
   const textWidth = ctx.measureText(disclaimerText).width + 44;
-  const pillH = 26;
+  const pillH = 32;
 
   // Translucent dark backdrop
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.80)';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 10;
   ctx.beginPath();
-  ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 4);
+  ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 6);
   ctx.fill();
 
   // Subtle border
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Low opacity white text
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
-  ctx.fillText(disclaimerText, 0, 1);
+  // High contrast crisp white text
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(disclaimerText, 0, 0);
+
+  ctx.restore();
+}
+
+// Vertical Date Stamp along Right Edge/Wall, Rotated 90°
+function drawDateStamp(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  card: NewsCardData
+) {
+  if (card.showDate === false) return;
+  const dateText = card.dateStr || getFormattedHindiDate();
+  if (!dateText || !dateText.trim()) return;
+
+  ctx.save();
+  const x = width - Math.max(34, Math.round(width * 0.038));
+  const y = Math.round(height * 0.22);
+  ctx.translate(x, y);
+  ctx.rotate(Math.PI / 2);
+
+  ctx.font = '700 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(dateText, 0, 0);
 
   ctx.restore();
 }
@@ -5802,36 +5887,6 @@ function drawAiGeneratedWatermark(
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
   ctx.fillText(text, 0, 1);
-
-  ctx.restore();
-}
-
-// Vertical Date Stamp along Right Edge, Rotated 90°, Positioned near header without box
-function drawDateStamp(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  dateText: string
-) {
-  ctx.save();
-  // Safe Zone enforced position along the right wall near header area
-  const safeRight = Math.max(36, Math.round(width * 0.038));
-  const x = width - safeRight;
-  const y = Math.round(height * 0.22);
-  ctx.translate(x, y);
-  ctx.rotate((90 * Math.PI) / 180); // 90° clockwise
-
-  ctx.font = '700 20px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Subtle shadow for readability without any background box
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-  ctx.shadowBlur = 5;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 1;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.fillText(dateText, 0, 0);
 
   ctx.restore();
 }

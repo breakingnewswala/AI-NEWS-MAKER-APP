@@ -76,15 +76,15 @@ export interface TemplatePlanConfig {
 export const GRAPHIC_1_DEFINITION: GraphicTemplateDefinition = {
   graphicNumber: 1,
   id: 'graphic_001',
-  name: 'Graphic 1',
-  titleHi: 'Graphic 1 (बेसिक 4:5 न्यूज़ जैकेट)',
-  subtitle: 'बेसिक प्लान: 4:5 पोर्ट्रेट, 270° रोटेटेड डेट, लोकेशन व लोगो बॉक्स, पूरी खबर डिस्क्रिप्शन में CTA, फिक्स्ड येलो फुटर',
+  name: 'Basic Graphic — Default',
+  titleHi: 'Basic Graphic — Default',
+  subtitle: 'बेसिक प्लान: 4:5 पोर्ट्रेट, डिफॉल्ट ग्राफिक',
   planCategory: 'BASIC',
   aspectRatio: '4:5',
   headlineMaxLines: 3,
   headline_max_lines: 3,
   headline_line_count: 3,
-  headline_area: '3-Line Headline Area (बॉटम व्हाइट पॉलीगॉन)',
+  headline_area: '3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)',
   hasDescriptionCTA: true,
   descriptionCTAText: 'पूरी खबर डिस्क्रिप्शन में',
   descriptionCTAPosition: 'below_headline',
@@ -93,8 +93,8 @@ export const GRAPHIC_1_DEFINITION: GraphicTemplateDefinition = {
   logoPlacement: 'top_right_box',
   photoLayout: 'top_half',
   footerType: 'fixed_yellow',
-  description: 'Graphic 1 (BASIC PLAN): शीर्ष 53% न्यूज़ फोटो, टॉप-लेफ्ट लोकेशन बॉक्स (रेड बॉर्डर), टॉप-राइट लोगो बॉक्स (#FFE600), लेफ्ट 270° रोटेटेड डेट, बॉटम 47% व्हाइट पॉलीगॉन एरिया में 3-लाइन हेडलाइन, "पूरी खबर डिस्क्रिप्शन में" रेड पिल CTA और बॉटम फिक्स्ड येलो सोशल फुटर।',
-  tags: ['basic', '4:5', 'photo-news', 'fixed-footer', 'graphic-1'],
+  description: 'Graphic 1 (BASIC PLAN): शीर्ष 53% न्यूज़ फोटो, टॉप-लेफ्ट लोकेशन बॉक्स, टॉप-राइट लोगो बॉक्स, वाटरमार्क व डेट, बॉटम 3-लाइन हेडलाइन एरिया और सोशल फुटर।',
+  tags: ['basic', '4:5', 'photo-news', 'fixed-footer', 'graphic-1', 'default'],
 };
 
 export const GRAPHIC_2_DEFINITION: GraphicTemplateDefinition = {
