@@ -23,6 +23,8 @@ import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
 import { cleanHeadlineText } from '../lib/speakerUtils';
+import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
+import { ReporterUser } from './LoginModal';
 
 export interface AutoFillNewsData {
   url?: string;
@@ -44,6 +46,7 @@ interface InlineAiNewsToolsProps {
   mobileViewMode?: 'steps' | 'all';
   onOpenCloudSettings?: () => void;
   autoFillNews?: AutoFillNewsData | null;
+  currentUser?: ReporterUser | null;
 }
 
 export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
@@ -54,7 +57,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   mobileViewMode = 'steps',
   onOpenCloudSettings,
   autoFillNews,
+  currentUser,
 }) => {
+  const isAdminOrSuperAdmin = isUserAdmin(currentUser) || isUserSuperAdmin(currentUser);
   const [activeTab, setActiveTab] = useState<'link' | 'command'>('link');
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai'>('gemini');
   const [linkUrl, setLinkUrl] = useState<string>('');
@@ -623,56 +628,58 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       </div>
 
-      {/* AI Model (Gemini vs ChatGPT) & Cloud Setting Header */}
-      <div className="flex items-center justify-between bg-neutral-950 p-2 sm:p-2.5 rounded-xl border border-neutral-800">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-neutral-400">AI मॉडल:</span>
-          <div className="inline-flex items-center bg-neutral-900 p-0.5 rounded-lg border border-neutral-700/80">
-            <button
-              type="button"
-              onClick={() => {
-                setAiProvider('gemini');
-                setError(null);
-              }}
-              className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                aiProvider === 'gemini'
-                  ? 'bg-yellow-400 text-neutral-950 shadow-sm'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <Zap className="w-3 h-3" />
-              <span>Gemini AI</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAiProvider('openai');
-                setError(null);
-              }}
-              className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                aiProvider === 'openai'
-                  ? 'bg-emerald-500 text-neutral-950 shadow-sm'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <Bot className="w-3 h-3" />
-              <span>चैट जीपीटी (OpenAI)</span>
-            </button>
+      {/* AI Model (Gemini vs ChatGPT) & Cloud Setting Header - Only for Admin / SuperAdmin */}
+      {isAdminOrSuperAdmin && (
+        <div className="flex items-center justify-between bg-neutral-950 p-2 sm:p-2.5 rounded-xl border border-neutral-800">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-neutral-400">AI मॉडल:</span>
+            <div className="inline-flex items-center bg-neutral-900 p-0.5 rounded-lg border border-neutral-700/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setAiProvider('gemini');
+                  setError(null);
+                }}
+                className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  aiProvider === 'gemini'
+                    ? 'bg-yellow-400 text-neutral-950 shadow-sm'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Zap className="w-3 h-3" />
+                <span>Gemini AI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAiProvider('openai');
+                  setError(null);
+                }}
+                className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  aiProvider === 'openai'
+                    ? 'bg-emerald-500 text-neutral-950 shadow-sm'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Bot className="w-3 h-3" />
+                <span>चैट जीपीटी (OpenAI)</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        {onOpenCloudSettings && (
-          <button
-            type="button"
-            onClick={onOpenCloudSettings}
-            className="flex items-center gap-1 text-[11px] font-bold text-blue-400 hover:text-blue-300 bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/80 px-2 py-1 rounded-lg transition-all cursor-pointer"
-            title="क्लाउड, ChatGPT API व कस्टम डोमेन सेटिंग्स"
-          >
-            <Server className="w-3 h-3" />
-            <span className="hidden sm:inline">क्लाउड/API</span>
-          </button>
-        )}
-      </div>
+          {onOpenCloudSettings && (
+            <button
+              type="button"
+              onClick={onOpenCloudSettings}
+              className="flex items-center gap-1 text-[11px] font-bold text-blue-400 hover:text-blue-300 bg-blue-950/40 hover:bg-blue-900/50 border border-blue-800/80 px-2 py-1 rounded-lg transition-all cursor-pointer"
+              title="क्लाउड, ChatGPT API व कस्टम डोमेन सेटिंग्स"
+            >
+              <Server className="w-3 h-3" />
+              <span className="hidden sm:inline">क्लाउड/API</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tab Selector: Step 2A vs Step 2B */}
       <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">

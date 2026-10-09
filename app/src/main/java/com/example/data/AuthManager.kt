@@ -23,18 +23,16 @@ data class AuthUser(
 )
 
 object AuthManager {
-<<<<<<< HEAD
-    const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
-    const val FALLBACK_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
-    const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
-    const val DEFAULT_OPENAI_API_KEY = "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"
-=======
     enum class AppMode {
         USER_MODE,
         ADMIN_MODE,
         TEST_MODE
     }
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
+    const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
+    const val FALLBACK_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
+    const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
+    const val DEFAULT_OPENAI_API_KEY = "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"
 
     const val ACCOUNT_DELETION_WEB_URL = "https://ainewsmaker.online/delete-account"
     const val TEST_REVIEWER_EMAIL = "google-reviewer@ainewsmaker.online"
@@ -69,26 +67,19 @@ object AuthManager {
     private const val KEY_ADMIN_VIEW_AS_MODE = "key_admin_view_as_mode"
     private const val KEY_USER_PLAN_TIER = "key_user_plan_tier"
 
-    private const val DEFAULT_GOOGLE_CLIENT_ID = ""
-    private const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
-    private const val DEFAULT_OPENAI_API_KEY = ""
-
     private val _appMode = MutableStateFlow(AppMode.ADMIN_MODE)
     val appMode: StateFlow<AppMode> = _appMode.asStateFlow()
 
-    private val _isLoggedIn = MutableStateFlow(true)
+    private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
-    private val _isOnboardingCompleted = MutableStateFlow(true)
+    private val _isOnboardingCompleted = MutableStateFlow(false)
     val isOnboardingCompleted: StateFlow<Boolean> = _isOnboardingCompleted.asStateFlow()
 
-    private val _currentUser = MutableStateFlow<AuthUser?>(AuthUser())
+    private val _currentUser = MutableStateFlow<AuthUser?>(null)
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
 
-<<<<<<< HEAD
     // Test Mode / View As Mode for Admin ("admin" | "user")
-=======
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
     private val _adminViewAsMode = MutableStateFlow("admin")
     val adminViewAsMode: StateFlow<String> = _adminViewAsMode.asStateFlow()
 
@@ -176,8 +167,8 @@ object AuthManager {
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        _isLoggedIn.value = prefs.getBoolean(KEY_IS_LOGGED_IN, true)
-        _isOnboardingCompleted.value = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, true)
+        _isLoggedIn.value = prefs.getBoolean(KEY_IS_LOGGED_IN, false)
+        _isOnboardingCompleted.value = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         _channelNameHi.value = prefs.getString(KEY_CHANNEL_NAME_HI, "एआई न्यूज़ मेकर") ?: "एआई न्यूज़ मेकर"
         _channelNameEn.value = prefs.getString(KEY_CHANNEL_NAME_EN, "AI News Maker") ?: "AI News Maker"
         _channelLogoUrl.value = prefs.getString(KEY_CHANNEL_LOGO_URL, "") ?: ""
@@ -186,29 +177,33 @@ object AuthManager {
         _userPlanTier.value = prefs.getString(KEY_USER_PLAN_TIER, "pro") ?: "pro"
         _adminViewAsMode.value = prefs.getString(KEY_ADMIN_VIEW_AS_MODE, "admin") ?: "admin"
 
-        val userName = prefs.getString(KEY_USER_NAME, "मुख्य संपादक (Chief Editor)") ?: "मुख्य संपादक (Chief Editor)"
-        val userEmail = prefs.getString(KEY_USER_EMAIL, "editor@ainewsmaker.online") ?: "editor@ainewsmaker.online"
-        val userRoleStr = prefs.getString(KEY_USER_ROLE, UserRole.ADMIN.name) ?: UserRole.ADMIN.name
-        val userRole = try { UserRole.valueOf(userRoleStr) } catch (_: Exception) { UserRole.ADMIN }
-        val district = prefs.getString(KEY_USER_DISTRICT, "सेंट्रल डेस्क") ?: "सेंट्रल डेस्क"
-        val mobile = prefs.getString(KEY_USER_MOBILE, "") ?: ""
+        if (_isLoggedIn.value) {
+            val userName = prefs.getString(KEY_USER_NAME, "मुख्य संपादक (Chief Editor)") ?: "मुख्य संपादक (Chief Editor)"
+            val userEmail = prefs.getString(KEY_USER_EMAIL, "editor@ainewsmaker.online") ?: "editor@ainewsmaker.online"
+            val userRoleStr = prefs.getString(KEY_USER_ROLE, UserRole.ADMIN.name) ?: UserRole.ADMIN.name
+            val userRole = try { UserRole.valueOf(userRoleStr) } catch (_: Exception) { UserRole.ADMIN }
+            val district = prefs.getString(KEY_USER_DISTRICT, "सेंट्रल डेस्क") ?: "सेंट्रल डेस्क"
+            val mobile = prefs.getString(KEY_USER_MOBILE, "") ?: ""
 
-        _currentUser.value = AuthUser(
-            name = userName,
-            email = userEmail,
-            role = userRole,
-            district = district,
-            mobileNumber = mobile,
-            channelName = _channelNameHi.value
-        )
+            _currentUser.value = AuthUser(
+                name = userName,
+                email = userEmail,
+                role = userRole,
+                district = district,
+                mobileNumber = mobile,
+                channelName = _channelNameHi.value
+            )
+        } else {
+            _currentUser.value = null
+        }
     }
 
     fun saveChannelProfile(
         context: Context,
         fullName: String,
-        channelHi: String,
-        channelEn: String,
-        logoUrl: String,
+        channelHi: String = "",
+        channelEn: String = "",
+        logoUrl: String = "",
         logoType: String = "png",
         logoPng: String? = null,
         logoGif: String? = null,
@@ -219,38 +214,61 @@ object AuthManager {
         whatsapp: Boolean = true,
         whatsappNum: String = "9876543210",
         webUrl: String = "ainewsmaker.online",
-        mobileNum: String = "9876543210"
+        mobileNum: String = "9876543210",
+        channelNameHi: String = channelHi,
+        channelNameEn: String = channelEn,
+        channelLogoUrl: String = logoUrl,
+        channelLogoType: String = logoType,
+        whatsappNumber: String = whatsappNum,
+        websiteUrl: String = webUrl,
+        mobileNumber: String = mobileNum
     ) {
+        val finalChannelHi = if (channelNameHi.isNotBlank()) channelNameHi else channelHi
+        val finalChannelEn = if (channelNameEn.isNotBlank()) channelNameEn else channelEn
+        val finalLogoUrl = if (channelLogoUrl.isNotBlank()) channelLogoUrl else logoUrl
+        val finalLogoType = if (channelLogoType.isNotBlank()) channelLogoType else logoType
+        val finalWhatsappNum = if (whatsappNumber != "9876543210") whatsappNumber else whatsappNum
+        val finalWebUrl = if (websiteUrl != "ainewsmaker.online") websiteUrl else webUrl
+        val finalMobileNum = if (mobileNumber != "9876543210") mobileNumber else mobileNum
+
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(KEY_USER_NAME, fullName)
-            .putString(KEY_CHANNEL_NAME_HI, channelHi)
-            .putString(KEY_CHANNEL_NAME_EN, channelEn)
-            .putString(KEY_CHANNEL_LOGO_URL, logoUrl)
-            .putString(KEY_CHANNEL_LOGO_TYPE, logoType)
-            .putString(KEY_WHATSAPP_NUMBER, whatsappNum)
-            .putString(KEY_WEBSITE_URL, webUrl)
-            .putString(KEY_USER_MOBILE, mobileNum)
+            .putString(KEY_CHANNEL_NAME_HI, finalChannelHi)
+            .putString(KEY_CHANNEL_NAME_EN, finalChannelEn)
+            .putString(KEY_CHANNEL_LOGO_URL, finalLogoUrl)
+            .putString(KEY_CHANNEL_LOGO_TYPE, finalLogoType)
+            .putString(KEY_WHATSAPP_NUMBER, finalWhatsappNum)
+            .putString(KEY_WEBSITE_URL, finalWebUrl)
+            .putString(KEY_USER_MOBILE, finalMobileNum)
             .apply()
 
-        _channelNameHi.value = channelHi
-        _channelNameEn.value = channelEn
-        _channelLogoUrl.value = logoUrl
-        _channelLogoType.value = logoType
-        _whatsappNumber.value = whatsappNum
-        _websiteUrl.value = webUrl
+        _channelNameHi.value = finalChannelHi
+        _channelNameEn.value = finalChannelEn
+        _channelLogoUrl.value = finalLogoUrl
+        _channelLogoType.value = finalLogoType
+        _whatsappNumber.value = finalWhatsappNum
+        _websiteUrl.value = finalWebUrl
 
         val curr = _currentUser.value
         if (curr != null) {
             _currentUser.value = curr.copy(
                 name = fullName,
-                channelName = channelHi,
-                mobileNumber = mobileNum
+                channelName = finalChannelHi,
+                mobileNumber = finalMobileNum
             )
         }
     }
 
     fun getChannelProfileJson(): String {
+        val socialObj = JSONObject().apply {
+            put("youtube", true)
+            put("facebook", true)
+            put("instagram", true)
+            put("twitter", false)
+            put("telegram", false)
+            put("whatsapp", true)
+        }
         val obj = JSONObject().apply {
             put("channelNameHi", _channelNameHi.value)
             put("channelNameEn", _channelNameEn.value)
@@ -258,6 +276,7 @@ object AuthManager {
             put("whatsappNumber", _whatsappNumber.value)
             put("websiteUrl", _websiteUrl.value)
             put("tier", _userPlanTier.value)
+            put("socialIcons", socialObj)
         }
         return obj.toString()
     }
@@ -408,6 +427,7 @@ object AuthManager {
     }
 
     fun getUserSessionJson(): String {
+        if (!_isLoggedIn.value) return "{}"
         val user = _currentUser.value ?: return "{}"
         val obj = JSONObject().apply {
             put("username", if (user.role == UserRole.ADMIN) "admin" else "reporter")

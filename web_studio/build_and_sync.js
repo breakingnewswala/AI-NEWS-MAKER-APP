@@ -33,6 +33,19 @@ targets.forEach((target) => {
     if (!fs.existsSync(target)) {
       fs.mkdirSync(target, { recursive: true });
     }
+    // Purge stale index-*.js and index-*.css bundles in target/assets before copying
+    const targetAssets = path.join(target, 'assets');
+    const distAssets = path.join(distDir, 'assets');
+    if (fs.existsSync(targetAssets) && fs.existsSync(distAssets)) {
+      const activeFiles = new Set(fs.readdirSync(distAssets));
+      const targetFiles = fs.readdirSync(targetAssets);
+      targetFiles.forEach((file) => {
+        if ((file.startsWith('index-') && (file.endsWith('.js') || file.endsWith('.css'))) && !activeFiles.has(file)) {
+          try { fs.unlinkSync(path.join(targetAssets, file)); } catch {}
+        }
+      });
+    }
+
     fs.cpSync(distDir, target, {
       recursive: true,
       force: true,

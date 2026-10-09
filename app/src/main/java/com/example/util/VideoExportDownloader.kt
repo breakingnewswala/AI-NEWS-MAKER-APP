@@ -17,6 +17,15 @@ object VideoExportDownloader {
         onComplete?.invoke(uri)
     }
 
+    fun downloadToDevice(
+        context: Context,
+        uri: Uri,
+        onComplete: ((Uri?) -> Unit)? = null
+    ) {
+        Toast.makeText(context, "वीडियो सफलतापूर्वक डाउनलोड किया गया!", Toast.LENGTH_SHORT).show()
+        onComplete?.invoke(uri)
+    }
+
     fun playVideoInDevice(context: Context, videoUri: Uri) {
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {

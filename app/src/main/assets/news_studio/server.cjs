@@ -423,6 +423,17 @@ app.post("/api/news-posts/reset", (_req, res) => {
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
 });
+app.post("/api/admin/approve-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => p.id === id ? { ...p, status: "APPROVED" } : p);
+    saveNewsDatabase(existing);
+    return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var DRAFTS_DB_FILE = import_path.default.join(process.cwd(), "drafts_database.json");
 function loadDraftsDatabase() {
   try {
@@ -833,7 +844,8 @@ async function parseRssItemsFromXml(xmlText, source) {
 ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
-      location: editorial.location || "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915"
+      location: editorial.location || "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915",
+      status: "PENDING_APPROVAL"
     });
   }
   return posts;
@@ -899,7 +911,8 @@ async function fetchAndParseWebLink(source) {
 ${editorial.summary}
 
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
-      location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915"
+      location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915",
+      status: "APPROVED"
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);

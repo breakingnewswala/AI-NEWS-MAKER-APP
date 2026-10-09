@@ -102,6 +102,13 @@ export function addNotification(notif: Omit<AppNotification, 'id' | 'timestamp' 
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
+  if (typeof window !== 'undefined' && (window as any).AndroidBridge?.requestNotificationPermission) {
+    try {
+      localStorage.setItem(PERMISSION_ASKED_KEY, 'true');
+      const res = (window as any).AndroidBridge.requestNotificationPermission();
+      return (res as NotificationPermission) || 'default';
+    } catch {}
+  }
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'unsupported';
   }
@@ -115,6 +122,14 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 export function getNotificationPermissionStatus(): NotificationPermission | 'unsupported' {
+  if (typeof window !== 'undefined' && (window as any).AndroidBridge?.getNotificationPermissionStatus) {
+    try {
+      const res = (window as any).AndroidBridge.getNotificationPermissionStatus();
+      if (res === 'granted' || res === 'denied' || res === 'default') {
+        return res;
+      }
+    } catch {}
+  }
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'unsupported';
   }

@@ -13,6 +13,47 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Eliminate tap highlight grey box and optimize mobile tap delay */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* UI Controls, buttons, navigation, and interactive elements: prevent accidental text selection & callout menu */
+button,
+nav,
+a,
+header,
+footer,
+[role="button"],
+[role="tab"],
+.app-bottom-bar,
+.app-top-bar,
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+/* Content where text selection/copying is legitimate: news headlines, articles, summaries, inputs, textareas */
+input,
+textarea,
+[contenteditable="true"],
+article,
+p,
+.selectable-text,
+.news-content {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Custom Scrollbar for sleek mobile & desktop view */

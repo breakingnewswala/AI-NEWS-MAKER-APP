@@ -161,6 +161,7 @@ interface StoredNewsPost {
   district?: string;
   location?: string;
   timestamp: number;
+  status?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 }
 
 const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
@@ -439,6 +440,19 @@ app.post("/api/news-posts/reset", (_req, res) => {
   const fresh = getInitialRichNewsPosts();
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
+});
+
+// 6. POST approve RSS news post
+app.post("/api/admin/approve-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => (p.id === id ? { ...p, status: "APPROVED" as const } : p));
+    saveNewsDatabase(existing);
+    return res.json({ success: true, message: "खबर स्वीकृत हो गई", id });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
 });
 
 // --- CROSS-PLATFORM NEWS DRAFTS DATABASE (drafts_database.json) ---
@@ -934,7 +948,7 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
       timestamp,
       fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
       location: editorial.location || "विशेष डेस्क",
-
+      status: "PENDING_APPROVAL",
     });
   }
 
@@ -1029,7 +1043,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       timestamp: Date.now(),
       fullContent: `${editorial.title}\n\n${editorial.summary}\n\nवेब लिंक स्रोतः ${source.url}`,
       location: editorial.location || "वेब डेस्क",
-
+      status: "APPROVED",
     }];
   } catch (err: any) {
     console.error(`Error fetching web link ${source.url}:`, err.message);

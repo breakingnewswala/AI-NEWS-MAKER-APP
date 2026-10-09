@@ -39,7 +39,13 @@ import {
 import { NewsFeedPost } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
-import { getActiveRssNewsPosts, getSavedNewsChannels } from '../lib/rssSourceManager';
+import {
+  getActiveRssNewsPosts,
+  getSavedNewsChannels,
+  getApprovedRssIds,
+  approveRssPost,
+  isRssPostApproved,
+} from '../lib/rssSourceManager';
 import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
 
 // Category visual differentiation helper: professional, subtle color coding per category
@@ -175,9 +181,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Dynamic Unified Categories (Single Source of Truth from CategoryManager)
   const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
 
-  // Admin Date & Channel Filter State (Visible only to Admin/SuperAdmin)
+  // Admin Date, Channel & Pending News Filter State (Visible to Admin/SuperAdmin)
   const [adminFilterDate, setAdminFilterDate] = useState<string>('');
   const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
+  const [adminPendingOnly, setAdminPendingOnly] = useState<boolean>(false);
+  const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
   // Back to Top button state & listener
@@ -227,9 +235,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   useEffect(() => {
     const handleRssUpdate = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
+      setApprovedRssIds(getApprovedRssIds());
     };
     const handleFeedRefresh = () => {
       if (onRefreshLiveNews) onRefreshLiveNews();
+      setApprovedRssIds(getApprovedRssIds());
     };
     const handleCategoriesUpdate = () => {
       setFeedCategories(getActiveCategories());
@@ -237,12 +247,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleChannelsUpdate = () => {
       setSavedChannels(getSavedNewsChannels());
     };
+    const handleApprovedUpdate = () => {
+      setApprovedRssIds(getApprovedRssIds());
+    };
 
     window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
     window.addEventListener('ai_news_feed_refresh_needed', handleFeedRefresh);
     window.addEventListener('ai_news_unified_categories_updated', handleCategoriesUpdate);
     window.addEventListener('ai_news_categories_updated', handleCategoriesUpdate);
     window.addEventListener('ai_news_channels_updated', handleChannelsUpdate);
+    window.addEventListener('ai_news_approved_rss_updated', handleApprovedUpdate);
 
     return () => {
       window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
@@ -250,6 +264,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       window.removeEventListener('ai_news_unified_categories_updated', handleCategoriesUpdate);
       window.removeEventListener('ai_news_categories_updated', handleCategoriesUpdate);
       window.removeEventListener('ai_news_channels_updated', handleChannelsUpdate);
+      window.removeEventListener('ai_news_approved_rss_updated', handleApprovedUpdate);
     };
   }, [onRefreshLiveNews]);
 
@@ -328,10 +343,32 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     return post.imageUrl || '/assets/placeholder_news_search_16x9.jpg';
   };
 
-  // Filter posts from combined feed (Admin Date, Channel, & Dynamic Category Filters)
+  // Derive visiblePosts for non-admin readers (unapproved RSS items excluded; web links bypass directly)
+  const visiblePosts = useMemo(() => {
+    if (canModerate) return combinedPosts;
+    return combinedPosts.filter((p) => isRssPostApproved(p, approvedRssIds));
+  }, [combinedPosts, canModerate, approvedRssIds]);
+
+  const pendingRssCount = useMemo(() => {
+    return combinedPosts.filter((p) => p.id && p.id.startsWith('rss-') && !isRssPostApproved(p, approvedRssIds)).length;
+  }, [combinedPosts, approvedRssIds]);
+
+  // Filter posts from combined feed (Admin Date, Channel, Pending News & Dynamic Category Filters)
   const filteredPosts = useMemo(() => {
     return combinedPosts.filter((p) => {
-      // 1. Admin Date Filter (Strict India Timezone YYYY-MM-DD match)
+      // 1. Normal users cannot see unapproved RSS items (web- links & regular posts bypass directly)
+      if (!canModerate && !isRssPostApproved(p, approvedRssIds)) {
+        return false;
+      }
+
+      // 2. Admin Pending News Filter: show ONLY unapproved RSS items
+      if (canModerate && adminPendingOnly) {
+        if (!p.id || !p.id.startsWith('rss-') || isRssPostApproved(p, approvedRssIds)) {
+          return false;
+        }
+      }
+
+      // 3. Admin Date Filter (Strict India Timezone YYYY-MM-DD match)
       if (canModerate && adminFilterDate) {
         const pDate = new Date(p.timestamp || 0);
         let istDateStr = '';
@@ -343,7 +380,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         if (istDateStr !== adminFilterDate) return false;
       }
 
-      // 2. Admin Channel Filter (Matches sourceChannel)
+      // 4. Admin Channel Filter (Matches sourceChannel)
       if (canModerate && adminFilterChannel) {
         const cleanChan = cleanViewerChannel(p.sourceChannel).toLowerCase();
         const filterChan = adminFilterChannel.toLowerCase();
@@ -352,7 +389,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         }
       }
 
-      // 3. Category Filter
+      // 5. Category Filter
       if (selectedCategory === 'all') return true;
       if (selectedCategory === 'breaking') return p.breaking;
       const catObj = feedCategories.find((c) => c.id === selectedCategory);
@@ -361,16 +398,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const postCatName = (p.categoryName || '').toLowerCase();
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
-  }, [combinedPosts, canModerate, adminFilterDate, adminFilterChannel, selectedCategory, feedCategories]);
+  }, [combinedPosts, canModerate, adminPendingOnly, adminFilterDate, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
 
-  const breakingPosts = combinedPosts.filter((p) => p.breaking).length > 0
-    ? combinedPosts.filter((p) => p.breaking)
-    : combinedPosts.slice(0, 6);
+  const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
+    ? visiblePosts.filter((p) => p.breaking)
+    : visiblePosts.slice(0, 6);
 
   // Identify highlights (exclusive / breaking) for Notification Board Carousel (up to 9 items for multi-item view)
   const highlightPosts = filteredPosts.filter((p) => p.isExclusive || p.breaking).length > 0
     ? filteredPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 9)
-    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 9) : combinedPosts.slice(0, 9));
+    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 9) : visiblePosts.slice(0, 9));
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -461,6 +498,98 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
+      {/* Admin 3-Way Filter Bar: 1. Date, 2. News Channels, 3. Pending News */}
+      {canModerate && (
+        <div className="sticky top-[56px] sm:top-[64px] z-30 bg-slate-950/95 backdrop-blur-md border-b border-amber-500/30 px-4 sm:px-6 lg:px-8 py-2.5 shadow-xl">
+          <div className="max-w-7xl mx-auto space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-amber-300">
+                  एडमिन फ़िल्टर (1. तारीख • 2. न्यूज़ चैनल • 3. लंबित RSS)
+                </span>
+                {pendingRssCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    {pendingRssCount} लंबित RSS
+                  </span>
+                )}
+              </div>
+              {(adminFilterDate || adminFilterChannel || adminPendingOnly) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminFilterDate('');
+                    setAdminFilterChannel('');
+                    setAdminPendingOnly(false);
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                  <span>फ़िल्टर हटाएं (Clear)</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+              {/* 1. Date Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  📅 1. तारीख चुनें (Date Filter)
+                </label>
+                <input
+                  type="date"
+                  value={adminFilterDate}
+                  onChange={(e) => setAdminFilterDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                />
+              </div>
+
+              {/* 2. Channel Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  📰 2. चैनल चुनें (Channel Filter)
+                </label>
+                <select
+                  value={adminFilterChannel}
+                  onChange={(e) => setAdminFilterChannel(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="">सभी चैनल (All Channels)</option>
+                  {savedChannels.map((ch) => (
+                    <option key={ch} value={ch}>{ch}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Pending News Filter */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-slate-300 truncate">
+                  ⏳ 3. लंबित RSS (Pending News)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setAdminPendingOnly(!adminPendingOnly)}
+                  className={`w-full px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-between gap-1.5 transition-all cursor-pointer border ${
+                    adminPendingOnly
+                      ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md'
+                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-850'
+                  }`}
+                  title="लंबित RSS खबरों को फ़िल्टर करें और स्वीकृत करें"
+                >
+                  <span className="truncate">लंबित RSS खबरें</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                    adminPendingOnly
+                      ? 'bg-slate-950 text-amber-300'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  }`}>
+                    {pendingRssCount}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Centered Container: All boxes share the exact same width and alignment */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-6">
 
@@ -705,6 +834,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span className="text-slate-400 font-medium truncate max-w-[35%]">
                             [चैनल: {cleanViewerChannel(post.sourceChannel)}]
                           </span>
+                          {post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                approveRssPost(post.id);
+                                setApprovedRssIds(getApprovedRssIds());
+                              }}
+                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
+                              title="इस RSS खबर को स्वीकृत करें"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>स्वीकृत करें</span>
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -786,64 +930,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* Admin Date & Channel Filter Bar (Visible strictly to authenticated Admin / Super Admin) */}
-        {canModerate && (
-          <div className="w-full bg-slate-900 border border-amber-500/40 rounded-2xl p-3 sm:p-4 shadow-xl space-y-2.5">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
-              <div className="flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-amber-300">
-                  एडमिन फ़िल्टर (Admin Date & Channel Filter)
-                </span>
-              </div>
-              {(adminFilterDate || adminFilterChannel) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAdminFilterDate('');
-                    setAdminFilterChannel('');
-                  }}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                  <span>फ़िल्टर हटाएं (Clear)</span>
-                </button>
-              )}
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-4">
-              {/* Left 50%: Date Filter */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-300 truncate">
-                  📅 तारीख चुनें (Date Filter)
-                </label>
-                <input
-                  type="date"
-                  value={adminFilterDate}
-                  onChange={(e) => setAdminFilterDate(e.target.value)}
-                  className="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                />
-              </div>
-
-              {/* Right 50%: Channel Filter */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-slate-300 truncate">
-                  📰 चैनल चुनें (Channel Filter)
-                </label>
-                <select
-                  value={adminFilterChannel}
-                  onChange={(e) => setAdminFilterChannel(e.target.value)}
-                  className="w-full px-2.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                >
-                  <option value="">सभी चैनल (All Channels)</option>
-                  {savedChannels.map((ch) => (
-                    <option key={ch} value={ch}>{ch}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* 4. Category Filter Chips (Single Source of Truth from Category Manager) */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
@@ -916,6 +1003,23 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </label>
 
                       <div className="flex items-center gap-1 flex-wrap">
+                        {/* 0. RSS Approval Button if pending */}
+                        {post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              approveRssPost(post.id);
+                              setApprovedRssIds(getApprovedRssIds());
+                            }}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
+                            title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
+                          >
+                            <Check className="w-3 h-3 text-white" />
+                            <span>स्वीकृत करें (Approve)</span>
+                          </button>
+                        )}
+
                         {/* 1. Thumbnail Source Toggle (Source / Default / Manual) */}
                         <button
                           type="button"
@@ -1024,6 +1128,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span className={`w-1.5 h-1.5 rounded-full ${catTheme.accentDot}`} />
                           {post.categoryName}
                         </span>
+
+                        {/* Pending RSS Badge */}
+                        {canModerate && post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                          <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
+                            ⏳ लंबित RSS
+                          </span>
+                        )}
                       </div>
 
                       <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded text-[10px] text-slate-300">
@@ -1056,6 +1167,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       )}
                     </div>
                   </div>
+
+                  {/* Dedicated Action Button for Pending RSS in Admin View */}
+                  {canModerate && post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                    <div className="px-4 pb-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          approveRssPost(post.id);
+                          setApprovedRssIds(getApprovedRssIds());
+                        }}
+                        className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
+                        title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
+                      >
+                        <Check className="w-4 h-4 text-white" />
+                        <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
+                      </button>
+                    </div>
+                  )}
 
                   <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center justify-between gap-2">
                     <button

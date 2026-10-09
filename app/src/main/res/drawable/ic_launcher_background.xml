@@ -4,17 +4,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
     <path
-<<<<<<< HEAD
         android:fillColor="#020919"
         android:pathData="M0,0h108v108h-108z"/>
-=======
-        android:fillColor="#0B0F19"
-        android:pathData="M0,0h108v108h-108z" />
+
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#44D4AF37"
+        android:strokeColor="#444D4F37"
         android:strokeWidth="1.5"
         android:pathData="M54,18 A36,36 0 1,0 54,90 A36,36 0 1,0 54,18" />
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
+
 </vector>

@@ -45,10 +45,6 @@ import com.example.data.TemplateHeaderFooter
 import com.example.model.*
 import com.example.ui.theme.*
 
-enum class ControlPanelTab(val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val testTag: String) {
-    PROFILE("1. प्रोफाइल व प्लान अपग्रेड", Icons.Default.Person, "tab_control_profile"),
-    DASHBOARD("2. डैशबोर्ड (RSS व कैटेगरी)", Icons.Default.Dashboard, "tab_control_dashboard")
-}
 
 @Composable
 fun ProfileScreen(
@@ -71,18 +67,6 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(Slate950)
     ) {
-<<<<<<< HEAD
-        AndroidView(
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    try {
-                        setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-                    } catch (_: Throwable) {}
-=======
         androidx.compose.runtime.key(webViewCrashId) {
             AndroidView(
                 factory = { ctx ->
@@ -91,10 +75,6 @@ fun ProfileScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
-                        try {
-                            setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
-                        } catch (_: Throwable) {}
->>>>>>> 7bc5501 (feat(studio): complete mobile graphic studio specification updates, primary nav sync, 4:5 ratio enforcement, draft auto-save and push)
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -3737,11 +3717,11 @@ fun EditChannelProfileDialog(
     var channelNameEn by remember { mutableStateOf(com.example.data.AuthManager.channelNameEn.value) }
     var channelLogoUrl by remember { mutableStateOf(com.example.data.AuthManager.channelLogoUrl.value) }
     var channelLogoType by remember { mutableStateOf(com.example.data.AuthManager.channelLogoType.value) }
-    var yt by remember { mutableStateOf(com.example.data.AuthManager.socialYoutube.value) }
-    var fb by remember { mutableStateOf(com.example.data.AuthManager.socialFacebook.value) }
-    var insta by remember { mutableStateOf(com.example.data.AuthManager.socialInstagram.value) }
-    var tw by remember { mutableStateOf(com.example.data.AuthManager.socialTwitter.value) }
-    var wa by remember { mutableStateOf(com.example.data.AuthManager.socialWhatsapp.value) }
+    var yt by remember { mutableStateOf(com.example.data.AuthManager.socialYoutube.value.isNotEmpty()) }
+    var fb by remember { mutableStateOf(com.example.data.AuthManager.socialFacebook.value.isNotEmpty()) }
+    var insta by remember { mutableStateOf(com.example.data.AuthManager.socialInstagram.value.isNotEmpty()) }
+    var tw by remember { mutableStateOf(com.example.data.AuthManager.socialTwitter.value.isNotEmpty()) }
+    var wa by remember { mutableStateOf(com.example.data.AuthManager.socialWhatsapp.value.isNotEmpty()) }
     var waNumber by remember { mutableStateOf(com.example.data.AuthManager.whatsappNumber.value) }
     var websiteUrl by remember { mutableStateOf(com.example.data.AuthManager.websiteUrl.value) }
 

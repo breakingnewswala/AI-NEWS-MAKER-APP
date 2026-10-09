@@ -7,6 +7,7 @@ import { AIGenerateImageModal } from './components/AIGenerateImageModal';
 import { NewsCommandModal } from './components/NewsCommandModal';
 import { CaptionModal } from './components/CaptionModal';
 import { LoginModal, ReporterUser } from './components/LoginModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppGuideModal } from './components/AppGuideModal';
 import { DraftsModal } from './components/DraftsModal';
 import {
@@ -164,6 +165,7 @@ export default function App() {
   );
 
   // Active App Tab: Fully responsive across Web and Android APK
+  const isStudio = (['studio', 'generator'].includes(window?.location?.hash?.replace(/^#\/?/, '') || '')) || false;
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
       const fullUrl = (window.location.href || '').toLowerCase();
@@ -354,7 +356,16 @@ export default function App() {
     } catch {}
   };
 
-  const [videos, setVideos] = useState<VideoFeedItem[]>(INITIAL_VIDEOS);
+  const [videos, setVideos] = useState<VideoFeedItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('app_admin_videos');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_VIDEOS;
+  });
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // Authentication session - loads from localStorage or Android native bridge
@@ -369,10 +380,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    // In native Android WebView environment, allow default reporter user
-    if (typeof window !== 'undefined' && isAndroidEnvironment) {
-      return DEFAULT_REPORTER_USER;
-    }
+    // Normal auth session resolution across Web & APK
     // Web visitors MUST authenticate via Google / Admin Login first
     return null;
   });
@@ -381,9 +389,7 @@ export default function App() {
   // Web visitors strictly require an active session and completed onboarding flag
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      if (typeof window !== 'undefined' && isAndroidEnvironment) {
-        return true;
-      }
+      // Require authentic session
       const savedSession = localStorage.getItem('reporter_auth_session');
       const savedOnboarding = localStorage.getItem('is_onboarding_completed');
       if (savedSession && savedOnboarding === 'true') {
@@ -436,6 +442,7 @@ export default function App() {
   useEffect(() => {
     let lastY = window.scrollY;
     let ticking = false;
+    let lastHeaderVisible = true;
 
     const handleScroll = () => {
       if (!ticking) {
@@ -444,16 +451,22 @@ export default function App() {
           const delta = currentY - lastY;
 
           if (delta > 8 && currentY > 30) {
-            // Scrolling down -> hide navbar & report to Android
-            setIsHeaderVisible(false);
-            if ((window as any).AndroidBridge?.reportScroll) {
-              (window as any).AndroidBridge.reportScroll(currentY, true);
+            // Scrolling down -> hide navbar & report to Android only on state transition
+            if (lastHeaderVisible) {
+              lastHeaderVisible = false;
+              setIsHeaderVisible(false);
+              if ((window as any).AndroidBridge?.reportScroll) {
+                (window as any).AndroidBridge.reportScroll(currentY, true);
+              }
             }
           } else if (delta < -8 || currentY <= 15) {
-            // Scrolling up or at the top -> show navbar
-            setIsHeaderVisible(true);
-            if ((window as any).AndroidBridge?.reportScroll) {
-              (window as any).AndroidBridge.reportScroll(currentY, false);
+            // Scrolling up or at the top -> show navbar only on state transition
+            if (!lastHeaderVisible) {
+              lastHeaderVisible = true;
+              setIsHeaderVisible(true);
+              if ((window as any).AndroidBridge?.reportScroll) {
+                (window as any).AndroidBridge.reportScroll(currentY, false);
+              }
             }
           }
 
@@ -712,23 +725,7 @@ export default function App() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
   const [autoFillNews, setAutoFillNews] = useState<AutoFillNewsData | null>(null);
-  const [isStudioSelectorVisible, setIsStudioSelectorVisible] = useState<boolean>(true);
-  const lastScrollYRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleStudioScroll = () => {
-      const currentY = window.scrollY;
-      if (currentY > 60 && currentY > lastScrollYRef.current) {
-        setIsStudioSelectorVisible(false);
-      } else if (currentY < lastScrollYRef.current || currentY <= 30) {
-        setIsStudioSelectorVisible(true);
-      }
-      lastScrollYRef.current = currentY;
-    };
-    window.addEventListener('scroll', handleStudioScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleStudioScroll);
-  }, []);
+  const [isStudioSelectorVisible] = useState<boolean>(true);
 
   // Proactive check on mount for Android Bridge ready and queued news data
   useEffect(() => {
@@ -799,7 +796,7 @@ export default function App() {
       }
     };
     (window as any).onAutoFillNewsLink = (newsData: AutoFillNewsData) => {
-      if (newsData) {
+      if (newsData && (newsData.title || newsData.summary || newsData.url)) {
         const effectiveLink = newsData.url || (newsData.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(newsData.title.slice(0, 30))}` : 'https://www.ainewsmaker.online');
         const effectiveLoc = newsData.location || 'मध्य प्रदेश';
 
@@ -960,7 +957,7 @@ export default function App() {
       summary: '',
       category: 'ताज़ा खबर',
       images: {
-        main: '',
+        main: '/assets/default_refresh_thumbnail.jpg',
         second: '',
       },
       imagePositions: undefined,
@@ -1545,9 +1542,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Bar Navigation - Only visible in Web browser, hidden in native Android APK */}
-      {!isAndroidEnvironment && (
-        <div className={`sticky top-0 z-50 transition-all duration-300 ${isHeaderVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}>
+      {/* Top Bar Navigation - Permanent Fixed Header in Home, Video, Newsroom, Control Room. Hidden in Studio. */}
+      {!(currentTab === 'studio' || currentTab === 'generator') && (
+        <div className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md shadow-md">
           <AppTopBarWeb
             currentTab={currentTab}
             currentUser={currentUser}
@@ -1594,38 +1591,36 @@ export default function App() {
       {(currentTab === 'generator' || currentTab === 'studio') && (
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
           {/* Studio Type Selector: Smoothly collapses on scroll to maximize vertical editing space */}
-          {!isAndroidEnvironment && (
-            <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
-              isStudioSelectorVisible ? 'max-h-20 opacity-100 mb-3' : 'max-h-0 opacity-0 mb-0 pointer-events-none'
-            }`}>
-              <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
-                <button
-                  type="button"
-                  onClick={() => updateStudioMode('graphic')}
-                  className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                    studioMode === 'graphic'
-                      ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
-                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-                  }`}
-                >
-                  <Palette className="w-4 h-4 text-neutral-950" />
-                  <span>ग्राफिक फोटो न्यूज़</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateStudioMode('video')}
-                  className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                    studioMode === 'video'
-                      ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
-                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
-                  }`}
-                >
-                  <Film className="w-4 h-4 text-white" />
-                  <span>वीडियो न्यूज़</span>
-                </button>
-              </div>
+          <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
+            isStudioSelectorVisible ? 'max-h-20 opacity-100 mb-3' : 'max-h-0 opacity-0 mb-0 pointer-events-none'
+          }`}>
+            <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
+              <button
+                type="button"
+                onClick={() => updateStudioMode('graphic')}
+                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  studioMode === 'graphic'
+                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-neutral-950 shadow-md font-black'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                }`}
+              >
+                <Palette className="w-4 h-4 text-neutral-950" />
+                <span>ग्राफिक फोटो न्यूज़</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateStudioMode('video')}
+                className={`flex-1 py-2 px-3 rounded-lg font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  studioMode === 'video'
+                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+                }`}
+              >
+                <Film className="w-4 h-4 text-white" />
+                <span>वीडियो न्यूज़</span>
+              </button>
             </div>
-          )}
+          </div>
 
           {studioMode === 'video' ? (
             <div className="w-full">
@@ -2059,35 +2054,38 @@ export default function App() {
 
       {/* 5. Profile & Control Panel Tab (10 Options + Channel Branding + Plans + APK Download) */}
       {(currentTab === 'profile' || currentTab === 'export') && (
-        <ProfileScreenWeb
-          currentUser={currentUser}
-          onLogout={handleLogout}
-          onAddNewPost={handleAddNewPost}
-          onOpenStudio={() => {
-            setCurrentTab('studio');
-            window.location.hash = 'studio';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateToGenerator={() => {
-            setCurrentTab('studio');
-            window.location.hash = 'studio';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
+        <ErrorBoundary fallbackTitle="कंट्रोल रूम लोड करने में समस्या आई">
+          <ProfileScreenWeb
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            onAddNewPost={handleAddNewPost}
+            onOpenStudio={() => {
+              setCurrentTab('studio');
+              window.location.hash = 'studio';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateToGenerator={() => {
+              setCurrentTab('studio');
+              window.location.hash = 'studio';
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            categories={categories}
+            onAddCategory={handleAddCategory}
+            onDeleteCategory={handleDeleteCategory}
+          />
+        </ErrorBoundary>
       )}
 
-      {/* Persistent Bottom Bar - Only visible on web browser, hidden in Android APK */}
-      {!isAndroidEnvironment && (
-        <AppBottomBarWeb
-          currentTab={currentTab}
-          currentUser={currentUser}
-          onSelectTab={(tab) => {
-            setCurrentTab(tab);
-            window.location.hash = tab;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        />
-      )}
+      {/* Persistent Bottom Bar - 1:1 identical across web browser and Android APK */}
+      <AppBottomBarWeb
+        currentTab={currentTab}
+        currentUser={currentUser}
+        onSelectTab={(tab) => {
+          setCurrentTab(tab);
+          window.location.hash = tab;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {/* Channel Profile Setup & Branding Modal - Mandatory for new signups */}
       <ChannelOnboardingModal

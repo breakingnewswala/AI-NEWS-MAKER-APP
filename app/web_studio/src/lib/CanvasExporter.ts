@@ -1559,53 +1559,7 @@ async function drawGraphic001Canvas(
   drawGoldCorner(0, 1274, -90); // Bottom-Left (above footer)
   drawGoldCorner(width, 1274, 180); // Bottom-Right (above footer)
 
-  // 3. TOP-LEFT LOGO AREA
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const logoMaxW = 260;
-    const logoMaxH = 110;
-    const lRatio = customLogoImg.width / customLogoImg.height;
-    let lW = logoMaxW;
-    let lH = lW / lRatio;
-    if (lH > logoMaxH) {
-      lH = logoMaxH;
-      lW = lH * lRatio;
-    }
-    lW = Math.round(lW * scale);
-    lH = Math.round(lH * scale);
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 4;
-    ctx.drawImage(customLogoImg, 42, 38, lW, lH);
-    ctx.restore();
-  } else {
-    // Default "YOUR LOGO" gold outline box
-    ctx.save();
-    const boxX = 42;
-    const boxY = 38;
-    const boxW = 220;
-    const boxH = 68;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 12);
-    ctx.fill();
-
-    ctx.strokeStyle = '#FFE600';
-    ctx.lineWidth = 3.5;
-    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-    ctx.shadowBlur = 12;
-    ctx.stroke();
-
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#FFE600';
-    ctx.font = '900 28px "Poppins", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
-    ctx.restore();
-  }
+  // Note: Logo and top corners are rendered after photo so they remain the TOP layer
 
   // 4. TOP PHOTO AREA (Y = 0 to 680)
   const photoH = 680;
@@ -1700,6 +1654,54 @@ async function drawGraphic001Canvas(
     ctx.font = '600 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
     ctx.fillText('(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)', width / 2, 555);
 
+    ctx.restore();
+  }
+
+  // 4B. TOP-LEFT LOGO AREA (TOP Layer — Rendered over photo)
+  if (customLogoImg) {
+    const scale = card.logoScale ?? 1.25;
+    const logoMaxW = 260;
+    const logoMaxH = 110;
+    const lRatio = customLogoImg.width / customLogoImg.height;
+    let lW = logoMaxW;
+    let lH = lW / lRatio;
+    if (lH > logoMaxH) {
+      lH = logoMaxH;
+      lW = lH * lRatio;
+    }
+    lW = Math.round(lW * scale);
+    lH = Math.round(lH * scale);
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
+    ctx.drawImage(customLogoImg, 42, 38, lW, lH);
+    ctx.restore();
+  } else {
+    // Default "YOUR LOGO" gold outline box
+    ctx.save();
+    const boxX = 42;
+    const boxY = 38;
+    const boxW = 220;
+    const boxH = 68;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+    ctx.fill();
+
+    ctx.strokeStyle = '#FFE600';
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#FFE600';
+    ctx.font = '900 28px "Poppins", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
     ctx.restore();
   }
 

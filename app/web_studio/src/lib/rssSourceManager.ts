@@ -126,6 +126,52 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
 import type { NewsFeedPost } from '../data/newsFeedData';
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
+const STORAGE_KEY_APPROVED_RSS_IDS = 'ai_news_approved_rss_post_ids_v1';
+
+export function getApprovedRssIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_APPROVED_RSS_IDS);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
+  // Web links and internal posts bypass the approval queue
+  if (!post.id || !post.id.startsWith('rss-')) return true;
+  if (post.status === 'APPROVED') return true;
+  const set = approvedIds || getApprovedRssIds();
+  return set.has(post.id);
+}
+
+export function approveRssPost(postId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const approved = getApprovedRssIds();
+    approved.add(postId);
+    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+
+    // Update locally cached synced RSS posts
+    const cached = getActiveRssNewsPosts();
+    const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'APPROVED' as const } : p));
+    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+
+    // Call server to persist approval in news database
+    fetch(`/api/admin/approve-news/${encodeURIComponent(postId)}`, { method: 'POST' }).catch(() => {
+      fetch(`/api/news-posts/${encodeURIComponent(postId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'APPROVED' }),
+      }).catch(() => {});
+    });
+
+    window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+  } catch (e) {
+    console.error('Error approving RSS post:', e);
+  }
+}
 
 export function getActiveRssNewsPosts(): NewsFeedPost[] {
   if (typeof window === 'undefined') return [];
@@ -134,7 +180,20 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        const approvedSet = getApprovedRssIds();
+        return parsed.map((p) => {
+          if (p.id && p.id.startsWith('rss-')) {
+            const isApproved = p.status === 'APPROVED' || approvedSet.has(p.id);
+            return {
+              ...p,
+              status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
+            };
+          }
+          return {
+            ...p,
+            status: 'APPROVED' as const,
+          };
+        });
       }
     }
   } catch {}
@@ -144,11 +203,24 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
 export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(posts));
+    const approvedSet = getApprovedRssIds();
+    const normalized = posts.map((p) => {
+      if (p.id && p.id.startsWith('rss-')) {
+        const isApproved = p.status === 'APPROVED' || approvedSet.has(p.id);
+        return {
+          ...p,
+          status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
+        };
+      }
+      return {
+        ...p,
+        status: 'APPROVED' as const,
+      };
+    });
+    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(normalized));
     window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   } catch {}
-
 }
 
 export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {

@@ -36,6 +36,12 @@ enum class JacketStyle(val label: String, val headerBgHex: Long, val accentHex: 
     BLUE_SPECIAL("ब्लू स्पेशल", 4280640491L, 4294967295L, "blue-special"),
     DARK_EXCLUSIVE("डार्क एक्सक्लूसिव", 4279769115L, 4291176488L, "dark-exclusive"),
     ORIGINAL_STUDIO("मूल चैनल जैकेट", 4293571336L, 4292617766L, "jacket-original"),
+    MORNING("मॉर्निंग सुविचार", 0xFF064E3BL, 0xFFF59E0BL, "jacket-morning"),
+    EPAPER("ई-पेपर 2-कॉलम", 0xFF18181BL, 0xFFD4AF37L, "jacket-epaper"),
+    TEXT_BREAKING("3D टेक्स्ट ब्रेकिंग", 0xFF991B1BL, 0xFFFBBF24L, "jacket-text-breaking"),
+    QUOTE("बयान / कोटेशन", 0xFF1E293BL, 0xFF38BDF8L, "jacket-quote"),
+    INVESTIGATION("विशेष पड़ताल", 0xFF0F172AL, 0xFFEF4444L, "jacket-investigation"),
+    ORIGINAL("ओरिजिनल जैकेट", 0xFFEAB308L, 0xFFDC2626L, "jacket-original"),
     CUSTOM_PNG("कस्टम PNG", 4278556265L, 4292128567L, "custom-png")
 }
 

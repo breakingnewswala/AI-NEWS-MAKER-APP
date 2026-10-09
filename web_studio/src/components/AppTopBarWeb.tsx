@@ -79,12 +79,18 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     window.addEventListener('ai_news_admin_test_plan_changed', handleUpdate);
     window.addEventListener('ai_news_user_plan_updated', handleUpdate);
     window.addEventListener('ai_news_notifications_updated', handleUpdate);
+    window.addEventListener('ai_news_notification_permission_changed', handleUpdate);
+    (window as any).onNotificationPermissionResult = (status: string) => {
+      setNotifPermission(status);
+      window.dispatchEvent(new Event('ai_news_notification_permission_changed'));
+    };
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('ai_news_admin_view_mode_changed', handleUpdate);
       window.removeEventListener('ai_news_admin_test_plan_changed', handleUpdate);
       window.removeEventListener('ai_news_user_plan_updated', handleUpdate);
       window.removeEventListener('ai_news_notifications_updated', handleUpdate);
+      window.removeEventListener('ai_news_notification_permission_changed', handleUpdate);
     };
   }, []);
 
@@ -101,7 +107,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
   const tabLabels: Record<string, string> = {
     home: isHindi ? 'होम (ताज़ा समाचार)' : 'Home (Live News)',
-    videos: isHindi ? 'वीडियो फ़ीड' : 'Video Feed',
+    videos: isHindi ? 'वीडियो एंड रील्स' : 'Videos & Reels',
     studio: isHindi ? 'ग्राफिक स्टूडियो' : 'Graphic Studio',
     epaper: isHindi ? 'दैनिक ई-पेपर' : 'E-Paper',
     profile: isAdminUser
@@ -228,7 +234,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             >
-              🎬 वीडियो
+              🎬 वीडियो एंड रील्स
             </button>
             <button
               onClick={() => onNavigateToTab('studio')}

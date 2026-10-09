@@ -77,6 +77,36 @@ import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminPlansAndPackagesManager } from './AdminPlansAndPackagesManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
+import {
+  getCustomFrames,
+  saveCustomFrame,
+  deleteCustomFrame,
+  setActiveCustomFrameId,
+  getActiveCustomFrameId,
+  CustomFrameItem,
+} from '../lib/customFramesManager';
+
+export const DEFAULT_SOCIAL_ICONS = {
+  youtube: true,
+  facebook: true,
+  instagram: true,
+  twitter: false,
+  telegram: false,
+  whatsapp: true,
+};
+
+export const DEFAULT_PROFILE: ChannelProfile = {
+  fullName: 'यूज़र',
+  channelNameHi: 'AI News Maker App',
+  channelNameEn: 'AI News Maker',
+  channelLogoUrl: '/assets/ai_news_maker_logo.png',
+  channelLogoType: 'png',
+  socialIcons: DEFAULT_SOCIAL_ICONS,
+  username: '',
+  mobileNumber: '96698-02408',
+  showMobileNumber: true,
+  websiteUrl: 'ainewsmaker.online',
+};
 
 interface ProfileScreenWebProps {
   currentUser: ReporterUser | null;
@@ -84,9 +114,10 @@ interface ProfileScreenWebProps {
   onAddNewPost: (post: Omit<NewsFeedPost, 'id' | 'timestamp'>) => void;
   onOpenStudio: () => void;
   onOpenOnboarding?: () => void;
-  categories: { id: string; name: string }[];
-  onAddCategory: (name: string) => void;
-  onDeleteCategory: (id: string) => void;
+  onNavigateToGenerator?: () => void;
+  categories?: { id: string; name: string }[];
+  onAddCategory?: (name: string) => void;
+  onDeleteCategory?: (id: string) => void;
 }
 
 export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
@@ -95,9 +126,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   onAddNewPost,
   onOpenStudio,
   onOpenOnboarding,
-  categories,
-  onAddCategory,
-  onDeleteCategory,
+  categories = [],
+  onAddCategory = () => {},
+  onDeleteCategory = () => {},
 }) => {
   // Admin check & Channel Profile Lock check with robust fallback for Android WebView
   const effectiveUser = currentUser || (() => {
@@ -117,29 +148,31 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
       if (cleanEmail) {
         const specific = localStorage.getItem(`user_profile_${cleanEmail}`);
-        if (specific) return JSON.parse(specific);
+        if (specific) {
+          const parsed = JSON.parse(specific);
+          return {
+            ...DEFAULT_PROFILE,
+            ...parsed,
+            socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+          };
+        }
       }
       const saved = localStorage.getItem('user_channel_profile');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_PROFILE,
+          ...parsed,
+          socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+        };
+      }
     } catch {}
     return {
+      ...DEFAULT_PROFILE,
       fullName: currentUser?.name || 'यूज़र',
       channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
       channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
-      channelLogoUrl: '/assets/ai_news_maker_logo.png',
-      channelLogoType: 'png',
-      socialIcons: {
-        youtube: true,
-        facebook: true,
-        instagram: true,
-        twitter: false,
-        telegram: false,
-        whatsapp: true,
-      },
       username: currentUser?.username || '',
-      mobileNumber: '96698-02408',
-      showMobileNumber: true,
-      websiteUrl: 'ainewsmaker.online',
     };
   });
 
@@ -416,7 +449,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     e.preventDefault();
     if (!rssChannelInput.trim() || !rssUrlInput.trim()) return;
 
-    const catObj = categories.find((c) => c.id === rssCategoryInput);
+    const catObj = (categories || []).find((c) => c.id === rssCategoryInput);
     const newSource: RssFeedSource = {
       id: `rss-${Date.now()}`,
       channelName: rssChannelInput.trim(),
@@ -494,7 +527,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setChannelProfile(parsed);
+          const normalized: ChannelProfile = {
+            ...DEFAULT_PROFILE,
+            ...parsed,
+            socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+          };
+          setChannelProfile(normalized);
           if (parsed.customHeaderPng !== undefined) setCustomHeaderPng(parsed.customHeaderPng);
           if (parsed.customFooterPng !== undefined) setCustomFooterPng(parsed.customFooterPng);
         } catch {}
@@ -507,6 +545,63 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       window.removeEventListener('storage', handleProfileSync);
     };
   }, []);
+
+  // 4:5 Custom Frames State for PRO & VIP DESK
+  const [customFramesList, setCustomFramesList] = useState<CustomFrameItem[]>(() =>
+    getCustomFrames(currentUser?.email)
+  );
+  const [activeFrameId, setActiveFrameId] = useState<string | null>(() => getActiveCustomFrameId());
+  const [newFrameName, setNewFrameName] = useState<string>('');
+  const [newFrameAsset, setNewFrameAsset] = useState<string>('');
+  const [frameUploadError, setFrameUploadError] = useState<string>('');
+
+  useEffect(() => {
+    const handleFramesUpdate = () => {
+      setCustomFramesList(getCustomFrames(currentUser?.email));
+      setActiveFrameId(getActiveCustomFrameId());
+    };
+    window.addEventListener('ai_news_custom_frames_updated', handleFramesUpdate);
+    return () => window.removeEventListener('ai_news_custom_frames_updated', handleFramesUpdate);
+  }, [currentUser?.email]);
+
+  const handleCustomFrameFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setFrameUploadError('कृपया वैध इमेज (PNG/JPG) फ़ाइल चुनें');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setNewFrameAsset(reader.result);
+          setFrameUploadError('');
+          if (!newFrameName) {
+            setNewFrameName(file.name.replace(/\.[^/.]+$/, ''));
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveCustomFrameItem = () => {
+    if (!newFrameAsset) {
+      setFrameUploadError('कृपया 4:5 कस्टम फ्रेम फ़ाइल चुनें');
+      return;
+    }
+    const saved = saveCustomFrame({
+      userId: currentUser?.email || 'user',
+      name: newFrameName.trim() || 'कस्टम 4:5 फ्रेम',
+      assetUrl: newFrameAsset,
+    });
+    setCustomFramesList(getCustomFrames(currentUser?.email));
+    setActiveFrameId(saved.id);
+    setNewFrameName('');
+    setNewFrameAsset('');
+    setFrameUploadError('');
+    showToast('✨ 4:5 कस्टम फ्रेम सफलतापूर्वक सहेजा गया!');
+  };
 
   // Custom Header & Custom Footer PNG states (PRO & VIP DESK exclusive)
   const [customHeaderPng, setCustomHeaderPng] = useState<string>(() => {
@@ -907,7 +1002,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       sourceChannel: newChannel,
       sourceUrl: 'https://ainewsmaker.online',
       category: newCategory,
-      categoryName: categories.find((c) => c.id === newCategory)?.name || 'ताज़ा खबर',
+      categoryName: (categories || []).find((c) => c.id === newCategory)?.name || 'ताज़ा खबर',
       publishedTime: 'अभी-अभी',
       imageUrl: newImageUrl.trim() || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
       breaking: isBreaking,
@@ -1874,7 +1969,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     { id: 'telegram', label: 'Telegram' },
                     { id: 'twitter', label: 'X / Twitter' },
                   ].map((soc) => {
-                    const isChecked = Boolean((channelProfile.socialIcons as any)[soc.id]);
+                    const isChecked = Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
                     return (
                       <button
                         key={soc.id}
@@ -1883,7 +1978,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           setChannelProfile((p) => ({
                             ...p,
                             socialIcons: {
-                              ...p.socialIcons,
+                              ...(p.socialIcons || DEFAULT_SOCIAL_ICONS),
                               [soc.id]: !isChecked,
                             },
                           }))
@@ -1918,7 +2013,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               </div>
             </div>
 
-            {/* SECTION 4: HEADER & FOOTER SETTINGS (PRO & VIP DESK ONLY GATING) */}
+            {/* SECTION 4: TRUE 4:5 CUSTOM FRAMES (PRO & VIP DESK ONLY GATING) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
@@ -1927,13 +2022,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white flex items-center gap-2">
-                      <span>कस्टम हेडर व फुटर सेटिंग्स</span>
+                      <span>4:5 कस्टम फ्रेम मैनेजर (Custom Frame Manager)</span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase">
                         PRO & VIP DESK ONLY
                       </span>
                     </h3>
                     <p className="text-xs text-slate-400">
-                      अपना कस्टम हेडर बैनर PNG व फुटर स्ट्रिप PNG अपलोड करें
+                      अपने चैनल का सम्पूर्ण 4:5 कस्टम फ्रेम अपलोड व प्रबंधित करें
                     </p>
                   </div>
                 </div>
@@ -1941,124 +2036,153 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
               {subscription.tier === 'professional' || subscription.tier === 'ultra' || isAdmin ? (
                 /* Unlocked for PRO & VIP DESK */
-                <div className="space-y-4">
-                  {/* Custom Header PNG */}
+                <div className="space-y-5">
+                  {/* Upload New 4:5 Custom Frame */}
                   <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="block text-xs font-bold text-white">
-                          1. कस्टम हेडर बैनर PNG (Custom Header PNG)
-                        </label>
-                        <p className="text-[11px] text-slate-400">
-                          अपलोड होने पर डिफ़ॉल्ट लोकेशन व लोगो बॉक्स स्वतः हाइड हो जाएंगे।
-                        </p>
-                      </div>
-                      {customHeaderPng && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomHeaderPng('')}
-                          className="text-xs text-red-400 hover:text-red-300 font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>हटाएं</span>
-                        </button>
-                      )}
-                    </div>
+                    <label className="block text-xs font-bold text-white">
+                      नया 4:5 कस्टम फ्रेम जोड़ें (Upload TRUE 4:5 Custom Frame)
+                    </label>
+                    <p className="text-[11px] text-slate-400">
+                      पूरा 1080×1350 (4:5) फ्रेम PNG अपलोड करें। आप एक से अधिक फ्रेम सहेज सकते हैं।
+                    </p>
 
-                    {customHeaderPng && (
-                      <div className="w-full max-h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={customHeaderPng}
-                          alt="Custom Header Preview"
-                          className="max-h-20 w-auto object-contain"
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-300">फ्रेम का नाम:*</label>
+                        <input
+                          type="text"
+                          value={newFrameName}
+                          onChange={(e) => setNewFrameName(e.target.value)}
+                          placeholder="उदा. मेरा मुख्य प्राइम टीवी फ्रेम"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:border-amber-400 focus:outline-hidden"
                         />
                       </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-slate-300">फ्रेम इमेज (PNG 4:5):*</label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex-1 px-3 py-2 bg-purple-950 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition truncate">
+                            <Upload className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            <span className="truncate">{newFrameAsset ? 'इमेज चुनी गई ✓' : '📁 4:5 फ्रेम चुनें'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/*"
+                              onChange={handleCustomFrameFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {frameUploadError && (
+                      <p className="text-xs text-red-400 font-medium">⚠️ {frameUploadError}</p>
                     )}
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label className="px-3.5 py-2 bg-purple-950 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>{customHeaderPng ? 'हेडर बदलें' : '📁 हेडर PNG अपलोड करें'}</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/*"
-                          onChange={handleCustomHeaderUpload}
-                          className="hidden"
+                    {newFrameAsset && (
+                      <div className="flex items-center gap-3 p-2 bg-slate-900 rounded-lg border border-slate-800">
+                        <img
+                          src={newFrameAsset}
+                          alt="New Frame Preview"
+                          className="w-12 h-15 object-contain rounded bg-slate-950 border border-slate-700"
                         />
-                      </label>
-                      <input
-                        type="text"
-                        value={customHeaderPng}
-                        onChange={(e) => setCustomHeaderPng(e.target.value)}
-                        placeholder="या हेडर PNG इमेज URL पेस्ट करें (https://...)"
-                        className="flex-1 min-w-[200px] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Custom Footer PNG */}
-                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="block text-xs font-bold text-white">
-                          2. कस्टम फुटर स्ट्रिप PNG (Custom Footer PNG)
-                        </label>
-                        <p className="text-[11px] text-slate-400">
-                          अपलोड होने पर डिफ़ॉल्ट फिक्स्ड फुटर स्वतः हाइड हो जाएगा।
-                        </p>
-                      </div>
-                      {customFooterPng && (
+                        <div className="flex-1 min-w-0 text-xs text-slate-300">
+                          <span className="font-bold text-white block truncate">{newFrameName || 'कस्टम 4:5 फ्रेम'}</span>
+                          <span className="text-[10px] text-amber-400">आस्पेक्ट रेशियो: 4:5 (सत्यापित)</span>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => setCustomFooterPng('')}
-                          className="text-xs text-red-400 hover:text-red-300 font-bold flex items-center gap-1 cursor-pointer"
+                          onClick={handleSaveCustomFrameItem}
+                          className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 text-slate-950 text-xs font-black rounded-lg shadow cursor-pointer transition active:scale-95"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>हटाएं</span>
+                          सहेजें (Save)
                         </button>
-                      )}
-                    </div>
-
-                    {customFooterPng && (
-                      <div className="w-full max-h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={customFooterPng}
-                          alt="Custom Footer Preview"
-                          className="max-h-20 w-auto object-contain"
-                        />
                       </div>
                     )}
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label className="px-3.5 py-2 bg-purple-950 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>{customFooterPng ? 'फुटर बदलें' : '📁 फुटर PNG अपलोड करें'}</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/*"
-                          onChange={handleCustomFooterUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <input
-                        type="text"
-                        value={customFooterPng}
-                        onChange={(e) => setCustomFooterPng(e.target.value)}
-                        placeholder="या फुटर PNG इमेज URL पेस्ट करें (https://...)"
-                        className="flex-1 min-w-[200px] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-mono"
-                      />
-                    </div>
                   </div>
 
-                  <div className="flex justify-end pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveChannelBranding}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>कस्टम हेडर व फुटर सेव करें</span>
-                    </button>
+                  {/* List of Saved Custom Frames */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                      <span>सहेजे गए कस्टम फ्रेम्स ({customFramesList.length})</span>
+                      {activeFrameId && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveFrameId(null)}
+                          className="text-[11px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                        >
+                          डिफ़ॉल्ट फ्रेम पर वापस जाएं
+                        </button>
+                      )}
+                    </h4>
+
+                    {customFramesList.length === 0 ? (
+                      <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800 text-center text-xs text-slate-500">
+                        कोई कस्टम फ्रेम सहेजा नहीं गया है। ऊपर से अपना 4:5 फ्रेम जोड़ें।
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {customFramesList.map((cf) => {
+                          const isActive = activeFrameId === cf.id;
+                          return (
+                            <div
+                              key={cf.id}
+                              className={`p-3 rounded-xl border transition flex flex-col justify-between gap-2 ${
+                                isActive
+                                  ? 'bg-purple-950/40 border-purple-500 ring-2 ring-purple-500/40'
+                                  : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <img
+                                  src={cf.assetUrl}
+                                  alt={cf.name}
+                                  className="w-12 h-15 object-contain rounded bg-slate-900 border border-slate-700 shrink-0"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <h5 className="text-xs font-bold text-white truncate">{cf.name}</h5>
+                                  <span className="text-[10px] text-purple-300 block">रेशियो: 4:5</span>
+                                  {isActive && (
+                                    <span className="text-[10px] text-emerald-400 font-bold">✓ सक्रिय</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 pt-1 border-t border-slate-800/80">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCustomFrameId(isActive ? null : cf.id);
+                                    setActiveFrameId(isActive ? null : cf.id);
+                                    showToast(isActive ? 'डिफ़ॉल्ट फ्रेम चुना गया' : `✅ "${cf.name}" फ्रेम सक्रिय किया गया!`);
+                                  }}
+                                  className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold cursor-pointer transition ${
+                                    isActive
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                                  }`}
+                                >
+                                  {isActive ? 'सक्रिय (Active)' : 'लागू करें'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`क्या आप "${cf.name}" फ्रेम को हटाना चाहते हैं?`)) {
+                                      deleteCustomFrame(cf.id);
+                                      setCustomFramesList(getCustomFrames(currentUser?.email));
+                                    }
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-red-400 rounded-lg cursor-pointer transition"
+                                  title="फ्रेम हटाएं"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -2234,6 +2358,16 @@ return (
                       <Crown className="w-3 h-3" />
                       <span>{activePlanDetail.nameHi}</span>
                     </span>
+
+                    {/* Requirement 20: 7-Day Free Trial Active & Days Remaining */}
+                    {!isAdmin && subscription.isTrialActive && (
+                      <span className="px-2.5 py-0.5 bg-emerald-950/90 border border-emerald-500/70 text-emerald-300 text-[10px] font-black rounded-full flex items-center gap-1.5 shadow-xs">
+                        <Sparkles className="w-3 h-3 text-emerald-400" />
+                        <span>7-Day Free Trial Active</span>
+                        <span>•</span>
+                        <span>{subscription.daysRemaining} Days Remaining</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Username & Location - Clean & Real Data + Manual Username Creation */}

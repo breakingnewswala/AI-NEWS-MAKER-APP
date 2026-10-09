@@ -45,7 +45,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
           }`}
         >
           <Film className={`w-5 h-5 ${isVideos ? 'stroke-[2.5]' : 'stroke-2'}`} />
-          <span className="text-[10px] font-bold mt-1">वीडियो</span>
+          <span className="text-[8.5px] sm:text-[9.5px] font-bold mt-1 tracking-tight truncate max-w-[64px]">वीडियो एंड रील्स</span>
         </button>
 
         {/* Tab 3: Studio (स्टूडियो - Center Elevated Action Button) */}

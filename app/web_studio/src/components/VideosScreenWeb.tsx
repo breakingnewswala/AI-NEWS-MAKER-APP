@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Play,
-  Share2,
   Sparkles,
   Clock,
   Eye,
-  Tv,
   Film,
   Flame,
-  Check,
-  Video,
   Upload,
   PlusCircle,
   ShieldCheck,
@@ -19,7 +15,7 @@ import {
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
-import { isEffectiveAdmin } from '../lib/userPlanManager';
+import { isEffectiveAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -35,7 +31,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   onAdminAddVideo,
 }) => {
   const [activeVideo, setActiveVideo] = useState<VideoFeedItem | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
 
   // Floating Back to Top state
@@ -78,21 +73,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   }, [activeVideos, selectedRatioFilter]);
 
   // Role-based Admin check: ONLY Super Admin and Admin have access to video upload controls
-  const isAdmin = isEffectiveAdmin(currentUser);
-
-  const handleShare = (vid: VideoFeedItem) => {
-    if (navigator.share) {
-      navigator.share({
-        title: vid.title,
-        text: `${vid.title} - ${vid.channel}`,
-        url: window.location.href,
-      }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(`${vid.title} (${vid.channel}) - AI News Maker`);
-      setCopiedId(vid.id);
-      setTimeout(() => setCopiedId(null), 2000);
-    }
-  };
+  const isAdmin = isEffectiveAdmin(currentUser) || isUserSuperAdmin(currentUser) || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   const handleAdminFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -137,7 +118,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
       {/* Top Header */}
-      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-4 sm:px-6 py-4 sticky top-14 z-20 backdrop-blur-md">
+      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-4 sm:px-6 py-4 sticky top-[56px] sm:top-[64px] z-20 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg">
@@ -145,10 +126,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                वीडियो बुलेटिन व लाइव रील्स
+                वीडियो एंड रील्स
               </h1>
               <p className="text-xs text-slate-400">
-                शीर्ष चैनलों की एक्सक्लूसिव वीडियो रिपोर्ट्स एवं डिजिटल क्लिप्स
+                एक्सक्लूसिव वीडियो रिपोर्ट्स एवं डिजिटल क्लिप्स
               </p>
             </div>
           </div>
@@ -168,7 +149,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
-                <span>एडमिन वीडियो अपलोड</span>
+                <span>वीडियो अपलोड</span>
               </button>
             )}
 
@@ -336,7 +317,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <span className="px-2.5 py-1 bg-red-600 text-white text-xs font-black rounded-md">
                   लाइव वीडियो प्लेयर
                 </span>
-                <span className="text-xs text-slate-400">{activeVideo.channel}</span>
                 {activeVideo.aspectRatio && (
                   <span className="px-2 py-0.5 bg-slate-800 text-amber-400 text-[10px] font-bold rounded">
                     रेशियो: {activeVideo.aspectRatio}
@@ -369,9 +349,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   </p>
                 )}
                 <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
-                  <span>{activeVideo.channel}</span>
-                  <span>•</span>
-                  <span>{activeVideo.views}</span>
+                  <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                    <Eye className="w-3.5 h-3.5" />
+                    {activeVideo.views}
+                  </span>
                   <span>•</span>
                   <span>अवधि: {activeVideo.duration}</span>
                 </div>
@@ -446,10 +427,9 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
 
                 <div className="p-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-semibold text-amber-400">{vid.channel}</span>
-                    <span className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
+                  <div className="flex items-center text-xs text-slate-400">
+                    <span className="flex items-center gap-1.5 font-medium text-amber-400">
+                      <Eye className="w-3.5 h-3.5" />
                       {vid.views}
                     </span>
                   </div>
@@ -469,7 +449,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + Share */}
+              {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + वीडियो देखें */}
               <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
                 <button
                   type="button"
@@ -482,15 +462,11 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => handleShare(vid)}
-                  className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors cursor-pointer"
-                  title="शेयर करें"
+                  onClick={() => setActiveVideo(vid)}
+                  className="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer active:scale-95 shrink-0"
                 >
-                  {copiedId === vid.id ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Share2 className="w-4 h-4" />
-                  )}
+                  <Play className="w-3.5 h-3.5 fill-current text-amber-400" />
+                  <span>वीडियो देखें</span>
                 </button>
               </div>
             </div>

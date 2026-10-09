@@ -267,8 +267,12 @@ object NewsRepository {
         resetJacketData()
     }
 
+    fun hasPendingGraphicPost(): Boolean {
+        return _pendingGraphicPost.value != null
+    }
+
     fun getPendingNewsJson(): String {
-        val post = _pendingGraphicPost.value ?: return "{}"
+        val post = _pendingGraphicPost.value ?: return ""
         val obj = JSONObject().apply {
             put("id", post.id)
             put("title", post.title)
@@ -366,11 +370,19 @@ object NewsRepository {
         }
     }
 
-    fun addWebLinkPost(url: String, channel: String, category: String, customTitle: String = "", customSummary: String = "") {
+    fun addWebLinkPost(
+        url: String,
+        channel: String,
+        category: String = "",
+        customTitle: String? = null,
+        customSummary: String = "",
+        categoryName: String = category
+    ) {
+        val effectiveCategory = if (category.isNotBlank()) category else categoryName
         scope.launch {
-            val fetched = LiveFeedNetworkManager.fetchWebArticleMetadata(url, channel, category)
+            val fetched = LiveFeedNetworkManager.fetchWebArticleMetadata(url, channel, effectiveCategory)
             val post = fetched.copy(
-                title = if (customTitle.isNotBlank()) customTitle else fetched.title,
+                title = if (!customTitle.isNullOrBlank()) customTitle else fetched.title,
                 summary = if (customSummary.isNotBlank()) customSummary else fetched.summary
             )
             _posts.value = listOf(post) + _posts.value
@@ -378,12 +390,18 @@ object NewsRepository {
         }
     }
 
-    fun addRssFeedPost(channel: String, url: String, categoryName: String, customTitle: String = "", customSummary: String = "") {
+    fun addRssFeedPost(
+        channel: String,
+        url: String,
+        categoryName: String = "ब्रेकिंग न्यूज़",
+        customTitle: String? = null,
+        customSummary: String = ""
+    ) {
         val cat = NewsCategory.entries.find { it.displayName == categoryName } ?: NewsCategory.BREAKING
         scope.launch {
             val fetched = LiveFeedNetworkManager.fetchRssFeed(url, channel, cat)
             if (fetched.isNotEmpty()) {
-                val toAdd = if (customTitle.isNotBlank()) {
+                val toAdd = if (!customTitle.isNullOrBlank()) {
                     val first = fetched[0].copy(
                         title = customTitle,
                         summary = if (customSummary.isNotBlank()) customSummary else fetched[0].summary
@@ -393,7 +411,7 @@ object NewsRepository {
                 _posts.value = toAdd + _posts.value
             } else {
                 addPost(
-                    title = if (customTitle.isNotBlank()) customTitle else "RSS फ़ीड अपडेट ($channel)",
+                    title = if (!customTitle.isNullOrBlank()) customTitle else "RSS फ़ीड अपडेट ($channel)",
                     summary = if (customSummary.isNotBlank()) customSummary else "फ़ीड से सामग्री लोड की गई।",
                     channel = channel,
                     url = url,

@@ -7,7 +7,7 @@ import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में त्रुटि">
+    <ErrorBoundary fallbackTitle="एप्लिकेशन लोड करने में त्रुटि">
       <LanguageProvider>
         <App />
       </LanguageProvider>

@@ -1260,6 +1260,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             mobileViewMode={mobileViewMode}
             onOpenCloudSettings={onOpenCloudSettings}
             autoFillNews={autoFillNews}
+            currentUser={currentUser}
           />
         </div>
       )}
@@ -3538,14 +3539,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           
 
       {/* ========================================================================= */}
-      {/* STEP 7: डाउनलोड (HD कार्ड एक्सपोर्ट) */}
+      {/* STEP 7: डाउनलोड व कैप्शन (HD कार्ड एक्सपोर्ट व सोशल शेयर) */}
       {/* ========================================================================= */}
       {(mobileViewMode === 'all' || activeStep === 7) && (
-
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}
-          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4 scroll-mt-28"
+          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 scroll-mt-28"
         >
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
@@ -3553,7 +3553,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 7
               </span>
               <h2 className="text-base sm:text-lg font-black text-white font-['Mukta']">
-                डाउनलोड (HD कार्ड एक्सपोर्ट)
+                डाउनलोड व कैप्शन (HD कार्ड एक्सपोर्ट व सोशल शेयर)
               </h2>
             </div>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30">
@@ -3561,6 +3561,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </span>
           </div>
 
+          {/* Block 1: HD Card Export */}
           <div className="bg-neutral-950/80 rounded-xl p-4 border border-neutral-800/80 flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-600 to-amber-500 flex items-center justify-center shrink-0 shadow-md text-white font-black">
@@ -3587,54 +3588,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </button>
           </div>
 
-          {/* Mobile Step Nav */}
-          {mobileViewMode === 'steps' && (
-            <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-              <button
-                type="button"
-                onClick={() => handleGoToStep(6)}
-                className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>पिछला: हैडर और फुटर</span>
-              </button>
-              <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 7 / {STEPS.length}</span>
-              <button
-                type="button"
-                onClick={onOpenCaptionModal}
-                className="px-3.5 py-1.5 rounded-lg bg-amber-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-              >
-                <span>कैप्शन व शेयर</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* STEP 7: कैप्शन (सोशल मीडिया कैप्शन व शेयर) */}
-      {/* ========================================================================= */}
-      {(mobileViewMode === 'all' || activeStep === 7) && (
-        <div
-          id="step-caption"
-          style={{ scrollMarginTop: '380px' }}
-          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4 scroll-mt-[380px]"
-        >
-          <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-amber-400 text-neutral-950 font-black flex items-center justify-center text-sm shadow-sm">
-                7
-              </span>
-              <h2 className="text-base sm:text-lg font-black text-white font-['Mukta']">
-                कैप्शन (सोशल मीडिया कैप्शन व शेयर)
-              </h2>
-            </div>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold border border-green-500/30">
-              ऑटो कैप्शन
-            </span>
-          </div>
-
+          {/* Block 2: Ready-to-Post Caption & Share */}
           <div className="bg-neutral-950/80 rounded-xl p-4 border border-neutral-800/80 flex flex-col gap-3">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-green-600/20 border border-green-500/30 flex items-center justify-center shrink-0 text-green-400">
@@ -3660,17 +3614,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </button>
           </div>
 
-
           {/* Mobile Step Nav */}
           {mobileViewMode === 'steps' && (
-            <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs lg:hidden">
+            <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
               <button
                 type="button"
-                onClick={() => handleGoToStep(7)}
+                onClick={() => handleGoToStep(6)}
                 className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
-                <span>पिछला: फुटर</span>
+                <span>पिछला: हैडर और फुटर</span>
               </button>
               <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 7 / {STEPS.length}</span>
               <button

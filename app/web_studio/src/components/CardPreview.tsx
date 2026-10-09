@@ -257,23 +257,23 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
       const isMorning = card.frameDesign === 'jacket-morning';
       const isIvory = isMorning && card.morningDesignStyle === 'editorial-ivory';
       const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
-      const isLightTemplate = isGraphic1 || isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
+      const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
 
-      // Base and highlight colors
-      const baseTextColor = isGraphic3
+      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses crisp WHITE text on dark canvas)
+      const baseTextColor = (isGraphic1 || isGraphic3)
         ? '#FFFFFF'
-        : (isGraphic1 || isGraphic2 || isGraphic4 || isIvory || isDefault)
+        : (isGraphic2 || isGraphic4 || isIvory || isDefault)
         ? '#000000'
         : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'));
 
-      const highlightColor = isGraphic3
+      const highlightColor = (isGraphic1 || isGraphic3)
         ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
         : isGraphic4
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
         : isGraphic2
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C')
         : isGraphic1
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
+        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#FFE600')
         : isIvory
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#B45309')
         : isEmerald

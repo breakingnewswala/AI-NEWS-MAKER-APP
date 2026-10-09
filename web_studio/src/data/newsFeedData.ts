@@ -17,6 +17,7 @@ export interface NewsFeedPost {
   imageSource?: 'source' | 'default' | 'manual';
   manualThumbnailUrl?: string;
   additionalPhotos?: string[];
+  status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
 }
 
 export interface VideoFeedItem {

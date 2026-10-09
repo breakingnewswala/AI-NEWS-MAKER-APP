@@ -84,9 +84,10 @@ interface ProfileScreenWebProps {
   onAddNewPost: (post: Omit<NewsFeedPost, 'id' | 'timestamp'>) => void;
   onOpenStudio: () => void;
   onOpenOnboarding?: () => void;
-  categories: { id: string; name: string }[];
-  onAddCategory: (name: string) => void;
-  onDeleteCategory: (id: string) => void;
+  onNavigateToGenerator?: () => void;
+  categories?: { id: string; name: string }[];
+  onAddCategory?: (name: string) => void;
+  onDeleteCategory?: (id: string) => void;
 }
 
 export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
@@ -95,9 +96,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   onAddNewPost,
   onOpenStudio,
   onOpenOnboarding,
-  categories,
-  onAddCategory,
-  onDeleteCategory,
+  categories = [],
+  onAddCategory = () => {},
+  onDeleteCategory = () => {},
 }) => {
   // Admin check & Channel Profile Lock check with robust fallback for Android WebView
   const effectiveUser = currentUser || (() => {
@@ -416,7 +417,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     e.preventDefault();
     if (!rssChannelInput.trim() || !rssUrlInput.trim()) return;
 
-    const catObj = categories.find((c) => c.id === rssCategoryInput);
+    const catObj = (categories || []).find((c) => c.id === rssCategoryInput);
     const newSource: RssFeedSource = {
       id: `rss-${Date.now()}`,
       channelName: rssChannelInput.trim(),
@@ -907,7 +908,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       sourceChannel: newChannel,
       sourceUrl: 'https://ainewsmaker.online',
       category: newCategory,
-      categoryName: categories.find((c) => c.id === newCategory)?.name || 'ताज़ा खबर',
+      categoryName: (categories || []).find((c) => c.id === newCategory)?.name || 'ताज़ा खबर',
       publishedTime: 'अभी-अभी',
       imageUrl: newImageUrl.trim() || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
       breaking: isBreaking,

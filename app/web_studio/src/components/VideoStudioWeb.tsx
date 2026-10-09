@@ -83,12 +83,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   
-  // Auto-set aspect ratio based on incoming video
+  // Auto-set aspect ratio based on incoming video - 4:3 is the primary standard
   const [aspect, setAspect] = useState<VideoAspect>(() => {
     if (initialVideo?.aspectRatio) {
+      if (initialVideo.aspectRatio === '16:9') return '4:3';
       return initialVideo.aspectRatio as VideoAspect;
     }
-    return '9:16';
+    return '4:3';
   });
   
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -116,9 +117,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [channelTag, setChannelTag] = useState<string>(
     profile?.channelNameHi || currentUser?.channelName || 'BREAKING NEWS WALA'
   );
-  const [channelLogoUrl, setChannelLogoUrl] = useState<string>(
-    profile?.channelLogoUrl || currentUser?.channelLogoUrl || ''
-  );
+  // Priority: 1. User Uploaded GIF, 2. Default Saved Channel Logo (PNG/Standard)
+  const primaryLogo = profile?.channelLogoGifUrl || profile?.channelLogoPngUrl || profile?.channelLogoUrl || currentUser?.channelLogoUrl || '';
+  const [channelLogoUrl, setChannelLogoUrl] = useState<string>(primaryLogo);
   const [logoScale, setLogoScale] = useState<number>(125); // 50% to 180%, default 125%
   const [socialHandle, setSocialHandle] = useState<string>(
     profile?.username ? (profile.username.startsWith('@') ? profile.username : `@${profile.username}`) : '@AINewsMaker'
@@ -650,7 +651,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 <span className="text-red-400 font-black">लाइव वीडियो कैनवास</span>
               </div>
               <div className="flex items-center gap-1">
-                {(['9:16', '4:3', '1:1', '16:9', '4:5'] as VideoAspect[]).map((r) => (
+                {(['4:3', '9:16', '1:1', '4:5'] as VideoAspect[]).map((r) => (
                   <button
                     key={r}
                     type="button"
@@ -1081,13 +1082,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </span>
             </div>
 
-            {/* Ratio Selector Buttons */}
-            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+            {/* Ratio Selector Buttons - 4:3 is Standard Broadcast Composition */}
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
               {[
-                { id: '9:16', label: '9:16', desc: 'रील्स' },
-                { id: '4:3', label: '4:3', desc: 'क्लासिक' },
+                { id: '4:3', label: '4:3', desc: 'क्लासिक टीवी' },
+                { id: '9:16', label: '9:16', desc: 'रील्स/शॉर्ट्स' },
                 { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
-                { id: '16:9', label: '16:9', desc: 'यूट्यूब' },
                 { id: '4:5', label: '4:5', desc: 'फ़ीड' },
               ].map((r) => (
                 <button

@@ -48,6 +48,7 @@ import {
   checkAccountUniqueness,
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
+import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -131,6 +132,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return false;
     }
   });
+  const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | null>(null);
 
   // Login Form States (for Admin Login)
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -1717,23 +1719,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <div className="text-xs text-slate-300 leading-relaxed">
                     <span className="font-bold text-white">
                       मैंने{' '}
-                      <a
-                        href="/terms"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-400 underline hover:text-amber-300"
+                      <button
+                        type="button"
+                        onClick={() => setLegalModalTab('terms')}
+                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
                       >
                         नियम व शर्तें (Terms & Conditions)
-                      </a>{' '}
+                      </button>{' '}
                       और{' '}
-                      <a
-                        href="/privacy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-400 underline hover:text-amber-300"
+                      <button
+                        type="button"
+                        onClick={() => setLegalModalTab('privacy')}
+                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
                       >
                         गोपनीयता नीति (Privacy Policy)
-                      </a>{' '}
+                      </button>{' '}
                       को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
                     </span>
                   </div>
@@ -1765,6 +1765,43 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           setDetailChannelLogoType('png');
         }}
       />
+
+      {/* Requirement 1: In-Page Terms & Privacy Modal Popup (Preserves all entered form inputs) */}
+      {legalModalTab && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-left">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
+              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-amber-400" />
+                <span>
+                  {legalModalTab === 'terms'
+                    ? 'नियम व शर्तें (Terms & Conditions)'
+                    : 'गोपनीयता नीति (Privacy Policy)'}
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLegalModalTab(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              <HelpAndPoliciesView isCompact={true} />
+            </div>
+            <div className="p-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setLegalModalTab(null)}
+                className="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl cursor-pointer shadow transition active:scale-95"
+              >
+                वापस जाएं (बंद करें)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

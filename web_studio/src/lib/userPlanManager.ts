@@ -1,4 +1,5 @@
 // AI News Maker App - User Tier & Plan Management
+import { getApiUrl } from './apiConfig';
 
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
@@ -839,12 +840,16 @@ export function savePrimaryMobileNumber(phone: string): boolean {
 // Activate 7-Day Free Trial (Trial Plan = VIP DESK as per MASTER SPECIFICATION Rule 32)
 export function activateFreeTrial(): UserSubscriptionInfo {
   if (typeof window !== 'undefined') {
-    const now = Date.now();
-    const expiry = now + 7 * 24 * 60 * 60 * 1000;
-    localStorage.setItem(STORAGE_KEY_TIER, 'ultra');
-    localStorage.setItem('ai_news_maker_is_trial', 'true');
-    localStorage.setItem(STORAGE_KEY_TRIAL_START, now.toString());
-    localStorage.setItem('ai_news_maker_plan_expires_at', expiry.toString());
+    const existingStart = localStorage.getItem(STORAGE_KEY_TRIAL_START);
+    const existingExpiry = localStorage.getItem('ai_news_maker_plan_expires_at');
+    if (!existingStart || !existingExpiry) {
+      const now = Date.now();
+      const expiry = now + 7 * 24 * 60 * 60 * 1000;
+      localStorage.setItem(STORAGE_KEY_TIER, 'ultra');
+      localStorage.setItem('ai_news_maker_is_trial', 'true');
+      localStorage.setItem(STORAGE_KEY_TRIAL_START, now.toString());
+      localStorage.setItem('ai_news_maker_plan_expires_at', expiry.toString());
+    }
   }
   return getUserSubscription();
 }
@@ -1154,7 +1159,7 @@ export function approveLogoChangeRequest(requestId: string): void {
 // Cloud Users Sync & Admin Operations
 export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
   try {
-    const res = await fetch('/api/admin/users');
+    const res = await fetch(getApiUrl('/api/admin/users'));
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.users)) {
@@ -1171,7 +1176,7 @@ export async function adminUpdateCloudUser(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch('/api/admin/update-user', {
+    const res = await fetch(getApiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, updates }),
@@ -1187,7 +1192,7 @@ export async function adminUpdateCloudUser(
 
 export async function adminDeleteCloudUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch('/api/admin/delete-user', {
+    const res = await fetch(getApiUrl('/api/admin/delete-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId }),
