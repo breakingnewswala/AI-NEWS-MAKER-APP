@@ -1837,7 +1837,7 @@ export default function App() {
                     </div>
 
                     {/* Action Bar below Preview: 4 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
                       {/* 1. JPG डाउनलोड */}
                       <button
                         type="button"
@@ -1898,8 +1898,8 @@ export default function App() {
                     RIGHT COLUMN: TOP STEP TABS BAR + COMMANDS AREA FOR ACTIVE STEP
                     ================================================== */}
                 <div className="flex-1 w-full min-w-0 flex flex-col space-y-3">
-                  {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar */}
-                  <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
+                  {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar (Sticky on Scroll) */}
+                  <div className="sticky top-[60px] z-20 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
                     {/* Top Bar Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -1944,8 +1944,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Commands Area */}
-                  <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl">
+                  {/* Commands Area (Scrollable internally right beneath selector) */}
+                  <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl max-h-[calc(100vh-180px)] overflow-y-auto">
                     <CardEditor
                       card={card}
                       onChange={handleUpdateCard}
@@ -1995,6 +1995,7 @@ export default function App() {
       {/* 4. Newsroom Tab (Drafts & Saved Projects Workspace) */}
       {(currentTab === 'newsroom' || currentTab === 'drafts') && (
         <NewsroomScreenWeb
+          currentUser={currentUser}
           onOpenStudioWithDraft={handleOpenDraftInStudio}
           onNavigateToStudio={() => {
             setCurrentTab('studio');

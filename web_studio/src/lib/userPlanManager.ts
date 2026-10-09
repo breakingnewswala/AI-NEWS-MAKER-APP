@@ -6,21 +6,22 @@ export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
 export const SUPER_ADMIN_EMAILS = [
   'admin.ainewsmaker@gmail.com',
-  'admin@breakingnewswala.com',
   'breakingnewswala.com@gmail.com',
 ];
 
 export function isUserSuperAdmin(userOrEmail?: any): boolean {
   if (!userOrEmail) return false;
   if (typeof userOrEmail === 'string') {
-    const clean = userOrEmail.toLowerCase().trim();
-    return clean === 'superadmin' || SUPER_ADMIN_EMAILS.includes(clean);
+    const clean = userOrEmail.replace(/\s+/g, '').toLowerCase().trim();
+    return clean === 'superadmin' || clean === 'master_admin_001' || SUPER_ADMIN_EMAILS.includes(clean);
   }
-  const email = (userOrEmail.email || '').toLowerCase().trim();
-  const username = (userOrEmail.username || '').toLowerCase().trim();
+  const email = (userOrEmail.email || '').replace(/\s+/g, '').toLowerCase().trim();
+  const username = (userOrEmail.username || '').replace(/\s+/g, '').toLowerCase().trim();
+  const uid = (userOrEmail.uid || userOrEmail.userId || '').replace(/\s+/g, '').toLowerCase().trim();
   const role = (userOrEmail.role || '').toLowerCase().trim();
-  return role === 'superadmin' || SUPER_ADMIN_EMAILS.includes(email) || username === 'superadmin';
+  return role === 'superadmin' || SUPER_ADMIN_EMAILS.includes(email) || username === 'superadmin' || uid === 'master_admin_001';
 }
+
 
 export function isEffectiveSuperAdmin(user?: any): boolean {
   if (!user) {

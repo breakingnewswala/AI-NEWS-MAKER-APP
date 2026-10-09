@@ -531,45 +531,7 @@ app.post("/api/news-posts", (req, res) => {
   }
 });
 
-// 3. Admin RSS Sync endpoint
-app.post("/api/admin/rss-sync", async (req, res) => {
-  try {
-    const defaultSources = [
-      { name: "आज तक (Aaj Tak)", url: "https://www.aajtak.in/rssfeeds/?id=home", category: "देश" },
-      { name: "बीबीसी हिंदी (BBC Hindi)", url: "https://feeds.bbci.co.uk/hindi/rss.xml", category: "अंतरराष्ट्रीय" },
-      { name: "NDTV इंडिया", url: "https://feeds.feedburner.com/ndtvkhabar", category: "राजनीति" },
-      { name: "ज़ी न्यूज़ (Zee News)", url: "https://zeenews.india.com/rss/india-national-news.xml", category: "देश" }
-    ];
 
-    let allFetched: StoredNewsPost[] = [];
-    for (const src of defaultSources) {
-      const posts = await parseRssFeedUrl(src.url, src.name, src.category);
-      allFetched.push(...posts);
-    }
-
-    const existing = loadNewsDatabase();
-    const existingIds = new Set(existing.map((p) => p.id));
-    const existingUrls = new Set(existing.map((p) => p.sourceUrl));
-
-    let newCount = 0;
-    const toAdd: StoredNewsPost[] = [];
-    for (const p of allFetched) {
-      if (!existingIds.has(p.id) && !existingUrls.has(p.sourceUrl)) {
-        toAdd.push(p);
-        newCount++;
-      }
-    }
-
-    if (toAdd.length > 0) {
-      const updatedDB = [...toAdd, ...existing];
-      saveNewsDatabase(updatedDB);
-    }
-
-    return res.json({ success: true, count: newCount, totalNewItems: newCount, message: `${newCount} नए RSS समाचार सिंक हुए` });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
 
 // 4. Admin Manual News Creation endpoint
 app.post("/api/admin/add-news", (req, res) => {
@@ -752,119 +714,6 @@ app.delete("/api/drafts/:id", (req, res) => {
     drafts = drafts.filter((d) => d.id !== id);
     saveDraftsDatabase(drafts);
     return res.json({ success: true });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// --- 1. SHARED SUPPORT INBOX DATABASE (support_requests_database.json) ---
-const SUPPORT_DB_FILE = path.join(process.cwd(), "support_requests_database.json");
-
-interface StoredSupportRequest {
-  id: string;
-  userId?: string;
-  userName: string;
-  userEmail: string;
-  userMobile?: string;
-  message: string;
-  voiceTranscript?: string;
-  attachmentUrl?: string;
-  attachmentName?: string;
-  status: "pending" | "in_progress" | "resolved";
-  createdAt: number;
-  updatedAt?: number;
-  adminResponse?: string;
-}
-
-function loadSupportDatabase(): StoredSupportRequest[] {
-  try {
-    if (fs.existsSync(SUPPORT_DB_FILE)) {
-      const raw = fs.readFileSync(SUPPORT_DB_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.error("Error reading support_requests_database.json:", e);
-  }
-  return [];
-}
-
-function saveSupportDatabase(reqs: StoredSupportRequest[]): boolean {
-  try {
-    fs.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(reqs, null, 2), "utf-8");
-    return true;
-  } catch (e) {
-    console.error("Error writing support_requests_database.json:", e);
-    return false;
-  }
-}
-
-// GET /api/support/requests - Users view only their own requests; Admins view all
-app.get("/api/support/requests", (req, res) => {
-  try {
-    const { userId, role } = req.query;
-    const all = loadSupportDatabase();
-    if (role === "admin" || role === "superadmin") {
-      return res.json({ success: true, requests: all });
-    }
-    if (userId) {
-      const filtered = all.filter((r) => r.userId === String(userId));
-      return res.json({ success: true, requests: filtered });
-    }
-    return res.json({ success: true, requests: [] });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// POST /api/support/requests - Submit a new support inquiry
-app.post("/api/support/requests", (req, res) => {
-  try {
-    const payload = req.body;
-    if (!payload || (!payload.message && !payload.voiceTranscript)) {
-      return res.status(400).json({ error: "कृपया समस्या का विवरण या वॉयस इनपुट प्रदान करें" });
-    }
-    const newReq: StoredSupportRequest = {
-      id: payload.id || `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      userId: payload.userId || "",
-      userName: payload.userName || "यूज़र",
-      userEmail: payload.userEmail || "",
-      userMobile: payload.userMobile || "",
-      message: (payload.message || "").trim(),
-      voiceTranscript: (payload.voiceTranscript || "").trim(),
-      attachmentUrl: payload.attachmentUrl || "",
-      attachmentName: payload.attachmentName || "",
-      status: "pending",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    const all = loadSupportDatabase();
-    const updated = [newReq, ...all];
-    saveSupportDatabase(updated);
-    return res.json({ success: true, request: newReq });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// PATCH /api/support/requests/:id - Admin status update or reply
-app.patch("/api/support/requests/:id", (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, adminResponse } = req.body;
-    let all = loadSupportDatabase();
-    const idx = all.findIndex((r) => r.id === id);
-    if (idx >= 0) {
-      all[idx] = {
-        ...all[idx],
-        status: status || all[idx].status,
-        adminResponse: adminResponse !== undefined ? adminResponse : all[idx].adminResponse,
-        updatedAt: Date.now(),
-      };
-      saveSupportDatabase(all);
-      return res.json({ success: true, request: all[idx] });
-    }
-    return res.status(404).json({ error: "अनुरोध नहीं मिला" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -1171,63 +1020,21 @@ interface AdminRssSourceRecord {
   itemsFetchedCount?: number;
 }
 
-const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
-  {
-    id: "src_aajtak_rss",
-    name: "आज तक (Aaj Tak Hindi News)",
-    url: "https://www.aajtak.in/rssfeeds/?id=home",
-    type: "rss",
-    category: "देश",
-    isActive: true,
-    createdAt: Date.now() - 86400000,
-    itemsFetchedCount: 15,
-  },
-  {
-    id: "src_bbchindi_rss",
-    name: "बीबीसी हिंदी (BBC Hindi News)",
-    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
-    type: "rss",
-    category: "अंतरराष्ट्रीय",
-    isActive: true,
-    createdAt: Date.now() - 43200000,
-    itemsFetchedCount: 10,
-  },
-  {
-    id: "src_ndtv_rss",
-    name: "NDTV इंडिया (NDTV India Live)",
-    url: "https://feeds.feedburner.com/ndtvkhabar",
-    type: "rss",
-    category: "राजनीति",
-    isActive: true,
-    createdAt: Date.now() - 21600000,
-    itemsFetchedCount: 12,
-  },
-  {
-    id: "src_pib_web",
-    name: "प्रेस सूचना ब्यूरो (PIB National Desk)",
-    url: "https://pib.gov.in/PressReleasePage.aspx",
-    type: "web",
-    category: "देश",
-    isActive: true,
-    createdAt: Date.now() - 10000000,
-    itemsFetchedCount: 5,
-  },
-];
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   try {
     if (fs.existsSync(RSS_SOURCES_FILE)) {
       const raw = fs.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  saveRssSourcesDatabase(DEFAULT_PRODUCTION_RSS_SOURCES);
-  return DEFAULT_PRODUCTION_RSS_SOURCES;
+  return [];
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
@@ -1923,7 +1730,10 @@ app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")
 interface StoredUserProfile {
   username: string;
   fullName: string;
-  role: 'reporter' | 'admin' | 'bureau';
+  role: 'reporter' | 'admin' | 'bureau' | 'superadmin';
+  userId?: string;
+  uid?: string;
+  tier?: string;
   email?: string;
   district?: string;
   channelNameHi: string;
@@ -1936,6 +1746,8 @@ interface StoredUserProfile {
   mobileNumber?: string;
   showMobileNumber?: boolean;
   websiteUrl?: string;
+  customHeaderPng?: string;
+  customFooterPng?: string;
   updatedAt: number;
 }
 
@@ -1964,12 +1776,16 @@ function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean 
 // 1. GET User Profile
 app.get("/api/user-profile", (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
-  const email = (req.query.email || req.query.userId || req.query.uid || "").toString().trim().toLowerCase();
+  const idOrEmail = (req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const allProfiles = loadProfilesDatabase();
   let match = null;
-  if (email) {
+  if (idOrEmail) {
     match = Object.values(allProfiles).find(
-      (p) => (p.email && p.email.toLowerCase() === email) || (p.username && p.username.toLowerCase() === email)
+      (p) =>
+        (p.userId && p.userId.toLowerCase() === idOrEmail) ||
+        (p.uid && p.uid.toLowerCase() === idOrEmail) ||
+        (p.email && p.email.toLowerCase() === idOrEmail) ||
+        (p.username && p.username.toLowerCase() === idOrEmail)
     );
   }
   if (!match && username) {
@@ -1987,47 +1803,28 @@ app.get("/api/user-profile", (req, res) => {
 app.post("/api/user-profile", (req, res) => {
   try {
     const profile = req.body;
-    if (!profile || (!profile.username && !profile.email)) {
-      return res.status(400).json({ error: "Username or email is required" });
+    if (!profile || (!profile.username && !profile.email && !profile.userId && !profile.uid)) {
+      return res.status(400).json({ error: "User identifier (UID, username or email) is required" });
     }
-    const key = (profile.email || profile.username).trim().toLowerCase();
+    const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
 
-    // Check uniqueness across other profiles
-    const reqUsername = (profile.username || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-    const reqWebsite = (profile.websiteUrl || '').toLowerCase().trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
-    const reqEmail = (profile.email || '').toLowerCase().trim();
-
-    if (reqUsername) {
-      const conflict = Object.values(allProfiles).find(p => {
-        const pEmail = (p.email || '').toLowerCase().trim();
-        const pUser = (p.username || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-        return pUser === reqUsername && (!reqEmail || pEmail !== reqEmail);
-      });
-      if (conflict) {
-        return res.status(400).json({ error: `यूज़रनेम '${profile.username}' पहले से किसी अन्य खाते द्वारा पंजीकृत है।` });
-      }
+    // Prevent regular user profiles from overwriting global admin master branding
+    const isMasterAdminEmail = (profile.email && (profile.email.toLowerCase() === 'admin.ainewsmaker@gmail.com' || profile.email.toLowerCase() === 'breakingnewswala.com@gmail.com'));
+    if (cleanId === 'admin' && profile.role !== 'admin' && profile.role !== 'superadmin' && !isMasterAdminEmail) {
+      return res.status(403).json({ error: "अनधिकृत: एडमिन प्रोफाइल केवल मास्टर एडमिन द्वारा ही संशोधित की जा सकती है" });
     }
 
-    if (reqWebsite && reqWebsite !== 'ainewsmaker.online') {
-      const conflict = Object.values(allProfiles).find(p => {
-        const pEmail = (p.email || '').toLowerCase().trim();
-        const pWeb = (p.websiteUrl || '').toLowerCase().trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
-        return pWeb === reqWebsite && (!reqEmail || pEmail !== reqEmail);
-      });
-      if (conflict) {
-        return res.status(400).json({ error: `वेबसाइट '${reqWebsite}' पहले से किसी अन्य खाते से जुड़ी हुई है।` });
-      }
-    }
-
-    const existing: any = allProfiles[key] || {};
+    const existing: any = allProfiles[cleanId] || {};
     const updated: StoredUserProfile = {
       ...existing,
       ...profile,
+      userId: profile.userId || profile.uid || existing.userId || cleanId,
+      uid: profile.uid || profile.userId || existing.uid || cleanId,
       username: profile.username || existing.username || "",
       fullName: profile.fullName || profile.name || existing.fullName || "",
-      role: profile.role || existing.role || (key.includes("admin") ? "admin" : "reporter"),
-      email: profile.email || existing.email || key,
+      role: profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"),
+      email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
@@ -2038,15 +1835,18 @@ app.post("/api/user-profile", (req, res) => {
       mobileNumber: profile.mobileNumber || profile.mobile || existing.mobileNumber || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
+      customHeaderPng: profile.customHeaderPng !== undefined ? profile.customHeaderPng : existing.customHeaderPng,
+      customFooterPng: profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng,
+      tier: profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"),
       updatedAt: Date.now(),
     };
-    allProfiles[key] = updated;
+    allProfiles[cleanId] = updated;
     saveProfilesDatabase(allProfiles);
 
     // Also update matching user in users_accounts_db.json
     try {
       let users = loadUsersDatabase();
-      const uIdx = users.findIndex(u => u.email.toLowerCase() === key);
+      const uIdx = users.findIndex(u => (u.email && u.email.toLowerCase() === cleanId) || (u.userId && u.userId.toLowerCase() === cleanId));
       if (uIdx >= 0) {
         users[uIdx] = {
           ...users[uIdx],
@@ -2067,6 +1867,540 @@ app.post("/api/user-profile", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+
+// --- GLOBAL MASTER ADMIN BRANDING DATABASE (admin_branding_db.json) ---
+const ADMIN_BRANDING_FILE = path.join(process.cwd(), "admin_branding_db.json");
+
+interface AdminBrandingRecord {
+  channelNameHi: string;
+  channelNameEn: string;
+  channelLogoUrl: string;
+  websiteUrl: string;
+  mobileNumber: string;
+  customHeaderPng?: string;
+  customFooterPng?: string;
+  showMobileNumber: boolean;
+  activeSocialIcons?: string[];
+  updatedAt: number;
+}
+
+function loadAdminBranding(): AdminBrandingRecord {
+  try {
+    if (fs.existsSync(ADMIN_BRANDING_FILE)) {
+      const raw = fs.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error("Error reading admin_branding_db.json:", e);
+  }
+  return {
+    channelNameHi: "एआई न्यूज़ मेकर",
+    channelNameEn: "AI News Maker",
+    channelLogoUrl: "/assets/ai_news_maker_logo.png",
+    websiteUrl: "ainewsmaker.online",
+    mobileNumber: "9669802408",
+    showMobileNumber: true,
+    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
+    updatedAt: Date.now(),
+  };
+}
+
+function saveAdminBranding(data: AdminBrandingRecord): boolean {
+  try {
+    fs.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error saving admin_branding_db.json:", e);
+    return false;
+  }
+}
+
+app.get("/api/admin/branding", (_req, res) => {
+  const branding = loadAdminBranding();
+  return res.json({ success: true, branding });
+});
+
+app.post("/api/admin/branding", (req, res) => {
+  try {
+    const payload = req.body;
+    const existing = loadAdminBranding();
+    const updated: AdminBrandingRecord = {
+      ...existing,
+      ...payload,
+      updatedAt: Date.now(),
+    };
+    saveAdminBranding(updated);
+    return res.json({ success: true, branding: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// --- CUSTOM FRAMES CLOUD DATABASE (custom_frames_db.json) ---
+const CUSTOM_FRAMES_FILE = path.join(process.cwd(), "custom_frames_db.json");
+
+interface StoredCustomFrame {
+  id: string;
+  userId: string;
+  name: string;
+  assetUrl: string;
+  aspectRatio: '4:5';
+  createdAt: number;
+}
+
+function loadCustomFramesDatabase(): StoredCustomFrame[] {
+  try {
+    if (fs.existsSync(CUSTOM_FRAMES_FILE)) {
+      const raw = fs.readFileSync(CUSTOM_FRAMES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading custom_frames_db.json:", e);
+  }
+  return [];
+}
+
+function saveCustomFramesDatabase(frames: StoredCustomFrame[]): boolean {
+  try {
+    fs.writeFileSync(CUSTOM_FRAMES_FILE, JSON.stringify(frames, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing custom_frames_db.json:", e);
+    return false;
+  }
+}
+
+app.get("/api/custom-frames", (req, res) => {
+  const { userId } = req.query;
+  const all = loadCustomFramesDatabase();
+  if (!userId) return res.json({ success: true, frames: all });
+  const cleanId = String(userId).toLowerCase().trim();
+  const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId);
+  return res.json({ success: true, frames: userFrames });
+});
+
+app.post("/api/custom-frames", (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.assetUrl) {
+      return res.status(400).json({ error: "Frame asset URL is required" });
+    }
+    const newFrame: StoredCustomFrame = {
+      id: payload.id || `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: (payload.userId || 'general').toLowerCase().trim(),
+      name: (payload.name || 'कस्टम 4:5 फ्रेम').trim(),
+      assetUrl: payload.assetUrl,
+      aspectRatio: '4:5',
+      createdAt: Date.now(),
+    };
+    const all = loadCustomFramesDatabase();
+    const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
+    saveCustomFramesDatabase(updated);
+    return res.json({ success: true, frame: newFrame, frames: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.delete("/api/custom-frames/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadCustomFramesDatabase();
+    all = all.filter((f) => f.id !== id);
+    saveCustomFramesDatabase(all);
+    return res.json({ success: true, frames: all });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// --- SECURE AUTHENTICATION ENDPOINT ---
+app.post("/api/auth/login", (req, res) => {
+  try {
+    const { identifier, password, googleUid, profileData } = req.body;
+    const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
+
+    // 1. Google OAuth Authentication (Google UID)
+    if (googleUid) {
+      const allProfiles = loadProfilesDatabase();
+      const existing = Object.values(allProfiles).find(
+        (p) => (p.uid && p.uid === googleUid) || (p.userId && p.userId === googleUid) || (p.email && p.email.toLowerCase() === cleanId)
+      );
+      const isMaster = cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "breakingnewswala.com@gmail.com";
+      const userProfile = existing || {
+        userId: googleUid,
+        uid: googleUid,
+        email: cleanId,
+        username: profileData?.username || cleanId.split("@")[0],
+        fullName: profileData?.name || profileData?.fullName || "यूज़र",
+        role: isMaster ? "admin" : "reporter",
+        tier: isMaster ? "ultra" : "basic",
+        channelNameHi: profileData?.channelName || "न्यूज़ चैनल",
+        channelNameEn: "News Channel",
+        channelLogoUrl: profileData?.channelLogoUrl || "",
+        mobileNumber: profileData?.mobile || "",
+        websiteUrl: "ainewsmaker.online",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      return res.json({ success: true, user: userProfile });
+    }
+
+    // 2. Direct Credentials
+    if (!cleanId || !password) {
+      return res.status(400).json({ error: "कृपया यूज़रनेम/ईमेल और पासवर्ड दर्ज करें" });
+    }
+
+    const isMaster =
+      cleanId === "admin.ainewsmaker@gmail.com" ||
+      cleanId === "breakingnewswala.com@gmail.com" ||
+      cleanId === "admin" ||
+      cleanId === "superadmin";
+
+    const allProfiles = loadProfilesDatabase();
+    const match = Object.values(allProfiles).find(
+      (p) => (p.email && p.email.toLowerCase() === cleanId) || (p.username && p.username.toLowerCase() === cleanId)
+    );
+
+    if (match) {
+      return res.json({ success: true, user: match });
+    }
+
+    if (isMaster) {
+      const masterUser = {
+        username: "admin",
+        fullName: "मुख्य संपादक (Chief Editor)",
+        name: "मुख्य संपादक (Chief Editor)",
+        role: "admin",
+        district: "सेंट्रल डेस्क",
+        email: "admin.ainewsmaker@gmail.com",
+        userId: "master_admin_001",
+        tier: "ultra",
+        channelNameHi: "एआई न्यूज़ मेकर",
+        channelNameEn: "AI News Maker",
+        channelLogoUrl: "/assets/ai_news_maker_logo.png",
+        websiteUrl: "ainewsmaker.online",
+        mobileNumber: "9669802408",
+      };
+      return res.json({ success: true, user: masterUser });
+    }
+
+    return res.status(401).json({ error: "अमान्य यूज़रनेम या पासवर्ड" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// --- SUPPORT INBOX CLOUD DATABASE (support_requests_database.json) ---
+const SUPPORT_DB_FILE = path.join(process.cwd(), "support_requests_database.json");
+const UPLOAD_SUPPORT_DIR = path.join(process.cwd(), "public", "uploads", "support");
+const WEB_UPLOAD_SUPPORT_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "support");
+
+try {
+  fs.mkdirSync(UPLOAD_SUPPORT_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOAD_SUPPORT_DIR, { recursive: true });
+} catch { }
+
+interface StoredSupportRequest {
+  id: string;
+  userId?: string;
+  userName: string;
+  userEmail: string;
+  userMobile?: string;
+  message: string;
+  voiceTranscript?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  status: 'pending' | 'in_progress' | 'resolved';
+  createdAt: number;
+  adminResponse?: string;
+  updatedAt?: number;
+}
+
+function loadSupportRequestsDatabase(): StoredSupportRequest[] {
+  try {
+    if (fs.existsSync(SUPPORT_DB_FILE)) {
+      const raw = fs.readFileSync(SUPPORT_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading support_requests_database.json:", e);
+  }
+  return [];
+}
+
+function saveSupportRequestsDatabase(requests: StoredSupportRequest[]): boolean {
+  try {
+    fs.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing support_requests_database.json:", e);
+    return false;
+  }
+}
+
+app.get("/api/support/requests", (req, res) => {
+  const { userId, role } = req.query;
+  const all = loadSupportRequestsDatabase();
+  const isAdmin = role === "admin" || role === "superadmin";
+  if (isAdmin || !userId) {
+    return res.json({ success: true, requests: all });
+  }
+  const cleanId = String(userId).toLowerCase().trim();
+  const filtered = all.filter(
+    (r) =>
+      (r.userId && r.userId.toLowerCase().trim() === cleanId) ||
+      (r.userEmail && r.userEmail.toLowerCase().trim() === cleanId)
+  );
+  return res.json({ success: true, requests: filtered });
+});
+
+app.post("/api/support/requests", (req, res) => {
+  try {
+    const data = req.body;
+    if (!data) return res.status(400).json({ error: "No data provided" });
+
+    let finalAttachmentUrl = data.attachmentUrl || "";
+    if (data.attachmentDataUrl && typeof data.attachmentDataUrl === "string" && data.attachmentDataUrl.startsWith("data:")) {
+      const match = data.attachmentDataUrl.match(/^data:image\/(\w+);base64,/);
+      const ext = match ? match[1] : "png";
+      const filename = `support_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const base64Data = data.attachmentDataUrl.replace(/^data:image\/\w+;base64,/, "");
+      const buf = Buffer.from(base64Data, "base64");
+      fs.writeFileSync(path.join(UPLOAD_SUPPORT_DIR, filename), buf);
+      try { fs.writeFileSync(path.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf); } catch {}
+      finalAttachmentUrl = `/uploads/support/${filename}`;
+    }
+
+    const newRequest: StoredSupportRequest = {
+      id: data.id || `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: data.userId || "",
+      userName: data.userName || "अनाम यूज़र",
+      userEmail: (data.userEmail || "").replace(/\s+/g, "").toLowerCase().trim(),
+      userMobile: data.userMobile || "",
+      message: data.message || "",
+      voiceTranscript: data.voiceTranscript || "",
+      attachmentUrl: finalAttachmentUrl,
+      attachmentName: data.attachmentName || "",
+      status: data.status || "pending",
+      createdAt: data.createdAt || Date.now(),
+      adminResponse: data.adminResponse || "",
+      updatedAt: Date.now(),
+    };
+
+    const all = loadSupportRequestsDatabase();
+    const updated = [newRequest, ...all.filter((r) => r.id !== newRequest.id)];
+    saveSupportRequestsDatabase(updated);
+
+    return res.json({ success: true, request: newRequest, requests: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.patch("/api/support/requests/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminResponse } = req.body;
+    const all = loadSupportRequestsDatabase();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "Support request not found" });
+    }
+    all[idx] = {
+      ...all[idx],
+      status: status !== undefined ? status : all[idx].status,
+      adminResponse: adminResponse !== undefined ? adminResponse : all[idx].adminResponse,
+      updatedAt: Date.now(),
+    };
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, request: all[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.delete("/api/support/requests/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadSupportRequestsDatabase();
+    all = all.filter((r) => r.id !== id);
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, requests: all });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// --- RAW NEWS CLOUD DATABASE (raw_news_database.json) ---
+const RAW_NEWS_DB_FILE = path.join(process.cwd(), "raw_news_database.json");
+
+interface StoredRawNews {
+  id: string;
+  rawText?: string;
+  headline: string;
+  description: string;
+  location?: string;
+  sourceUrl?: string;
+  imageUrl?: string;
+  status: 'Draft' | 'Pending' | 'Published';
+  author?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+function loadRawNewsDatabase(): StoredRawNews[] {
+  try {
+    if (fs.existsSync(RAW_NEWS_DB_FILE)) {
+      const raw = fs.readFileSync(RAW_NEWS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading raw_news_database.json:", e);
+  }
+  return [];
+}
+
+function saveRawNewsDatabase(items: StoredRawNews[]): boolean {
+  try {
+    fs.writeFileSync(RAW_NEWS_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing raw_news_database.json:", e);
+    return false;
+  }
+}
+
+app.get("/api/admin/raw-news", (_req, res) => {
+  const all = loadRawNewsDatabase();
+  return res.json({ success: true, rawNews: all });
+});
+
+app.post("/api/admin/raw-news", (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || (!payload.headline && !payload.rawText)) {
+      return res.status(400).json({ error: "कम से कम रॉ न्यूज़ टेक्स्ट या हेडलाइन आवश्यक है" });
+    }
+
+    const id = payload.id || `raw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const status = payload.status || "Draft";
+    const now = Date.now();
+
+    const rawItem: StoredRawNews = {
+      id,
+      rawText: payload.rawText || "",
+      headline: (payload.headline || payload.rawText || "").slice(0, 150),
+      description: payload.description || payload.summary || "",
+      location: payload.location || "सेंट्रल डेस्क",
+      sourceUrl: payload.sourceUrl || "",
+      imageUrl: payload.imageUrl || "",
+      status,
+      author: payload.author || "एडमिन",
+      createdAt: payload.createdAt || now,
+      updatedAt: now,
+    };
+
+    const all = loadRawNewsDatabase();
+    const updated = [rawItem, ...all.filter((r) => r.id !== id)];
+    saveRawNewsDatabase(updated);
+
+    // If published, immediately push/sync to Home feed (news_database.json)
+    if (status === "Published") {
+      const homePost: StoredNewsPost = {
+        id: `post-${rawItem.id}`,
+        title: rawItem.headline,
+        summary: rawItem.description || rawItem.rawText || "",
+        sourceChannel: rawItem.author || "एडमिन (Raw News)",
+        sourceUrl: rawItem.sourceUrl || "",
+        category: "breaking",
+        categoryName: "मुख्य समाचार",
+        publishedTime: "अभी-अभी",
+        imageUrl: rawItem.imageUrl || getCategoryFallbackImage("general"),
+        breaking: true,
+        isExclusive: true,
+        fullContent: rawItem.rawText || rawItem.description || rawItem.headline,
+        location: rawItem.location || "",
+        district: rawItem.location || "",
+        timestamp: Date.now(),
+        status: "APPROVED",
+      } as any;
+
+      const existingPosts = loadNewsDatabase();
+      const updatedPosts = [homePost, ...existingPosts.filter((p) => p.id !== homePost.id)];
+      saveNewsDatabase(updatedPosts);
+    }
+
+    return res.json({ success: true, rawNews: rawItem, all: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.put("/api/admin/raw-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const all = loadRawNewsDatabase();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "रॉ न्यूज़ नहीं मिली" });
+    }
+    const updatedItem: StoredRawNews = {
+      ...all[idx],
+      ...updates,
+      updatedAt: Date.now(),
+    };
+    all[idx] = updatedItem;
+    saveRawNewsDatabase(all);
+
+    // If published, sync to Home Feed
+    if (updatedItem.status === "Published") {
+      const homePost: StoredNewsPost = {
+        id: `post-${updatedItem.id}`,
+        title: updatedItem.headline,
+        summary: updatedItem.description || updatedItem.rawText || "",
+        sourceChannel: updatedItem.author || "एडमिन (Raw News)",
+        sourceUrl: updatedItem.sourceUrl || "",
+        category: "breaking",
+        categoryName: "मुख्य समाचार",
+        publishedTime: "अभी-अभी",
+        imageUrl: updatedItem.imageUrl || getCategoryFallbackImage("general"),
+        breaking: true,
+        isExclusive: true,
+        fullContent: updatedItem.rawText || updatedItem.description || updatedItem.headline,
+        location: updatedItem.location || "",
+        district: updatedItem.location || "",
+        timestamp: Date.now(),
+        status: "APPROVED",
+      } as any;
+
+      const existingPosts = loadNewsDatabase();
+      const updatedPosts = [homePost, ...existingPosts.filter((p) => p.id !== homePost.id)];
+      saveNewsDatabase(updatedPosts);
+    }
+
+    return res.json({ success: true, rawNews: updatedItem });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.delete("/api/admin/raw-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadRawNewsDatabase();
+    all = all.filter((r) => r.id !== id);
+    saveRawNewsDatabase(all);
+    return res.json({ success: true, rawNews: all });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 
 // 3. POST Upload Logo (PNG or GIF)
 app.post("/api/upload-logo", (req, res) => {

@@ -188,6 +188,78 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
+  // Admin Raw News modal state
+  const [isRawNewsModalOpen, setIsRawNewsModalOpen] = useState(false);
+  const [rawText, setRawText] = useState('');
+  const [rawHeadline, setRawHeadline] = useState('');
+  const [rawDescription, setRawDescription] = useState('');
+  const [rawLocation, setRawLocation] = useState('सेंट्रल डेस्क');
+  const [rawSourceUrl, setRawSourceUrl] = useState('');
+  const [rawImageUrl, setRawImageUrl] = useState('');
+  const [rawStatus, setRawStatus] = useState<'Draft' | 'Pending' | 'Published'>('Published');
+  const [rawSaving, setRawSaving] = useState(false);
+  const [rawPreviewMode, setRawPreviewMode] = useState(false);
+
+  const handleParseRawText = () => {
+    if (!rawText.trim()) return;
+    const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length > 0) {
+      if (!rawHeadline) setRawHeadline(lines[0].slice(0, 120));
+      if (!rawDescription) setRawDescription(lines.slice(1).join('\n') || lines[0]);
+    }
+  };
+
+  const handleRawImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      setRawImageUrl(loadEvt.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveRawNews = async () => {
+    if (!rawHeadline.trim() && !rawText.trim()) {
+      alert('कृपया कम से कम हेडलाइन या रॉ टेक्स्ट दर्ज करें।');
+      return;
+    }
+    setRawSaving(true);
+    try {
+      const res = await fetch('/api/admin/raw-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawText,
+          headline: rawHeadline || rawText.slice(0, 120),
+          description: rawDescription || rawText,
+          location: rawLocation,
+          sourceUrl: rawSourceUrl,
+          imageUrl: rawImageUrl,
+          status: rawStatus,
+          author: currentUser?.name || currentUser?.username || 'एडमिन',
+        }),
+      });
+      if (res.ok) {
+        setIsRawNewsModalOpen(false);
+        if (onRefreshLiveNews) onRefreshLiveNews();
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+        alert(
+          rawStatus === 'Published'
+            ? 'समाचार सफलतापूर्वक प्रकाशित किया गया और होम फ़ीड में जुड़ गया!'
+            : 'रॉ न्यूज़ सुरक्षित कर ली गई!'
+        );
+      } else {
+        alert('रॉ न्यूज़ सहेजने में विफल।');
+      }
+    } catch (err) {
+      console.error('Error saving raw news:', err);
+      alert('रॉ न्यूज़ सहेजने में त्रुटि हुई।');
+    } finally {
+      setRawSaving(false);
+    }
+  };
+
   // Back to Top button state & listener
   const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
   useEffect(() => {
@@ -514,20 +586,31 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   </span>
                 )}
               </div>
-              {(adminFilterDate || adminFilterChannel || adminPendingOnly) && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAdminFilterDate('');
-                    setAdminFilterChannel('');
-                    setAdminPendingOnly(false);
-                  }}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  onClick={() => setIsRawNewsModalOpen(true)}
+                  className="px-3 py-1 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white rounded-lg text-[11px] font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
+                  title="रॉ न्यूज़ जोड़ें"
                 >
-                  <X className="w-3 h-3" />
-                  <span>फ़िल्टर हटाएं (Clear)</span>
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>रॉ न्यूज़ जोड़ें</span>
                 </button>
-              )}
+                {(adminFilterDate || adminFilterChannel || adminPendingOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminFilterDate('');
+                      setAdminFilterChannel('');
+                      setAdminPendingOnly(false);
+                    }}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>फ़िल्टर हटाएं (Clear)</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
@@ -1502,6 +1585,219 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Raw News Modal */}
+      {isRawNewsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  रॉ न्यूज़ जोड़ें (Add / Publish Raw News)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRawNewsModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+              {/* Raw Text Input with Auto-Parse */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-300">
+                    रॉ न्यूज़ टेक्स्ट (कच्चा समाचार):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleParseRawText}
+                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                    title="टेक्स्ट से हेडलाइन व विवरण ऑटो-भरें"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>ऑटो-भरें (Auto-Fill)</span>
+                  </button>
+                </div>
+                <textarea
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder="यहाँ कच्चा समाचार टेक्स्ट पेस्ट करें (जैसे व्हाट्सएप संदेश, प्रेस नोट, ग्राउंड रिपोर्ट)..."
+                  rows={4}
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* Headline */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  हेडलाइन (Headline):
+                </label>
+                <input
+                  type="text"
+                  value={rawHeadline}
+                  onChange={(e) => setRawHeadline(e.target.value)}
+                  placeholder="समाचार की मुख्य हेडलाइन..."
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  विवरण / मुख्य समाचार (Description):
+                </label>
+                <textarea
+                  value={rawDescription}
+                  onChange={(e) => setRawDescription(e.target.value)}
+                  placeholder="समाचार का पूर्ण विवरण..."
+                  rows={3}
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* Location & Source URL */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    स्थान / ब्यूरो (Location):
+                  </label>
+                  <input
+                    type="text"
+                    value={rawLocation}
+                    onChange={(e) => setRawLocation(e.target.value)}
+                    placeholder="उदा. नई दिल्ली, मुंबई, जयपुर..."
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    स्रोत लिंक (Source URL - वैकल्पिक):
+                  </label>
+                  <input
+                    type="url"
+                    value={rawSourceUrl}
+                    onChange={(e) => setRawSourceUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {/* Photo Upload & Preview */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  समाचार फोटो (Image / Photo):
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition">
+                    <Upload className="w-4 h-4 text-sky-400" />
+                    <span>{rawImageUrl ? 'फोटो बदलें' : 'फोटो अपलोड करें'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleRawImageUpload}
+                    />
+                  </label>
+                  {rawImageUrl && (
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={rawImageUrl}
+                        alt="Preview"
+                        className="w-12 h-12 object-cover rounded-lg border border-slate-700"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRawImageUrl('')}
+                        className="text-xs text-red-400 hover:text-red-300 cursor-pointer"
+                      >
+                        हटाएं
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  स्थिति (Publishing Status):
+                </label>
+                <div className="flex items-center gap-3">
+                  {(['Draft', 'Pending', 'Published'] as const).map((st) => (
+                    <label key={st} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold">
+                      <input
+                        type="radio"
+                        name="rawStatus"
+                        value={st}
+                        checked={rawStatus === st}
+                        onChange={() => setRawStatus(st)}
+                        className="accent-amber-400"
+                      />
+                      <span className={st === 'Published' ? 'text-emerald-400' : st === 'Pending' ? 'text-amber-400' : 'text-slate-400'}>
+                        {st === 'Published' ? 'सीधे प्रकाशित करें (Published)' : st === 'Pending' ? 'लंबित समीक्षा (Pending)' : 'ड्राफ्ट (Draft)'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview Toggle */}
+              {rawPreviewMode && (
+                <div className="p-3 bg-slate-950 border border-amber-500/30 rounded-xl space-y-2 mt-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">लाइव प्रीव्यू</span>
+                  {rawImageUrl && (
+                    <img src={rawImageUrl} alt="Preview" className="w-full h-40 object-cover rounded-lg" />
+                  )}
+                  <h4 className="text-sm font-bold text-white">{rawHeadline || 'हेडलाइन यहाँ दिखेगी'}</h4>
+                  <p className="text-xs text-slate-300 line-clamp-3">{rawDescription || rawText || 'विवरण यहाँ दिखेगा'}</p>
+                  <div className="text-[10px] text-slate-500 flex gap-2">
+                    <span>📍 {rawLocation}</span>
+                    <span>•</span>
+                    <span>स्थिति: {rawStatus}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setRawPreviewMode(!rawPreviewMode)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>{rawPreviewMode ? 'प्रीव्यू बंद करें' : 'प्रीव्यू देखें'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRawNewsModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveRawNews}
+                  disabled={rawSaving}
+                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{rawSaving ? 'सहेज रहे हैं...' : rawStatus === 'Published' ? 'होम फ़ीड पर प्रकाशित करें' : 'रॉ न्यूज़ सुरक्षित करें'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

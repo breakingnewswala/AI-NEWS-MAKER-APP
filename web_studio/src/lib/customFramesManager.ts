@@ -1,90 +1,161 @@
-// Custom Frame Manager for PRO & VIP DESK Users
-// Supports Multiple TRUE 4:5 Custom Frames with Name, Asset URL, User Association, and Persistence
+// Custom Frames Cloud & Local Storage Manager
+// Enables uploading, naming, persisting and applying 4:5 Custom Frames
 
-export interface CustomFrameItem {
+export interface CustomFrame {
   id: string;
-  userId: string;
+  userId?: string;
   name: string;
   assetUrl: string;
   aspectRatio: '4:5';
   createdAt: number;
 }
 
-const STORAGE_KEY_FRAMES = 'ai_news_custom_frames_catalog_v1';
-const STORAGE_KEY_ACTIVE_FRAME = 'ai_news_active_custom_frame_id';
+export type CustomFrameItem = CustomFrame;
 
-export function getCustomFrames(userEmailOrId?: string): CustomFrameItem[] {
+const STORAGE_KEY = 'ai_news_custom_frames_v1';
+const STORAGE_KEY_ACTIVE = 'ai_news_active_custom_frame_id';
+
+export function getLocalCustomFrames(userId?: string): CustomFrame[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_FRAMES);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const list: CustomFrameItem[] = JSON.parse(raw);
+    const list = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    if (!userEmailOrId) return list;
-    const cleanId = userEmailOrId.toLowerCase().trim();
-    return list.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId);
-  } catch (e) {
-    console.warn('Error reading custom frames:', e);
+    if (!userId) return list;
+    const cleanId = userId.toLowerCase().trim();
+    return list.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === 'general');
+  } catch {
     return [];
   }
 }
 
-export function saveCustomFrame(data: {
-  userId: string;
+export const getCustomFrames = getLocalCustomFrames;
+
+export async function fetchCustomFrames(userId?: string): Promise<CustomFrame[]> {
+  try {
+    const url = userId ? `/api/custom-frames?userId=${encodeURIComponent(userId)}` : '/api/custom-frames';
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.frames)) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.frames));
+        }
+        return data.frames;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to fetch custom frames from cloud:', e);
+  }
+  return getLocalCustomFrames(userId);
+}
+
+export async function saveCustomFrameToCloud(frame: {
   name: string;
   assetUrl: string;
-}): CustomFrameItem {
-  const newFrame: CustomFrameItem = {
+  userId?: string;
+}): Promise<CustomFrame | null> {
+  const newFrame: CustomFrame = {
     id: `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    userId: (data.userId || 'general').toLowerCase().trim(),
-    name: data.name.trim() || 'कस्टम 4:5 फ्रेम',
-    assetUrl: data.assetUrl,
+    name: frame.name.trim() || 'कस्टम 4:5 फ्रेम',
+    assetUrl: frame.assetUrl,
+    userId: frame.userId || 'general',
     aspectRatio: '4:5',
     createdAt: Date.now(),
   };
 
+  const existing = getLocalCustomFrames();
+  const updated = [newFrame, ...existing.filter((f) => f.id !== newFrame.id)];
   if (typeof window !== 'undefined') {
-    try {
-      const existing = getCustomFrames();
-      const updated = [newFrame, ...existing];
-      localStorage.setItem(STORAGE_KEY_FRAMES, JSON.stringify(updated));
-      localStorage.setItem(STORAGE_KEY_ACTIVE_FRAME, newFrame.id);
-      window.dispatchEvent(new CustomEvent('ai_news_custom_frames_updated', { detail: newFrame }));
-    } catch (e) {
-      console.warn('Error saving custom frame:', e);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('ai_news_custom_frames_updated', { detail: newFrame }));
+  }
+
+  try {
+    const res = await fetch('/api/custom-frames', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newFrame),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.frame) {
+        return data.frame;
+      }
     }
+  } catch (e) {
+    console.warn('Failed to save custom frame to backend:', e);
   }
 
   return newFrame;
 }
 
-export function deleteCustomFrame(frameId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const existing = getCustomFrames();
-    const updated = existing.filter((f) => f.id !== frameId);
-    localStorage.setItem(STORAGE_KEY_FRAMES, JSON.stringify(updated));
-    const active = localStorage.getItem(STORAGE_KEY_ACTIVE_FRAME);
-    if (active === frameId) {
-      localStorage.removeItem(STORAGE_KEY_ACTIVE_FRAME);
+export function saveCustomFrame(data: {
+  userId?: string;
+  name: string;
+  assetUrl: string;
+}): CustomFrameItem {
+  const frame: CustomFrameItem = {
+    id: `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: data.name.trim() || 'कस्टम 4:5 फ्रेम',
+    assetUrl: data.assetUrl,
+    userId: data.userId || 'general',
+    aspectRatio: '4:5',
+    createdAt: Date.now(),
+  };
+
+  const existing = getLocalCustomFrames();
+  const updated = [frame, ...existing.filter((f) => f.id !== frame.id)];
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEY_ACTIVE, frame.id);
+    window.dispatchEvent(new CustomEvent('ai_news_custom_frames_updated', { detail: frame }));
+  }
+
+  // Also sync to cloud asynchronously
+  fetch('/api/custom-frames', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(frame),
+  }).catch((e) => console.warn('Cloud frame sync background fail:', e));
+
+  return frame;
+}
+
+export function deleteCustomFrame(id: string): void {
+  deleteCustomFrameFromCloud(id);
+}
+
+export async function deleteCustomFrameFromCloud(id: string): Promise<void> {
+  const existing = getLocalCustomFrames();
+  const updated = existing.filter((f) => f.id !== id);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    const active = localStorage.getItem(STORAGE_KEY_ACTIVE);
+    if (active === id) {
+      localStorage.removeItem(STORAGE_KEY_ACTIVE);
     }
     window.dispatchEvent(new CustomEvent('ai_news_custom_frames_updated'));
+  }
+  try {
+    await fetch(`/api/custom-frames/${encodeURIComponent(id)}`, { method: 'DELETE' });
   } catch (e) {
-    console.warn('Error deleting custom frame:', e);
+    console.warn('Failed to delete custom frame from backend:', e);
   }
 }
 
 export function getActiveCustomFrameId(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(STORAGE_KEY_ACTIVE_FRAME) || null;
+  return localStorage.getItem(STORAGE_KEY_ACTIVE) || null;
 }
 
 export function setActiveCustomFrameId(frameId: string | null): void {
   if (typeof window === 'undefined') return;
   if (!frameId) {
-    localStorage.removeItem(STORAGE_KEY_ACTIVE_FRAME);
+    localStorage.removeItem(STORAGE_KEY_ACTIVE);
   } else {
-    localStorage.setItem(STORAGE_KEY_ACTIVE_FRAME, frameId);
+    localStorage.setItem(STORAGE_KEY_ACTIVE, frameId);
   }
   window.dispatchEvent(new CustomEvent('ai_news_custom_frames_updated'));
 }
@@ -92,6 +163,6 @@ export function setActiveCustomFrameId(frameId: string | null): void {
 export function getActiveCustomFrame(userEmailOrId?: string): CustomFrameItem | null {
   const activeId = getActiveCustomFrameId();
   if (!activeId) return null;
-  const frames = getCustomFrames(userEmailOrId);
+  const frames = getLocalCustomFrames(userEmailOrId);
   return frames.find((f) => f.id === activeId) || null;
 }

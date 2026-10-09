@@ -42,6 +42,11 @@ import {
   Minus,
 } from 'lucide-react';
 import {
+  saveCustomFrame,
+  getCustomFrames,
+  CustomFrameItem,
+} from '../lib/customFramesManager';
+import {
   FRAME_OPTIONS,
   REPORTER_ALLOWED_FRAMES,
   getEffectiveFrameOptions,
@@ -548,9 +553,21 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     const reader = new FileReader();
     reader.onload = (e) => {
       if (e.target?.result) {
+        const frameDataUrl = e.target.result as string;
+        const frameName =
+          window.prompt('कृपया कस्टम फ्रेम का नाम दर्ज करें (Enter Frame Name):', 'माय कस्टम फ्रेम 4:5') ||
+          'कस्टम 4:5 फ्रेम';
+
+        saveCustomFrame({
+          userId: currentUser?.email || currentUser?.username || 'general',
+          name: frameName,
+          assetUrl: frameDataUrl,
+        });
+
         onChange({
-          customFrameOverlayPng: e.target.result as string,
+          customFrameOverlayPng: frameDataUrl,
           frameDesign: 'custom-png',
+          showMasterBranding: false,
         });
       }
     };
@@ -1155,7 +1172,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') &&
               templatePlanFilter === 'custom' && (
                 <div
-                  onClick={() => onChange({ frameDesign: 'custom-png' })}
+                  onClick={() => onChange({ frameDesign: 'custom-png', showMasterBranding: false })}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer relative overflow-hidden select-none ${
                     card.frameDesign === 'custom-png'
                       ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40'
@@ -1200,6 +1217,53 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   </div>
                 </div>
               )}
+
+            {/* List of Saved Custom Frames */}
+            {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') &&
+              templatePlanFilter === 'custom' &&
+              (() => {
+                const savedFrames = getCustomFrames(currentUser?.email);
+                if (savedFrames.length === 0) return null;
+                return savedFrames.map((cf) => {
+                  const isApplied = card.customFrameOverlayPng === cf.assetUrl && card.frameDesign === 'custom-png';
+                  return (
+                    <div
+                      key={cf.id}
+                      onClick={() =>
+                        onChange({
+                          frameDesign: 'custom-png',
+                          customFrameOverlayPng: cf.assetUrl,
+                          showMasterBranding: false,
+                        })
+                      }
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer relative overflow-hidden select-none ${
+                        isApplied
+                          ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40'
+                          : 'border-slate-800 bg-neutral-950/70 hover:border-yellow-400/60 text-neutral-300 hover:bg-neutral-900/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-black tracking-wide truncate text-white flex items-center gap-1.5">
+                          <span>🖼️</span>
+                          <span className="truncate">{cf.name}</span>
+                        </span>
+                        {isApplied && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-yellow-400 text-slate-950">
+                            सक्रिय
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-full h-16 bg-neutral-900 rounded border border-neutral-800 flex items-center justify-center overflow-hidden">
+                        <img src={cf.assetUrl} alt={cf.name} className="max-h-full object-contain" />
+                      </div>
+                      <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
+                        <span className="text-yellow-400 font-bold">{isApplied ? 'फ्रेम लागू है' : 'फ्रेम लागू करें'}</span>
+                        <span className="text-[9px] text-neutral-500 font-mono">4:5 PNG</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
           </div>
         )}
 
@@ -2389,70 +2453,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
           )}
 
-          {/* Available Photos from News Article (Parts 16, 17) */}
-          {(() => {
-            let photos: string[] = [];
-            if (autoFillNews?.additionalPhotos && autoFillNews.additionalPhotos.length > 0) {
-              photos = autoFillNews.additionalPhotos;
-            } else {
-              try {
-                const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('studio_active_news_photos') : null;
-                if (raw) photos = JSON.parse(raw);
-              } catch {}
-            }
-            if (!photos || photos.length === 0) return null;
-
-            return (
-              <div className="bg-slate-900/90 border border-amber-500/40 rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-amber-300">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>इस समाचार की उपलब्ध फोटो (Available Photos from Article)</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-semibold">{photos.length} उपलब्ध</span>
-                </div>
-                <p className="text-[11px] text-slate-300">
-                  कार्ड में मुख्य फोटो बनाने के लिए किसी भी फोटो पर क्लिक करें:
-                </p>
-                <div className="grid grid-cols-4 gap-2 pt-1">
-                  {photos.map((pUrl, pIdx) => {
-                    const isSelected = card.images.main === pUrl;
-                    return (
-                      <div
-                        key={pIdx}
-                        onClick={() => {
-                          onChange({
-                            images: {
-                              ...card.images,
-                              main: pUrl,
-                            },
-                          });
-                        }}
-                        className={`relative h-20 rounded-lg overflow-hidden border-2 cursor-pointer transition group shadow ${
-                          isSelected
-                            ? 'border-amber-400 ring-2 ring-amber-400/50 scale-102'
-                            : 'border-slate-700 hover:border-amber-300'
-                        }`}
-                      >
-                        <img src={pUrl} alt={`Article photo ${pIdx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition" />
-                        <span className={`absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-black ${
-                          isSelected ? 'bg-amber-400 text-slate-950' : 'bg-black/75 text-white'
-                        }`}>
-                          {pIdx === 0 ? 'मुख्य' : `फोटो ${pIdx}`}
-                        </span>
-                        {isSelected && (
-                          <div className="absolute top-1 right-1 p-0.5 bg-amber-400 text-slate-950 rounded-full">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
           <div className="text-xs font-semibold text-neutral-300">
             तस्वीरें अपलोड करें:
           </div>
@@ -3134,6 +3134,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) handleFooterUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* 3. Full Frame PNG (4:5) */}
+              <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-neutral-200">3. फुल फ्रेम PNG (4:5 Full Frame Overlay)</span>
+                  {card.customFrameOverlayPng && (
+                    <button
+                      type="button"
+                      onClick={() => onChange({ customFrameOverlayPng: undefined })}
+                      className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                    >
+                      हटाएं (Remove)
+                    </button>
+                  )}
+                </div>
+                {card.customFrameOverlayPng ? (
+                  <div className="relative h-16 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
+                    <img src={card.customFrameOverlayPng} alt="Custom Frame" className="max-h-full max-w-full object-contain" />
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-neutral-400">संपूर्ण 4:5 (1080x1350) पारदर्शी कस्टम फ्रेम अपलोड करें।</p>
+                )}
+                <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-yellow-300 border border-yellow-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                  <span>{card.customFrameOverlayPng ? '🔄 नया 4:5 फ्रेम बदलें' : '📁 4:5 फुल फ्रेम PNG अपलोड करें'}</span>
+                  <input
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFrameOverlayUpload(file);
                     }}
                   />
                 </label>

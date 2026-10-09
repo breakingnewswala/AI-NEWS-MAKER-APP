@@ -42,3 +42,4 @@ debug.keystore.base64
 !.env.example
 
 *.zip
+backup_pre_repair/

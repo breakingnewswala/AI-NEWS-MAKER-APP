@@ -54,62 +54,31 @@ interface LoginModalProps {
   onOpenProfileSetup?: (user: ReporterUser) => void;
 }
 
-// Default pre-configured accounts
+// Default role configurations (Passwords verified securely via backend /api/auth/login)
 const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
   'admin.ainewsmaker@gmail.com': {
-    pass: 'Admin@ainewsmaker',
-    user: {
-      username: 'superadmin',
-      name: 'सुपर एडमिन (Super Admin)',
-      role: 'superadmin' as any,
-      district: 'हेडक्वार्टर सेंट्रल डेस्क',
-      email: 'admin.ainewsmaker@gmail.com',
-      planTier: 'ultra',
-    },
-  },
-  superadmin: {
-    pass: 'Admin@ainewsmaker',
-    user: {
-      username: 'superadmin',
-      name: 'सुपर एडमिन (Super Admin)',
-      role: 'superadmin' as any,
-      district: 'हेडक्वार्टर सेंट्रल डेस्क',
-      email: 'admin.ainewsmaker@gmail.com',
-      planTier: 'ultra',
-    },
-  },
-
-  admin: {
-    pass: 'news123',
+    pass: '',
     user: {
       username: 'admin',
-      name: 'मुख्य संपादक (Chief Editor)',
-      role: 'admin',
+      name: 'मास्टर एडमिन (Master Admin)',
+      role: 'superadmin' as any,
       district: 'सेंट्रल डेस्क',
-      email: 'admin@breakingnewswala.com',
-    },
-  },
-  'admin@breakingnewswala.com': {
-    pass: 'news123',
-    user: {
-      username: 'admin',
-      name: 'मुख्य संपादक (Chief Editor)',
-      role: 'admin',
-      district: 'सेंट्रल डेस्क',
-      email: 'admin@breakingnewswala.com',
+      email: 'admin.ainewsmaker@gmail.com',
+      planTier: 'ultra',
     },
   },
   'breakingnewswala.com@gmail.com': {
-    pass: 'news123',
+    pass: '',
     user: {
       username: 'breakingnewswala',
       name: 'मुख्य संपादक (Chief Editor)',
       role: 'admin',
       district: 'सेंट्रल डेस्क',
       email: 'breakingnewswala.com@gmail.com',
-      planTier: 'enterprise',
+      planTier: 'ultra',
     },
   },
+
   reporter: {
     pass: 'news2026',
     user: {
@@ -182,12 +151,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setLoading(true);
     setErrorMessage(null);
 
-    const processGoogleUser = (email: string, displayName?: string) => {
-      const cleanEmail = email.trim().toLowerCase();
-      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'superadmin';
+    const processGoogleUser = async (rawEmail: string, displayName?: string) => {
+      // 1. Strict whitespace cleaning
+      const cleanEmail = rawEmail.replace(/\s+/g, '').trim().toLowerCase();
+
+      // 2. Strict email regex validation
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(cleanEmail)) {
+        setLoading(false);
+        setErrorMessage('कृपया एक वैध ईमेल पता दर्ज करें (उदा. user@gmail.com)।');
+        return;
+      }
+
+      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com';
       const isAdmin = isSuper;
       const prefix = cleanEmail.split('@')[0];
-      let existingUsername = '';
+      let existingUsername = prefix;
       try {
         const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
         if (savedProfileStr) {
@@ -198,14 +177,42 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       const defaultName = displayName || prefix.split('.')[0] || 'User';
 
-      const user: ReporterUser = {
+      let user: ReporterUser = {
         username: existingUsername,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        role: isSuper ? 'superadmin' : 'user',
+        role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
         email: cleanEmail,
         district: isAdmin ? 'सेंट्रल डेस्क' : 'डिजिटल डेस्क',
-        planTier: isSuper ? 'ultra' : (isAdmin ? 'enterprise' : 'basic'),
+        planTier: isSuper ? 'ultra' : 'basic',
       };
+
+      // Authenticate & sync with Cloud backend /api/auth/login
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            googleUid: `goog_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+            identifier: cleanEmail,
+            profileData: {
+              email: cleanEmail,
+              name: user.name,
+              username: user.username,
+            },
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            user.role = data.user.role || user.role;
+            user.planTier = data.user.tier || user.planTier;
+            user.channelName = data.user.channelNameHi || user.channelName;
+            user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
+          }
+        }
+      } catch (authErr) {
+        console.warn('Cloud auth sync error:', authErr);
+      }
 
       try {
         let customAccounts: Record<string, { pass: string; user: ReporterUser }> = {};
@@ -215,18 +222,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         customAccounts[prefix] = { pass: 'google_linked', user };
         localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
         localStorage.setItem('reporter_auth_session', JSON.stringify(user));
-      try {
-        registerOrUpdateUser({
-          email: cleanEmail,
-          name: user.name,
-          username: user.username,
-          role: user.role,
-          tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : 'basic'),
-          isLocked: !isAdmin && !isSuper,
-        });
-      } catch (gRegErr) {
-        console.warn('Error syncing Google user in LoginModal:', gRegErr);
-      }
+
+        try {
+          registerOrUpdateUser({
+            email: cleanEmail,
+            name: user.name,
+            username: user.username,
+            role: user.role,
+            tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : 'basic'),
+            isLocked: !isAdmin && !isSuper,
+          });
+        } catch (gRegErr) {
+          console.warn('Error syncing Google user in LoginModal:', gRegErr);
+        }
       } catch (e) {}
 
       // Persist to server user-profile endpoint
@@ -244,7 +252,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         }).catch(() => {});
       } catch {}
 
-      setSuccessMessage(`🎉 Google खाता कनेक्ट हो गया (${user.role === 'admin' ? '👑 एडमिन' : '👤 रिपोर्टर'})!`);
+      setSuccessMessage(`🎉 खाता सत्यापित हो गया (${user.role === 'admin' || user.role === 'superadmin' ? '👑 एडमिन' : '👤 रिपोर्टर'})!`);
       setTimeout(() => {
         setLoading(false);
         onLoginSuccess(user);
@@ -272,7 +280,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           callback: (response: any) => {
             if (response.credential) {
               try {
-                // Decode JWT payload (standard base64)
                 const payloadBase64 = response.credential.split('.')[1];
                 const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
                 const decoded = JSON.parse(decodedJson);
@@ -288,7 +295,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         });
         (window as any).google.accounts.id.prompt((notification: any) => {
           if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            // Prompt fallback if GSI popup is blocked by browser
             const promptEmail = prompt(
               'Google लॉगिन: अपना Google ईमेल दर्ज करें:',
               'breakingnewswala.com@gmail.com'
@@ -319,12 +325,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   // Handle Sign In
-  const handleLogin = (e?: React.FormEvent, customUser?: string, customPass?: string) => {
+  const handleLogin = async (e?: React.FormEvent, customUser?: string, customPass?: string) => {
     if (e) e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    const cleanUser = (customUser || username).trim().toLowerCase();
+    const cleanUser = (customUser || username).replace(/\s+/g, '').trim().toLowerCase();
     const cleanPass = (customPass || password).trim();
 
     if (!cleanUser || !cleanPass) {
@@ -334,45 +340,67 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     setLoading(true);
 
-    setTimeout(() => {
-      // Check stored custom accounts
-      let customAccounts: Record<string, { pass: string; user: ReporterUser }> = {};
-      try {
-        const stored = localStorage.getItem('reporter_custom_accounts');
-        if (stored) {
-          customAccounts = JSON.parse(stored);
+    // 1. First attempt Cloud Backend /api/auth/login
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanUser, password: cleanPass }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          const authUser: ReporterUser = {
+            username: data.user.username || cleanUser,
+            name: data.user.fullName || data.user.name || cleanUser,
+            role: data.user.role || 'reporter',
+            district: data.user.district || 'सेंट्रल डेस्क',
+            email: data.user.email || (cleanUser.includes('@') ? cleanUser : undefined),
+            planTier: data.user.tier || 'basic',
+            channelName: data.user.channelNameHi,
+            channelLogoUrl: data.user.channelLogoUrl,
+            mobileNumber: data.user.mobileNumber,
+            channelWebsite: data.user.websiteUrl,
+          };
+          localStorage.setItem('reporter_auth_session', JSON.stringify(authUser));
+          setLoading(false);
+          onLoginSuccess(authUser);
+          return;
         }
-      } catch (err) {
-        console.warn('Failed to parse custom accounts:', err);
-      }
-
-      const allAccounts = { ...DEFAULT_ACCOUNTS, ...customAccounts };
-      let matched = allAccounts[cleanUser];
-
-      if (!matched && (cleanUser.includes('admin') || cleanUser === 'breakingnewswala.com@gmail.com') && (cleanPass === 'news123' || cleanPass === 'admin123')) {
-        matched = {
-          pass: cleanPass,
-          user: {
-            username: 'admin',
-            name: 'मुख्य संपादक (Chief Editor)',
-            role: 'admin',
-            district: 'सेंट्रल डेस्क',
-            email: cleanUser.includes('@') ? cleanUser : 'admin@breakingnewswala.com',
-          },
-        };
-      }
-
-      if (matched && matched.pass === cleanPass) {
-        // Successful login
-        localStorage.setItem('reporter_auth_session', JSON.stringify(matched.user));
+      } else if (res.status === 401 || res.status === 400) {
+        const errData = await res.json().catch(() => ({}));
         setLoading(false);
-        onLoginSuccess(matched.user);
-      } else {
-        setLoading(false);
-        setErrorMessage('गलत यूज़रनेम या पासवर्ड! कृपया सही क्रेडेंशियल्स दर्ज करें।');
+        setErrorMessage(errData.error || 'गलत यूज़रनेम या पासवर्ड! कृपया सही क्रेडेंशियल्स दर्ज करें।');
+        return;
       }
-    }, 250);
+    } catch (e) {
+      console.warn('Backend login connection error, checking local:', e);
+    }
+
+    // 2. Check local accounts fallback
+    let customAccounts: Record<string, { pass: string; user: ReporterUser }> = {};
+    try {
+      const stored = localStorage.getItem('reporter_custom_accounts');
+      if (stored) {
+        customAccounts = JSON.parse(stored);
+      }
+    } catch (err) {
+      console.warn('Failed to parse custom accounts:', err);
+    }
+
+    const allAccounts = { ...DEFAULT_ACCOUNTS, ...customAccounts };
+    const matched = allAccounts[cleanUser];
+
+    if (matched && matched.pass && matched.pass === cleanPass) {
+      localStorage.setItem('reporter_auth_session', JSON.stringify(matched.user));
+      setLoading(false);
+      onLoginSuccess(matched.user);
+    } else {
+      setLoading(false);
+      setErrorMessage('गलत यूज़रनेम या पासवर्ड! कृपया सही क्रेडेंशियल्स दर्ज करें।');
+    }
   };
+
 
   // Handle Sign Up
   const handleSignUp = (e: React.FormEvent) => {

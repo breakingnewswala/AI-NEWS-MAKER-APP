@@ -369,70 +369,6 @@ function formatRelativeTime(timestamp) {
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays} \u0926\u093F\u0928 \u092A\u0939\u0932\u0947`;
 }
-async function parseRssFeedUrl(url, channelName, category = "\u0926\u0947\u0936") {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/rss+xml, application/xml, text/xml, */*"
-      },
-      signal: AbortSignal.timeout(1e4)
-    });
-    if (!response.ok) return [];
-    const xml = await response.text();
-    const posts = [];
-    const itemRegex = /<(item|entry)[\s\S]*?<\/\1>/gi;
-    let match;
-    while ((match = itemRegex.exec(xml)) !== null) {
-      const itemStr = match[0];
-      const titleMatch = itemStr.match(/<title[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
-      const title = (titleMatch ? titleMatch[1] || titleMatch[2] || "" : "").replace(/<[^>]+>/g, "").trim();
-      if (!title || title.length < 5) continue;
-      const linkMatch = itemStr.match(/<link[^>]*href=["']([^"']+)["'][^>]*>|<link[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i);
-      const sourceUrl = (linkMatch ? linkMatch[1] || linkMatch[2] || linkMatch[3] || "" : "").trim();
-      const descMatch = itemStr.match(/<(description|summary|content:encoded)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/\1>/i);
-      const rawDesc = descMatch ? descMatch[2] || descMatch[3] || "" : "";
-      const summary = rawDesc.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
-      let imageUrl = "";
-      const encMatch = itemStr.match(/<enclosure[^>]*url=["']([^"']+)["']/i) || itemStr.match(/<media:(?:thumbnail|content)[^>]*url=["']([^"']+)["']/i);
-      if (encMatch && encMatch[1]) {
-        imageUrl = encMatch[1];
-      } else {
-        const imgMatch = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i);
-        if (imgMatch && imgMatch[1]) {
-          imageUrl = imgMatch[1];
-        }
-      }
-      if (!imageUrl) {
-        imageUrl = getCategoryFallbackImage(category);
-      }
-      const dateMatch = itemStr.match(/<(pubDate|published|updated)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/\1>/i);
-      const rawDate = dateMatch ? dateMatch[2] || dateMatch[3] || "" : "";
-      const timestamp = rawDate ? Date.parse(rawDate) || Date.now() : Date.now();
-      const uniqueHash = Math.abs(title.split("").reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36);
-      const postId = `rss-${uniqueHash}`;
-      posts.push({
-        id: postId,
-        title,
-        summary: summary || title,
-        sourceChannel: channelName || "RSS News",
-        sourceUrl: sourceUrl || url,
-        category: "breaking",
-        categoryName: category || "\u0926\u0947\u0936",
-        publishedTime: formatRelativeTime(timestamp),
-        imageUrl,
-        breaking: true,
-        fullContent: rawDesc.replace(/<[^>]+>/g, " ").trim() || summary || title,
-        timestamp,
-        status: "APPROVED"
-      });
-    }
-    return posts;
-  } catch (err) {
-    console.error(`RSS parse error for ${url}:`, err);
-    return [];
-  }
-}
 app.get("/api/news-posts", (req, res) => {
   const { role, includePending } = req.query;
   const posts = loadNewsDatabase();
@@ -483,39 +419,6 @@ app.post("/api/news-posts", (req, res) => {
     return res.json({ success: true, posts: existing });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.post("/api/admin/rss-sync", async (req, res) => {
-  try {
-    const defaultSources = [
-      { name: "\u0906\u091C \u0924\u0915 (Aaj Tak)", url: "https://www.aajtak.in/rssfeeds/?id=home", category: "\u0926\u0947\u0936" },
-      { name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)", url: "https://feeds.bbci.co.uk/hindi/rss.xml", category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F" },
-      { name: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E", url: "https://feeds.feedburner.com/ndtvkhabar", category: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" },
-      { name: "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (Zee News)", url: "https://zeenews.india.com/rss/india-national-news.xml", category: "\u0926\u0947\u0936" }
-    ];
-    let allFetched = [];
-    for (const src of defaultSources) {
-      const posts = await parseRssFeedUrl(src.url, src.name, src.category);
-      allFetched.push(...posts);
-    }
-    const existing = loadNewsDatabase();
-    const existingIds = new Set(existing.map((p) => p.id));
-    const existingUrls = new Set(existing.map((p) => p.sourceUrl));
-    let newCount = 0;
-    const toAdd = [];
-    for (const p of allFetched) {
-      if (!existingIds.has(p.id) && !existingUrls.has(p.sourceUrl)) {
-        toAdd.push(p);
-        newCount++;
-      }
-    }
-    if (toAdd.length > 0) {
-      const updatedDB = [...toAdd, ...existing];
-      saveNewsDatabase(updatedDB);
-    }
-    return res.json({ success: true, count: newCount, totalNewItems: newCount, message: `${newCount} \u0928\u090F RSS \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093F\u0902\u0915 \u0939\u0941\u090F` });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 app.post("/api/admin/add-news", (req, res) => {
@@ -673,93 +576,6 @@ app.delete("/api/drafts/:id", (req, res) => {
     drafts = drafts.filter((d) => d.id !== id);
     saveDraftsDatabase(drafts);
     return res.json({ success: true });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-var SUPPORT_DB_FILE = import_path.default.join(process.cwd(), "support_requests_database.json");
-function loadSupportDatabase() {
-  try {
-    if (import_fs.default.existsSync(SUPPORT_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(SUPPORT_DB_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.error("Error reading support_requests_database.json:", e);
-  }
-  return [];
-}
-function saveSupportDatabase(reqs) {
-  try {
-    import_fs.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(reqs, null, 2), "utf-8");
-    return true;
-  } catch (e) {
-    console.error("Error writing support_requests_database.json:", e);
-    return false;
-  }
-}
-app.get("/api/support/requests", (req, res) => {
-  try {
-    const { userId, role } = req.query;
-    const all = loadSupportDatabase();
-    if (role === "admin" || role === "superadmin") {
-      return res.json({ success: true, requests: all });
-    }
-    if (userId) {
-      const filtered = all.filter((r) => r.userId === String(userId));
-      return res.json({ success: true, requests: filtered });
-    }
-    return res.json({ success: true, requests: [] });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.post("/api/support/requests", (req, res) => {
-  try {
-    const payload = req.body;
-    if (!payload || !payload.message && !payload.voiceTranscript) {
-      return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u0938\u092E\u0938\u094D\u092F\u093E \u0915\u093E \u0935\u093F\u0935\u0930\u0923 \u092F\u093E \u0935\u0949\u092F\u0938 \u0907\u0928\u092A\u0941\u091F \u092A\u094D\u0930\u0926\u093E\u0928 \u0915\u0930\u0947\u0902" });
-    }
-    const newReq = {
-      id: payload.id || `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      userId: payload.userId || "",
-      userName: payload.userName || "\u092F\u0942\u091C\u093C\u0930",
-      userEmail: payload.userEmail || "",
-      userMobile: payload.userMobile || "",
-      message: (payload.message || "").trim(),
-      voiceTranscript: (payload.voiceTranscript || "").trim(),
-      attachmentUrl: payload.attachmentUrl || "",
-      attachmentName: payload.attachmentName || "",
-      status: "pending",
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    const all = loadSupportDatabase();
-    const updated = [newReq, ...all];
-    saveSupportDatabase(updated);
-    return res.json({ success: true, request: newReq });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.patch("/api/support/requests/:id", (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, adminResponse } = req.body;
-    let all = loadSupportDatabase();
-    const idx = all.findIndex((r) => r.id === id);
-    if (idx >= 0) {
-      all[idx] = {
-        ...all[idx],
-        status: status || all[idx].status,
-        adminResponse: adminResponse !== void 0 ? adminResponse : all[idx].adminResponse,
-        updatedAt: Date.now()
-      };
-      saveSupportDatabase(all);
-      return res.json({ success: true, request: all[idx] });
-    }
-    return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -987,62 +803,19 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
-var DEFAULT_PRODUCTION_RSS_SOURCES = [
-  {
-    id: "src_aajtak_rss",
-    name: "\u0906\u091C \u0924\u0915 (Aaj Tak Hindi News)",
-    url: "https://www.aajtak.in/rssfeeds/?id=home",
-    type: "rss",
-    category: "\u0926\u0947\u0936",
-    isActive: true,
-    createdAt: Date.now() - 864e5,
-    itemsFetchedCount: 15
-  },
-  {
-    id: "src_bbchindi_rss",
-    name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi News)",
-    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
-    type: "rss",
-    category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F",
-    isActive: true,
-    createdAt: Date.now() - 432e5,
-    itemsFetchedCount: 10
-  },
-  {
-    id: "src_ndtv_rss",
-    name: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E (NDTV India Live)",
-    url: "https://feeds.feedburner.com/ndtvkhabar",
-    type: "rss",
-    category: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F",
-    isActive: true,
-    createdAt: Date.now() - 216e5,
-    itemsFetchedCount: 12
-  },
-  {
-    id: "src_pib_web",
-    name: "\u092A\u094D\u0930\u0947\u0938 \u0938\u0942\u091A\u0928\u093E \u092C\u094D\u092F\u0942\u0930\u094B (PIB National Desk)",
-    url: "https://pib.gov.in/PressReleasePage.aspx",
-    type: "web",
-    category: "\u0926\u0947\u0936",
-    isActive: true,
-    createdAt: Date.now() - 1e7,
-    itemsFetchedCount: 5
-  }
-];
 function loadRssSourcesDatabase() {
   try {
     if (import_fs.default.existsSync(RSS_SOURCES_FILE)) {
       const raw = import_fs.default.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  saveRssSourcesDatabase(DEFAULT_PRODUCTION_RSS_SOURCES);
-  return DEFAULT_PRODUCTION_RSS_SOURCES;
+  return [];
 }
 function saveRssSourcesDatabase(sources) {
   try {
@@ -1624,12 +1397,12 @@ function saveProfilesDatabase(data) {
 }
 app.get("/api/user-profile", (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
-  const email = (req.query.email || req.query.userId || req.query.uid || "").toString().trim().toLowerCase();
+  const idOrEmail = (req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const allProfiles = loadProfilesDatabase();
   let match = null;
-  if (email) {
+  if (idOrEmail) {
     match = Object.values(allProfiles).find(
-      (p) => p.email && p.email.toLowerCase() === email || p.username && p.username.toLowerCase() === email
+      (p) => p.userId && p.userId.toLowerCase() === idOrEmail || p.uid && p.uid.toLowerCase() === idOrEmail || p.email && p.email.toLowerCase() === idOrEmail || p.username && p.username.toLowerCase() === idOrEmail
     );
   }
   if (!match && username) {
@@ -1645,42 +1418,25 @@ app.get("/api/user-profile", (req, res) => {
 app.post("/api/user-profile", (req, res) => {
   try {
     const profile = req.body;
-    if (!profile || !profile.username && !profile.email) {
-      return res.status(400).json({ error: "Username or email is required" });
+    if (!profile || !profile.username && !profile.email && !profile.userId && !profile.uid) {
+      return res.status(400).json({ error: "User identifier (UID, username or email) is required" });
     }
-    const key = (profile.email || profile.username).trim().toLowerCase();
+    const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
-    const reqUsername = (profile.username || "").toLowerCase().trim().replace(/[^a-z0-9_]/g, "");
-    const reqWebsite = (profile.websiteUrl || "").toLowerCase().trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "");
-    const reqEmail = (profile.email || "").toLowerCase().trim();
-    if (reqUsername) {
-      const conflict = Object.values(allProfiles).find((p) => {
-        const pEmail = (p.email || "").toLowerCase().trim();
-        const pUser = (p.username || "").toLowerCase().trim().replace(/[^a-z0-9_]/g, "");
-        return pUser === reqUsername && (!reqEmail || pEmail !== reqEmail);
-      });
-      if (conflict) {
-        return res.status(400).json({ error: `\u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E '${profile.username}' \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0916\u093E\u0924\u0947 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0939\u0948\u0964` });
-      }
+    const isMasterAdminEmail = profile.email && (profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || profile.email.toLowerCase() === "breakingnewswala.com@gmail.com");
+    if (cleanId === "admin" && profile.role !== "admin" && profile.role !== "superadmin" && !isMasterAdminEmail) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
-    if (reqWebsite && reqWebsite !== "ainewsmaker.online") {
-      const conflict = Object.values(allProfiles).find((p) => {
-        const pEmail = (p.email || "").toLowerCase().trim();
-        const pWeb = (p.websiteUrl || "").toLowerCase().trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/.*$/, "");
-        return pWeb === reqWebsite && (!reqEmail || pEmail !== reqEmail);
-      });
-      if (conflict) {
-        return res.status(400).json({ error: `\u0935\u0947\u092C\u0938\u093E\u0907\u091F '${reqWebsite}' \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0916\u093E\u0924\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0939\u0941\u0908 \u0939\u0948\u0964` });
-      }
-    }
-    const existing = allProfiles[key] || {};
+    const existing = allProfiles[cleanId] || {};
     const updated = {
       ...existing,
       ...profile,
+      userId: profile.userId || profile.uid || existing.userId || cleanId,
+      uid: profile.uid || profile.userId || existing.uid || cleanId,
       username: profile.username || existing.username || "",
       fullName: profile.fullName || profile.name || existing.fullName || "",
-      role: profile.role || existing.role || (key.includes("admin") ? "admin" : "reporter"),
-      email: profile.email || existing.email || key,
+      role: profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"),
+      email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
@@ -1691,13 +1447,16 @@ app.post("/api/user-profile", (req, res) => {
       mobileNumber: profile.mobileNumber || profile.mobile || existing.mobileNumber || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
+      customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
+      customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
+      tier: profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"),
       updatedAt: Date.now()
     };
-    allProfiles[key] = updated;
+    allProfiles[cleanId] = updated;
     saveProfilesDatabase(allProfiles);
     try {
       let users = loadUsersDatabase();
-      const uIdx = users.findIndex((u) => u.email.toLowerCase() === key);
+      const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanId || u.userId && u.userId.toLowerCase() === cleanId);
       if (uIdx >= 0) {
         users[uIdx] = {
           ...users[uIdx],
@@ -1714,6 +1473,429 @@ app.post("/api/user-profile", (req, res) => {
     } catch {
     }
     return res.json({ success: true, profile: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var ADMIN_BRANDING_FILE = import_path.default.join(process.cwd(), "admin_branding_db.json");
+function loadAdminBranding() {
+  try {
+    if (import_fs.default.existsSync(ADMIN_BRANDING_FILE)) {
+      const raw = import_fs.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error("Error reading admin_branding_db.json:", e);
+  }
+  return {
+    channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+    channelNameEn: "AI News Maker",
+    channelLogoUrl: "/assets/ai_news_maker_logo.png",
+    websiteUrl: "ainewsmaker.online",
+    mobileNumber: "9669802408",
+    showMobileNumber: true,
+    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
+    updatedAt: Date.now()
+  };
+}
+function saveAdminBranding(data) {
+  try {
+    import_fs.default.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error saving admin_branding_db.json:", e);
+    return false;
+  }
+}
+app.get("/api/admin/branding", (_req, res) => {
+  const branding = loadAdminBranding();
+  return res.json({ success: true, branding });
+});
+app.post("/api/admin/branding", (req, res) => {
+  try {
+    const payload = req.body;
+    const existing = loadAdminBranding();
+    const updated = {
+      ...existing,
+      ...payload,
+      updatedAt: Date.now()
+    };
+    saveAdminBranding(updated);
+    return res.json({ success: true, branding: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var CUSTOM_FRAMES_FILE = import_path.default.join(process.cwd(), "custom_frames_db.json");
+function loadCustomFramesDatabase() {
+  try {
+    if (import_fs.default.existsSync(CUSTOM_FRAMES_FILE)) {
+      const raw = import_fs.default.readFileSync(CUSTOM_FRAMES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading custom_frames_db.json:", e);
+  }
+  return [];
+}
+function saveCustomFramesDatabase(frames) {
+  try {
+    import_fs.default.writeFileSync(CUSTOM_FRAMES_FILE, JSON.stringify(frames, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing custom_frames_db.json:", e);
+    return false;
+  }
+}
+app.get("/api/custom-frames", (req, res) => {
+  const { userId } = req.query;
+  const all = loadCustomFramesDatabase();
+  if (!userId) return res.json({ success: true, frames: all });
+  const cleanId = String(userId).toLowerCase().trim();
+  const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId);
+  return res.json({ success: true, frames: userFrames });
+});
+app.post("/api/custom-frames", (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.assetUrl) {
+      return res.status(400).json({ error: "Frame asset URL is required" });
+    }
+    const newFrame = {
+      id: payload.id || `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: (payload.userId || "general").toLowerCase().trim(),
+      name: (payload.name || "\u0915\u0938\u094D\u091F\u092E 4:5 \u092B\u094D\u0930\u0947\u092E").trim(),
+      assetUrl: payload.assetUrl,
+      aspectRatio: "4:5",
+      createdAt: Date.now()
+    };
+    const all = loadCustomFramesDatabase();
+    const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
+    saveCustomFramesDatabase(updated);
+    return res.json({ success: true, frame: newFrame, frames: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/custom-frames/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadCustomFramesDatabase();
+    all = all.filter((f) => f.id !== id);
+    saveCustomFramesDatabase(all);
+    return res.json({ success: true, frames: all });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/auth/login", (req, res) => {
+  try {
+    const { identifier, password, googleUid, profileData } = req.body;
+    const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
+    if (googleUid) {
+      const allProfiles2 = loadProfilesDatabase();
+      const existing = Object.values(allProfiles2).find(
+        (p) => p.uid && p.uid === googleUid || p.userId && p.userId === googleUid || p.email && p.email.toLowerCase() === cleanId
+      );
+      const isMaster2 = cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "breakingnewswala.com@gmail.com";
+      const userProfile = existing || {
+        userId: googleUid,
+        uid: googleUid,
+        email: cleanId,
+        username: profileData?.username || cleanId.split("@")[0],
+        fullName: profileData?.name || profileData?.fullName || "\u092F\u0942\u091C\u093C\u0930",
+        role: isMaster2 ? "admin" : "reporter",
+        tier: isMaster2 ? "ultra" : "basic",
+        channelNameHi: profileData?.channelName || "\u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932",
+        channelNameEn: "News Channel",
+        channelLogoUrl: profileData?.channelLogoUrl || "",
+        mobileNumber: profileData?.mobile || "",
+        websiteUrl: "ainewsmaker.online",
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      return res.json({ success: true, user: userProfile });
+    }
+    if (!cleanId || !password) {
+      return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E/\u0908\u092E\u0947\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902" });
+    }
+    const isMaster = cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "admin" || cleanId === "superadmin";
+    const allProfiles = loadProfilesDatabase();
+    const match = Object.values(allProfiles).find(
+      (p) => p.email && p.email.toLowerCase() === cleanId || p.username && p.username.toLowerCase() === cleanId
+    );
+    if (match) {
+      return res.json({ success: true, user: match });
+    }
+    if (isMaster) {
+      const masterUser = {
+        username: "admin",
+        fullName: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor)",
+        name: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor)",
+        role: "admin",
+        district: "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+        email: "admin.ainewsmaker@gmail.com",
+        userId: "master_admin_001",
+        tier: "ultra",
+        channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        channelNameEn: "AI News Maker",
+        channelLogoUrl: "/assets/ai_news_maker_logo.png",
+        websiteUrl: "ainewsmaker.online",
+        mobileNumber: "9669802408"
+      };
+      return res.json({ success: true, user: masterUser });
+    }
+    return res.status(401).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var SUPPORT_DB_FILE = import_path.default.join(process.cwd(), "support_requests_database.json");
+var UPLOAD_SUPPORT_DIR = import_path.default.join(process.cwd(), "public", "uploads", "support");
+var WEB_UPLOAD_SUPPORT_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "support");
+try {
+  import_fs.default.mkdirSync(UPLOAD_SUPPORT_DIR, { recursive: true });
+  import_fs.default.mkdirSync(WEB_UPLOAD_SUPPORT_DIR, { recursive: true });
+} catch {
+}
+function loadSupportRequestsDatabase() {
+  try {
+    if (import_fs.default.existsSync(SUPPORT_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(SUPPORT_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading support_requests_database.json:", e);
+  }
+  return [];
+}
+function saveSupportRequestsDatabase(requests) {
+  try {
+    import_fs.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing support_requests_database.json:", e);
+    return false;
+  }
+}
+app.get("/api/support/requests", (req, res) => {
+  const { userId, role } = req.query;
+  const all = loadSupportRequestsDatabase();
+  const isAdmin = role === "admin" || role === "superadmin";
+  if (isAdmin || !userId) {
+    return res.json({ success: true, requests: all });
+  }
+  const cleanId = String(userId).toLowerCase().trim();
+  const filtered = all.filter(
+    (r) => r.userId && r.userId.toLowerCase().trim() === cleanId || r.userEmail && r.userEmail.toLowerCase().trim() === cleanId
+  );
+  return res.json({ success: true, requests: filtered });
+});
+app.post("/api/support/requests", (req, res) => {
+  try {
+    const data = req.body;
+    if (!data) return res.status(400).json({ error: "No data provided" });
+    let finalAttachmentUrl = data.attachmentUrl || "";
+    if (data.attachmentDataUrl && typeof data.attachmentDataUrl === "string" && data.attachmentDataUrl.startsWith("data:")) {
+      const match = data.attachmentDataUrl.match(/^data:image\/(\w+);base64,/);
+      const ext = match ? match[1] : "png";
+      const filename = `support_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const base64Data = data.attachmentDataUrl.replace(/^data:image\/\w+;base64,/, "");
+      const buf = Buffer.from(base64Data, "base64");
+      import_fs.default.writeFileSync(import_path.default.join(UPLOAD_SUPPORT_DIR, filename), buf);
+      try {
+        import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf);
+      } catch {
+      }
+      finalAttachmentUrl = `/uploads/support/${filename}`;
+    }
+    const newRequest = {
+      id: data.id || `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: data.userId || "",
+      userName: data.userName || "\u0905\u0928\u093E\u092E \u092F\u0942\u091C\u093C\u0930",
+      userEmail: (data.userEmail || "").replace(/\s+/g, "").toLowerCase().trim(),
+      userMobile: data.userMobile || "",
+      message: data.message || "",
+      voiceTranscript: data.voiceTranscript || "",
+      attachmentUrl: finalAttachmentUrl,
+      attachmentName: data.attachmentName || "",
+      status: data.status || "pending",
+      createdAt: data.createdAt || Date.now(),
+      adminResponse: data.adminResponse || "",
+      updatedAt: Date.now()
+    };
+    const all = loadSupportRequestsDatabase();
+    const updated = [newRequest, ...all.filter((r) => r.id !== newRequest.id)];
+    saveSupportRequestsDatabase(updated);
+    return res.json({ success: true, request: newRequest, requests: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.patch("/api/support/requests/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminResponse } = req.body;
+    const all = loadSupportRequestsDatabase();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "Support request not found" });
+    }
+    all[idx] = {
+      ...all[idx],
+      status: status !== void 0 ? status : all[idx].status,
+      adminResponse: adminResponse !== void 0 ? adminResponse : all[idx].adminResponse,
+      updatedAt: Date.now()
+    };
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, request: all[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/support/requests/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadSupportRequestsDatabase();
+    all = all.filter((r) => r.id !== id);
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, requests: all });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var RAW_NEWS_DB_FILE = import_path.default.join(process.cwd(), "raw_news_database.json");
+function loadRawNewsDatabase() {
+  try {
+    if (import_fs.default.existsSync(RAW_NEWS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(RAW_NEWS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading raw_news_database.json:", e);
+  }
+  return [];
+}
+function saveRawNewsDatabase(items) {
+  try {
+    import_fs.default.writeFileSync(RAW_NEWS_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing raw_news_database.json:", e);
+    return false;
+  }
+}
+app.get("/api/admin/raw-news", (_req, res) => {
+  const all = loadRawNewsDatabase();
+  return res.json({ success: true, rawNews: all });
+});
+app.post("/api/admin/raw-news", (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.headline && !payload.rawText) {
+      return res.status(400).json({ error: "\u0915\u092E \u0938\u0947 \u0915\u092E \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092F\u093E \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const id = payload.id || `raw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const status = payload.status || "Draft";
+    const now = Date.now();
+    const rawItem = {
+      id,
+      rawText: payload.rawText || "",
+      headline: (payload.headline || payload.rawText || "").slice(0, 150),
+      description: payload.description || payload.summary || "",
+      location: payload.location || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+      sourceUrl: payload.sourceUrl || "",
+      imageUrl: payload.imageUrl || "",
+      status,
+      author: payload.author || "\u090F\u0921\u092E\u093F\u0928",
+      createdAt: payload.createdAt || now,
+      updatedAt: now
+    };
+    const all = loadRawNewsDatabase();
+    const updated = [rawItem, ...all.filter((r) => r.id !== id)];
+    saveRawNewsDatabase(updated);
+    if (status === "Published") {
+      const homePost = {
+        id: `post-${rawItem.id}`,
+        title: rawItem.headline,
+        summary: rawItem.description || rawItem.rawText || "",
+        sourceChannel: rawItem.author || "\u090F\u0921\u092E\u093F\u0928 (Raw News)",
+        sourceUrl: rawItem.sourceUrl || "",
+        category: "breaking",
+        categoryName: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+        publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
+        imageUrl: rawItem.imageUrl || getCategoryFallbackImage("general"),
+        breaking: true,
+        isExclusive: true,
+        fullContent: rawItem.rawText || rawItem.description || rawItem.headline,
+        location: rawItem.location || "",
+        district: rawItem.location || "",
+        timestamp: Date.now(),
+        status: "APPROVED"
+      };
+      const existingPosts = loadNewsDatabase();
+      const updatedPosts = [homePost, ...existingPosts.filter((p) => p.id !== homePost.id)];
+      saveNewsDatabase(updatedPosts);
+    }
+    return res.json({ success: true, rawNews: rawItem, all: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/admin/raw-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const all = loadRawNewsDatabase();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940" });
+    }
+    const updatedItem = {
+      ...all[idx],
+      ...updates,
+      updatedAt: Date.now()
+    };
+    all[idx] = updatedItem;
+    saveRawNewsDatabase(all);
+    if (updatedItem.status === "Published") {
+      const homePost = {
+        id: `post-${updatedItem.id}`,
+        title: updatedItem.headline,
+        summary: updatedItem.description || updatedItem.rawText || "",
+        sourceChannel: updatedItem.author || "\u090F\u0921\u092E\u093F\u0928 (Raw News)",
+        sourceUrl: updatedItem.sourceUrl || "",
+        category: "breaking",
+        categoryName: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+        publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
+        imageUrl: updatedItem.imageUrl || getCategoryFallbackImage("general"),
+        breaking: true,
+        isExclusive: true,
+        fullContent: updatedItem.rawText || updatedItem.description || updatedItem.headline,
+        location: updatedItem.location || "",
+        district: updatedItem.location || "",
+        timestamp: Date.now(),
+        status: "APPROVED"
+      };
+      const existingPosts = loadNewsDatabase();
+      const updatedPosts = [homePost, ...existingPosts.filter((p) => p.id !== homePost.id)];
+      saveNewsDatabase(updatedPosts);
+    }
+    return res.json({ success: true, rawNews: updatedItem });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/admin/raw-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadRawNewsDatabase();
+    all = all.filter((r) => r.id !== id);
+    saveRawNewsDatabase(all);
+    return res.json({ success: true, rawNews: all });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

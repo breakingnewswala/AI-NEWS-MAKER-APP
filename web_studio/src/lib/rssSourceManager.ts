@@ -15,62 +15,42 @@ export interface AdminRssSource {
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
 
-export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
-  {
-    id: 'src_aajtak_rss',
-    name: 'आज तक (Aaj Tak Hindi News)',
-    url: 'https://www.aajtak.in/rssfeeds/?id=home',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: Date.now() - 86400000,
-    itemsFetchedCount: 12,
-  },
-  {
-    id: 'src_bbchindi_rss',
-    name: 'बीबीसी हिंदी (BBC Hindi News)',
-    url: 'https://feeds.bbci.co.uk/hindi/rss.xml',
-    type: 'rss',
-    category: 'अंतरराष्ट्रीय',
-    isActive: true,
-    createdAt: Date.now() - 43200000,
-    itemsFetchedCount: 8,
-  },
-  {
-    id: 'src_ndtv_rss',
-    name: 'NDTV इंडिया (NDTV India Live)',
-    url: 'https://feeds.feedburner.com/ndtvkhabar',
-    type: 'rss',
-    category: 'राजनीति',
-    isActive: true,
-    createdAt: Date.now() - 21600000,
-    itemsFetchedCount: 10,
-  },
-  {
-    id: 'src_pib_web',
-    name: 'प्रेस सूचना ब्यूरो (PIB National Desk)',
-    url: 'https://pib.gov.in/PressReleasePage.aspx',
-    type: 'web',
-    category: 'देश',
-    isActive: true,
-    createdAt: Date.now() - 10000000,
-    itemsFetchedCount: 5,
-  },
-];
+export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [];
+
+let memoryRssSources: AdminRssSource[] = [];
 
 export function getAdminRssSources(): AdminRssSource[] {
-  if (typeof window === 'undefined') return DEFAULT_RSS_SOURCES;
+  if (typeof window === 'undefined') return memoryRssSources;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(DEFAULT_RSS_SOURCES));
-      return DEFAULT_RSS_SOURCES;
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list;
     }
-    const list = JSON.parse(raw);
-    return Array.isArray(list) && list.length > 0 ? list : DEFAULT_RSS_SOURCES;
   } catch {
-    return DEFAULT_RSS_SOURCES;
+    // ignore
   }
+  return memoryRssSources;
+}
+
+export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
+  try {
+    const res = await fetch('/api/admin/rss-sources');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.sources)) {
+        memoryRssSources = data.sources;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
+          window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: data.sources }));
+        }
+        return data.sources;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch RSS sources from backend:', err);
+  }
+  return getAdminRssSources();
 }
 
 export function saveAdminRssSources(sources: AdminRssSource[]) {
