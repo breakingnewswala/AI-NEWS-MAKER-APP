@@ -2244,7 +2244,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               { id: 'grid-3' as CardLayout, label: '3 इमेज (2-1)', sub: '2 ऊपर, 1 नीचे' },
               { id: 'grid-3-bottom' as CardLayout, label: '3 इमेज (1-2)', sub: '1 ऊपर, 2 नीचे' },
               { id: 'grid-4' as CardLayout, label: '4 इमेज (2x2)', sub: '2 ऊपर, 2 नीचे ग्रिड' },
-              { id: 'inset-circle' as CardLayout, label: 'गोल सर्कल', sub: 'सर्कल पोर्ट्रेट' },
             ].map((l) => {
               const isSelected =
                 card.layout === l.id ||
@@ -3012,190 +3011,150 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       </div>
 
       {/* ========================================================================= */}
-          {/* STEP 7: हैडर और फुटर (Header & Footer) */}
-          {/* ========================================================================= */}
-          <div
-            id="step-header-footer"
-            style={{ scrollMarginTop: '120px' }}
-            className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
-              mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
+      {/* STEP 6: हैडर और फुटर (Header & Footer) */}
+      {/* ========================================================================= */}
+      <div
+        id="step-header-footer"
+        style={{ scrollMarginTop: '120px' }}
+        className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-28 ${
+          mobileViewMode === 'steps' && activeStep !== 6 ? 'hidden' : 'block'
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
+            <Sliders className="w-3.5 h-3.5 text-yellow-400" />
+            स्टेप 6 : हैडर और फुटर (Header & Footer)
+          </span>
+          <span className="text-xs text-neutral-400 font-medium">
+            ब्रांडिंग व फुटर सेटिंग्स
+          </span>
+        </div>
 
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-                स्टेप 6 : हैडर और फुटर (Header & Footer)
+        {/* 1. Master Branding Card with ON/OFF Toggle (Top of Step 6) */}
+        <div className="p-3 bg-neutral-950/80 border border-blue-900/40 rounded-xl space-y-2.5 text-xs">
+          <div className="flex items-center justify-between text-blue-300 font-bold">
+            <span className="flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-blue-400" />
+              <span>मास्टर ब्रांडिंग (Master Branding)</span>
+            </span>
+            {canUseCustomHF ? (
+              <button
+                type="button"
+                onClick={() => onChange({ showMasterBranding: card.showMasterBranding === false ? true : false })}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
+                  card.showMasterBranding !== false
+                    ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
+                    : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                }`}
+              >
+                {card.showMasterBranding !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                <span>{card.showMasterBranding !== false ? 'चालू (ON)' : 'बंद (OFF)'}</span>
+              </button>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                <span>केवल PRO / VIP DESK</span>
               </span>
-              <span className="text-xs text-neutral-400 font-medium">
-                टॉप हेडर व बॉटम फुटर स्ट्रिप
-              </span>
-            </div>
-
-            {/* Template-specific Header & Footer PNG Customization Box (Strictly PRO & VIP DESK) */}
-            {canUseCustomHF && (
-              <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-3.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-neutral-800/80 pb-2.5">
-                  <div className="flex items-start sm:items-center gap-2">
-                    <span className="text-amber-400 text-sm">🏷️</span>
-                    <div>
-                      <span className="text-xs font-bold text-neutral-200 block">
-                        {currentFrameOptions.find((f) => (card.frameDesign || 'jacket-original') === f.id)?.name || 'मूल न्यूज़ जैकेट'} : हेडर व फुटर पीएनजी
-                      </span>
-                      <span className="text-[10.5px] text-neutral-400 block">
-                        इस टेम्पलेट के लिए कस्टम हेडर/फुटर अपलोड करें (बदलने पर सुरक्षित रहेगा)
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold self-start sm:self-auto flex items-center gap-1">
-                    <span>✓</span> टेम्पलेट सक्रिय
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Top Header PNG Card */}
-                  <div className="bg-neutral-900/90 border border-neutral-800 rounded-xl p-3 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
-                        <span>🖼️</span> हेडर पीएनजी (Top Header)
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-amber-300 font-medium flex items-center gap-1 border border-neutral-700/60">
-                        <Lock className="w-3 h-3 text-amber-400" />
-                        <span>{isProfileLocked ? 'लॉक्ड' : 'अनलॉक्ड'}</span>
-                      </span>
-                    </div>
-
-                    {/* Header Preview & Action buttons */}
-                    {activeHeaderPng ? (
-                      <div className="flex items-center gap-2 p-2 bg-neutral-950 rounded-lg border border-neutral-800">
-                        <div className="w-16 h-8 bg-neutral-900 rounded border border-neutral-700 flex items-center justify-center overflow-hidden shrink-0">
-                          <img src={activeHeaderPng} alt="Header" className="max-w-full max-h-full object-contain" />
-                        </div>
-                        <span className="text-[11px] text-neutral-300 truncate flex-1 font-mono">कस्टम हेडर सक्रिय</span>
-                        <button
-                          type="button"
-                          onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
-                          className="p-1.5 rounded bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-400 text-xs cursor-pointer"
-                          title="हेडर हटाएं"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleApplyHeaderToAll(activeHeaderPng)}
-                          className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10.5px] font-bold border border-neutral-700 cursor-pointer"
-                          title="सभी टेम्पलेट्स पर लगाएं"
-                        >
-                          सभी पर
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-2 text-center bg-neutral-950/60 rounded-lg border border-dashed border-neutral-800 text-[11px] text-neutral-400">
-                        डिफ़ॉल्ट हेडर सक्रिय (कोई कस्टम PNG नहीं)
-                      </div>
-                    )}
-
-                    <label className="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
-                      <Upload className="w-3.5 h-3.5 text-sky-400" />
-                      <span>नया हेडर PNG बदलें</span>
-                      <input
-                        type="file"
-                        accept="image/png,image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleHeaderUpload(file);
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  {/* Bottom Footer PNG Card */}
-                  <div className="bg-neutral-900/90 border border-neutral-800 rounded-xl p-3 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-                        <span>🔻</span> फुटर पीएनजी (Bottom Footer)
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-amber-300 font-medium flex items-center gap-1 border border-neutral-700/60">
-                        <Lock className="w-3 h-3 text-amber-400" />
-                        <span>{isProfileLocked ? 'लॉक्ड' : 'अनलॉक्ड'}</span>
-                      </span>
-                    </div>
-
-                    {/* Footer Preview & Action buttons */}
-                    {activeFooterPng ? (
-                      <div className="flex items-center gap-2 p-2 bg-neutral-950 rounded-lg border border-neutral-800">
-                        <div className="w-16 h-8 bg-neutral-900 rounded border border-neutral-700 flex items-center justify-center overflow-hidden shrink-0">
-                          <img src={activeFooterPng} alt="Footer" className="max-w-full max-h-full object-contain" />
-                        </div>
-                        <span className="text-[11px] text-neutral-300 truncate flex-1 font-mono">कस्टम फुटर सक्रिय</span>
-                        <button
-                          type="button"
-                          onClick={() => handleResetFooterForDesign(card.frameDesign || 'jacket-original')}
-                          className="p-1.5 rounded bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-400 text-xs cursor-pointer"
-                          title="फुटर हटाएं"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleApplyFooterToAll(activeFooterPng)}
-                          className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10.5px] font-bold border border-neutral-700 cursor-pointer"
-                          title="सभी टेम्पलेट्स पर लगाएं"
-                        >
-                          सभी पर
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-2 text-center bg-neutral-950/60 rounded-lg border border-dashed border-neutral-800 text-[11px] text-neutral-400">
-                        डिफ़ॉल्ट फुटर सक्रिय (कोई कस्टम PNG नहीं)
-                      </div>
-                    )}
-
-                    <label className="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
-                      <Upload className="w-3.5 h-3.5 text-red-400" />
-                      <span>नया फुटर PNG बदलें</span>
-                      <input
-                        type="file"
-                        accept="image/png,image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFooterUpload(file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
             )}
+          </div>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">
+            हेडर लोगो व फुटर ब्रैंडिंग सीधे आपकी प्रोफ़ाइल से ऑटो-लिंक रहते हैं। प्रो/VIP यूज़र मास्टर ब्रांडिंग बंद कर सकते हैं।
+          </p>
 
-            {/* 1. Logo Settings & Locked Position Controls */}
-            <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
-                  🏷️ चैनल / ब्रांड लोगो (शीर्ष दाईं ओर फिक्स):
-                </span>
-                <span className="text-[11px] text-amber-400 font-semibold">
-                  साइज: {Math.round((card.logoScale ?? 1.25) * 100)}%
-                </span>
+          {/* When Master Branding is OFF (PRO / VIP / Admin): Header PNG & Footer PNG (NOT for Basic Frame) */}
+          {canUseCustomHF && card.showMasterBranding === false && card.frameDesign !== 'basic' && card.frameDesign !== 'jacket-basic' && (
+            <div className="pt-2 border-t border-neutral-800/80 space-y-3">
+              <div className="flex items-center gap-1.5 text-amber-300 font-bold text-[11px]">
+                <Layers className="w-3.5 h-3.5 text-amber-400" />
+                <span>कस्टम PNG अपलोड (मास्टर ब्रांडिंग बंद होने पर):</span>
               </div>
 
-              {isProfileLocked ? (
-                <div className="p-3 bg-neutral-900 border border-amber-500/40 rounded-xl flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Lock className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="text-xs text-amber-200 font-bold truncate">
-                      चैनल लोगो स्थायी रूप से सुरक्षित है (One-Time Setup)
-                    </span>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono shrink-0">
-                    Locked
-                  </span>
+              {/* 1. Header PNG */}
+              <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-neutral-200">1. हेडर PNG (Header PNG)</span>
+                  {activeHeaderPng && (
+                    <button
+                      type="button"
+                      onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
+                      className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                    >
+                      हटाएं (Remove)
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <label className="flex-1 py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
+                {activeHeaderPng ? (
+                  <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
+                    <img src={activeHeaderPng} alt="Custom Header" className="max-h-full max-w-full object-contain" />
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी हेडर पट्टी अपलोड करें।</p>
+                )}
+                <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-blue-300 border border-blue-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                  <span>{activeHeaderPng ? '🔄 नया हेडर PNG चुनें' : '📁 हेडर PNG अपलोड करें'}</span>
+                  <input
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleHeaderUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              {/* 2. Footer PNG */}
+              <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-neutral-200">2. फुटर PNG (Footer PNG)</span>
+                  {activeFooterPng && (
+                    <button
+                      type="button"
+                      onClick={() => handleFooterReset()}
+                      className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                    >
+                      हटाएं (Remove)
+                    </button>
+                  )}
+                </div>
+                {activeFooterPng ? (
+                  <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
+                    <img src={activeFooterPng} alt="Custom Footer" className="max-h-full max-w-full object-contain" />
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी फुटर स्ट्रिप अपलोड करें।</p>
+                )}
+                <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
+                  <span>{activeFooterPng ? '🔄 नया फुटर PNG चुनें' : '📁 फुटर PNG अपलोड करें'}</span>
+                  <input
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFooterUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Channel Logo Settings & Position Controls (Second in Step 6) */}
+        <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
+              🏷️ चैनल / ब्रांड लोगो (शीर्ष दाईं ओर फिक्स):
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono shrink-0">
+              Locked
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="flex-1 py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
                     <Upload className="w-3.5 h-3.5" />
                     <span>{card.customLogoUrl ? 'नया लोगो बदलें' : 'कस्टम लोगो अपलोड'}</span>
                     <input
@@ -3219,7 +3178,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </button>
                   )}
                 </div>
-              )}
 
               {/* Logo Preview thumbnail */}
               {card.customLogoUrl && (
@@ -3287,162 +3245,15 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               </div>
             </div>
 
-            {/* 2. Master Branding Card with ON/OFF Toggle */}
-            <div className="p-3 bg-neutral-950/80 border border-blue-900/40 rounded-xl space-y-2.5 text-xs">
-              <div className="flex items-center justify-between text-blue-300 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <Globe className="w-4 h-4 text-blue-400" />
-                  <span>मास्टर ब्रांडिंग (Master Branding)</span>
-                </span>
-                {canUseCustomHF ? (
-                  <button
-                    type="button"
-                    onClick={() => onChange({ showMasterBranding: card.showMasterBranding === false ? true : false })}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
-                      card.showMasterBranding !== false
-                        ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
-                        : 'bg-neutral-800 text-neutral-400 border-neutral-700'
-                    }`}
-                  >
-                    {card.showMasterBranding !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                    <span>{card.showMasterBranding !== false ? 'चालू (ON)' : 'बंद (OFF)'}</span>
-                  </button>
-                ) : (
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
-                    <Lock className="w-3 h-3" />
-                    <span>केवल PRO / VIP DESK</span>
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-neutral-400 leading-relaxed">
-                हेडर लोगो, फुटर स्ट्रिप, सोशल हैंडल व वेबसाइट सीधे आपकी <strong>प्रोफ़ाइल</strong> से ऑटो-लिंक रहते हैं।
-              </p>
-
-              {/* When Master Branding is OFF (PRO / VIP / Admin): Header PNG, Footer PNG & Complete Frame 4:5 */}
-              {canUseCustomHF && card.showMasterBranding === false && (
-                <div className="pt-2 border-t border-neutral-800/80 space-y-3">
-                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-[11px]">
-                    <Layers className="w-3.5 h-3.5 text-amber-400" />
-                    <span>कस्टम PNG अपलोड (जब मास्टर ब्रांडिंग बंद हो):</span>
-                  </div>
-
-                  {/* 1. Header PNG */}
-                  <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-neutral-200">1. हेडर PNG (Header PNG)</span>
-                      {activeHeaderPng && (
-                        <button
-                          type="button"
-                          onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
-                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                        >
-                          हटाएं (Remove)
-                        </button>
-                      )}
-                    </div>
-                    {activeHeaderPng ? (
-                      <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
-                        <img src={activeHeaderPng} alt="Custom Header" className="max-h-full max-w-full object-contain" />
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी हेडर पट्टी अपलोड करें।</p>
-                    )}
-                    <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-blue-300 border border-blue-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
-                      <span>{activeHeaderPng ? '🔄 नया हेडर PNG चुनें' : '📁 हेडर PNG अपलोड करें'}</span>
-                      <input
-                        type="file"
-                        accept="image/png"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleHeaderUpload(file);
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  {/* 2. Footer PNG */}
-                  <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-neutral-200">2. फुटर PNG (Footer PNG)</span>
-                      {activeFooterPng && (
-                        <button
-                          type="button"
-                          onClick={() => handleFooterReset()}
-                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                        >
-                          हटाएं (Remove)
-                        </button>
-                      )}
-                    </div>
-                    {activeFooterPng ? (
-                      <div className="relative h-12 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
-                        <img src={activeFooterPng} alt="Custom Footer" className="max-h-full max-w-full object-contain" />
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-neutral-400">कस्टम पारदर्शी फुटर स्ट्रिप अपलोड करें।</p>
-                    )}
-                    <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
-                      <span>{activeFooterPng ? '🔄 नया फुटर PNG चुनें' : '📁 फुटर PNG अपलोड करें'}</span>
-                      <input
-                        type="file"
-                        accept="image/png"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFooterUpload(file);
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  {/* 3. Complete Frame (4:5 full layout) */}
-                  <div className="p-2 bg-neutral-900 border border-neutral-800 rounded-lg space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-neutral-200">3. कम्पलीट फ्रेम 4:5 (Complete Frame Overlay)</span>
-                      {card.customFrameOverlayPng && (
-                        <button
-                          type="button"
-                          onClick={() => onChange({ customFrameOverlayPng: undefined })}
-                          className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                        >
-                          हटाएं (Remove)
-                        </button>
-                      )}
-                    </div>
-                    {card.customFrameOverlayPng ? (
-                      <div className="relative h-20 bg-neutral-950 rounded border border-neutral-700 flex items-center justify-center p-1">
-                        <img src={card.customFrameOverlayPng} alt="Custom Frame Overlay" className="max-h-full max-w-full object-contain" />
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-neutral-400">1080x1350 (4:5) फुल पारदर्शी फ्रेम जो सभी कंटेंट के सबसे ऊपर (Topmost Layer) दिखाई देगा।</p>
-                    )}
-                    <label className="block text-center py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-purple-300 border border-purple-500/30 rounded text-[11px] font-bold cursor-pointer transition-all">
-                      <span>{card.customFrameOverlayPng ? '🔄 नया 4:5 फ्रेम चुनें' : '📁 कम्पलीट 4:5 फ्रेम अपलोड करें'}</span>
-                      <input
-                        type="file"
-                        accept="image/png"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFrameOverlayUpload(file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Footer Style Customization (3 Blocks Center Aligned, No Partition Line) */}
+            {/* 3. Footer Settings & WhatsApp Toggle (Third in Step 6, No Website Box) */}
             <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
                   <Palette className="w-3.5 h-3.5 text-amber-400" />
-                  <span>फुटर 3 ब्लॉक्स (Social | Website | Contact):</span>
+                  <span>फुटर ब्रैंडिंग एवं बैकग्राउंड सेटिंग्स:</span>
                 </span>
                 <span className="text-[10px] text-neutral-400">
-                  सेंटर अलाइंड • कॉम्पैक्ट
+                  कॉम्पैक्ट डिज़ाइन
                 </span>
               </div>
 
@@ -3473,41 +3284,29 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </div>
               </div>
 
-              {/* Contact ON/OFF and details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
-                <div>
-                  <label className="text-[11px] text-neutral-400 block mb-1">वेबसाइट:</label>
-                  <input
-                    type="text"
-                    value={card.websiteUrl || ''}
-                    onChange={(e) => onChange({ websiteUrl: e.target.value })}
-                    placeholder="ainewsmaker.online"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-neutral-300 font-bold">WhatsApp / Contact:</label>
-                    <button
-                      type="button"
-                      onClick={() => onChange({ showMobileNumber: !card.showMobileNumber })}
-                      className={`px-3 py-1 text-xs font-black rounded-lg cursor-pointer transition-all shadow-sm active:scale-95 flex items-center gap-1.5 ${
-                        card.showMobileNumber !== false
-                          ? 'bg-emerald-500 text-slate-950 ring-1 ring-emerald-300'
-                          : 'bg-rose-950/80 text-rose-300 border border-rose-600/60 hover:bg-rose-900'
-                      }`}
-                      title={card.showMobileNumber !== false ? 'नंबर छिपाने हेतु क्लिक करें' : 'नंबर दिखाने हेतु क्लिक करें'}
-                    >
-                      <span>{card.showMobileNumber !== false ? '✓ ON (दिखेगा)' : '✕ OFF (छिपा)'}</span>
-                    </button>
+              {/* WhatsApp Single Toggle (Strictly ON/OFF only - No number input box) */}
+              <div className="pt-2 border-t border-neutral-800/80">
+                <div className="flex items-center justify-between p-2.5 bg-neutral-900 rounded-xl border border-neutral-800">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Footer में WhatsApp नंबर दिखाएँ</span>
+                    </span>
+                    <span className="text-[10.5px] text-neutral-400 block">
+                      नंबर सीधे आपकी प्रोफ़ाइल के वाट्सएप सेक्शन से प्राप्त होता है।
+                    </span>
                   </div>
-                  <input
-                    type="text"
-                    value={card.whatsappNumber || ''}
-                    onChange={(e) => onChange({ whatsappNumber: e.target.value })}
-                    placeholder="9876543210"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => onChange({ showMobileNumber: card.showMobileNumber === false ? true : false })}
+                    className={`px-3 py-1 text-xs font-black rounded-lg cursor-pointer transition-all shadow-sm active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                      card.showMobileNumber !== false
+                        ? 'bg-emerald-500 text-slate-950 ring-1 ring-emerald-300'
+                        : 'bg-rose-950/80 text-rose-300 border border-rose-600/60 hover:bg-rose-900'
+                    }`}
+                  >
+                    <span>{card.showMobileNumber !== false ? '✓ ON (दिखेगा)' : '✕ OFF (छिपा)'}</span>
+                  </button>
                 </div>
               </div>
             </div>

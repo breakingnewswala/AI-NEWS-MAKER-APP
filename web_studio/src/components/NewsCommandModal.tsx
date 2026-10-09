@@ -12,7 +12,7 @@ interface NewsCommandModalProps {
   onClose: () => void;
   onApplyResult: (result: AIAnalysisResult) => void;
   autoFillNews?: { url?: string; title?: string; summary?: string; imageUrl?: string } | null;
-  initialTab?: 'link' | 'command';
+  initialTab?: 'link' | 'command' | 'manual';
   templateId?: string;
   headlineMaxLines?: number;
 }
@@ -28,7 +28,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
 }) => {
   const tplConfig = getTemplateHeadlineConfig(templateId);
   const targetMaxLines = headlineMaxLines || tplConfig.headline_max_lines;
-  const [activeTab, setActiveTab] = useState<'link' | 'command'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'link' | 'command' | 'manual'>(initialTab);
   const [inputText, setInputText] = useState<string>('');
   const [linkUrl, setLinkUrl] = useState<string>('');
   const [customPrompt, setCustomPrompt] = useState<string>('');
@@ -46,6 +46,67 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
   const [aiPhotoPrompt, setAiPhotoPrompt] = useState<string>('');
   const [aiPhotoVariation, setAiPhotoVariation] = useState<number>(0);
   const [captionCopied, setCaptionCopied] = useState<boolean>(false);
+
+  // Manual Add News Form State
+  const [manualHeadline, setManualHeadline] = useState<string>('');
+  const [manualShortDesc, setManualShortDesc] = useState<string>('');
+  const [manualThumbnail, setManualThumbnail] = useState<string>('');
+  const [manualAdditionalPhotos, setManualAdditionalPhotos] = useState<string[]>([]);
+  const [manualFullNews, setManualFullNews] = useState<string>('');
+  const [manualLocation, setManualLocation] = useState<string>('');
+  const [manualNewsDate, setManualNewsDate] = useState<string>('');
+  const [submittingManual, setSubmittingManual] = useState<boolean>(false);
+
+  const handleSaveManualNews = async () => {
+    if (!manualHeadline.trim() || !manualShortDesc.trim()) {
+      setError('हेडलाइन और शॉर्ट डिस्क्रिप्शन आवश्यक हैं');
+      return;
+    }
+    setSubmittingManual(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/add-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          headline: manualHeadline,
+          shortDescription: manualShortDesc,
+          thumbnailPhoto: manualThumbnail,
+          additionalPhotos: manualAdditionalPhotos,
+          fullNews: manualFullNews || manualShortDesc,
+          location: manualLocation,
+          newsDate: manualNewsDate,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'मैन्युअल खबर सेव करने में त्रुटि');
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      }
+
+      onApplyResult({
+        headline: manualHeadline,
+        formattedHeadline: manualHeadline,
+        summary: manualShortDesc,
+        location: manualLocation || 'विशेष कवरेज',
+        pickedImages: {
+          main: manualThumbnail || undefined,
+          second: manualAdditionalPhotos[0],
+          third: manualAdditionalPhotos[1],
+          fourth: manualAdditionalPhotos[2],
+        },
+      });
+
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'खबर जोड़ने में विफल');
+    } finally {
+      setSubmittingManual(false);
+    }
+  };
 
   const formatFullCaption = (headline: string, location: string, summary: string, sourceUrl?: string) => {
     let cleanSummary = (summary || '').trim();
@@ -528,10 +589,10 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         </div>
 
         {/* Tab switch */}
-        <div className="flex border-b border-neutral-800 bg-neutral-950 px-3 pt-2 gap-2">
+        <div className="flex border-b border-neutral-800 bg-neutral-950 px-3 pt-2 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('link')}
-            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'link'
                 ? 'border-blue-400 text-blue-400'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
@@ -542,7 +603,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('command')}
-            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'command'
                 ? 'border-yellow-400 text-yellow-400'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
@@ -551,11 +612,199 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
             <FileText className="w-3.5 h-3.5" />
             <span>2. रॉ न्यूज़ / स्क्रिप्ट (टेक्स्ट से बनाएं)</span>
           </button>
+          <button
+            onClick={() => setActiveTab('manual')}
+            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'manual'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>3. मैन्युअल खबर जोड़ें (Add News)</span>
+          </button>
         </div>
 
         {/* Body */}
         <div className="p-4 sm:p-6 space-y-4">
-          {activeTab === 'link' ? (
+          {activeTab === 'manual' ? (
+            <div className="space-y-4 bg-neutral-950 p-4 rounded-xl border border-neutral-800">
+              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <span>➕</span>
+                <span>मैन्युअल न्यूज़ कार्ड दर्ज करें (Admin Add News):</span>
+              </h3>
+
+              {/* 1. Headline */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  1. हेडलाइन (Headline) <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={manualHeadline}
+                  onChange={(e) => setManualHeadline(e.target.value)}
+                  placeholder="मुख्य खबर की हेडलाइन दर्ज करें..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
+              {/* 2. Short Description */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  2. लघु विवरण (Short Description) <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={manualShortDesc}
+                  onChange={(e) => setManualShortDesc(e.target.value)}
+                  placeholder="खबर का 2-3 पंक्तियों में संक्षिप्त सारांश लिखें..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
+              {/* 3. Thumbnail Photo */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  3. थंबनेल फोटो (Thumbnail Photo) <span className="text-red-400">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={manualThumbnail}
+                    onChange={(e) => setManualThumbnail(e.target.value)}
+                    placeholder="इमेज URL पेस्ट करें या फ़ाइल अपलोड करें..."
+                    className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                  />
+                  <label className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white text-xs font-bold px-3 py-2.5 rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0">
+                    <span>📁 अपलोड</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) {
+                              setManualThumbnail(ev.target.result as string);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {manualThumbnail && (
+                  <img src={manualThumbnail} alt="Thumbnail preview" className="w-16 h-12 object-cover rounded border border-neutral-700 mt-1" />
+                )}
+              </div>
+
+              {/* 4. Additional Photos */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  4. अतिरिक्त फोटो (Additional Photos - ऐच्छिक)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer flex items-center gap-1.5">
+                    <span>🖼️ फोटो अपलोड करें</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        files.forEach((file) => {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) {
+                              setManualAdditionalPhotos((prev) => [...prev, ev.target!.result as string]);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                      }}
+                    />
+                  </label>
+                  {manualAdditionalPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setManualAdditionalPhotos([])}
+                      className="text-xs text-red-400 hover:underline"
+                    >
+                      हटाएं ({manualAdditionalPhotos.length})
+                    </button>
+                  )}
+                </div>
+                {manualAdditionalPhotos.length > 0 && (
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {manualAdditionalPhotos.map((photo, pIdx) => (
+                      <img key={pIdx} src={photo} alt="" className="w-12 h-12 object-cover rounded border border-neutral-700" />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Full News */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  5. पूरी खबर (Full News) <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={manualFullNews}
+                  onChange={(e) => setManualFullNews(e.target.value)}
+                  placeholder="समाचार की पूरी विस्तृत रिपोर्ट दर्ज करें..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
+              {/* 6. Location & 7. News Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-300">6. स्थान (Location)</label>
+                  <input
+                    type="text"
+                    value={manualLocation}
+                    onChange={(e) => setManualLocation(e.target.value)}
+                    placeholder="उदा. भोपाल, मध्य प्रदेश"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-300">7. दिनांक (News Date)</label>
+                  <input
+                    type="text"
+                    value={manualNewsDate}
+                    onChange={(e) => setManualNewsDate(e.target.value)}
+                    placeholder="उदा. 09 अक्टूबर 2026"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={submittingManual}
+                onClick={handleSaveManualNews}
+                className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-black text-sm rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 transition-all"
+              >
+                {submittingManual ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>खबर सेव हो रही है...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>खबर प्रकाशित करें व स्टूडियो में खोलें</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : activeTab === 'link' ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">

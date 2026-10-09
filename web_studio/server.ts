@@ -39,8 +39,8 @@ if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API
 if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "MY_OPENAI_API_KEY") {
   process.env.OPENAI_API_KEY = CONFIGURED_OPENAI_KEY;
 }
-let dynamicOpenAiKey: string = (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY") 
-  ? process.env.OPENAI_API_KEY 
+let dynamicOpenAiKey: string = (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY")
+  ? process.env.OPENAI_API_KEY
   : CONFIGURED_OPENAI_KEY;
 let dynamicCustomDomain: string = "";
 
@@ -50,6 +50,12 @@ const GEMINI_MODELS_POOL = [
   "gemini-3.8-flash",
   "gemini-3.1-flash-lite",
 ];
+
+function cleanErrorMessage(err: any): string {
+  if (typeof err === 'string') return err;
+  if (err?.message) return err.message;
+  return 'सर्वर त्रुटि हुई';
+}
 
 function getCategoryFallbackImage(category: string = 'general'): string {
   const cat = (category || '').toLowerCase();
@@ -358,7 +364,7 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
   }
 }
 
-// Format dynamic relative time
+// Dynamic relative time formatter helper
 function formatRelativeTime(timestamp: number): string {
   const diffMs = Date.now() - timestamp;
   const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
@@ -367,6 +373,87 @@ function formatRelativeTime(timestamp: number): string {
   if (diffHours < 24) return `${diffHours} घंटे पहले`;
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays} दिन पहले`;
+}
+
+// Live RSS XML Parser (RSS 2.0 & Atom feed parser)
+async function parseRssFeedUrl(url: string, channelName: string, category: string = 'देश'): Promise<StoredNewsPost[]> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return [];
+    const xml = await response.text();
+
+    const posts: StoredNewsPost[] = [];
+    const itemRegex = /<(item|entry)[\s\S]*?<\/\1>/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = itemRegex.exec(xml)) !== null) {
+      const itemStr = match[0];
+
+      // Title
+      const titleMatch = itemStr.match(/<title[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+      const title = (titleMatch ? (titleMatch[1] || titleMatch[2] || '') : '').replace(/<[^>]+>/g, '').trim();
+      if (!title || title.length < 5) continue;
+
+      // Link
+      const linkMatch = itemStr.match(/<link[^>]*href=["']([^"']+)["'][^>]*>|<link[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i);
+      const sourceUrl = (linkMatch ? (linkMatch[1] || linkMatch[2] || linkMatch[3] || '') : '').trim();
+
+      // Description / Summary / Content
+      const descMatch = itemStr.match(/<(description|summary|content:encoded)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/\1>/i);
+      const rawDesc = descMatch ? (descMatch[2] || descMatch[3] || '') : '';
+      const summary = rawDesc.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+
+      // Image Extraction
+      let imageUrl = '';
+      const encMatch = itemStr.match(/<enclosure[^>]*url=["']([^"']+)["']/i) || itemStr.match(/<media:(?:thumbnail|content)[^>]*url=["']([^"']+)["']/i);
+      if (encMatch && encMatch[1]) {
+        imageUrl = encMatch[1];
+      } else {
+        const imgMatch = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (imgMatch && imgMatch[1]) {
+          imageUrl = imgMatch[1];
+        }
+      }
+      if (!imageUrl) {
+        imageUrl = getCategoryFallbackImage(category);
+      }
+
+      // PubDate
+      const dateMatch = itemStr.match(/<(pubDate|published|updated)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/\1>/i);
+      const rawDate = dateMatch ? (dateMatch[2] || dateMatch[3] || '') : '';
+      const timestamp = rawDate ? (Date.parse(rawDate) || Date.now()) : Date.now();
+
+      const uniqueHash = Math.abs(title.split('').reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36);
+      const postId = `rss-${uniqueHash}`;
+
+      posts.push({
+        id: postId,
+        title,
+        summary: summary || title,
+        sourceChannel: channelName || 'RSS News',
+        sourceUrl: sourceUrl || url,
+        category: 'breaking',
+        categoryName: category || 'देश',
+        publishedTime: formatRelativeTime(timestamp),
+        imageUrl,
+        breaking: true,
+        fullContent: rawDesc.replace(/<[^>]+>/g, ' ').trim() || summary || title,
+        timestamp,
+        status: 'APPROVED',
+      });
+    }
+
+    return posts;
+  } catch (err) {
+    console.error(`RSS parse error for ${url}:`, err);
+    return [];
+  }
 }
 
 // 1. GET all news posts (Applies 3-day expiry, filters obsolete seeds, and respects admin RSS approval)
@@ -397,7 +484,9 @@ app.get("/api/news-posts", (req, res) => {
     ...p,
     publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
   }));
-  return res.json({ success: true, posts: dynamicPosts });
+
+  // Support array format direct access as well as object
+  return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
 });
 
 // 2. POST add or sync news posts
@@ -437,7 +526,119 @@ app.post("/api/news-posts", (req, res) => {
   }
 });
 
-// 3. PUT update existing post
+// 3. Admin RSS Sync endpoint
+app.post("/api/admin/rss-sync", async (req, res) => {
+  try {
+    const defaultSources = [
+      { name: "आज तक (Aaj Tak)", url: "https://www.aajtak.in/rssfeeds/?id=home", category: "देश" },
+      { name: "बीबीसी हिंदी (BBC Hindi)", url: "https://feeds.bbci.co.uk/hindi/rss.xml", category: "अंतरराष्ट्रीय" },
+      { name: "NDTV इंडिया", url: "https://feeds.feedburner.com/ndtvkhabar", category: "राजनीति" },
+      { name: "ज़ी न्यूज़ (Zee News)", url: "https://zeenews.india.com/rss/india-national-news.xml", category: "देश" }
+    ];
+
+    let allFetched: StoredNewsPost[] = [];
+    for (const src of defaultSources) {
+      const posts = await parseRssFeedUrl(src.url, src.name, src.category);
+      allFetched.push(...posts);
+    }
+
+    const existing = loadNewsDatabase();
+    const existingIds = new Set(existing.map((p) => p.id));
+    const existingUrls = new Set(existing.map((p) => p.sourceUrl));
+
+    let newCount = 0;
+    const toAdd: StoredNewsPost[] = [];
+    for (const p of allFetched) {
+      if (!existingIds.has(p.id) && !existingUrls.has(p.sourceUrl)) {
+        toAdd.push(p);
+        newCount++;
+      }
+    }
+
+    if (toAdd.length > 0) {
+      const updatedDB = [...toAdd, ...existing];
+      saveNewsDatabase(updatedDB);
+    }
+
+    return res.json({ success: true, count: newCount, totalNewItems: newCount, message: `${newCount} नए RSS समाचार सिंक हुए` });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// 4. Admin Manual News Creation endpoint
+app.post("/api/admin/add-news", (req, res) => {
+  try {
+    const {
+      headline,
+      title,
+      shortDescription,
+      summary,
+      thumbnailPhoto,
+      imageUrl,
+      additionalPhotos,
+      fullNews,
+      fullContent,
+      location,
+      district,
+      newsDate,
+      publishedTime,
+      sourceChannel,
+    } = req.body;
+
+    const finalHeadline = (headline || title || "").trim();
+    const finalSummary = (shortDescription || summary || "").trim();
+    const finalPhoto = (thumbnailPhoto || imageUrl || "").trim();
+    const finalFullNews = (fullNews || fullContent || finalSummary || finalHeadline).trim();
+
+    if (!finalHeadline || !finalSummary) {
+      return res.status(400).json({ success: false, error: "हेडलाइन और लघु विवरण (Short Description) आवश्यक हैं" });
+    }
+
+    const newPost: StoredNewsPost = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: finalHeadline,
+      summary: finalSummary,
+      sourceChannel: sourceChannel || "एडमिन (Manual)",
+      sourceUrl: "",
+      category: "breaking",
+      categoryName: "मुख्य समाचार",
+      publishedTime: newsDate || publishedTime || "अभी-अभी",
+      imageUrl: finalPhoto || getCategoryFallbackImage("general"),
+      additionalPhotos: Array.isArray(additionalPhotos) ? additionalPhotos : [],
+      breaking: true,
+      isExclusive: true,
+      fullContent: finalFullNews,
+      location: location || district || "",
+      district: district || location || "",
+      timestamp: Date.now(),
+      status: "APPROVED",
+    } as any;
+
+    const existing = loadNewsDatabase();
+    const updated = [newPost, ...existing];
+    saveNewsDatabase(updated);
+
+    return res.json({ success: true, post: newPost, posts: updated, message: "मैन्युअल समाचार सफलतापूर्वक जोड़ा गया!" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// 5. Admin Approve News endpoint
+app.post("/api/admin/approve-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => (p.id === id ? { ...p, status: "APPROVED" as const } : p));
+    saveNewsDatabase(existing);
+    return res.json({ success: true, posts: existing });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 6. PUT update existing post
 app.put("/api/news-posts/:id", (req, res) => {
   try {
     const { id } = req.params;
@@ -451,7 +652,7 @@ app.put("/api/news-posts/:id", (req, res) => {
   }
 });
 
-// 4. DELETE news post
+// 7. DELETE news post
 app.delete("/api/news-posts/:id", (req, res) => {
   try {
     const { id } = req.params;
@@ -1091,21 +1292,21 @@ async function extractBestNewsImage(
         const html = await resp.text();
         // Priority 4: og:image
         const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-                             html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
         if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
           return ogImageMatch[1].trim();
         }
 
         // Priority 5: twitter:image
         const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
-                                  html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
         if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
           return twitterImageMatch[1].trim();
         }
 
         // Priority 6: Article main image (<article> img or <figure> img)
         const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
-                                html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+          html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
         if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
           return articleImgMatch[1].trim();
         }
@@ -1256,16 +1457,16 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
 
 
     const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) ||
-                      itemXml.match(/<link\s+href=["']([^"']+)["']/i);
+      itemXml.match(/<link\s+href=["']([^"']+)["']/i);
     const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
 
     const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) ||
-                      itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
+      itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
     const rawDesc = descMatch ? (descMatch[1] || descMatch[2] || "").trim() : "";
 
 
     const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) ||
-                         itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
+      itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
     const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
     let timestamp = Date.now();
     if (pubDateStr) {
@@ -1283,12 +1484,12 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
 
     const catKey =
       catName === "देश" ? "national" :
-      catName === "राज्य" ? "state" :
-      catName === "राजनीति" ? "politics" :
-      catName === "व्यापार" ? "business" :
-      catName === "खेल" ? "sports" :
-      catName === "मनोरंजन" ? "entertainment" :
-      catName === "अपराध" ? "crime" : "tech";
+        catName === "राज्य" ? "state" :
+          catName === "राजनीति" ? "politics" :
+            catName === "व्यापार" ? "business" :
+              catName === "खेल" ? "sports" :
+                catName === "मनोरंजन" ? "entertainment" :
+                  catName === "अपराध" ? "crime" : "tech";
 
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
 
@@ -1330,13 +1531,13 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     const html = await resp.text();
 
     const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
-                         html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
-                         html.match(/<title>([^<]+)<\/title>/i);
+      html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<title>([^<]+)<\/title>/i);
     const rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
     if (!rawTitle) return [];
 
     const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
-                        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
     const rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
 
     // Extract article text from <article> or <p> tags
@@ -1351,7 +1552,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     // 1. Strict Priority Image Selection
     let imageUrl = "";
     const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-                         html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
     if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
       imageUrl = ogImageMatch[1].trim();
     }
@@ -1363,7 +1564,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     }
     if (!imageUrl) {
       const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
-                              html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+        html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
       if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
         imageUrl = articleImgMatch[1].trim();
       }
@@ -1379,12 +1580,12 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     const catName = editorial.categoryName || source.category || "देश";
     const catKey =
       catName === "देश" ? "national" :
-      catName === "राज्य" ? "state" :
-      catName === "राजनीति" ? "politics" :
-      catName === "व्यापार" ? "business" :
-      catName === "खेल" ? "sports" :
-      catName === "मनोरंजन" ? "entertainment" :
-      catName === "अपराध" ? "crime" : "tech";
+        catName === "राज्य" ? "state" :
+          catName === "राजनीति" ? "politics" :
+            catName === "व्यापार" ? "business" :
+              catName === "खेल" ? "sports" :
+                catName === "मनोरंजन" ? "entertainment" :
+                  catName === "अपराध" ? "crime" : "tech";
 
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
     const postId = `web-${source.id}-${hashStr}`;
@@ -1707,7 +1908,7 @@ const WEB_UPLOAD_LOGOS_DIR = path.join(process.cwd(), "web_studio", "public", "u
 try {
   fs.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
   fs.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
-} catch {}
+} catch { }
 
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
@@ -1851,7 +2052,7 @@ app.post("/api/user-profile", (req, res) => {
         };
         saveUsersDatabase(users);
       }
-    } catch {}
+    } catch { }
 
     return res.json({ success: true, profile: updated });
   } catch (err: any) {
@@ -1875,7 +2076,7 @@ app.post("/api/upload-logo", (req, res) => {
     const filePath = path.join(UPLOAD_LOGOS_DIR, filename);
     const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, filename);
     fs.writeFileSync(filePath, buffer);
-    try { fs.writeFileSync(webFilePath, buffer); } catch {}
+    try { fs.writeFileSync(webFilePath, buffer); } catch { }
 
     const logoUrl = `/uploads/logos/${filename}`;
 
@@ -4734,8 +4935,8 @@ async function startServer() {
       const backupServer = app.listen(3000, "0.0.0.0", () => {
         console.log(`Backup listener running on http://0.0.0.0:3000`);
       });
-      backupServer.on("error", () => {});
-    } catch (_err) {}
+      backupServer.on("error", () => { });
+    } catch (_err) { }
   }
 }
 

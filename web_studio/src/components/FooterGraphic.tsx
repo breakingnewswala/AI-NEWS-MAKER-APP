@@ -73,7 +73,6 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     return activeSocialIcons.includes(name);
   };
 
-  const cleanWebsite = websiteUrl ? websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '').trim() : '';
   const cleanPhone = showMobileNumber && whatsappNumber ? whatsappNumber.replace(/^\/+/, '').trim() : '';
   const displayHandle = socialHandle
     ? (socialHandle.startsWith('@') ? socialHandle : `@${socialHandle}`)
@@ -83,16 +82,14 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const socialPlatforms = ['youtube', 'facebook', 'instagram', 'twitter', 'telegram'];
   const visibleSocialIcons = (activeSocialIcons || []).filter((icon) => socialPlatforms.includes(icon));
   const hasSocial = Boolean(displayHandle || visibleSocialIcons.length > 0);
-  const hasWeb = Boolean(cleanWebsite);
   const hasContact = Boolean(cleanPhone);
-  const totalItemsCount = (hasSocial ? 1 : 0) + (hasWeb ? 1 : 0) + (hasContact ? 1 : 0);
+  const totalItemsCount = (hasSocial ? 1 : 0) + (hasContact ? 1 : 0);
 
   // Responsive styling variables
-  const isCompact = totalItemsCount >= 3;
+  const isCompact = totalItemsCount >= 2;
   const textSizeClass = isCompact ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs';
   const iconContainerSizeClass = isCompact ? 'w-3.5 h-3.5 sm:w-4 sm:h-4' : 'w-4 h-4 sm:w-4.5 sm:h-4.5';
-  const svgSizeClass = isCompact ? 'w-2 h-2 sm:w-2.5 sm:h-2.5' : 'w-2.5 h-2.5 sm:w-3 sm:h-3';
-  const gapClass = isCompact ? 'gap-1 sm:gap-2' : 'gap-1.5 sm:gap-2.5';
+  const svgSizeClass = isCompact ? 'w-2.5 h-2.5 sm:w-3 sm:h-3' : 'w-3 h-3 sm:w-3.5 sm:h-3.5';
   const pyClass = isCompact ? 'py-1.5 sm:py-2' : 'py-2 sm:py-2.5';
 
   // Helper to determine icon style classes
@@ -134,7 +131,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
       }}
       className={`w-full border-t border-neutral-200/50 px-1.5 sm:px-4 ${pyClass} flex items-center justify-center shadow-inner select-none overflow-hidden text-center`}
     >
-      {/* Master Branding Active Blocks: Strict order ONE (Social) -> TWO (Website) -> THREE (Contact) */}
+      {/* Master Branding Active Blocks: Strict order ONE (Social) -> TWO (WhatsApp Contact) */}
       <div className="flex items-center justify-center gap-1.5 sm:gap-3.5 max-w-full overflow-hidden flex-nowrap sm:flex-nowrap text-center text-ellipsis">
         {/* Section 1: Social Media Icons + Handle */}
         {hasSocial && (
@@ -207,7 +204,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
               </div>
             )}
 
-            {/* Social Handle (No internal divider between icon and text) */}
+            {/* Social Handle */}
             {displayHandle && (
               <span
                 style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
@@ -219,8 +216,8 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
           </div>
         )}
 
-        {/* Partition Divider between Section 1 and Section 2 */}
-        {hasSocial && hasWeb && (
+        {/* Partition Divider before WhatsApp Section */}
+        {hasContact && hasSocial && (
           <span
             style={{ color: separatorColor }}
             className="select-none text-xs font-light opacity-60 shrink-0 px-0.5"
@@ -230,44 +227,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
           </span>
         )}
 
-        {/* Section 2: Website (+ Icon) */}
-        {hasWeb && (
-          <div className="flex items-center justify-center gap-1 shrink-0">
-            <svg
-              style={{ color: effectiveTextColor }}
-              className={svgSizeClass}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            <span
-              style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
-              className={`font-extrabold ${textSizeClass} tracking-tight whitespace-nowrap`}
-            >
-              {cleanWebsite}
-            </span>
-          </div>
-        )}
-
-        {/* Partition Divider before Section 3 (if either Section 1 or Section 2 is active) */}
-        {hasContact && (hasSocial || hasWeb) && (
-          <span
-            style={{ color: separatorColor }}
-            className="select-none text-xs font-light opacity-60 shrink-0 px-0.5"
-            aria-hidden="true"
-          >
-            |
-          </span>
-        )}
-
-        {/* Section 3: WhatsApp + Contact */}
+        {/* Section 2: WhatsApp Contact */}
         {hasContact && (
           <div className="flex items-center justify-center gap-1 shrink-0">
             <div

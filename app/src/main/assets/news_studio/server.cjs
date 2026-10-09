@@ -361,6 +361,70 @@ function formatRelativeTime(timestamp) {
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays} \u0926\u093F\u0928 \u092A\u0939\u0932\u0947`;
 }
+async function parseRssFeedUrl(url, channelName, category = "\u0926\u0947\u0936") {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*"
+      },
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (!response.ok) return [];
+    const xml = await response.text();
+    const posts = [];
+    const itemRegex = /<(item|entry)[\s\S]*?<\/\1>/gi;
+    let match;
+    while ((match = itemRegex.exec(xml)) !== null) {
+      const itemStr = match[0];
+      const titleMatch = itemStr.match(/<title[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+      const title = (titleMatch ? titleMatch[1] || titleMatch[2] || "" : "").replace(/<[^>]+>/g, "").trim();
+      if (!title || title.length < 5) continue;
+      const linkMatch = itemStr.match(/<link[^>]*href=["']([^"']+)["'][^>]*>|<link[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i);
+      const sourceUrl = (linkMatch ? linkMatch[1] || linkMatch[2] || linkMatch[3] || "" : "").trim();
+      const descMatch = itemStr.match(/<(description|summary|content:encoded)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/\1>/i);
+      const rawDesc = descMatch ? descMatch[2] || descMatch[3] || "" : "";
+      const summary = rawDesc.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+      let imageUrl = "";
+      const encMatch = itemStr.match(/<enclosure[^>]*url=["']([^"']+)["']/i) || itemStr.match(/<media:(?:thumbnail|content)[^>]*url=["']([^"']+)["']/i);
+      if (encMatch && encMatch[1]) {
+        imageUrl = encMatch[1];
+      } else {
+        const imgMatch = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (imgMatch && imgMatch[1]) {
+          imageUrl = imgMatch[1];
+        }
+      }
+      if (!imageUrl) {
+        imageUrl = getCategoryFallbackImage(category);
+      }
+      const dateMatch = itemStr.match(/<(pubDate|published|updated)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/\1>/i);
+      const rawDate = dateMatch ? dateMatch[2] || dateMatch[3] || "" : "";
+      const timestamp = rawDate ? Date.parse(rawDate) || Date.now() : Date.now();
+      const uniqueHash = Math.abs(title.split("").reduce((acc, char) => (acc << 5) - acc + char.charCodeAt(0), 0)).toString(36);
+      const postId = `rss-${uniqueHash}`;
+      posts.push({
+        id: postId,
+        title,
+        summary: summary || title,
+        sourceChannel: channelName || "RSS News",
+        sourceUrl: sourceUrl || url,
+        category: "breaking",
+        categoryName: category || "\u0926\u0947\u0936",
+        publishedTime: formatRelativeTime(timestamp),
+        imageUrl,
+        breaking: true,
+        fullContent: rawDesc.replace(/<[^>]+>/g, " ").trim() || summary || title,
+        timestamp,
+        status: "APPROVED"
+      });
+    }
+    return posts;
+  } catch (err) {
+    console.error(`RSS parse error for ${url}:`, err);
+    return [];
+  }
+}
 app.get("/api/news-posts", (req, res) => {
   const { role, includePending } = req.query;
   const posts = loadNewsDatabase();
@@ -379,7 +443,7 @@ app.get("/api/news-posts", (req, res) => {
     ...p,
     publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime
   }));
-  return res.json({ success: true, posts: dynamicPosts });
+  return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
 });
 app.post("/api/news-posts", (req, res) => {
   try {
@@ -407,6 +471,102 @@ app.post("/api/news-posts", (req, res) => {
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
+    saveNewsDatabase(existing);
+    return res.json({ success: true, posts: existing });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/rss-sync", async (req, res) => {
+  try {
+    const defaultSources = [
+      { name: "\u0906\u091C \u0924\u0915 (Aaj Tak)", url: "https://www.aajtak.in/rssfeeds/?id=home", category: "\u0926\u0947\u0936" },
+      { name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)", url: "https://feeds.bbci.co.uk/hindi/rss.xml", category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F" },
+      { name: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E", url: "https://feeds.feedburner.com/ndtvkhabar", category: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" },
+      { name: "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (Zee News)", url: "https://zeenews.india.com/rss/india-national-news.xml", category: "\u0926\u0947\u0936" }
+    ];
+    let allFetched = [];
+    for (const src of defaultSources) {
+      const posts = await parseRssFeedUrl(src.url, src.name, src.category);
+      allFetched.push(...posts);
+    }
+    const existing = loadNewsDatabase();
+    const existingIds = new Set(existing.map((p) => p.id));
+    const existingUrls = new Set(existing.map((p) => p.sourceUrl));
+    let newCount = 0;
+    const toAdd = [];
+    for (const p of allFetched) {
+      if (!existingIds.has(p.id) && !existingUrls.has(p.sourceUrl)) {
+        toAdd.push(p);
+        newCount++;
+      }
+    }
+    if (toAdd.length > 0) {
+      const updatedDB = [...toAdd, ...existing];
+      saveNewsDatabase(updatedDB);
+    }
+    return res.json({ success: true, count: newCount, totalNewItems: newCount, message: `${newCount} \u0928\u090F RSS \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093F\u0902\u0915 \u0939\u0941\u090F` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/add-news", (req, res) => {
+  try {
+    const {
+      headline,
+      title,
+      shortDescription,
+      summary,
+      thumbnailPhoto,
+      imageUrl,
+      additionalPhotos,
+      fullNews,
+      fullContent,
+      location,
+      district,
+      newsDate,
+      publishedTime,
+      sourceChannel
+    } = req.body;
+    const finalHeadline = (headline || title || "").trim();
+    const finalSummary = (shortDescription || summary || "").trim();
+    const finalPhoto = (thumbnailPhoto || imageUrl || "").trim();
+    const finalFullNews = (fullNews || fullContent || finalSummary || finalHeadline).trim();
+    if (!finalHeadline || !finalSummary) {
+      return res.status(400).json({ success: false, error: "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0932\u0918\u0941 \u0935\u093F\u0935\u0930\u0923 (Short Description) \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902" });
+    }
+    const newPost = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: finalHeadline,
+      summary: finalSummary,
+      sourceChannel: sourceChannel || "\u090F\u0921\u092E\u093F\u0928 (Manual)",
+      sourceUrl: "",
+      category: "breaking",
+      categoryName: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+      publishedTime: newsDate || publishedTime || "\u0905\u092D\u0940-\u0905\u092D\u0940",
+      imageUrl: finalPhoto || getCategoryFallbackImage("general"),
+      additionalPhotos: Array.isArray(additionalPhotos) ? additionalPhotos : [],
+      breaking: true,
+      isExclusive: true,
+      fullContent: finalFullNews,
+      location: location || district || "",
+      district: district || location || "",
+      timestamp: Date.now(),
+      status: "APPROVED"
+    };
+    const existing = loadNewsDatabase();
+    const updated = [newPost, ...existing];
+    saveNewsDatabase(updated);
+    return res.json({ success: true, post: newPost, posts: updated, message: "\u092E\u0948\u0928\u094D\u092F\u0941\u0905\u0932 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u091C\u094B\u0921\u093C\u093E \u0917\u092F\u093E!" });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/approve-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => p.id === id ? { ...p, status: "APPROVED" } : p);
     saveNewsDatabase(existing);
     return res.json({ success: true, posts: existing });
   } catch (err) {

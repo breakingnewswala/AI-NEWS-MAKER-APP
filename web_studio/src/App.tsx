@@ -1330,6 +1330,7 @@ export default function App() {
       url: effectiveLink,
       title: post.title,
       summary: post.summary,
+      fullNews: (post as any).fullContent || (post as any).fullNews || post.summary || post.title,
       imageUrl: targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,

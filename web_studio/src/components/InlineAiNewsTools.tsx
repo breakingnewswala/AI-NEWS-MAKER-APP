@@ -30,6 +30,7 @@ export interface AutoFillNewsData {
   url?: string;
   title?: string;
   summary?: string;
+  fullNews?: string;
   imageUrl?: string;
   category?: string;
   location?: string;
@@ -156,13 +157,34 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
 
     const effectiveTargetUrl = autoFillNews.url || (autoFillNews.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(autoFillNews.title.slice(0, 30))}` : '');
-    setActiveTab('link');
+    const rawContent = autoFillNews.fullNews || autoFillNews.summary || autoFillNews.title || '';
+    
+    if (autoFillNews.fullNews || !autoFillNews.url) {
+      setActiveTab('command');
+    } else {
+      setActiveTab('link');
+    }
+    
     setLinkUrl(effectiveTargetUrl);
-    setInputText(autoFillNews.summary || autoFillNews.title || '');
+    setInputText(rawContent);
     setError(null);
 
+    // Apply additional photos if provided
+    if (autoFillNews.additionalPhotos && autoFillNews.additionalPhotos.length > 0) {
+      onChange({
+        images: {
+          ...card.images,
+          main: autoFillNews.imageUrl || card.images.main,
+          second: autoFillNews.additionalPhotos[0] || card.images.second,
+          third: autoFillNews.additionalPhotos[1] || card.images.third,
+          fourth: autoFillNews.additionalPhotos[2] || card.images.fourth,
+        },
+        layout: autoFillNews.additionalPhotos.length >= 3 ? 'grid-4' : autoFillNews.additionalPhotos.length === 2 ? 'grid-3' : 'double-h',
+      });
+    }
+
     if (autoFillNews.autoTrigger) {
-      triggerProcessDirectly(effectiveTargetUrl, autoFillNews.summary || autoFillNews.title || '', autoFillNews);
+      triggerProcessDirectly(effectiveTargetUrl, rawContent, autoFillNews);
     }
   }, [autoFillNews]);
 

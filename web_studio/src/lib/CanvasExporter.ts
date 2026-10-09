@@ -6410,13 +6410,6 @@ async function drawThemeFooterBar(
     displayHandle = `@${displayHandle}`;
   }
 
-  // Clean website
-  const cleanWebsite = (websiteUrl || '')
-    .trim()
-    .replace(/^https?:\/\//i, '')
-    .replace(/^www\./i, '')
-    .replace(/\/$/, '');
-
   // Clean phone number
   const shouldShowPhone = showMobileNumber !== false && Boolean(whatsappNumber && whatsappNumber.trim());
   const cleanPhone = shouldShowPhone
@@ -6441,17 +6434,12 @@ async function drawThemeFooterBar(
 
   const separatorWidth = ctx.measureText('|').width;
 
-  const webIconWidth = cleanWebsite ? 18 : 0;
-  const webTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
-  const webGroupWidth = cleanWebsite ? webIconWidth + 4 + webTextWidth : 0;
-
   const phoneIconWidth = cleanPhone ? 18 : 0;
   const phoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
   const phoneGroupWidth = cleanPhone ? phoneIconWidth + 4 + phoneTextWidth : 0;
 
   // Total raw width
   let totalWidth = iconsGroupWidth + 8 + handleWidth;
-  if (webGroupWidth > 0) totalWidth += 14 + separatorWidth + 14 + webGroupWidth;
   if (phoneGroupWidth > 0) totalWidth += 14 + separatorWidth + 14 + phoneGroupWidth;
 
   // Adaptive scale to strictly fit in one line
@@ -6471,14 +6459,11 @@ async function drawThemeFooterBar(
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
   const finalHandleWidth = ctx.measureText(displayHandle).width;
   const finalSepWidth = ctx.measureText('|').width;
-  const finalWebTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
   const finalPhoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
-  const finalWebIconWidth = cleanWebsite ? Math.round(18 * scale) : 0;
   const finalPhoneIconWidth = cleanPhone ? Math.round(18 * scale) : 0;
   const finalSepMargin = Math.round(12 * scale);
 
   let finalTotalWidth = finalIconsGroupWidth + Math.round(8 * scale) + finalHandleWidth;
-  if (cleanWebsite) finalTotalWidth += finalSepMargin * 2 + finalSepWidth + finalWebIconWidth + 4 + finalWebTextWidth;
   if (cleanPhone) finalTotalWidth += finalSepMargin * 2 + finalSepWidth + finalPhoneIconWidth + 4 + finalPhoneTextWidth;
 
   let curX = Math.max(20, Math.round((width - finalTotalWidth) / 2));
