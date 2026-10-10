@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidNewsPost(data) {
+      return data.keys().hasAll(['id', 'title', 'summary', 'timestamp'])
+        && data.keys().hasOnly([
+             'id', 'title', 'summary', 'sourceChannel', 'sourceUrl',
+             'category', 'categoryName', 'publishedTime', 'imageUrl',
+             'breaking', 'isExclusive', 'fullContent', 'district',
+             'location', 'timestamp', 'status', 'authorId'
+           ])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 500
+        && data.summary is string && data.summary.size() <= 2000
+        && data.timestamp is number;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email'])
+        && data.keys().hasOnly([
+             'uid', 'name', 'email', 'role', 'channelName',
+             'channelLogoUrl', 'mobileNumber', 'district', 'updatedAt'
+           ])
+        && data.uid == request.auth.uid
+        && data.email is string && data.email.size() <= 200;
+    }
+
+    function isValidDraft(data) {
+      return data.keys().hasAll(['id', 'userId', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'headline', 'summary', 'cardData', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.id is string && data.id.size() <= 128;
+    }
+
+    // Collection Rules
+
+    // News Posts: Read allowed for everyone, Write requires auth & schema validation
+    match /news_posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+                    && isValidId(postId)
+                    && isValidNewsPost(incoming())
+                    && (incoming().authorId == null || incoming().authorId == request.auth.uid);
+      allow update: if isSignedIn()
+                    && isValidId(postId)
+                    && isValidNewsPost(incoming())
+                    && (isAdmin() || (existing().authorId == request.auth.uid && incoming().authorId == existing().authorId));
+      allow delete: if isSignedIn()
+                    && isValidId(postId)
+                    && (isAdmin() || existing().authorId == request.auth.uid);
+    }
+
+    // Users Profiles
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isOwner(userId)
+                    && isValidUserProfile(incoming())
+                    && (incoming().role == null || incoming().role == 'reporter' || incoming().role == 'user');
+      allow update: if (isOwner(userId) || isAdmin())
+                    && isValidUserProfile(incoming())
+                    && (incoming().role == existing().role || isAdmin());
+      allow delete: if isAdmin();
+
+      // Nested Drafts subcollection
+      match /drafts/{draftId} {
+        allow read, write: if isOwner(userId) && isValidId(draftId);
+      }
+    }
+
+    // Admins Collection (Restricted)
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && request.auth.uid == adminId;
+      allow write: if false; // Admins managed only via console / server
+    }
+  }
+}

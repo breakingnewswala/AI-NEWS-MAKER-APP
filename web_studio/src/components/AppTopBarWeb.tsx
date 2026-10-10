@@ -11,6 +11,8 @@ import {
   Sparkles,
   ArrowRight,
   UserCheck,
+  FileSpreadsheet,
+  Smartphone,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import {
@@ -36,6 +38,8 @@ interface AppTopBarWebProps {
   currentTab: string;
   currentUser: ReporterUser | null;
   onOpenAdminConsole?: () => void;
+  onOpenGoogleSheets?: () => void;
+  onOpenAppUpdate?: () => void;
   onRefresh: () => void;
   onNavigateToTab: (tab: any) => void;
 }
@@ -43,6 +47,8 @@ interface AppTopBarWebProps {
 export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   currentTab,
   currentUser,
+  onOpenGoogleSheets,
+  onOpenAppUpdate,
   onRefresh,
   onNavigateToTab,
 }) => {
@@ -268,6 +274,39 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
+            {/* APK Download Button */}
+            <button
+              onClick={() => {
+                if (onOpenAppUpdate) {
+                  onOpenAppUpdate();
+                } else {
+                  const link = document.createElement('a');
+                  link.href = '/app-release.apk';
+                  link.download = 'app-release.apk';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }
+              }}
+              className="p-2 text-amber-300 hover:text-amber-200 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Android APK सेंटर व डाउनलोड"
+            >
+              <Smartphone className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline text-xs">APK</span>
+            </button>
+
+            {/* Google Sheets Sync Button */}
+            {onOpenGoogleSheets && (
+              <button
+                onClick={onOpenGoogleSheets}
+                className="p-2 text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                title="Google Sheets सिंक व लाइव एक्सपोर्ट"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">Sheets</span>
+              </button>
+            )}
+
             {/* Refresh Button - Hidden on Control Panel */}
             {!isControlPanel && (
               <button

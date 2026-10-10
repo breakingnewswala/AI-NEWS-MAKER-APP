@@ -18,5 +18,8 @@
     "dotenv": "^17.2.3",
     "express": "^4.22.3",
     "openai": "^7.10.0"
+  },
+  "devDependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2"
   }
 }

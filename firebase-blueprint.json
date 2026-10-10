@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "NewsPost": {
+      "title": "NewsPost",
+      "description": "Represents a published or pending news article card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 500 },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "sourceChannel": { "type": "string", "maxLength": 200 },
+        "sourceUrl": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 100 },
+        "categoryName": { "type": "string", "maxLength": 100 },
+        "publishedTime": { "type": "string", "maxLength": 100 },
+        "imageUrl": { "type": "string", "maxLength": 2000 },
+        "breaking": { "type": "boolean" },
+        "isExclusive": { "type": "boolean" },
+        "fullContent": { "type": "string", "maxLength": 10000 },
+        "district": { "type": "string", "maxLength": 200 },
+        "location": { "type": "string", "maxLength": 200 },
+        "timestamp": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "authorId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "title", "summary", "timestamp"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and newsroom credentials",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "email": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "maxLength": 50 },
+        "channelName": { "type": "string", "maxLength": 200 },
+        "channelLogoUrl": { "type": "string", "maxLength": 2000 },
+        "mobileNumber": { "type": "string", "maxLength": 50 },
+        "district": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "email"]
+    },
+    "DraftRecord": {
+      "title": "DraftRecord",
+      "description": "Saved news graphics and video drafts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "headline": { "type": "string", "maxLength": 500 },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "cardData": { "type": "object" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/news_posts/{postId}": {
+      "schema": { "$ref": "#/entities/NewsPost" },
+      "description": "Collection of all news posts across channels"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles and permissions"
+    },
+    "/users/{userId}/drafts/{draftId}": {
+      "schema": { "$ref": "#/entities/DraftRecord" },
+      "description": "User saved drafts"
+    }
+  }
+}

@@ -3,23 +3,89 @@
  * Project: ai-news-maker-app
  */
 
-export const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBo9dbqeg-nmr5MTqqA068e7Xa-755HSO8",
-  authDomain: "ai-news-maker-app.firebaseapp.com",
-  databaseURL: "https://ai-news-maker-app-default-rtdb.firebaseio.com",
-  projectId: "ai-news-maker-app",
-  storageBucket: "ai-news-maker-app.firebasestorage.app",
-  messagingSenderId: "401033199805",
-  appId: "1:401033199805:web:f3a541f1dc51a2e1f5b7d4",
-  measurementId: "G-J8JHSZMWWH"
-};
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import firebaseConfig from '../../../firebase-applet-config.json';
+
+export const FIREBASE_CONFIG = firebaseConfig;
+
+// Initialize Firebase App
+export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+// CRITICAL: Initialize Firestore with custom database ID from config
+export const db = getFirestore(
+  app,
+  (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd'
+);
+export const auth = getAuth(app);
 
 // Direct HTTP Endpoints for Firebase Storage Database
 export const FIREBASE_STORAGE_NEWS_URL = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_CONFIG.storageBucket}/o/news_database.json?alt=media`;
 export const FIREBASE_STORAGE_UPLOAD_URL = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_CONFIG.storageBucket}/o?name=news_database.json`;
 
 // Realtime Database Endpoint for direct backup / sync
-export const FIREBASE_RTDB_NEWS_URL = `${FIREBASE_CONFIG.databaseURL}/news_database.json`;
+export const FIREBASE_RTDB_NEWS_URL = `https://ai-news-maker-app-default-rtdb.firebaseio.com/news_database.json`;
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+export async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn("Firestore offline mode active.");
+    }
+  }
+}
+
+// Automatically test connection upon module load
+testConnection();
 
 /**
  * Fetch latest news posts from Firebase Storage

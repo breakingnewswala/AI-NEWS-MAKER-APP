@@ -18,6 +18,7 @@ import {
 } from './lib/draftManager';
 import { AppUpdateModal, AppVersionInfo, APP_CURRENT_VERSION } from './components/AppUpdateModal';
 import { CloudSettingsModal } from './components/CloudSettingsModal';
+import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
@@ -408,6 +409,7 @@ export default function App() {
   });
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState<boolean>(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
 
   // Login modal remains closed by default
@@ -1558,6 +1560,8 @@ export default function App() {
         <AppTopBarWeb
           currentTab={currentTab}
           currentUser={currentUser}
+          onOpenGoogleSheets={() => setIsSheetsModalOpen(true)}
+          onOpenAppUpdate={() => setIsUpdateModalOpen(true)}
           onRefresh={async () => {
             await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
@@ -2153,6 +2157,42 @@ export default function App() {
         onClose={() => setIsDraftsModalOpen(false)}
         onRestoreDraft={handleRestoreDraft}
         currentDraftId={currentDraftId}
+      />
+
+      {/* 10. GOOGLE SHEETS & DRIVE WORKSPACE INTEGRATION MODAL */}
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+        currentPosts={posts}
+        onImportPosts={(imported) => {
+          const cleanImported = imported.map((p, index) => ({
+            id: p.id || `sheet-import-${Date.now()}-${index}`,
+            title: p.title || 'शीट्स खबर',
+            summary: p.summary || '',
+            sourceChannel: p.sourceChannel || 'Google Sheets',
+            sourceUrl: p.sourceUrl || '',
+            category: p.category || 'breaking',
+            categoryName: p.categoryName || 'गूगल शीट्स',
+            publishedTime: p.publishedTime || 'अभी-अभी',
+            imageUrl: p.imageUrl || 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80',
+            breaking: true,
+            isExclusive: false,
+            timestamp: Date.now(),
+            district: p.district || '',
+            location: p.location || '',
+            fullContent: p.fullContent || p.summary || p.title,
+          }));
+
+          setPosts((prev) => {
+            const merged = [...cleanImported, ...prev.filter((existing) => !cleanImported.some((imp) => imp.id === existing.id))];
+            try {
+              localStorage.setItem('app_news_posts_v2', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+
+          showToast(`Google Sheets से ${cleanImported.length} समाचार फ़ीड में जुड़े!`);
+        }}
       />
     </div>
   );

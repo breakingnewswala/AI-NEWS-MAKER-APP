@@ -5337,6 +5337,24 @@ app.get("/api/app-version", (_req, res) => {
   });
 });
 
+app.get(["/app-release.apk", "/download/apk"], (_req, res) => {
+  const possibleApkLocations = [
+    path.join(process.cwd(), "app-release.apk"),
+    path.join(process.cwd(), "public", "app-release.apk"),
+    path.join(process.cwd(), "dist", "app-release.apk"),
+    path.join(process.cwd(), "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+  ];
+
+  const foundPath = possibleApkLocations.find((p) => fs.existsSync(p));
+  if (foundPath) {
+    res.setHeader("Content-Type", "application/vnd.android.package-archive");
+    res.setHeader("Content-Disposition", 'attachment; filename="app-release.apk"');
+    return res.sendFile(foundPath);
+  } else {
+    return res.status(404).send("APK file is currently being generated. Please refresh in a moment.");
+  }
+});
+
 app.post("/api/admin/update-version-info", (req, res) => {
   try {
     const { version, versionCode, releaseTitle, releaseNotes, downloadUrl, forceUpdate } = req.body;
