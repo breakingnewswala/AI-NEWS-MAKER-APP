@@ -72,9 +72,11 @@ import {
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
   checkAccountUniqueness,
+  canAccessTemplateManager,
 } from '../lib/userPlanManager';
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
+import { UserTemplateManager } from './UserTemplateManager';
 import { AdminPlansAndPackagesManager } from './AdminPlansAndPackagesManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import {
@@ -312,7 +314,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   }, [currentUser?.email, isAdmin]);
 
   // Tabs: 'profile', 'plans_packages', 'templates', 'dashboard' (Admin only gets multi-tab access)
-  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'policies' | ''>('profile');
+  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'templates_manager' | 'policies' | ''>('profile');
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
     if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
@@ -337,15 +339,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const handleOpenRss = () => setActiveTab('dashboard');
     const handleOpenTemplates = () => setActiveTab('templates');
     const handleOpenPlans = () => setActiveTab('plans_packages');
+    const handleOpenTemplateManagerCustom = () => setNormalUserTab('templates_manager');
+
     window.addEventListener('open_rss_dashboard', handleOpenRss);
     window.addEventListener('open_template_manager', handleOpenTemplates);
     window.addEventListener('open_plans_packages', handleOpenPlans);
+    window.addEventListener('ai_news_open_template_manager', handleOpenTemplateManagerCustom);
     const handleHash = () => {
       const h = window.location.hash.toLowerCase();
       if (h.includes('plan') || h.includes('package') || h.includes('promo')) {
         setActiveTab('plans_packages');
       } else if (h.includes('template')) {
         setActiveTab('templates');
+        setNormalUserTab('templates_manager');
       } else if (h.includes('dashboard') || h.includes('rss') || h.includes('feed')) {
         setActiveTab('dashboard');
       }
@@ -355,6 +361,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       window.removeEventListener('open_rss_dashboard', handleOpenRss);
       window.removeEventListener('open_template_manager', handleOpenTemplates);
       window.removeEventListener('open_plans_packages', handleOpenPlans);
+      window.removeEventListener('ai_news_open_template_manager', handleOpenTemplateManagerCustom);
       window.removeEventListener('hashchange', handleHash);
     };
   }, [isAdmin]);
@@ -2777,7 +2784,47 @@ return (
               )}
             </div>
 
-            {/* OPTION 3: सहायता एवं नीतियाँ */}
+            {/* OPTION FOR PRO / VIP / ADMIN: टेम्प्लेट व कस्टम फ्रेम्स मैनेजर */}
+            {canAccessTemplateManager(currentUser) && (
+              <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'templates_manager' ? 'border-purple-400 bg-slate-900/95 ring-2 ring-purple-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+                <button
+                  type="button"
+                  onClick={() => setNormalUserTab(normalUserTab === 'templates_manager' ? '' : 'templates_manager')}
+                  className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'templates_manager' ? 'bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border-b border-purple-800/80' : 'hover:bg-slate-850'}`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                      <span>🎨</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm sm:text-base font-black text-white block truncate">
+                          टेम्प्लेट व कस्टम फ्रेम्स मैनेजर
+                        </span>
+                        <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                          PRO & VIP DESK
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        कस्टम 4:5 फ्रेम्स व टेम्प्लेट्स देखें, नए बनाएं या डिलीट करें
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'templates_manager' ? 'rotate-180 text-purple-400' : ''}`} />
+                </button>
+                {normalUserTab === 'templates_manager' && (
+                  <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <UserTemplateManager
+                      currentUser={currentUser}
+                      isAdmin={isAdmin}
+                      onOpenStudioWithTemplate={onOpenStudio}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* OPTION: सहायता एवं नीतियाँ */}
             <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"

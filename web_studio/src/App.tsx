@@ -1592,7 +1592,6 @@ export default function App() {
           onRefreshLiveNews={async () => {
             await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
-            setToastMessage('लाइव खबरें क्लाउड से सिंक हो गईं!');
           }}
           isSyncingNews={isSyncingNews}
           onOpenAdminLogin={() => {

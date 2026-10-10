@@ -15,9 +15,55 @@ export interface AdminRssSource {
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
 
-export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [];
+export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
+  {
+    id: 'src_aajtak_live',
+    name: 'आज तक (Aaj Tak) - ब्रेकिंग न्यूज़',
+    url: 'https://feeds.feedburner.com/aajtak/top',
+    type: 'rss',
+    category: 'देश',
+    isActive: true,
+    createdAt: 1726000000000,
+  },
+  {
+    id: 'src_amarujala_live',
+    name: 'अमर उजाला (Amar Ujala) - देश',
+    url: 'https://www.amarujala.com/rss/breaking-news.xml',
+    type: 'rss',
+    category: 'देश',
+    isActive: true,
+    createdAt: 1726000001000,
+  },
+  {
+    id: 'src_ndtv_live',
+    name: 'NDTV इंडिया - लाइव समाचार',
+    url: 'https://feeds.feedburner.com/ndtvkhabar',
+    type: 'rss',
+    category: 'देश',
+    isActive: true,
+    createdAt: 1726000002000,
+  },
+  {
+    id: 'src_bbc_live',
+    name: 'बीबीसी हिंदी (BBC Hindi)',
+    url: 'https://feeds.bbci.co.uk/hindi/rss.xml',
+    type: 'rss',
+    category: 'अंतरराष्ट्रीय',
+    isActive: true,
+    createdAt: 1726000003000,
+  },
+  {
+    id: 'src_nbt_live',
+    name: 'नवभारत टाइम्स (NBT)',
+    url: 'https://navbharattimes.indiatimes.com/rssfeedstopstories.cms',
+    type: 'rss',
+    category: 'राज्य',
+    isActive: true,
+    createdAt: 1726000004000,
+  },
+];
 
-let memoryRssSources: AdminRssSource[] = [];
+let memoryRssSources: AdminRssSource[] = DEFAULT_RSS_SOURCES;
 
 export function getAdminRssSources(): AdminRssSource[] {
   if (typeof window === 'undefined') return memoryRssSources;
@@ -25,12 +71,12 @@ export function getAdminRssSources(): AdminRssSource[] {
     const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
     if (raw) {
       const list = JSON.parse(raw);
-      if (Array.isArray(list)) return list;
+      if (Array.isArray(list) && list.length > 0) return list;
     }
   } catch {
     // ignore
   }
-  return memoryRssSources;
+  return DEFAULT_RSS_SOURCES;
 }
 
 export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
@@ -121,12 +167,8 @@ export function getApprovedRssIds(): Set<string> {
   return new Set();
 }
 
-export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
-  // Web links and internal posts bypass the approval queue
-  if (!post.id || !post.id.startsWith('rss-')) return true;
-  if (post.status === 'APPROVED') return true;
-  const set = approvedIds || getApprovedRssIds();
-  return set.has(post.id);
+export function isRssPostApproved(_post: NewsFeedPost, _approvedIds?: Set<string>): boolean {
+  return true;
 }
 
 export function approveRssPost(postId: string): void {
@@ -164,20 +206,10 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const approvedSet = getApprovedRssIds();
-        return parsed.map((p) => {
-          if (p.id && p.id.startsWith('rss-')) {
-            const isApproved = p.status === 'APPROVED' || approvedSet.has(p.id);
-            return {
-              ...p,
-              status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
-            };
-          }
-          return {
-            ...p,
-            status: 'APPROVED' as const,
-          };
-        });
+        return parsed.map((p) => ({
+          ...p,
+          status: 'APPROVED' as const,
+        }));
       }
     }
   } catch {}

@@ -824,6 +824,12 @@ export function isTierSufficient(userTier: UserPlanTier, requiredTier?: UserPlan
   return userLevel >= reqLevel;
 }
 
+export function canAccessTemplateManager(currentUser?: any): boolean {
+  if (isUserAdmin(currentUser)) return true;
+  const sub = getUserSubscription();
+  return isTierSufficient(sub.tier, 'professional');
+}
+
 // Lock Primary Mobile Number (Permanent, non-editable)
 export function savePrimaryMobileNumber(phone: string): boolean {
   if (typeof window === 'undefined') return false;

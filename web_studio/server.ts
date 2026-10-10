@@ -1020,21 +1020,71 @@ interface AdminRssSourceRecord {
   itemsFetchedCount?: number;
 }
 
-const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
+  {
+    id: "src_aajtak_live",
+    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000000000,
+  },
+  {
+    id: "src_amarujala_live",
+    name: "अमर उजाला (Amar Ujala) - देश",
+    url: "https://www.amarujala.com/rss/breaking-news.xml",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000001000,
+  },
+  {
+    id: "src_ndtv_live",
+    name: "NDTV इंडिया - लाइव समाचार",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000002000,
+  },
+  {
+    id: "src_bbc_live",
+    name: "बीबीसी हिंदी (BBC Hindi)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "अंतरराष्ट्रीय",
+    isActive: true,
+    createdAt: 1726000003000,
+  },
+  {
+    id: "src_nbt_live",
+    name: "नवभारत टाइम्स (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "राज्य",
+    isActive: true,
+    createdAt: 1726000004000,
+  },
+];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   try {
     if (fs.existsSync(RSS_SOURCES_FILE)) {
       const raw = fs.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return [];
+  // Initialize with permanent default live sources if empty
+  try {
+    fs.writeFileSync(RSS_SOURCES_FILE, JSON.stringify(DEFAULT_PRODUCTION_RSS_SOURCES, null, 2), "utf-8");
+  } catch {}
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
@@ -5337,23 +5387,53 @@ app.get("/api/app-version", (_req, res) => {
   });
 });
 
-app.get(["/app-release.apk", "/download/apk"], (_req, res) => {
-  const possibleApkLocations = [
-    path.join(process.cwd(), "app-release.apk"),
-    path.join(process.cwd(), "public", "app-release.apk"),
-    path.join(process.cwd(), "dist", "app-release.apk"),
-    path.join(process.cwd(), "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
-  ];
+app.get(
+  [
+    "/app-release.apk",
+    "/ainewsmaker-app.apk",
+    "/download/apk",
+    "/api/download/apk",
+    "/api/download-apk",
+    "/api/apk",
+    "/download.apk",
+    "/ainewsmaker.apk",
+    "/app-debug.apk",
+    "/apk",
+  ],
+  (_req, res) => {
+    const possibleApkLocations = [
+      path.join(process.cwd(), "app-release.apk"),
+      path.join(process.cwd(), "public", "app-release.apk"),
+      path.join(process.cwd(), "dist", "app-release.apk"),
+      path.join(process.cwd(), "web_studio", "dist", "app-release.apk"),
+      path.join(process.cwd(), "web_studio", "public", "app-release.apk"),
+      path.join(process.cwd(), "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+      path.join(safeDirname, "app-release.apk"),
+      path.join(safeDirname, "..", "app-release.apk"),
+      path.join(safeDirname, "..", "public", "app-release.apk"),
+      path.join(safeDirname, "..", "dist", "app-release.apk"),
+      "/app-release.apk",
+      "/public/app-release.apk",
+    ];
 
-  const foundPath = possibleApkLocations.find((p) => fs.existsSync(p));
-  if (foundPath) {
-    res.setHeader("Content-Type", "application/vnd.android.package-archive");
-    res.setHeader("Content-Disposition", 'attachment; filename="app-release.apk"');
-    return res.sendFile(foundPath);
-  } else {
-    return res.status(404).send("APK file is currently being generated. Please refresh in a moment.");
+    const foundPath = possibleApkLocations.find((p) => {
+      try {
+        return fs.existsSync(p) && fs.statSync(p).size > 1000;
+      } catch {
+        return false;
+      }
+    });
+
+    if (foundPath) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.setHeader("Content-Disposition", 'attachment; filename="ainewsmaker-app-v1.2.0.apk"');
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.sendFile(path.resolve(foundPath));
+    } else {
+      return res.status(404).send("APK file is currently being prepared. Please refresh in a moment.");
+    }
   }
-});
+);
 
 app.post("/api/admin/update-version-info", (req, res) => {
   try {

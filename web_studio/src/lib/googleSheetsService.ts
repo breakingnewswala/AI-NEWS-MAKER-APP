@@ -250,3 +250,74 @@ export async function readPostsFromGoogleSheet(
       breaking: true,
     }));
 }
+
+/**
+ * Extract Spreadsheet ID from Google Sheet URL or return raw ID
+ */
+export function extractSpreadsheetId(urlOrId: string): string {
+  if (!urlOrId) return '';
+  const clean = urlOrId.trim();
+  const match = clean.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) return match[1];
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(clean)) return clean;
+  return clean;
+}
+
+/**
+ * Fetch Google Sheet data directly using Google Visualization API
+ * Works reliably with ANY Google Sheet shared with "Anyone with link" WITHOUT requiring OAuth popup!
+ */
+export async function fetchGoogleSheetDirectly(urlOrId: string): Promise<SheetNewsItem[]> {
+  const sheetId = extractSpreadsheetId(urlOrId);
+  if (!sheetId) throw new Error('कृपया वैध Google Sheet URL या ID दर्ज करें');
+
+  const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+  const response = await fetch(gvizUrl);
+  if (!response.ok) {
+    throw new Error(`Google Sheet लोड करने में समस्या (${response.status})। कृपया सुनिश्चित करें कि शीट "Anyone with link can view" पर सेट है।`);
+  }
+
+  const text = await response.text();
+  const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);/);
+  if (!jsonMatch || !jsonMatch[1]) {
+    throw new Error('Google Sheet का डेटा पार्स नहीं हो सका। कृपया लिंक की जांच करें।');
+  }
+
+  const data = JSON.parse(jsonMatch[1]);
+  const table = data.table;
+  if (!table || !Array.isArray(table.rows)) {
+    return [];
+  }
+
+  const items: SheetNewsItem[] = [];
+  table.rows.forEach((rowObj: any, index: number) => {
+    const c = rowObj.c || [];
+    const val = (idx: number) => (c[idx] && c[idx].v !== null && c[idx].v !== undefined ? String(c[idx].v).trim() : '');
+
+    const col0 = val(0);
+    const col1 = val(1);
+    if (index === 0 && (col0.toLowerCase() === 'id' || col1.toLowerCase().includes('title') || col1.toLowerCase().includes('headline'))) {
+      return;
+    }
+
+    const title = col1 || col0;
+    if (!title) return;
+
+    items.push({
+      id: col0 || `sheet-${Date.now()}-${index}`,
+      title,
+      summary: val(2) || title,
+      categoryName: val(3) || 'गूगल शीट्स',
+      category: 'sheets',
+      sourceChannel: val(4) || 'Google Sheet Live',
+      district: val(5) || '',
+      location: val(5) || '',
+      publishedTime: val(6) || 'अभी-अभी (Sheets)',
+      imageUrl: val(7) || 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80',
+      fullContent: val(8) || val(2) || title,
+      breaking: true,
+    });
+  });
+
+  return items;
+}

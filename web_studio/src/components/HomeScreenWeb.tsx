@@ -318,7 +318,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     };
     const handleFeedRefresh = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
-      if (onRefreshLiveNews) onRefreshLiveNews();
       setApprovedRssIds(getApprovedRssIds());
     };
     const handleCategoriesUpdate = () => {
@@ -346,7 +345,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       window.removeEventListener('ai_news_channels_updated', handleChannelsUpdate);
       window.removeEventListener('ai_news_approved_rss_updated', handleApprovedUpdate);
     };
-  }, [onRefreshLiveNews]);
+  }, []);
 
   // Merge active RSS/Web posts with database news posts seamlessly
   const getDeletedIds = (): Set<string> => {

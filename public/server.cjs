@@ -803,19 +803,70 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
+var DEFAULT_PRODUCTION_RSS_SOURCES = [
+  {
+    id: "src_aajtak_live",
+    name: "\u0906\u091C \u0924\u0915 (Aaj Tak) - \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1726e9
+  },
+  {
+    id: "src_amarujala_live",
+    name: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala) - \u0926\u0947\u0936",
+    url: "https://www.amarujala.com/rss/breaking-news.xml",
+    type: "rss",
+    category: "\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1726000001e3
+  },
+  {
+    id: "src_ndtv_live",
+    name: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E - \u0932\u093E\u0907\u0935 \u0938\u092E\u093E\u091A\u093E\u0930",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1726000002e3
+  },
+  {
+    id: "src_bbc_live",
+    name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F",
+    isActive: true,
+    createdAt: 1726000003e3
+  },
+  {
+    id: "src_nbt_live",
+    name: "\u0928\u0935\u092D\u093E\u0930\u0924 \u091F\u093E\u0907\u092E\u094D\u0938 (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "\u0930\u093E\u091C\u094D\u092F",
+    isActive: true,
+    createdAt: 1726000004e3
+  }
+];
 function loadRssSourcesDatabase() {
   try {
     if (import_fs.default.existsSync(RSS_SOURCES_FILE)) {
       const raw = import_fs.default.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return [];
+  try {
+    import_fs.default.writeFileSync(RSS_SOURCES_FILE, JSON.stringify(DEFAULT_PRODUCTION_RSS_SOURCES, null, 2), "utf-8");
+  } catch {
+  }
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
 }
 function saveRssSourcesDatabase(sources) {
   try {
@@ -4324,22 +4375,51 @@ app.get("/api/app-version", (_req, res) => {
     currentServerTime: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
-app.get(["/app-release.apk", "/download/apk"], (_req, res) => {
-  const possibleApkLocations = [
-    import_path.default.join(process.cwd(), "app-release.apk"),
-    import_path.default.join(process.cwd(), "public", "app-release.apk"),
-    import_path.default.join(process.cwd(), "dist", "app-release.apk"),
-    import_path.default.join(process.cwd(), "app", "build", "outputs", "apk", "debug", "app-debug.apk")
-  ];
-  const foundPath = possibleApkLocations.find((p) => import_fs.default.existsSync(p));
-  if (foundPath) {
-    res.setHeader("Content-Type", "application/vnd.android.package-archive");
-    res.setHeader("Content-Disposition", 'attachment; filename="app-release.apk"');
-    return res.sendFile(foundPath);
-  } else {
-    return res.status(404).send("APK file is currently being generated. Please refresh in a moment.");
+app.get(
+  [
+    "/app-release.apk",
+    "/ainewsmaker-app.apk",
+    "/download/apk",
+    "/api/download/apk",
+    "/api/download-apk",
+    "/api/apk",
+    "/download.apk",
+    "/ainewsmaker.apk",
+    "/app-debug.apk",
+    "/apk"
+  ],
+  (_req, res) => {
+    const possibleApkLocations = [
+      import_path.default.join(process.cwd(), "app-release.apk"),
+      import_path.default.join(process.cwd(), "public", "app-release.apk"),
+      import_path.default.join(process.cwd(), "dist", "app-release.apk"),
+      import_path.default.join(process.cwd(), "web_studio", "dist", "app-release.apk"),
+      import_path.default.join(process.cwd(), "web_studio", "public", "app-release.apk"),
+      import_path.default.join(process.cwd(), "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+      import_path.default.join(safeDirname, "app-release.apk"),
+      import_path.default.join(safeDirname, "..", "app-release.apk"),
+      import_path.default.join(safeDirname, "..", "public", "app-release.apk"),
+      import_path.default.join(safeDirname, "..", "dist", "app-release.apk"),
+      "/app-release.apk",
+      "/public/app-release.apk"
+    ];
+    const foundPath = possibleApkLocations.find((p) => {
+      try {
+        return import_fs.default.existsSync(p) && import_fs.default.statSync(p).size > 1e3;
+      } catch {
+        return false;
+      }
+    });
+    if (foundPath) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.setHeader("Content-Disposition", 'attachment; filename="ainewsmaker-app-v1.2.0.apk"');
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.sendFile(import_path.default.resolve(foundPath));
+    } else {
+      return res.status(404).send("APK file is currently being prepared. Please refresh in a moment.");
+    }
   }
-});
+);
 app.post("/api/admin/update-version-info", (req, res) => {
   try {
     const { version, versionCode, releaseTitle, releaseNotes, downloadUrl, forceUpdate } = req.body;
