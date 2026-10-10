@@ -1047,6 +1047,21 @@ function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
   }
 }
 
+function resolveUrl(url: string, baseUrl?: string): string {
+  try {
+    if (!url || typeof url !== "string") return "";
+    const clean = url.trim();
+    if (clean.startsWith("//")) return "https:" + clean;
+    if (clean.startsWith("http://") || clean.startsWith("https://")) return clean;
+    if (baseUrl && (baseUrl.startsWith("http://") || baseUrl.startsWith("https://"))) {
+      return new URL(clean, baseUrl).href;
+    }
+    return clean;
+  } catch {
+    return url;
+  }
+}
+
 function isValidNewsImage(url: string): boolean {
   if (!url || typeof url !== "string") return false;
   const clean = url.trim().toLowerCase();
@@ -1073,17 +1088,27 @@ async function extractBestNewsImage(
   // 1. media:content (highest priority)
   const mediaMatches = itemXml.matchAll(/<media:content[^>]+url=["']([^"']+)["'][^>]*>/gi);
   for (const m of mediaMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
+  }
+
+  // 1b. media:thumbnail
+  const mediaThumbMatches = itemXml.matchAll(/<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*>/gi);
+  for (const m of mediaThumbMatches) {
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
 
   // 2. enclosure (image/jpeg, image/png, image/webp)
   const enclosureMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/gi);
   for (const m of enclosureMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
   const enclosureAltMatches = itemXml.matchAll(/<enclosure[^>]+type=["']image\/[^"']+["'][^>]*url=["']([^"']+)["']/gi);
   for (const m of enclosureAltMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
 
   // 3. RSS content image (content:encoded or description img tag)
@@ -1091,39 +1116,66 @@ async function extractBestNewsImage(
   const contentBody = (contentEncodedMatch ? (contentEncodedMatch[1] || contentEncodedMatch[2] || "") : "") + " " + rawDesc;
   const imgMatches = contentBody.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
   for (const m of imgMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
 
-  // 4, 5, 6. Fetch actual webpage for og:image, twitter:image, article main image
+  // 4, 5, 6. Fetch actual webpage for og:image, twitter:image, JSON-LD, article main image
   if (articleUrl && articleUrl.startsWith("http")) {
     try {
       const resp = await fetch(articleUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
         },
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(4500),
       });
       if (resp.ok) {
         const html = await resp.text();
-        // Priority 4: og:image
+
+        // Priority 4: JSON-LD image
+        const ldMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+        for (const ldMatch of ldMatches) {
+          try {
+            const data = JSON.parse(ldMatch[1]);
+            const item = Array.isArray(data) ? data[0] : (data["@graph"] ? data["@graph"].find((x: any) => x["@type"]?.includes?.("Article") || x.image) : data);
+            if (item) {
+              let imgCandidate = "";
+              if (typeof item.image === "string") imgCandidate = item.image;
+              else if (Array.isArray(item.image) && typeof item.image[0] === "string") imgCandidate = item.image[0];
+              else if (item.image?.url) imgCandidate = item.image.url;
+              else if (item.thumbnailUrl) imgCandidate = item.thumbnailUrl;
+
+              if (imgCandidate) {
+                const resolved = resolveUrl(imgCandidate, articleUrl);
+                if (isValidNewsImage(resolved)) return resolved;
+              }
+            }
+          } catch {}
+        }
+
+        // Priority 5: og:image
         const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
           html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-        if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
-          return ogImageMatch[1].trim();
+        if (ogImageMatch && ogImageMatch[1]) {
+          const resolved = resolveUrl(ogImageMatch[1].trim(), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
         }
 
-        // Priority 5: twitter:image
+        // Priority 6: twitter:image
         const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
           html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-        if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
-          return twitterImageMatch[1].trim();
+        if (twitterImageMatch && twitterImageMatch[1]) {
+          const resolved = resolveUrl(twitterImageMatch[1].trim(), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
         }
 
-        // Priority 6: Article main image (<article> img or <figure> img)
+        // Priority 7: Article main image (<article> img or <figure> img or prominent body img)
         const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
-          html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
-        if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
-          return articleImgMatch[1].trim();
+          html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
+          html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
+        if (articleImgMatch && articleImgMatch[1]) {
+          const resolved = resolveUrl(articleImgMatch[1].trim(), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
         }
       }
     } catch {
@@ -1345,43 +1397,82 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     if (!resp.ok) return [];
     const html = await resp.text();
 
-    const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<title>([^<]+)<\/title>/i);
-    const rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
+    let rawTitle = "";
+    let rawDesc = "";
+    let fullArticleText = "";
+    let imageUrl = "";
+
+    // 0. Parse JSON-LD metadata if present
+    const ldMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    for (const ldMatch of ldMatches) {
+      try {
+        const data = JSON.parse(ldMatch[1]);
+        const item = Array.isArray(data) ? data[0] : (data["@graph"] ? data["@graph"].find((x: any) => x["@type"]?.includes?.("Article") || x.headline) : data);
+        if (item) {
+          if (!rawTitle && (item.headline || item.name)) rawTitle = decodeHtmlEntities(String(item.headline || item.name).trim());
+          if (!rawDesc && (item.description || item.abstract)) rawDesc = decodeHtmlEntities(String(item.description || item.abstract).trim());
+          if (!fullArticleText && item.articleBody) fullArticleText = decodeHtmlEntities(String(item.articleBody).trim());
+
+          let candidateImg = "";
+          if (typeof item.image === "string") candidateImg = item.image;
+          else if (Array.isArray(item.image) && typeof item.image[0] === "string") candidateImg = item.image[0];
+          else if (item.image?.url) candidateImg = item.image.url;
+          else if (item.thumbnailUrl) candidateImg = item.thumbnailUrl;
+          if (candidateImg && !imageUrl) {
+            const resolved = resolveUrl(candidateImg, source.url);
+            if (isValidNewsImage(resolved)) imageUrl = resolved;
+          }
+        }
+      } catch {}
+    }
+
+    if (!rawTitle) {
+      const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<title>([^<]+)<\/title>/i);
+      rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
+    }
     if (!rawTitle) return [];
 
-    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
-    const rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
+    if (!rawDesc) {
+      const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+      rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
+    }
 
     // Extract article text from <article> or <p> tags
-    const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi))
-      .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()))
-      .filter((p) => p.length > 30)
-      .slice(0, 5)
-      .join("\n\n");
-
-    const fullArticleText = paragraphs || rawDesc;
+    if (!fullArticleText) {
+      const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi))
+        .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()))
+        .filter((p) => p.length > 30)
+        .slice(0, 5)
+        .join("\n\n");
+      fullArticleText = paragraphs || rawDesc;
+    }
 
     // 1. Strict Priority Image Selection
-    let imageUrl = "";
-    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
-      imageUrl = ogImageMatch[1].trim();
+    if (!imageUrl) {
+      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (ogImageMatch && ogImageMatch[1]) {
+        const resolved = resolveUrl(ogImageMatch[1].trim(), source.url);
+        if (isValidNewsImage(resolved)) imageUrl = resolved;
+      }
     }
     if (!imageUrl) {
       const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-      if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
-        imageUrl = twitterImageMatch[1].trim();
+      if (twitterImageMatch && twitterImageMatch[1]) {
+        const resolved = resolveUrl(twitterImageMatch[1].trim(), source.url);
+        if (isValidNewsImage(resolved)) imageUrl = resolved;
       }
     }
     if (!imageUrl) {
       const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
-        html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
-      if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
-        imageUrl = articleImgMatch[1].trim();
+        html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
+        html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
+      if (articleImgMatch && articleImgMatch[1]) {
+        const resolved = resolveUrl(articleImgMatch[1].trim(), source.url);
+        if (isValidNewsImage(resolved)) imageUrl = resolved;
       }
     }
 
@@ -3339,49 +3430,64 @@ function createLocalNewsFallback(
     categories.push("ताज़ा समाचार", detectedLocation);
   }
 
-  // 5. Build 4 FULL-SIZED, RICH HEADLINE OPTIONS (12-22 words each as requested)
-  const baseSubject = extractedTitle || "महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला";
-  const cleanSubjectWords = baseSubject.split(/\s+/).filter(Boolean);
+  // 5. Build up to 4 fact-derived distinct headline options based on actual extracted news facts
+  const baseTitle = extractedTitle || (extractedDesc ? extractedDesc.slice(0, 70) : "महत्वपूर्ण समाचार");
+  const baseDesc = extractedDesc || "";
+  const baseContent = extractedContent || "";
 
-  // Enforce rich full length (at least 10-18 words)
-  let opt1 = baseSubject;
-  if (cleanSubjectWords.length > 20) {
-    opt1 = cleanSubjectWords.slice(0, 18).join(" ");
+  // Derive genuine variants from the source text itself
+  const rawVariants: string[] = [];
+  if (baseTitle && !isInvalidUrlHeadline(baseTitle)) {
+    rawVariants.push(baseTitle);
   }
 
-  // Generate 4 distinct rich journalistic variants based on the actual story
-  let opt2 = "";
-  let opt3 = "";
-  let opt4 = "";
-
-  if (category === "कारोबार / टेक" || /ग्रीन कार्ड|आईटी|टाटा|विप्रो|इंफोसिस|ट्रम्प/i.test(fullCorpus)) {
-    opt1 = opt1.length > 30 ? opt1 : "ट्रम्प ने ग्रीन कार्ड प्रोसेस पर लगाई रोक: टाटा, विप्रो और इंफोसिस समेत प्रमुख कंपनियों पर एक्शन";
-    opt2 = "अमेरिका में भारतीय टेक पेशेवरों को बड़ा झटका: ग्रीन कार्ड नियमों में बदलाव, आईटी कंपनियों के आवेदन निलंबित";
-    opt3 = "यूएस प्रशासन का कड़ा फैसला: प्रमुख टेक कंपनियों के ग्रीन कार्ड प्रोसेस पर रोक से लाखों कर्मचारियों में चिंता";
-    opt4 = "ग्राउंड रिपोर्ट: अमेरिकी वीज़ा नीति में बड़े फेरबदल से वैश्विक टेक उद्योग में हलचल, कंपनियों ने शुरू की समीक्षा";
-  } else if (category === "हादसा") {
-    opt2 = `${detectedLocation}: भीषण सड़क हादसे के बाद मौके पर मची चीख-पुकार, घायलों को तुरंत अस्पताल में कराया गया भर्ती`;
-    opt3 = `बड़ी दुर्घटना: ${detectedLocation} में तेज रफ्तार वाहन अनियंत्रित होकर पलटा, राहत एवं बचाव कार्य युद्धस्तर पर जारी`;
-    opt4 = `ग्राउंड रिपोर्ट: घटनाक्रम के बाद प्रशासन और पुलिस की टीम मौके पर पहुंची, कारणों की गहन जांच शुरू`;
-  } else if (category === "क्राइम") {
-    opt2 = `${detectedLocation}: पुलिस प्रशासन का बड़ा एक्शन, गंभीर मामले में मुख्य आरोपियों को घेराबंदी कर किया गिरफ्तार`;
-    opt3 = `कानून व्यवस्था पर सख्त रुख: ${detectedLocation} में पुलिस की ताबड़तोड़ कार्रवाई, अग्रिम वैधानिक प्रक्रिया शुरू`;
-    opt4 = `क्राइम डायरी: क्षेत्र में हलचल पैदा करने वाले मामले का पुलिस ने किया पर्दाफाश, निष्पक्ष जांच के कड़े निर्देश`;
-  } else if (category === "सियासत") {
-    opt2 = `${detectedLocation}: सियासी गलियारों में बढ़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद राजनीतिक बयानबाजी तेज`;
-    opt3 = `बड़ा राजनीतिक घटनाक्रम: नीतिगत मुद्दों को लेकर सत्ता और विपक्ष आमने-सामने, जनता के बीच व्यापक चर्चा`;
-    opt4 = `ग्राउंड रिपोर्ट: आगामी रणनीतियों को लेकर दलों की महत्वपूर्ण बैठक संपन्न, नए समीकरणों पर मंथन शुरू`;
-  } else {
-    opt2 = `${detectedLocation}: महत्वपूर्ण फैसले के बाद हलचल तेज, संबंधित विभागों को तत्काल दिशा-निर्देश जारी`;
-    opt3 = `बड़ा घटनाक्रम: ${detectedLocation} में नए नियमों और आदेशों से जनजीवन पर असर, स्थिति पर रखी जा रही नजर`;
-    opt4 = `ग्राउंड रिपोर्ट: पूरे मामले को लेकर आमजन और विशेषज्ञों में व्यापक चर्चा, आगामी प्रक्रिया तेज करने की मांग`;
+  // Variant 2: Combine location and core action/fact from description
+  if (baseDesc && baseDesc.length > 20) {
+    const firstSentenceDesc = baseDesc.split(/[।\.\!\?]/)[0].trim();
+    if (firstSentenceDesc && firstSentenceDesc.length > 15 && !rawVariants.includes(firstSentenceDesc)) {
+      rawVariants.push(detectedLocation !== "विशेष कवरेज" ? `${detectedLocation}: ${firstSentenceDesc}` : firstSentenceDesc);
+    }
   }
 
-  const rawOptions = [opt1, opt2, opt3, opt4];
-  const headlineOptions = rawOptions.map((h) =>
-    sanitizePressNoteFlattery(h).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()
-  );
+  // Variant 3: Derived from content snippet or second part of description
+  if (baseContent && baseContent.length > 30) {
+    const firstSentenceContent = baseContent.split(/[।\.\!\?]/)[0].trim();
+    if (firstSentenceContent && firstSentenceContent.length > 15 && !rawVariants.includes(firstSentenceContent)) {
+      rawVariants.push(firstSentenceContent);
+    }
+  }
 
+  // Variant 4: Impact / development angle from title + desc key facts
+  if (baseTitle && baseDesc) {
+    const descSecondPart = baseDesc.split(/[।\.\!\?]/)[1]?.trim();
+    if (descSecondPart && descSecondPart.length > 15) {
+      rawVariants.push(descSecondPart);
+    } else {
+      const impactVariant = `${baseTitle}: विस्तृत विवरण और मुख्य तथ्यों पर अपडेट`;
+      if (!rawVariants.includes(impactVariant)) {
+        rawVariants.push(impactVariant);
+      }
+    }
+  }
+
+  // Ensure 1-4 distinct, factual headline options without repetitive filler
+  const distinctCleanOptions: string[] = [];
+  for (const opt of rawVariants) {
+    const sanitized = sanitizePressNoteFlattery(opt).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+    if (sanitized && !isInvalidUrlHeadline(sanitized) && !distinctCleanOptions.includes(sanitized)) {
+      distinctCleanOptions.push(sanitized);
+    }
+  }
+
+  if (distinctCleanOptions.length === 0) {
+    distinctCleanOptions.push(
+      detectedLocation !== "विशेष कवरेज"
+        ? `${detectedLocation}: मामले को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी`
+        : "ताज़ा घटनाक्रम को लेकर महत्वपूर्ण फैसला, अग्रिम दिशा-निर्देश जारी"
+    );
+  }
+
+  const headlineOptions = distinctCleanOptions.slice(0, 4);
   const headline = headlineOptions[0];
 
   // Pick highlight words: numbers, quoted words or entities
@@ -3636,6 +3742,9 @@ app.post("/api/process-news-command", async (req, res) => {
     const targetArea = headline_area || tplConfig.headline_area;
 
     let fetchedArticleSnippet = "";
+    let effectiveArticleTitle = "";
+    let effectiveArticleDesc = "";
+    let articleBodySnippets = "";
     const pickedImages: { main?: string; second?: string } = {};
     let extractedArticleMeta: ArticleExtractedMetadata | undefined = undefined;
 
@@ -3674,13 +3783,13 @@ app.post("/api/process-news-command", async (req, res) => {
               html.match(/<meta[^>]*name=["']twitter:description["'][^>]*content=["']([^"']+)["']/i) ||
               html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:description["']/i);
 
-            const effectiveArticleTitle =
+            effectiveArticleTitle =
               (ogTitleMatch && ogTitleMatch[1]?.trim()) ||
               (titleMatch && titleMatch[1]?.trim()) ||
               (twitterTitleMatch && twitterTitleMatch[1]?.trim()) ||
               "";
 
-            const effectiveArticleDesc =
+            effectiveArticleDesc =
               (ogDescMatch && ogDescMatch[1]?.trim()) ||
               (metaDescMatch && metaDescMatch[1]?.trim()) ||
               (twitterDescMatch && twitterDescMatch[1]?.trim()) ||
@@ -3717,14 +3826,76 @@ app.post("/api/process-news-command", async (req, res) => {
               }
             }
 
-            const articleBodySnippets = extractedParagraphs.join("\n\n");
+            articleBodySnippets = extractedParagraphs.join("\n\n");
+
+            // 4. Preserved Image Extraction: og:image, twitter:image, JSON-LD, prominent body img
+            const ogImageMatch =
+              html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+              html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+            const twitterImageMatch =
+              html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i) ||
+              html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["']/i);
+
+            const foundImages: string[] = [];
+            if (ogImageMatch && ogImageMatch[1]) {
+              const resolved = resolveUrl(ogImageMatch[1].trim(), rawLink);
+              if (resolved) foundImages.push(resolved);
+            }
+            if (twitterImageMatch && twitterImageMatch[1]) {
+              const resolved = resolveUrl(twitterImageMatch[1].trim(), rawLink);
+              if (resolved && !foundImages.includes(resolved)) {
+                foundImages.push(resolved);
+              }
+            }
+
+            // Check JSON-LD schema
+            try {
+              const jsonLdMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+              for (const jm of jsonLdMatches) {
+                try {
+                  const jdata = JSON.parse(jm[1].trim());
+                  const jitems = Array.isArray(jdata) ? jdata : jdata?.["@graph"] ? jdata["@graph"] : [jdata];
+                  for (const item of jitems) {
+                    if (item && (item["@type"] === "NewsArticle" || item["@type"] === "Article" || item["@type"] === "ReportageNewsArticle" || item.headline)) {
+                      if (!effectiveArticleTitle && item.headline) effectiveArticleTitle = cleanHtmlEntities(String(item.headline));
+                      if (!effectiveArticleDesc && item.description) effectiveArticleDesc = cleanHtmlEntities(String(item.description));
+                      if (!articleBodySnippets && item.articleBody) articleBodySnippets = cleanHtmlEntities(String(item.articleBody)).slice(0, 2500);
+                      const img = item.image?.url || (typeof item.image === "string" ? item.image : (Array.isArray(item.image) ? item.image[0] : null));
+                      if (img) {
+                        const resolvedImg = resolveUrl(typeof img === "object" ? img.url : img, rawLink);
+                        if (resolvedImg && !foundImages.includes(resolvedImg)) foundImages.unshift(resolvedImg);
+                      }
+                    }
+                  }
+                } catch {}
+              }
+            } catch {}
+
+            const imgMatches = html.matchAll(
+              /<img[^>]+src=["']([^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi
+            );
+            for (const match of imgMatches) {
+              const src = match[1];
+              if (
+                src &&
+                !src.includes("logo") &&
+                !src.includes("icon") &&
+                !src.includes("avatar")
+              ) {
+                const resolved = resolveUrl(src, rawLink);
+                if (resolved && !foundImages.includes(resolved)) {
+                  foundImages.push(resolved);
+                  if (foundImages.length >= 4) break;
+                }
+              }
+            }
 
             if (effectiveArticleTitle || effectiveArticleDesc || articleBodySnippets) {
               extractedArticleMeta = {
                 title: effectiveArticleTitle,
                 description: effectiveArticleDesc,
                 content: articleBodySnippets,
-                imageUrl: undefined, // will set below
+                imageUrl: foundImages[0] ? `/api/proxy-image?url=${encodeURIComponent(foundImages[0])}` : undefined,
                 linkUrl: rawLink,
               };
             }
@@ -3735,43 +3906,6 @@ Description: ${effectiveArticleDesc}
 Facts & Content: ${articleBodySnippets || effectiveArticleDesc || effectiveArticleTitle}
 Source URL: ${rawLink}
 `;
-
-            // 4. Preserved Image Extraction: og:image, twitter:image, prominent body img
-            const ogImageMatch =
-              html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
-              html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-            const twitterImageMatch =
-              html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i) ||
-              html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["']/i);
-
-            const foundImages: string[] = [];
-            if (ogImageMatch && ogImageMatch[1]) {
-              foundImages.push(ogImageMatch[1].trim());
-            }
-            if (
-              twitterImageMatch &&
-              twitterImageMatch[1] &&
-              !foundImages.includes(twitterImageMatch[1].trim())
-            ) {
-              foundImages.push(twitterImageMatch[1].trim());
-            }
-
-            const imgMatches = html.matchAll(
-              /<img[^>]+src=["'](https?:\/\/[^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi
-            );
-            for (const match of imgMatches) {
-              const src = match[1];
-              if (
-                src &&
-                !src.includes("logo") &&
-                !src.includes("icon") &&
-                !src.includes("avatar") &&
-                !foundImages.includes(src)
-              ) {
-                foundImages.push(src);
-                if (foundImages.length >= 4) break;
-              }
-            }
 
             if (foundImages.length > 0) {
               pickedImages.main = `/api/proxy-image?url=${encodeURIComponent(foundImages[0])}`;

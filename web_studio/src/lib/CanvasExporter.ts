@@ -2161,14 +2161,68 @@ async function drawGraphic002Canvas(
 
   // 1. TOP PHOTO AREA (12 to photoH, with outer orange border)
   let hasValidPhoto = false;
+  const pBoxX = orangeBorderW;
+  const pBoxY = orangeBorderW;
+  const pBoxW = width - orangeBorderW * 2;
+  const pBoxH = photoH - orangeBorderW;
+
+  const mCrop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
+  const mCropX = (mCrop.x ?? 50) / 100;
+  const mCropY = (mCrop.y ?? 50) / 100;
+  const mZoom = Math.max(1, mCrop.zoom || 1);
+
+  const sCrop = card.imagePositions?.second || { x: 50, y: 50, zoom: 1 };
+  const sCropX = (sCrop.x ?? 50) / 100;
+  const sCropY = (sCrop.y ?? 50) / 100;
+  const sZoom = Math.max(1, sCrop.zoom || 1);
+
+  const layout = card.layout || 'single';
+
   if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg') {
     try {
-      const img = await loadImage(card.images.main);
-      const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
-      const cropX = (crop.x ?? 50) / 100;
-      const cropY = (crop.y ?? 50) / 100;
-      const zoom = Math.max(1, crop.zoom || 1);
-      drawImageCover(ctx, img, orangeBorderW, orangeBorderW, width - orangeBorderW * 2, photoH - orangeBorderW, cropX, cropY, zoom);
+      const mainImg = await loadImage(card.images.main);
+      if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      } else if (layout === 'split-v') {
+        // 35% Top, 65% Bottom
+        const topH = Math.round(pBoxH * 0.35);
+        const bottomH = pBoxH - topH;
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, topH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + topH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double') {
+        // 50% Top, 50% Bottom
+        const halfH = Math.round(pBoxH * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, halfH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + halfH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double-h' || layout === 'split-h') {
+        // 50% Left, 50% Right
+        const halfW = Math.round(pBoxW * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, halfW - 2, pBoxH, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX + halfW - 2, pBoxY, 4, pBoxH);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        }
+      } else {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      }
       hasValidPhoto = true;
     } catch (e) {
       console.warn('Failed to load main image for graphic_002', e);
@@ -2502,6 +2556,39 @@ async function drawGraphic002Canvas(
       ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
     }
     ctx.restore();
+  } else {
+    const activeFooter = getActiveFooterPng(card);
+    if (activeFooter) {
+      try {
+        const footerImg = await loadImage(activeFooter);
+        const footerH = 110;
+        const footerY = height - footerH;
+        drawImageCover(ctx, footerImg, orangeBorderW, footerY, width - orangeBorderW * 2, footerH - orangeBorderW, 0.5, 0.5, 1);
+      } catch (err) {
+        console.warn('Failed to draw custom footer PNG in graphic_002', err);
+      }
+    }
+  }
+
+  // Custom Header PNG or Custom Full Frame Overlay PNG
+  if (card.showMasterBranding === false) {
+    const activeHeader = getActiveHeaderPng(card);
+    if (activeHeader) {
+      try {
+        const headerImg = await loadImage(activeHeader);
+        const headerH = Math.min(180, Math.round(width * (headerImg.height / headerImg.width)));
+        ctx.drawImage(headerImg, 0, 0, width, headerH);
+      } catch (err) {
+        console.warn('Failed to draw custom header PNG in graphic_002', err);
+      }
+    }
+  }
+
+  if (card.customFrameOverlayPng && (card.frameDesign === 'custom-png' || card.showMasterBranding === false)) {
+    try {
+      const frameImg = await loadImage(card.customFrameOverlayPng);
+      ctx.drawImage(frameImg, 0, 0, width, height);
+    } catch {}
   }
 
   // 6. DESCRIPTION CTA (Y = 1172)
@@ -2671,14 +2758,68 @@ async function drawGraphic003Canvas(
 
   // 1. FULL-BLEED PHOTO (Full Canvas 1080 x 1350)
   let hasValidPhoto = false;
+  const pBoxX = 0;
+  const pBoxY = 0;
+  const pBoxW = width;
+  const pBoxH = height;
+
+  const mCrop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
+  const mCropX = (mCrop.x ?? 50) / 100;
+  const mCropY = (mCrop.y ?? 50) / 100;
+  const mZoom = Math.max(1, mCrop.zoom || 1);
+
+  const sCrop = card.imagePositions?.second || { x: 50, y: 50, zoom: 1 };
+  const sCropX = (sCrop.x ?? 50) / 100;
+  const sCropY = (sCrop.y ?? 50) / 100;
+  const sZoom = Math.max(1, sCrop.zoom || 1);
+
+  const layout = card.layout || 'single';
+
   if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg') {
     try {
-      const img = await loadImage(card.images.main);
-      const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
-      const cropX = (crop.x ?? 50) / 100;
-      const cropY = (crop.y ?? 50) / 100;
-      const zoom = Math.max(1, crop.zoom || 1);
-      drawImageCover(ctx, img, 0, 0, width, height, cropX, cropY, zoom);
+      const mainImg = await loadImage(card.images.main);
+      if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      } else if (layout === 'split-v') {
+        // 35% Top, 65% Bottom
+        const topH = Math.round(pBoxH * 0.35);
+        const bottomH = pBoxH - topH;
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, topH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + topH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double') {
+        // 50% Top, 50% Bottom
+        const halfH = Math.round(pBoxH * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, halfH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + halfH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double-h' || layout === 'split-h') {
+        // 50% Left, 50% Right
+        const halfW = Math.round(pBoxW * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, halfW - 2, pBoxH, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX + halfW - 2, pBoxY, 4, pBoxH);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        }
+      } else {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      }
       hasValidPhoto = true;
     } catch (e) {
       console.warn('Failed to load main image for graphic_003', e);
@@ -2869,10 +3010,9 @@ async function drawGraphic003Canvas(
   }
 
   // 5. FIXED FOOTER (100px at bottom: Y = 1250 to 1350)
+  const footerH = 100;
+  const footerY = height - footerH;
   if (card.showMasterBranding !== false) {
-    const footerH = 100;
-    const footerY = height - footerH;
-
     ctx.save();
     // Semi-transparent deep dark background with backdrop feel
     ctx.fillStyle = 'rgba(10, 15, 29, 0.95)';
@@ -3012,6 +3152,16 @@ async function drawGraphic003Canvas(
       ctx.fillText(card.whatsappNumber, badgeX + 32, iconY);
     }
     ctx.restore();
+  } else {
+    const activeFooter = getActiveFooterPng(card);
+    if (activeFooter) {
+      try {
+        const footerImg = await loadImage(activeFooter);
+        drawImageCover(ctx, footerImg, 0, footerY, width, footerH, 0.5, 0.5, 1);
+      } catch (err) {
+        console.warn('Failed to draw custom footer PNG in graphic_003', err);
+      }
+    }
   }
 
   // 6. LARGE BOLD HEADLINE DIRECT OVERLAY ON PHOTO (Y = 820 to 1220)
@@ -3102,6 +3252,27 @@ async function drawGraphic003Canvas(
     }
   }
   ctx.restore();
+
+  // Custom Header PNG or Custom Full Frame Overlay PNG
+  if (card.showMasterBranding === false) {
+    const activeHeader = getActiveHeaderPng(card);
+    if (activeHeader) {
+      try {
+        const headerImg = await loadImage(activeHeader);
+        const headerH = Math.min(180, Math.round(width * (headerImg.height / headerImg.width)));
+        ctx.drawImage(headerImg, 0, 0, width, headerH);
+      } catch (err) {
+        console.warn('Failed to draw custom header PNG in graphic_003', err);
+      }
+    }
+  }
+
+  if (card.customFrameOverlayPng && (card.frameDesign === 'custom-png' || card.showMasterBranding === false)) {
+    try {
+      const frameImg = await loadImage(card.customFrameOverlayPng);
+      ctx.drawImage(frameImg, 0, 0, width, height);
+    } catch {}
+  }
 
   ctx.restore();
 }

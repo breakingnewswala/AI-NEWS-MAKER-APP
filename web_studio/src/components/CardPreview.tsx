@@ -811,13 +811,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               EXCLUSIVE
             </span>
           </div>
-        ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
-          /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
-          null
         ) : card.showMasterBranding === false ? (
           getActiveHeaderPng(card) ? (
             <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
           ) : null
+        ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
+          /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
+          null
         ) : card.frameDesign === 'custom-png' ? (
           !card.hideDefaultHeaderInCustomFrame && (
             <HeaderGraphic
@@ -1138,55 +1138,63 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             </div>
 
             {/* Fixed Footer: Yellow Bar (#FFE600) with Social Icons, Handle, Website and Fixed Footer Badge */}
-            <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
-              {/* Left Social Icons */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  ▶
+            {card.showMasterBranding === false ? (
+              getActiveFooterPng(card) ? (
+                <div className="relative z-10 w-full pointer-events-auto overflow-hidden">
+                  <img src={getActiveFooterPng(card)} alt="Footer" className="w-full h-auto object-contain block" />
                 </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                  f
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  📷
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  💬
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04]" />
-
-              {/* Handle */}
-              <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
-                {card.socialHandle || '@YourChannel'}
-              </span>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
-
-              {/* Website */}
-              <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
-                <span className="text-sky-600 font-bold">🌐</span>
-                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-              </div>
-
-              {/* Contact Number (if enabled by admin/profile) */}
-              {card.showMobileNumber !== false && card.whatsappNumber && (
-                <>
-                  <div className="h-5 w-px bg-[#CA8A04]" />
-                  <div className="flex items-center gap-1.5 text-black font-bold text-xs font-['Poppins'] shrink-0">
-                    <div className="w-4 h-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.23 8.23 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.39-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43s-.56-1.36-.77-1.86c-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.55c.13.16 1.74 2.65 4.21 3.72.59.25 1.05.41 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.18-.47-.3z"/>
-                      </svg>
-                    </div>
-                    <span>{card.whatsappNumber}</span>
+              ) : null
+            ) : (
+              <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
+                {/* Left Social Icons */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                    ▶
                   </div>
-                </>
-              )}
-            </div>
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
+                    f
+                  </div>
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                    📷
+                  </div>
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                    💬
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-[#CA8A04]" />
+
+                {/* Handle */}
+                <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
+                  {card.socialHandle || '@YourChannel'}
+                </span>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
+
+                {/* Website */}
+                <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
+                  <span className="text-sky-600 font-bold">🌐</span>
+                  <span>{card.websiteUrl || 'yourwebsite.com'}</span>
+                </div>
+
+                {/* Contact Number (if enabled by admin/profile) */}
+                {card.showMobileNumber !== false && card.whatsappNumber && (
+                  <>
+                    <div className="h-5 w-px bg-[#CA8A04]" />
+                    <div className="flex items-center gap-1.5 text-black font-bold text-xs font-['Poppins'] shrink-0">
+                      <div className="w-4 h-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.23 8.23 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.39-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43s-.56-1.36-.77-1.86c-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.55c.13.16 1.74 2.65 4.21 3.72.59.25 1.05.41 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.18-.47-.3z"/>
+                        </svg>
+                      </div>
+                      <span>{card.whatsappNumber}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : card.frameDesign === 'graphic_003' ? (
@@ -1271,55 +1279,63 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             </div>
 
             {/* Sleek Dark Fixed Social Footer Bar */}
-            <div className="w-full bg-slate-950/95 backdrop-blur-md border-t-2 border-amber-500 px-3 sm:px-5 py-2.5 flex items-center justify-between pointer-events-auto">
-              {/* Left Social Icons */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  ▶
+            {card.showMasterBranding === false ? (
+              getActiveFooterPng(card) ? (
+                <div className="w-full pointer-events-auto overflow-hidden">
+                  <img src={getActiveFooterPng(card)} alt="Footer" className="w-full h-auto object-contain block" />
                 </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                  f
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  📷
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  💬
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-white/20" />
-
-              {/* Handle */}
-              <span className="font-black text-xs sm:text-sm text-white font-['Poppins'] truncate">
-                {card.socialHandle || '@YourChannel'}
-              </span>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-white/20 hidden sm:block" />
-
-              {/* Website */}
-              <div className="hidden sm:flex items-center gap-1 text-slate-200 font-bold text-xs font-['Poppins'] truncate">
-                <span className="text-sky-400 font-bold">🌐</span>
-                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-              </div>
-
-              {/* Contact Number (if enabled by admin/profile) */}
-              {card.showMobileNumber !== false && card.whatsappNumber && (
-                <>
-                  <div className="h-5 w-px bg-white/20" />
-                  <div className="flex items-center gap-1.5 text-slate-200 font-bold text-xs font-['Poppins'] shrink-0">
-                    <div className="w-4 h-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.23 8.23 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.39-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43s-.56-1.36-.77-1.86c-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.55c.13.16 1.74 2.65 4.21 3.72.59.25 1.05.41 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.18-.47-.3z"/>
-                      </svg>
-                    </div>
-                    <span>{card.whatsappNumber}</span>
+              ) : null
+            ) : (
+              <div className="w-full bg-slate-950/95 backdrop-blur-md border-t-2 border-amber-500 px-3 sm:px-5 py-2.5 flex items-center justify-between pointer-events-auto">
+                {/* Left Social Icons */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                    ▶
                   </div>
-                </>
-              )}
-            </div>
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
+                    f
+                  </div>
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                    📷
+                  </div>
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
+                    💬
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-white/20" />
+
+                {/* Handle */}
+                <span className="font-black text-xs sm:text-sm text-white font-['Poppins'] truncate">
+                  {card.socialHandle || '@YourChannel'}
+                </span>
+
+                {/* Divider */}
+                <div className="h-5 w-px bg-white/20 hidden sm:block" />
+
+                {/* Website */}
+                <div className="hidden sm:flex items-center gap-1 text-slate-200 font-bold text-xs font-['Poppins'] truncate">
+                  <span className="text-sky-400 font-bold">🌐</span>
+                  <span>{card.websiteUrl || 'yourwebsite.com'}</span>
+                </div>
+
+                {/* Contact Number (if enabled by admin/profile) */}
+                {card.showMobileNumber !== false && card.whatsappNumber && (
+                  <>
+                    <div className="h-5 w-px bg-white/20" />
+                    <div className="flex items-center gap-1.5 text-slate-200 font-bold text-xs font-['Poppins'] shrink-0">
+                      <div className="w-4 h-4 rounded-full bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.23 8.23 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.39-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43s-.56-1.36-.77-1.86c-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.55c.13.16 1.74 2.65 4.21 3.72.59.25 1.05.41 1.41.52.59.19 1.13.16 1.56.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.18-.47-.3z"/>
+                        </svg>
+                      </div>
+                      <span>{card.whatsappNumber}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : card.frameDesign === 'graphic_004' ? (
@@ -1425,53 +1441,61 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           </div>
 
           {/* Bottom Fixed Black Footer with Yellow Details & Date Badge */}
-          <div className="relative z-20 w-full bg-black border-t-2 border-white px-2 sm:px-3 py-1.5 flex items-center justify-between pointer-events-auto">
-            {/* Left Social Icons */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-red-600 flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
-                ▶
+          {card.showMasterBranding === false ? (
+            getActiveFooterPng(card) ? (
+              <div className="relative z-20 w-full pointer-events-auto overflow-hidden">
+                <img src={getActiveFooterPng(card)} alt="Footer" className="w-full h-auto object-contain block" />
               </div>
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[10px] font-black shadow-xs">
-                f
+            ) : null
+          ) : (
+            <div className="relative z-20 w-full bg-black border-t-2 border-white px-2 sm:px-3 py-1.5 flex items-center justify-between pointer-events-auto">
+              {/* Left Social Icons */}
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-red-600 flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
+                  ▶
+                </div>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[10px] font-black shadow-xs">
+                  f
+                </div>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
+                  📷
+                </div>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
+                  💬
+                </div>
               </div>
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
-                📷
-              </div>
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
-                💬
-              </div>
-            </div>
 
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40" />
+              {/* Divider */}
+              <div className="h-4 w-px bg-white/40" />
 
-            {/* Handle in Yellow */}
-            <span className="font-black text-[11px] sm:text-xs text-[#FFE600] font-['Poppins'] truncate">
-              {card.socialHandle || '@YourChannel'}
-            </span>
-
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40 hidden sm:block" />
-
-            {/* Website in Yellow */}
-            <div className="hidden sm:flex items-center gap-1 text-[#FFE600] font-bold text-[10px] sm:text-[11px] font-['Poppins'] truncate">
-              <span className="text-sky-400 font-bold">🌐</span>
-              <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-            </div>
-
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40" />
-
-            {/* Right Date Badge: DATE / यहाँ तारीख आएगी */}
-            <div className="bg-black border border-white text-white px-2 py-0.5 rounded-lg flex flex-col items-center justify-center text-center shrink-0 leading-none">
-              <span className="font-black text-[8px] sm:text-[9.5px] font-['Poppins'] tracking-wider">
-                DATE
+              {/* Handle in Yellow */}
+              <span className="font-black text-[11px] sm:text-xs text-[#FFE600] font-['Poppins'] truncate">
+                {card.socialHandle || '@YourChannel'}
               </span>
-              <span className="text-[6.5px] sm:text-[8px] text-neutral-300 font-['Noto_Sans_Devanagari'] mt-0.5">
-                {card.date && card.date.trim().length > 0 ? card.date : 'यहाँ तारीख आएगी'}
-              </span>
+
+              {/* Divider */}
+              <div className="h-4 w-px bg-white/40 hidden sm:block" />
+
+              {/* Website in Yellow */}
+              <div className="hidden sm:flex items-center gap-1 text-[#FFE600] font-bold text-[10px] sm:text-[11px] font-['Poppins'] truncate">
+                <span className="text-sky-400 font-bold">🌐</span>
+                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
+              </div>
+
+              {/* Divider */}
+              <div className="h-4 w-px bg-white/40" />
+
+              {/* Right Date Badge: DATE / यहाँ तारीख आएगी */}
+              <div className="bg-black border border-white text-white px-2 py-0.5 rounded-lg flex flex-col items-center justify-center text-center shrink-0 leading-none">
+                <span className="font-black text-[8px] sm:text-[9.5px] font-['Poppins'] tracking-wider">
+                  DATE
+                </span>
+                <span className="text-[6.5px] sm:text-[8px] text-neutral-300 font-['Noto_Sans_Devanagari'] mt-0.5">
+                  {card.date && card.date.trim().length > 0 ? card.date : 'यहाँ तारीख आएगी'}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ) : card.frameDesign === 'jacket-default' ? (
         /* ================= DEFAULT FRAME (CLEAN WHITE, PINK LOCATION, YOUR LOGO, 3-LINE HEADLINE, SOLID GRAY FOOTER) ================= */

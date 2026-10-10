@@ -154,7 +154,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     layout: 'double',
     images: {
       main: SAMPLE_RALLY_IMG,
-      secondary: SAMPLE_MINISTER_IMG,
+      second: SAMPLE_MINISTER_IMG,
     },
     insetPosition: { x: 76, y: 55 },
     aspectRatio: '4:5',

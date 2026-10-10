@@ -826,6 +826,20 @@ function saveRssSourcesDatabase(sources) {
     return false;
   }
 }
+function resolveUrl(url, baseUrl) {
+  try {
+    if (!url || typeof url !== "string") return "";
+    const clean = url.trim();
+    if (clean.startsWith("//")) return "https:" + clean;
+    if (clean.startsWith("http://") || clean.startsWith("https://")) return clean;
+    if (baseUrl && (baseUrl.startsWith("http://") || baseUrl.startsWith("https://"))) {
+      return new URL(clean, baseUrl).href;
+    }
+    return clean;
+  } catch {
+    return url;
+  }
+}
 function isValidNewsImage(url) {
   if (!url || typeof url !== "string") return false;
   const clean = url.trim().toLowerCase();
@@ -867,21 +881,30 @@ function isValidNewsImage(url) {
 async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCategory) {
   const mediaMatches = itemXml.matchAll(/<media:content[^>]+url=["']([^"']+)["'][^>]*>/gi);
   for (const m of mediaMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
+  }
+  const mediaThumbMatches = itemXml.matchAll(/<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*>/gi);
+  for (const m of mediaThumbMatches) {
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
   const enclosureMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/gi);
   for (const m of enclosureMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
   const enclosureAltMatches = itemXml.matchAll(/<enclosure[^>]+type=["']image\/[^"']+["'][^>]*url=["']([^"']+)["']/gi);
   for (const m of enclosureAltMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
   const contentEncodedMatch = itemXml.match(/<content:encoded>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/content:encoded>/i);
   const contentBody = (contentEncodedMatch ? contentEncodedMatch[1] || contentEncodedMatch[2] || "" : "") + " " + rawDesc;
   const imgMatches = contentBody.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
   for (const m of imgMatches) {
-    if (m[1] && isValidNewsImage(m[1])) return m[1].trim();
+    const resolved = resolveUrl(m[1], articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
   }
   if (articleUrl && articleUrl.startsWith("http")) {
     try {
@@ -889,21 +912,43 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
         },
-        signal: AbortSignal.timeout(3500)
+        signal: AbortSignal.timeout(4500)
       });
       if (resp.ok) {
         const html = await resp.text();
+        const ldMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+        for (const ldMatch of ldMatches) {
+          try {
+            const data = JSON.parse(ldMatch[1]);
+            const item = Array.isArray(data) ? data[0] : data["@graph"] ? data["@graph"].find((x) => x["@type"]?.includes?.("Article") || x.image) : data;
+            if (item) {
+              let imgCandidate = "";
+              if (typeof item.image === "string") imgCandidate = item.image;
+              else if (Array.isArray(item.image) && typeof item.image[0] === "string") imgCandidate = item.image[0];
+              else if (item.image?.url) imgCandidate = item.image.url;
+              else if (item.thumbnailUrl) imgCandidate = item.thumbnailUrl;
+              if (imgCandidate) {
+                const resolved = resolveUrl(imgCandidate, articleUrl);
+                if (isValidNewsImage(resolved)) return resolved;
+              }
+            }
+          } catch {
+          }
+        }
         const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-        if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
-          return ogImageMatch[1].trim();
+        if (ogImageMatch && ogImageMatch[1]) {
+          const resolved = resolveUrl(ogImageMatch[1].trim(), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
         }
         const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-        if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
-          return twitterImageMatch[1].trim();
+        if (twitterImageMatch && twitterImageMatch[1]) {
+          const resolved = resolveUrl(twitterImageMatch[1].trim(), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
         }
-        const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
-        if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
-          return articleImgMatch[1].trim();
+        const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
+        if (articleImgMatch && articleImgMatch[1]) {
+          const resolved = resolveUrl(articleImgMatch[1].trim(), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
         }
       }
     } catch {
@@ -1074,28 +1119,64 @@ async function fetchAndParseWebLink(source) {
     });
     if (!resp.ok) return [];
     const html = await resp.text();
-    const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<title>([^<]+)<\/title>/i);
-    const rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
-    if (!rawTitle) return [];
-    const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
-    const rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
-    const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)).map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim())).filter((p) => p.length > 30).slice(0, 5).join("\n\n");
-    const fullArticleText = paragraphs || rawDesc;
+    let rawTitle = "";
+    let rawDesc = "";
+    let fullArticleText = "";
     let imageUrl = "";
-    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    if (ogImageMatch && ogImageMatch[1] && isValidNewsImage(ogImageMatch[1])) {
-      imageUrl = ogImageMatch[1].trim();
+    const ldMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    for (const ldMatch of ldMatches) {
+      try {
+        const data = JSON.parse(ldMatch[1]);
+        const item = Array.isArray(data) ? data[0] : data["@graph"] ? data["@graph"].find((x) => x["@type"]?.includes?.("Article") || x.headline) : data;
+        if (item) {
+          if (!rawTitle && (item.headline || item.name)) rawTitle = decodeHtmlEntities(String(item.headline || item.name).trim());
+          if (!rawDesc && (item.description || item.abstract)) rawDesc = decodeHtmlEntities(String(item.description || item.abstract).trim());
+          if (!fullArticleText && item.articleBody) fullArticleText = decodeHtmlEntities(String(item.articleBody).trim());
+          let candidateImg = "";
+          if (typeof item.image === "string") candidateImg = item.image;
+          else if (Array.isArray(item.image) && typeof item.image[0] === "string") candidateImg = item.image[0];
+          else if (item.image?.url) candidateImg = item.image.url;
+          else if (item.thumbnailUrl) candidateImg = item.thumbnailUrl;
+          if (candidateImg && !imageUrl) {
+            const resolved = resolveUrl(candidateImg, source.url);
+            if (isValidNewsImage(resolved)) imageUrl = resolved;
+          }
+        }
+      } catch {
+      }
+    }
+    if (!rawTitle) {
+      const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i) || html.match(/<title>([^<]+)<\/title>/i);
+      rawTitle = ogTitleMatch ? decodeHtmlEntities(ogTitleMatch[1].trim()) : "";
+    }
+    if (!rawTitle) return [];
+    if (!rawDesc) {
+      const ogDescMatch = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+      rawDesc = ogDescMatch ? decodeHtmlEntities(ogDescMatch[1].trim()) : "";
+    }
+    if (!fullArticleText) {
+      const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)).map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim())).filter((p) => p.length > 30).slice(0, 5).join("\n\n");
+      fullArticleText = paragraphs || rawDesc;
     }
     if (!imageUrl) {
-      const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-      if (twitterImageMatch && twitterImageMatch[1] && isValidNewsImage(twitterImageMatch[1])) {
-        imageUrl = twitterImageMatch[1].trim();
+      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (ogImageMatch && ogImageMatch[1]) {
+        const resolved = resolveUrl(ogImageMatch[1].trim(), source.url);
+        if (isValidNewsImage(resolved)) imageUrl = resolved;
       }
     }
     if (!imageUrl) {
-      const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
-      if (articleImgMatch && articleImgMatch[1] && isValidNewsImage(articleImgMatch[1])) {
-        imageUrl = articleImgMatch[1].trim();
+      const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+      if (twitterImageMatch && twitterImageMatch[1]) {
+        const resolved = resolveUrl(twitterImageMatch[1].trim(), source.url);
+        if (isValidNewsImage(resolved)) imageUrl = resolved;
+      }
+    }
+    if (!imageUrl) {
+      const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
+      if (articleImgMatch && articleImgMatch[1]) {
+        const resolved = resolveUrl(articleImgMatch[1].trim(), source.url);
+        if (isValidNewsImage(resolved)) imageUrl = resolved;
       }
     }
     if (!imageUrl) {
@@ -2688,41 +2769,49 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
   } else {
     categories.push("\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930", detectedLocation);
   }
-  const baseSubject = extractedTitle || "\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u092B\u0948\u0938\u0932\u093E";
-  const cleanSubjectWords = baseSubject.split(/\s+/).filter(Boolean);
-  let opt1 = baseSubject;
-  if (cleanSubjectWords.length > 20) {
-    opt1 = cleanSubjectWords.slice(0, 18).join(" ");
+  const baseTitle = extractedTitle || (extractedDesc ? extractedDesc.slice(0, 70) : "\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u092E\u093E\u091A\u093E\u0930");
+  const baseDesc = extractedDesc || "";
+  const baseContent = extractedContent || "";
+  const rawVariants = [];
+  if (baseTitle && !isInvalidUrlHeadline(baseTitle)) {
+    rawVariants.push(baseTitle);
   }
-  let opt2 = "";
-  let opt3 = "";
-  let opt4 = "";
-  if (category === "\u0915\u093E\u0930\u094B\u092C\u093E\u0930 / \u091F\u0947\u0915" || /ग्रीन कार्ड|आईटी|टाटा|विप्रो|इंफोसिस|ट्रम्प/i.test(fullCorpus)) {
-    opt1 = opt1.length > 30 ? opt1 : "\u091F\u094D\u0930\u092E\u094D\u092A \u0928\u0947 \u0917\u094D\u0930\u0940\u0928 \u0915\u093E\u0930\u094D\u0921 \u092A\u094D\u0930\u094B\u0938\u0947\u0938 \u092A\u0930 \u0932\u0917\u093E\u0908 \u0930\u094B\u0915: \u091F\u093E\u091F\u093E, \u0935\u093F\u092A\u094D\u0930\u094B \u0914\u0930 \u0907\u0902\u092B\u094B\u0938\u093F\u0938 \u0938\u092E\u0947\u0924 \u092A\u094D\u0930\u092E\u0941\u0916 \u0915\u0902\u092A\u0928\u093F\u092F\u094B\u0902 \u092A\u0930 \u090F\u0915\u094D\u0936\u0928";
-    opt2 = "\u0905\u092E\u0947\u0930\u093F\u0915\u093E \u092E\u0947\u0902 \u092D\u093E\u0930\u0924\u0940\u092F \u091F\u0947\u0915 \u092A\u0947\u0936\u0947\u0935\u0930\u094B\u0902 \u0915\u094B \u092C\u0921\u093C\u093E \u091D\u091F\u0915\u093E: \u0917\u094D\u0930\u0940\u0928 \u0915\u093E\u0930\u094D\u0921 \u0928\u093F\u092F\u092E\u094B\u0902 \u092E\u0947\u0902 \u092C\u0926\u0932\u093E\u0935, \u0906\u0908\u091F\u0940 \u0915\u0902\u092A\u0928\u093F\u092F\u094B\u0902 \u0915\u0947 \u0906\u0935\u0947\u0926\u0928 \u0928\u093F\u0932\u0902\u092C\u093F\u0924";
-    opt3 = "\u092F\u0942\u090F\u0938 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u093E \u0915\u0921\u093C\u093E \u092B\u0948\u0938\u0932\u093E: \u092A\u094D\u0930\u092E\u0941\u0916 \u091F\u0947\u0915 \u0915\u0902\u092A\u0928\u093F\u092F\u094B\u0902 \u0915\u0947 \u0917\u094D\u0930\u0940\u0928 \u0915\u093E\u0930\u094D\u0921 \u092A\u094D\u0930\u094B\u0938\u0947\u0938 \u092A\u0930 \u0930\u094B\u0915 \u0938\u0947 \u0932\u093E\u0916\u094B\u0902 \u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u092E\u0947\u0902 \u091A\u093F\u0902\u0924\u093E";
-    opt4 = "\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: \u0905\u092E\u0947\u0930\u093F\u0915\u0940 \u0935\u0940\u091C\u093C\u093E \u0928\u0940\u0924\u093F \u092E\u0947\u0902 \u092C\u0921\u093C\u0947 \u092B\u0947\u0930\u092C\u0926\u0932 \u0938\u0947 \u0935\u0948\u0936\u094D\u0935\u093F\u0915 \u091F\u0947\u0915 \u0909\u0926\u094D\u092F\u094B\u0917 \u092E\u0947\u0902 \u0939\u0932\u091A\u0932, \u0915\u0902\u092A\u0928\u093F\u092F\u094B\u0902 \u0928\u0947 \u0936\u0941\u0930\u0942 \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E";
-  } else if (category === "\u0939\u093E\u0926\u0938\u093E") {
-    opt2 = `${detectedLocation}: \u092D\u0940\u0937\u0923 \u0938\u0921\u093C\u0915 \u0939\u093E\u0926\u0938\u0947 \u0915\u0947 \u092C\u093E\u0926 \u092E\u094C\u0915\u0947 \u092A\u0930 \u092E\u091A\u0940 \u091A\u0940\u0916-\u092A\u0941\u0915\u093E\u0930, \u0918\u093E\u092F\u0932\u094B\u0902 \u0915\u094B \u0924\u0941\u0930\u0902\u0924 \u0905\u0938\u094D\u092A\u0924\u093E\u0932 \u092E\u0947\u0902 \u0915\u0930\u093E\u092F\u093E \u0917\u092F\u093E \u092D\u0930\u094D\u0924\u0940`;
-    opt3 = `\u092C\u0921\u093C\u0940 \u0926\u0941\u0930\u094D\u0918\u091F\u0928\u093E: ${detectedLocation} \u092E\u0947\u0902 \u0924\u0947\u091C \u0930\u092B\u094D\u0924\u093E\u0930 \u0935\u093E\u0939\u0928 \u0905\u0928\u093F\u092F\u0902\u0924\u094D\u0930\u093F\u0924 \u0939\u094B\u0915\u0930 \u092A\u0932\u091F\u093E, \u0930\u093E\u0939\u0924 \u090F\u0935\u0902 \u092C\u091A\u093E\u0935 \u0915\u093E\u0930\u094D\u092F \u092F\u0941\u0926\u094D\u0927\u0938\u094D\u0924\u0930 \u092A\u0930 \u091C\u093E\u0930\u0940`;
-    opt4 = `\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0947 \u092C\u093E\u0926 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0914\u0930 \u092A\u0941\u0932\u093F\u0938 \u0915\u0940 \u091F\u0940\u092E \u092E\u094C\u0915\u0947 \u092A\u0930 \u092A\u0939\u0941\u0902\u091A\u0940, \u0915\u093E\u0930\u0923\u094B\u0902 \u0915\u0940 \u0917\u0939\u0928 \u091C\u093E\u0902\u091A \u0936\u0941\u0930\u0942`;
-  } else if (category === "\u0915\u094D\u0930\u093E\u0907\u092E") {
-    opt2 = `${detectedLocation}: \u092A\u0941\u0932\u093F\u0938 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u093E \u092C\u0921\u093C\u093E \u090F\u0915\u094D\u0936\u0928, \u0917\u0902\u092D\u0940\u0930 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092E\u0941\u0916\u094D\u092F \u0906\u0930\u094B\u092A\u093F\u092F\u094B\u0902 \u0915\u094B \u0918\u0947\u0930\u093E\u092C\u0902\u0926\u0940 \u0915\u0930 \u0915\u093F\u092F\u093E \u0917\u093F\u0930\u092B\u094D\u0924\u093E\u0930`;
-    opt3 = `\u0915\u093E\u0928\u0942\u0928 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E \u092A\u0930 \u0938\u0916\u094D\u0924 \u0930\u0941\u0916: ${detectedLocation} \u092E\u0947\u0902 \u092A\u0941\u0932\u093F\u0938 \u0915\u0940 \u0924\u093E\u092C\u0921\u093C\u0924\u094B\u0921\u093C \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908, \u0905\u0917\u094D\u0930\u093F\u092E \u0935\u0948\u0927\u093E\u0928\u093F\u0915 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0936\u0941\u0930\u0942`;
-    opt4 = `\u0915\u094D\u0930\u093E\u0907\u092E \u0921\u093E\u092F\u0930\u0940: \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u0939\u0932\u091A\u0932 \u092A\u0948\u0926\u093E \u0915\u0930\u0928\u0947 \u0935\u093E\u0932\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u093E \u092A\u0941\u0932\u093F\u0938 \u0928\u0947 \u0915\u093F\u092F\u093E \u092A\u0930\u094D\u0926\u093E\u092B\u093E\u0936, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0915\u0947 \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`;
-  } else if (category === "\u0938\u093F\u092F\u093E\u0938\u0924") {
-    opt2 = `${detectedLocation}: \u0938\u093F\u092F\u093E\u0938\u0940 \u0917\u0932\u093F\u092F\u093E\u0930\u094B\u0902 \u092E\u0947\u0902 \u092C\u0922\u093C\u0940 \u0939\u0932\u091A\u0932, \u0936\u0940\u0930\u094D\u0937 \u0928\u0947\u0924\u0943\u0924\u094D\u0935 \u0915\u0947 \u0905\u0939\u092E \u092C\u092F\u093E\u0928 \u0915\u0947 \u092C\u093E\u0926 \u0930\u093E\u091C\u0928\u0940\u0924\u093F\u0915 \u092C\u092F\u093E\u0928\u092C\u093E\u091C\u0940 \u0924\u0947\u091C`;
-    opt3 = `\u092C\u0921\u093C\u093E \u0930\u093E\u091C\u0928\u0940\u0924\u093F\u0915 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: \u0928\u0940\u0924\u093F\u0917\u0924 \u092E\u0941\u0926\u094D\u0926\u094B\u0902 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u0924\u094D\u0924\u093E \u0914\u0930 \u0935\u093F\u092A\u0915\u094D\u0937 \u0906\u092E\u0928\u0947-\u0938\u093E\u092E\u0928\u0947, \u091C\u0928\u0924\u093E \u0915\u0947 \u092C\u0940\u091A \u0935\u094D\u092F\u093E\u092A\u0915 \u091A\u0930\u094D\u091A\u093E`;
-    opt4 = `\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: \u0906\u0917\u093E\u092E\u0940 \u0930\u0923\u0928\u0940\u0924\u093F\u092F\u094B\u0902 \u0915\u094B \u0932\u0947\u0915\u0930 \u0926\u0932\u094B\u0902 \u0915\u0940 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u092C\u0948\u0920\u0915 \u0938\u0902\u092A\u0928\u094D\u0928, \u0928\u090F \u0938\u092E\u0940\u0915\u0930\u0923\u094B\u0902 \u092A\u0930 \u092E\u0902\u0925\u0928 \u0936\u0941\u0930\u0942`;
-  } else {
-    opt2 = `${detectedLocation}: \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u092B\u0948\u0938\u0932\u0947 \u0915\u0947 \u092C\u093E\u0926 \u0939\u0932\u091A\u0932 \u0924\u0947\u091C, \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917\u094B\u0902 \u0915\u094B \u0924\u0924\u094D\u0915\u093E\u0932 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940`;
-    opt3 = `\u092C\u0921\u093C\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: ${detectedLocation} \u092E\u0947\u0902 \u0928\u090F \u0928\u093F\u092F\u092E\u094B\u0902 \u0914\u0930 \u0906\u0926\u0947\u0936\u094B\u0902 \u0938\u0947 \u091C\u0928\u091C\u0940\u0935\u0928 \u092A\u0930 \u0905\u0938\u0930, \u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0928\u091C\u0930`;
-    opt4 = `\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0906\u092E\u091C\u0928 \u0914\u0930 \u0935\u093F\u0936\u0947\u0937\u091C\u094D\u091E\u094B\u0902 \u092E\u0947\u0902 \u0935\u094D\u092F\u093E\u092A\u0915 \u091A\u0930\u094D\u091A\u093E, \u0906\u0917\u093E\u092E\u0940 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0924\u0947\u091C \u0915\u0930\u0928\u0947 \u0915\u0940 \u092E\u093E\u0902\u0917`;
+  if (baseDesc && baseDesc.length > 20) {
+    const firstSentenceDesc = baseDesc.split(/[।\.\!\?]/)[0].trim();
+    if (firstSentenceDesc && firstSentenceDesc.length > 15 && !rawVariants.includes(firstSentenceDesc)) {
+      rawVariants.push(detectedLocation !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${detectedLocation}: ${firstSentenceDesc}` : firstSentenceDesc);
+    }
   }
-  const rawOptions = [opt1, opt2, opt3, opt4];
-  const headlineOptions = rawOptions.map(
-    (h) => sanitizePressNoteFlattery(h).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()
-  );
+  if (baseContent && baseContent.length > 30) {
+    const firstSentenceContent = baseContent.split(/[।\.\!\?]/)[0].trim();
+    if (firstSentenceContent && firstSentenceContent.length > 15 && !rawVariants.includes(firstSentenceContent)) {
+      rawVariants.push(firstSentenceContent);
+    }
+  }
+  if (baseTitle && baseDesc) {
+    const descSecondPart = baseDesc.split(/[।\.\!\?]/)[1]?.trim();
+    if (descSecondPart && descSecondPart.length > 15) {
+      rawVariants.push(descSecondPart);
+    } else {
+      const impactVariant = `${baseTitle}: \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0924\u0925\u094D\u092F\u094B\u0902 \u092A\u0930 \u0905\u092A\u0921\u0947\u091F`;
+      if (!rawVariants.includes(impactVariant)) {
+        rawVariants.push(impactVariant);
+      }
+    }
+  }
+  const distinctCleanOptions = [];
+  for (const opt of rawVariants) {
+    const sanitized = sanitizePressNoteFlattery(opt).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+    if (sanitized && !isInvalidUrlHeadline(sanitized) && !distinctCleanOptions.includes(sanitized)) {
+      distinctCleanOptions.push(sanitized);
+    }
+  }
+  if (distinctCleanOptions.length === 0) {
+    distinctCleanOptions.push(
+      detectedLocation !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${detectedLocation}: \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u092B\u0948\u0938\u0932\u093E, \u0905\u0917\u094D\u0930\u093F\u092E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940` : "\u0924\u093E\u091C\u093C\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u092B\u0948\u0938\u0932\u093E, \u0905\u0917\u094D\u0930\u093F\u092E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940"
+    );
+  }
+  const headlineOptions = distinctCleanOptions.slice(0, 4);
   const headline = headlineOptions[0];
   const words = headline.split(/\s+/).filter(Boolean);
   const highlightWords = [];
@@ -2935,6 +3024,9 @@ app.post("/api/process-news-command", async (req, res) => {
     const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
     const targetArea = headline_area || tplConfig.headline_area;
     let fetchedArticleSnippet = "";
+    let effectiveArticleTitle = "";
+    let effectiveArticleDesc = "";
+    let articleBodySnippets = "";
     const pickedImages = {};
     let extractedArticleMeta = void 0;
     let effectiveInput = (rawInputText || "").trim();
@@ -2957,8 +3049,8 @@ app.post("/api/process-news-command", async (req, res) => {
             );
             const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:description["']/i);
             const twitterDescMatch = html.match(/<meta[^>]*name=["']twitter:description["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:description["']/i);
-            const effectiveArticleTitle2 = ogTitleMatch && ogTitleMatch[1]?.trim() || titleMatch && titleMatch[1]?.trim() || twitterTitleMatch && twitterTitleMatch[1]?.trim() || "";
-            const effectiveArticleDesc2 = ogDescMatch && ogDescMatch[1]?.trim() || metaDescMatch && metaDescMatch[1]?.trim() || twitterDescMatch && twitterDescMatch[1]?.trim() || "";
+            effectiveArticleTitle = ogTitleMatch && ogTitleMatch[1]?.trim() || titleMatch && titleMatch[1]?.trim() || twitterTitleMatch && twitterTitleMatch[1]?.trim() || "";
+            effectiveArticleDesc = ogDescMatch && ogDescMatch[1]?.trim() || metaDescMatch && metaDescMatch[1]?.trim() || twitterDescMatch && twitterDescMatch[1]?.trim() || "";
             const cleanBodyText = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, " ").replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, " ").replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, " ").replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, " ").replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, " ");
             const articleTagMatch = cleanBodyText.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
             const textSource = articleTagMatch ? articleTagMatch[1] : cleanBodyText;
@@ -2971,42 +3063,71 @@ app.post("/api/process-news-command", async (req, res) => {
                 if (extractedParagraphs.join("\n\n").length >= 2500) break;
               }
             }
-            const articleBodySnippets2 = extractedParagraphs.join("\n\n");
-            if (effectiveArticleTitle2 || effectiveArticleDesc2 || articleBodySnippets2) {
-              extractedArticleMeta = {
-                title: effectiveArticleTitle2,
-                description: effectiveArticleDesc2,
-                content: articleBodySnippets2,
-                imageUrl: void 0,
-                // will set below
-                linkUrl: rawLink
-              };
-            }
-            fetchedArticleSnippet = `
-Title: ${effectiveArticleTitle2}
-Description: ${effectiveArticleDesc2}
-Facts & Content: ${articleBodySnippets2 || effectiveArticleDesc2 || effectiveArticleTitle2}
-Source URL: ${rawLink}
-`;
+            articleBodySnippets = extractedParagraphs.join("\n\n");
             const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
             const twitterImageMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["']/i);
             const foundImages = [];
             if (ogImageMatch && ogImageMatch[1]) {
-              foundImages.push(ogImageMatch[1].trim());
+              const resolved = resolveUrl(ogImageMatch[1].trim(), rawLink);
+              if (resolved) foundImages.push(resolved);
             }
-            if (twitterImageMatch && twitterImageMatch[1] && !foundImages.includes(twitterImageMatch[1].trim())) {
-              foundImages.push(twitterImageMatch[1].trim());
+            if (twitterImageMatch && twitterImageMatch[1]) {
+              const resolved = resolveUrl(twitterImageMatch[1].trim(), rawLink);
+              if (resolved && !foundImages.includes(resolved)) {
+                foundImages.push(resolved);
+              }
+            }
+            try {
+              const jsonLdMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+              for (const jm of jsonLdMatches) {
+                try {
+                  const jdata = JSON.parse(jm[1].trim());
+                  const jitems = Array.isArray(jdata) ? jdata : jdata?.["@graph"] ? jdata["@graph"] : [jdata];
+                  for (const item of jitems) {
+                    if (item && (item["@type"] === "NewsArticle" || item["@type"] === "Article" || item["@type"] === "ReportageNewsArticle" || item.headline)) {
+                      if (!effectiveArticleTitle && item.headline) effectiveArticleTitle = cleanHtmlEntities(String(item.headline));
+                      if (!effectiveArticleDesc && item.description) effectiveArticleDesc = cleanHtmlEntities(String(item.description));
+                      if (!articleBodySnippets && item.articleBody) articleBodySnippets = cleanHtmlEntities(String(item.articleBody)).slice(0, 2500);
+                      const img = item.image?.url || (typeof item.image === "string" ? item.image : Array.isArray(item.image) ? item.image[0] : null);
+                      if (img) {
+                        const resolvedImg = resolveUrl(typeof img === "object" ? img.url : img, rawLink);
+                        if (resolvedImg && !foundImages.includes(resolvedImg)) foundImages.unshift(resolvedImg);
+                      }
+                    }
+                  }
+                } catch {
+                }
+              }
+            } catch {
             }
             const imgMatches = html.matchAll(
-              /<img[^>]+src=["'](https?:\/\/[^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi
+              /<img[^>]+src=["']([^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi
             );
             for (const match of imgMatches) {
               const src = match[1];
-              if (src && !src.includes("logo") && !src.includes("icon") && !src.includes("avatar") && !foundImages.includes(src)) {
-                foundImages.push(src);
-                if (foundImages.length >= 4) break;
+              if (src && !src.includes("logo") && !src.includes("icon") && !src.includes("avatar")) {
+                const resolved = resolveUrl(src, rawLink);
+                if (resolved && !foundImages.includes(resolved)) {
+                  foundImages.push(resolved);
+                  if (foundImages.length >= 4) break;
+                }
               }
             }
+            if (effectiveArticleTitle || effectiveArticleDesc || articleBodySnippets) {
+              extractedArticleMeta = {
+                title: effectiveArticleTitle,
+                description: effectiveArticleDesc,
+                content: articleBodySnippets,
+                imageUrl: foundImages[0] ? `/api/proxy-image?url=${encodeURIComponent(foundImages[0])}` : void 0,
+                linkUrl: rawLink
+              };
+            }
+            fetchedArticleSnippet = `
+Title: ${effectiveArticleTitle}
+Description: ${effectiveArticleDesc}
+Facts & Content: ${articleBodySnippets || effectiveArticleDesc || effectiveArticleTitle}
+Source URL: ${rawLink}
+`;
             if (foundImages.length > 0) {
               pickedImages.main = `/api/proxy-image?url=${encodeURIComponent(foundImages[0])}`;
               if (extractedArticleMeta) {

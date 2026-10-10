@@ -1600,7 +1600,8 @@ export default function App() {
 
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
-        <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
+        <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
+          <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
           {/* Studio Type Selector: Smoothly collapses on scroll to maximize vertical editing space */}
           <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible ? 'max-h-20 opacity-100 mb-3' : 'max-h-0 opacity-0 mb-0 pointer-events-none'
@@ -1988,6 +1989,7 @@ export default function App() {
             </>
           )}
         </main>
+      </ErrorBoundary>
       )}
 
       {/* 2. Videos Tab (Rich Video News Feed) */}

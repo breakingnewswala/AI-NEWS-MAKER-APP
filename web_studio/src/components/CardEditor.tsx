@@ -40,6 +40,7 @@ import {
   Calendar,
   Plus,
   Minus,
+  FolderOpen,
 } from 'lucide-react';
 import {
   saveCustomFrame,
@@ -172,7 +173,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const effectiveTier = getEffectiveUserTier(currentUser);
   const isAdmin = effectiveAdmin;
   const isProfileLocked = !effectiveAdmin && isChannelProfileLocked(currentUser);
-  const canUseCustomHF = effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra';
+  const canUseCustomHF = true; // Always allow Master Branding toggle and custom branding in Web Studio
   const canUploadCustomFont = effectiveAdmin || effectiveTier === 'ultra';
 
   // Package-based headline fonts system (prepared for per-package font mappings)
@@ -243,6 +244,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const setMobileViewMode = onToggleMobileViewMode || setInternalMobileViewMode;
   const defaultFilter = effectiveAdmin ? 'basic' : (effectiveTier === 'ultra' ? 'ultra' : effectiveTier === 'professional' ? 'professional' : effectiveTier === 'advanced' ? 'advanced' : 'basic');
   const [templatePlanFilter, setTemplatePlanFilter] = React.useState<string>(defaultFilter);
+  const [showSearchHelper, setShowSearchHelper] = React.useState<boolean>(false);
 
   React.useEffect(() => {
     if (effectiveAdmin) {
@@ -2339,334 +2341,441 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {[
-              { id: 'single' as CardLayout, label: '1 इमेज', sub: 'सिंगल फुल' },
-              { id: 'split-v' as CardLayout, label: '2 इमेज (35-65)', sub: '35% ऊपर, 65% नीचे' },
-              { id: 'double' as CardLayout, label: '2 इमेज (50-50)', sub: '50% ऊपर, 50% नीचे' },
-              { id: 'double-h' as CardLayout, label: '2 इमेज (L-R)', sub: 'लेफ्ट-राइट 50-50' },
-              { id: 'grid-3' as CardLayout, label: '3 इमेज (2-1)', sub: '2 ऊपर, 1 नीचे' },
-              { id: 'grid-3-bottom' as CardLayout, label: '3 इमेज (1-2)', sub: '1 ऊपर, 2 नीचे' },
-              { id: 'grid-4' as CardLayout, label: '4 इमेज (2x2)', sub: '2 ऊपर, 2 नीचे ग्रिड' },
-            ].map((l) => {
-              const isSelected =
-                card.layout === l.id ||
-                (l.id === 'double-h' && card.layout === 'split-h');
-              return (
-                <button
-                  key={l.id}
-                  type="button"
-                  onClick={() => onChange({ layout: l.id })}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold border text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                    isSelected
-                      ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm'
-                      : 'border-neutral-800 bg-neutral-950 text-neutral-400 hover:border-neutral-700'
-                  }`}
-                >
-                  <span>{l.label}</span>
-                  <span className="text-[10px] font-normal opacity-80">{l.sub}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Layout specific tips */}
-        {card.layout === 'split-v' && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ 35-65 अप-डाउन मोड: 35% ऊपर इमेज (Top), 65% नीचे इमेज (Bottom) - नीचे की फोटो पूरी तरह साफ़ दिखेगी!</span>
-            <span className="text-[11px] font-bold bg-yellow-500 text-neutral-950 px-2 py-0.5 rounded">
-              35-65 Ratio
-            </span>
-          </div>
-        )}
-
-        {card.layout === 'double' && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ 50-50 अप-डाउन मोड: 50% आधी फोटो ऊपर, 50% आधी फोटो नीचे।</span>
-            <span className="text-[11px] font-bold bg-yellow-500 text-neutral-950 px-2 py-0.5 rounded">
-              50-50 Ratio
-            </span>
-          </div>
-        )}
-
-        {(card.layout === 'double-h' || card.layout === 'split-h') && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ 50-50 लेफ्ट-राइट मोड: आधी फोटो बाईं तरफ, आधी फोटो दाईं तरफ।</span>
-            <span className="text-[11px] font-bold bg-yellow-500 text-neutral-950 px-2 py-0.5 rounded">
-              Side-by-Side
-            </span>
-          </div>
-        )}
-
-        {card.layout === 'grid-3' && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ 3 फोटो मोड (2 ऊपर, 1 नीचे): 2 फोटो ऊपर (लेफ्ट-राइट), 1 चौड़ी फोटो नीचे।</span>
-          </div>
-        )}
-
-        {card.layout === 'grid-3-bottom' && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ 3 फोटो मोड (1 ऊपर, 2 नीचे): 1 चौड़ी फोटो ऊपर, 2 फोटो नीचे (लेफ्ट-राइट)।</span>
-          </div>
-        )}
-
-        {card.layout === 'grid-4' && (
-          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200 flex items-center justify-between">
-            <span>✨ 4 फोटो मोड (2x2 ग्रिड): 2 फोटो ऊपर (लेफ्ट-राइट), 2 फोटो नीचे (लेफ्ट-राइट)।</span>
-            <span className="text-[11px] font-bold bg-yellow-500 text-neutral-950 px-2 py-0.5 rounded">
-              4 Photos 2x2
-            </span>
-          </div>
-        )}
-
-
-
-        {/* Upload Buttons according to selected layout */}
-        <div className="pt-2 border-t border-neutral-800/80 space-y-3">
-          {/* Internet Photo Search Workflow & Prompt Restoration */}
-          {(!card.images?.main || card.images.main.includes('placeholder_news_search') || card.images.main.includes('placeholder_news_photo')) && (
-            <div className="bg-gradient-to-br from-blue-950/70 via-slate-900 to-amber-950/40 border-2 border-blue-500/50 rounded-xl p-3.5 sm:p-4 space-y-3 shadow-xl">
-              <div className="flex items-center justify-between gap-2 border-b border-blue-500/30 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-                  <span className="text-xs sm:text-sm font-extrabold text-blue-300 flex items-center gap-1.5">
-                    <Globe className="w-4 h-4 text-blue-400" />
-                    इंटरनेट से संबंधित समाचार फोटो खोजें
-                  </span>
+          <div className="space-y-3">
+            {/* 1. Primary Layout Selection Tabs: 1 Image vs 2 Image vs Multi Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => onChange({ layout: 'single' })}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
+                  card.layout === 'single' || card.layout === 'full'
+                    ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                    : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-yellow-400" />
+                  <span>1 इमेज (Single)</span>
                 </div>
-                <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/40 px-2 py-0.5 rounded-full">
-                  स्टेप 4 गाइडेंस
-                </span>
-              </div>
+                <span className="text-[10px] font-normal opacity-80">सिंगल फुल स्क्रीन</span>
+              </button>
 
-              <div className="bg-slate-950/80 border border-blue-500/20 rounded-lg p-3 text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1.5">
-                <p className="font-semibold text-amber-300">
-                  📌 <b>निर्देश:</b> इस खबर के विषय के अनुसार इंटरनेट पर संबंधित और वास्तविक समाचार फोटो खोजें। फोटो खबर के वास्तविक विषय, व्यक्ति, स्थान या घटना से संबंधित हो।
-                </p>
-                <p className="text-slate-300 text-[11px] sm:text-xs">
-                  ⚠️ गलत व्यक्ति, असंबंधित फोटो, logo, advertisement, stock image या unrelated image का उपयोग न करें। चुनी गई फोटो को डाउनलोड करके Graphic Studio के <b>Step 4 / Photos</b> में upload करें।
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (card.layout !== 'split-v' && card.layout !== 'double' && card.layout !== 'double-h' && card.layout !== 'split-h') {
+                    onChange({ layout: 'split-v' });
+                  }
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
+                  card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h'
+                    ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                    : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <LayoutGrid className="w-4 h-4 text-yellow-400" />
+                  <span>2 इमेज (Two Photos)</span>
+                </div>
+                <span className="text-[10px] font-normal opacity-80">2 फोटो अलग स्लॉट</span>
+              </button>
 
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {(() => {
-                  const searchQuery = (card.headline || card.title || 'ताज़ा समाचार')
-                    .replace(/\[\/?(yellow|red|white|cyan|green|orange|gold)\]/gi, '')
-                    .slice(0, 70)
-                    .trim();
-                  const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(searchQuery + (card.location ? ` ${card.location}` : ''))}`;
-                  return (
-                    <>
-                      <a
-                        href={searchUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 py-2 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-lg shadow-md flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer text-center"
-                      >
-                        <Globe className="w-3.5 h-3.5" />
-                        <span>गूगल इमेज पर फोटो खोजें</span>
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(searchQuery);
-                          alert('सर्च क्वेरी क्लिपबोर्ड में कॉपी हो गई!');
-                        }}
-                        className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-lg border border-slate-700 flex items-center justify-center gap-1 transition cursor-pointer"
-                        title="सर्च टेक्स्ट कॉपी करें"
-                      >
-                        <span>क्वेरी कॉपी</span>
-                      </button>
-                    </>
-                  );
-                })()}
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (card.layout !== 'grid-3' && card.layout !== 'grid-3-bottom' && card.layout !== 'grid-4') {
+                    onChange({ layout: 'grid-3' });
+                  }
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border col-span-2 sm:col-span-1 ${
+                  card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4'
+                    ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                    : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-yellow-400" />
+                  <span>मल्टी ग्रिड (3-4)</span>
+                </div>
+                <span className="text-[10px] font-normal opacity-80">3 या 4 तस्वीरें</span>
+              </button>
             </div>
-          )}
 
-          <div className="text-xs font-semibold text-neutral-300">
-            तस्वीरें अपलोड करें:
-          </div>
+            {/* Sub-variant selector for 2 Images */}
+            {(card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h') && (
+              <div className="p-2.5 bg-neutral-950 rounded-xl border border-yellow-500/30 space-y-2">
+                <div className="text-[11px] font-bold text-yellow-300 flex items-center justify-between">
+                  <span>2 इमेज स्टाइल चुनें:</span>
+                  <span className="text-[10px] text-neutral-400">नीचे 2 अलग फोटो स्लॉट सक्रिय हैं</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'split-v' as CardLayout, label: '35-65 अप-डाउन', desc: '35% ऊपर, 65% नीचे' },
+                    { id: 'double' as CardLayout, label: '50-50 अप-डाउन', desc: '50% ऊपर, 50% नीचे' },
+                    { id: 'double-h' as CardLayout, label: '50-50 L-R', desc: 'लेफ्ट-राइट' },
+                  ].map((l) => {
+                    const isSelected = card.layout === l.id || (l.id === 'double-h' && card.layout === 'split-h');
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => onChange({ layout: l.id })}
+                        className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
+                          isSelected
+                            ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm font-bold'
+                            : 'border-neutral-800 bg-neutral-900/60 text-neutral-400 hover:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-[11px]">{l.label}</span>
+                        <span className="text-[9px] opacity-75">{l.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Photo 1 */}
-            <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 space-y-2">
-              <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
-                <span>
-                  {card.layout === 'single' || card.layout === 'full'
-                    ? 'मुख्य फोटो (Single Photo)'
-                    : card.layout === 'split-v'
-                    ? 'पहली फोटो (35% ऊपर - Top)'
-                    : card.layout === 'double'
-                    ? 'पहली फोटो (50% ऊपर - Top)'
-                    : card.layout === 'double-h' || card.layout === 'split-h'
-                    ? 'पहली फोटो (50% बाईं - Left Half)'
-                    : card.layout === 'grid-3' || card.layout === 'grid-4'
-                    ? 'पहली फोटो (ऊपर बाईं - Top Left)'
-                    : card.layout === 'grid-3-bottom'
-                    ? 'पहली फोटो (ऊपर चौड़ी - Top Wide)'
-                    : 'मुख्य बैकग्राउंड फोटो (Background)'}
+            {/* Sub-variant selector for Multi Grid */}
+            {(card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4') && (
+              <div className="p-2.5 bg-neutral-950 rounded-xl border border-yellow-500/30 space-y-2">
+                <div className="text-[11px] font-bold text-yellow-300">
+                  मल्टी ग्रिड स्टाइल चुनें:
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'grid-3' as CardLayout, label: '3 इमेज (2-1)', desc: '2 ऊपर, 1 नीचे' },
+                    { id: 'grid-3-bottom' as CardLayout, label: '3 इमेज (1-2)', desc: '1 ऊपर, 2 नीचे' },
+                    { id: 'grid-4' as CardLayout, label: '4 इमेज (2x2)', desc: '4 फोटो ग्रिड' },
+                  ].map((l) => {
+                    const isSelected = card.layout === l.id;
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => onChange({ layout: l.id })}
+                        className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
+                          isSelected
+                            ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm font-bold'
+                            : 'border-neutral-800 bg-neutral-900/60 text-neutral-400 hover:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-[11px]">{l.label}</span>
+                        <span className="text-[9px] opacity-75">{l.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 2. Photo Slots Workspace */}
+            <div className="pt-2 border-t border-neutral-800/80 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-yellow-400" />
+                  <span>
+                    {card.layout === 'single' || card.layout === 'full'
+                      ? 'फोटो वर्कस्पेस (1 Photo Slot)'
+                      : card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h'
+                      ? 'फोटो वर्कस्पेस (2 Photo Slots)'
+                      : 'फोटो वर्कस्पेस (मल्टी फोटो स्लॉट)'}
+                  </span>
                 </span>
-                <span className="text-yellow-400 text-[10px] font-bold">अनिवार्य</span>
+                <span className="text-[10px] text-neutral-400">
+                  चयनित फोटो यहाँ लाइव प्रीव्यू होगी
+                </span>
               </div>
 
-              {/* Current photo preview thumbnail */}
-              {card.images.main && (
-                <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
-                  <img
-                    src={card.images.main}
-                    alt="Photo 1 preview"
-                    className="w-12 h-12 object-cover rounded border border-neutral-700 shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] text-green-400 font-semibold truncate flex items-center gap-1">
-                      <Check className="w-3 h-3 text-green-400" /> फोटो एक्टिव है
-                    </p>
-                    <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+              {/* SINGLE PHOTO WORKSPACE: Exactly 1 Photo Slot */}
+              {(card.layout === 'single' || card.layout === 'full' || card.frameDesign === 'jacket-quote') && (
+                <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>मुख्य फोटो (Photo Slot 1)</span>
+                    </span>
+                    <span className="text-yellow-400 text-[10px] font-bold bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded">
+                      सिंगल फोटो
+                    </span>
+                  </div>
+
+                  {card.images.main ? (
+                    <div className="flex items-center gap-3 bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                      <img
+                        src={card.images.main}
+                        alt="Photo 1 preview"
+                        className="w-16 h-16 object-cover rounded-md border border-neutral-700 shadow-sm shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-green-400 font-bold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> फोटो 1 सक्रिय है
+                        </p>
+                        <p className="text-[11px] text-neutral-400 mt-0.5 truncate">लाइव कार्ड व डाउनलोड में यह फोटो दिखाई देगी</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-neutral-900/40 rounded-lg border border-dashed border-neutral-800 text-center text-xs text-neutral-400">
+                      कोई फोटो चयनित नहीं है। कृपया नीचे से मुख्य फोटो अपलोड करें।
+                    </div>
+                  )}
+
+                  <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-yellow-500/60 hover:border-yellow-400 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold hover:text-white bg-yellow-500/10 hover:bg-yellow-500/20 transition-all shadow-sm">
+                    <Upload className="w-3.5 h-3.5 text-yellow-400" />
+                    <span>{card.images.main ? 'नई फोटो अपलोड / बदलें' : 'मुख्य फोटो अपलोड करें'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleFileUpload('main', f);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* TWO IMAGES WORKSPACE: Exactly 2 Photo Slots side-by-side */}
+              {(card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Slot 1 (पहली फोटो) */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-yellow-400" />
+                        <span>पहली फोटो (Slot 1)</span>
+                      </span>
+                      <span className="text-[10px] text-yellow-400 font-bold bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20">
+                        {card.layout === 'split-v' ? '35% ऊपर' : card.layout === 'double' ? '50% ऊपर' : '50% बाईं'}
+                      </span>
+                    </div>
+
+                    {card.images.main ? (
+                      <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
+                        <img
+                          src={card.images.main}
+                          alt="Photo 1 preview"
+                          className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
+                            <Check className="w-3 h-3 text-green-400" /> फोटो 1 सक्रिय
+                          </p>
+                          <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-neutral-900/40 rounded border border-dashed border-neutral-800 text-center text-[11px] text-neutral-400">
+                        फोटो 1 खाली है
+                      </div>
+                    )}
+
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-500/50 hover:border-yellow-400 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold bg-yellow-500/10 hover:bg-yellow-500/20 transition-all">
+                      <Upload className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFileUpload('main', f);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Slot 2 (दूसरी फोटो) */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                        <span>दूसरी फोटो (Slot 2)</span>
+                      </span>
+                      <span className="text-[10px] text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
+                        {card.layout === 'split-v' ? '65% नीचे' : card.layout === 'double' ? '50% नीचे' : '50% दाईं'}
+                      </span>
+                    </div>
+
+                    {card.images.second ? (
+                      <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
+                        <img
+                          src={card.images.second}
+                          alt="Photo 2 preview"
+                          className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
+                            <Check className="w-3 h-3 text-green-400" /> फोटो 2 सक्रिय
+                          </p>
+                          <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-neutral-900/40 rounded border border-dashed border-neutral-800 text-center text-[11px] text-neutral-400">
+                        दूसरी फोटो अपलोड करें
+                      </div>
+                    )}
+
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-blue-500/50 hover:border-blue-400 rounded-lg cursor-pointer text-xs text-blue-300 font-bold bg-blue-500/10 hover:bg-blue-500/20 transition-all">
+                      <Upload className="w-3.5 h-3.5 text-blue-400" />
+                      <span>{card.images.second ? 'फोटो 2 बदलें' : 'दूसरी फोटो अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFileUpload('second', f);
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
               )}
 
-              <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-yellow-500/50 hover:border-yellow-400 rounded-md cursor-pointer text-xs text-yellow-300 font-bold hover:text-white bg-yellow-500/10 hover:bg-yellow-500/20 transition-all">
-                <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                <span>{card.images.main ? 'नई फोटो अपलोड / बदलें' : 'फोटो अपलोड करें'}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleFileUpload('main', f);
-                  }}
-                />
-              </label>
+              {/* MULTI GRID WORKSPACE (3 or 4 Images) */}
+              {(card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4') && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Photo 1 */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2">
+                    <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
+                      <span>फोटो 1 (मुख्य)</span>
+                      <span className="text-yellow-400 text-[10px] font-bold">स्लॉट 1</span>
+                    </div>
+                    {card.images.main && (
+                      <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
+                        <img src={card.images.main} alt="Photo 1" className="w-10 h-10 object-cover rounded" />
+                        <span className="text-[10px] text-green-400">सक्रिय</span>
+                      </div>
+                    )}
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-500/50 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold">
+                      <Upload className="w-3 h-3 text-yellow-400" />
+                      <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('main', f); }} />
+                    </label>
+                  </div>
+
+                  {/* Photo 2 */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2">
+                    <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
+                      <span>फोटो 2</span>
+                      <span className="text-blue-400 text-[10px] font-bold">स्लॉट 2</span>
+                    </div>
+                    {card.images.second && (
+                      <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
+                        <img src={card.images.second} alt="Photo 2" className="w-10 h-10 object-cover rounded" />
+                        <span className="text-[10px] text-green-400">सक्रिय</span>
+                      </div>
+                    )}
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-blue-500/50 rounded-lg cursor-pointer text-xs text-blue-300 font-bold">
+                      <Upload className="w-3 h-3 text-blue-400" />
+                      <span>{card.images.second ? 'फोटो 2 बदलें' : 'फोटो 2 अपलोड'}</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('second', f); }} />
+                    </label>
+                  </div>
+
+                  {/* Photo 3 */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2">
+                    <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
+                      <span>फोटो 3</span>
+                      <span className="text-purple-400 text-[10px] font-bold">स्लॉट 3</span>
+                    </div>
+                    {card.images.third && (
+                      <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
+                        <img src={card.images.third} alt="Photo 3" className="w-10 h-10 object-cover rounded" />
+                        <span className="text-[10px] text-green-400">सक्रिय</span>
+                      </div>
+                    )}
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-purple-500/50 rounded-lg cursor-pointer text-xs text-purple-300 font-bold">
+                      <Upload className="w-3 h-3 text-purple-400" />
+                      <span>{card.images.third ? 'फोटो 3 बदलें' : 'फोटो 3 अपलोड'}</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('third', f); }} />
+                    </label>
+                  </div>
+
+                  {/* Photo 4 (if grid-4) */}
+                  {card.layout === 'grid-4' && (
+                    <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2">
+                      <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
+                        <span>फोटो 4</span>
+                        <span className="text-emerald-400 text-[10px] font-bold">स्लॉट 4</span>
+                      </div>
+                      {card.images.fourth && (
+                        <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
+                          <img src={card.images.fourth} alt="Photo 4" className="w-10 h-10 object-cover rounded" />
+                          <span className="text-[10px] text-green-400">सक्रिय</span>
+                        </div>
+                      )}
+                      <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-emerald-500/50 rounded-lg cursor-pointer text-xs text-emerald-300 font-bold">
+                        <Upload className="w-3 h-3 text-emerald-400" />
+                        <span>{card.images.fourth ? 'फोटो 4 बदलें' : 'फोटो 4 अपलोड'}</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('fourth', f); }} />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Compact / Collapsible Google Image Search Assistant (Below Photo Slots) */}
+              <div className="pt-2 border-t border-neutral-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowSearchHelper((prev) => !prev)}
+                  className="w-full p-2.5 bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 rounded-xl flex items-center justify-between text-xs font-bold text-neutral-300 transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2 text-blue-300">
+                    <Globe className="w-4 h-4 text-blue-400" />
+                    <span>इंटरनेट समाचार फोटो खोजें (गूगल इमेज सर्च)</span>
+                  </span>
+                  <span className="text-[10px] text-neutral-400 flex items-center gap-1">
+                    <span>{showSearchHelper ? 'छुपाएं ▲' : 'खोलें ▼'}</span>
+                  </span>
+                </button>
+
+                {showSearchHelper && (
+                  <div className="mt-2 p-3 bg-gradient-to-br from-blue-950/60 to-slate-900 border border-blue-500/30 rounded-xl space-y-2 text-xs">
+                    <p className="text-[11px] text-neutral-300 leading-relaxed">
+                      खबर के विषय से संबंधित वास्तविक समाचार फोटो गूगल से खोजकर डाउनलोड करें और ऊपर दिए गए फोटो स्लॉट में अपलोड करें।
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {(() => {
+                        const searchQuery = (card.headline || card.title || 'ताज़ा समाचार')
+                          .replace(/\[\/?(yellow|red|white|cyan|green|orange|gold)\]/gi, '')
+                          .slice(0, 70)
+                          .trim();
+                        const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(searchQuery + (card.location ? ` ${card.location}` : ''))}`;
+                        return (
+                          <>
+                            <a
+                              href={searchUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-1.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition text-center"
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                              <span>गूगल इमेज पर फोटो खोजें</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(searchQuery);
+                                alert('सर्च क्वेरी क्लिपबोर्ड में कॉपी हो गई!');
+                              }}
+                              className="py-1.5 px-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs rounded-lg border border-neutral-700 flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <span>क्वेरी कॉपी</span>
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-
-            {/* Photo 2 (for double, split-v, double-h, grid-3, grid-3-bottom, grid-4) */}
-            {(card.layout === 'double' ||
-              card.layout === 'split-v' ||
-              card.layout === 'double-h' ||
-              card.layout === 'split-h' ||
-              card.layout === 'grid-3' ||
-              card.layout === 'grid-3-bottom' ||
-              card.layout === 'grid-4') && (
-              <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 space-y-2">
-                <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
-                  <span>
-                    {card.layout === 'split-v'
-                      ? 'दूसरी फोटो (65% नीचे - Bottom)'
-                      : card.layout === 'double'
-                      ? 'दूसरी फोटो (50% नीचे - Bottom)'
-                      : card.layout === 'double-h' || card.layout === 'split-h'
-                      ? 'दूसरी फोटो (50% दाईं - Right Half)'
-                      : card.layout === 'grid-3' || card.layout === 'grid-4'
-                      ? 'दूसरी फोटो (ऊपर दाईं - Top Right)'
-                      : 'दूसरी फोटो (नीचे बाईं - Bottom Left)'}
-                  </span>
-                </div>
-
-                {card.images.second && (
-                  <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
-                    <img
-                      src={card.images.second}
-                      alt="Photo 2 preview"
-                      className="w-12 h-12 object-cover rounded border border-neutral-700 shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-green-400 font-semibold truncate flex items-center gap-1">
-                        <Check className="w-3 h-3 text-green-400" /> फोटो 2 एक्टिव है
-                      </p>
-                      <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
-                    </div>
-                  </div>
-                )}
-
-                <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-neutral-700 hover:border-yellow-500 rounded-md cursor-pointer text-xs text-neutral-400 hover:text-white bg-neutral-900/50 transition-all">
-                  <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>{card.images.second ? 'फोटो 2 बदलें' : 'फोटो 2 अपलोड करें'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleFileUpload('second', f);
-                    }}
-                  />
-                </label>
-              </div>
-            )}
-
-            {/* Photo 3 (for grid-3, grid-3-bottom, grid-4) */}
-            {(card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4') && (
-              <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 space-y-2">
-                <div className="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
-                  <span>
-                    {card.layout === 'grid-3'
-                      ? 'तीसरी फोटो (नीचे चौड़ी - Bottom Wide)'
-                      : card.layout === 'grid-4'
-                      ? 'तीसरी फोटो (नीचे बाईं - Bottom Left)'
-                      : 'तीसरी फोटो (नीचे दाईं - Bottom Right)'}
-                  </span>
-                </div>
-
-                {card.images.third && (
-                  <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
-                    <img
-                      src={card.images.third}
-                      alt="Photo 3 preview"
-                      className="w-12 h-12 object-cover rounded border border-neutral-700 shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] text-green-400 font-semibold truncate flex items-center gap-1">
-                        <Check className="w-3 h-3 text-green-400" /> फोटो 3 एक्टिव है
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-neutral-700 hover:border-neutral-500 rounded-md cursor-pointer text-xs text-neutral-400 hover:text-white bg-neutral-900/50 transition-all">
-                  <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>{card.images.third ? 'फोटो 3 बदलें' : 'फोटो 3 अपलोड करें'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleFileUpload('third', f);
-                    }}
-                  />
-                </label>
-              </div>
-            )}
-
-            {/* Photo 4 (for grid-4) */}
-            {card.layout === 'grid-4' && (
-              <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
-                <div className="text-[11px] font-bold text-neutral-300 mb-1.5 flex items-center justify-between">
-                  <span>चौथी फोटो (नीचे दाईं - Bottom Right)</span>
-                </div>
-                <label className="flex items-center justify-center gap-2 p-2 border border-dashed border-neutral-700 hover:border-neutral-500 rounded-md cursor-pointer text-xs text-neutral-400 hover:text-white bg-neutral-900/50 transition-all">
-                  <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>फोटो 4 अपलोड करें</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleFileUpload('fourth', f);
-                    }}
-                  />
-                </label>
-              </div>
-            )}
-
           </div>
-        </div>
+        )}
 
           {/* 3.1 Photo Crop & Move Controls (Left, Right, Center, Up, Down, Zoom) */}
           <div className="bg-neutral-950/80 border border-neutral-800 rounded-lg p-3.5 space-y-3 pt-3">
@@ -3023,8 +3132,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             हेडर लोगो व फुटर ब्रैंडिंग सीधे आपकी प्रोफ़ाइल से ऑटो-लिंक रहते हैं। प्रो/VIP यूज़र मास्टर ब्रांडिंग बंद कर सकते हैं।
           </p>
 
-          {/* When Master Branding is OFF (PRO / VIP / Admin): Header & Footer Combo or 4:5 Full Frame */}
-          {canUseCustomHF && card.showMasterBranding === false && card.frameDesign !== 'basic' && card.frameDesign !== 'jacket-basic' && (
+          {/* When Master Branding is OFF: Header & Footer Combo or 4:5 Full Frame */}
+          {card.showMasterBranding === false && (
             <div className="pt-2 border-t border-neutral-800/80 space-y-3">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="flex items-center gap-1.5 text-amber-300 font-bold">
