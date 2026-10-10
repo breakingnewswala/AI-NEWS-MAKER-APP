@@ -551,6 +551,11 @@ export function recordUserPlanAssignment(record: PlanUserRecord): void {
     const filtered = existing.filter((u) => u.email !== record.email);
     const updated = [record, ...filtered];
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(updated));
+    
+    // Auto-sync to Google Sheet in real time
+    import('./googleSheetsUserSync').then(({ syncUsersToGoogleSheet }) => {
+      syncUsersToGoogleSheet(updated).catch(() => {});
+    }).catch(() => {});
   } catch (e) {
     console.warn('Error saving plan user:', e);
   }

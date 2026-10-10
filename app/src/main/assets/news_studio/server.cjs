@@ -4411,15 +4411,39 @@ app.get(
       }
     });
     if (foundPath) {
-      res.setHeader("Content-Type", "application/vnd.android.package-archive");
-      res.setHeader("Content-Disposition", 'attachment; filename="ainewsmaker-app-v1.2.0.apk"');
-      res.setHeader("Cache-Control", "public, max-age=3600");
-      return res.sendFile(import_path.default.resolve(foundPath));
-    } else {
-      return res.status(404).send("APK file is currently being prepared. Please refresh in a moment.");
+      try {
+        const absPath = import_path.default.resolve(foundPath);
+        const stat = import_fs.default.statSync(absPath);
+        res.writeHead(200, {
+          "Content-Type": "application/vnd.android.package-archive",
+          "Content-Length": stat.size,
+          "Content-Disposition": 'attachment; filename="ainewsmaker-app-v1.2.0.apk"',
+          "Cache-Control": "public, max-age=3600",
+          "Access-Control-Allow-Origin": "*"
+        });
+        const stream = import_fs.default.createReadStream(absPath);
+        stream.pipe(res);
+        return;
+      } catch (err) {
+        console.error("Error streaming APK file:", err.message);
+      }
     }
+    return res.status(404).send("APK file is currently being prepared. Please refresh in a moment.");
   }
 );
+var USERS_SHEET_FILE = import_path.default.join(process.cwd(), "users_sheet_database.json");
+app.post("/api/admin/sync-users-sheet", (req, res) => {
+  try {
+    const { users } = req.body;
+    if (Array.isArray(users)) {
+      import_fs.default.writeFileSync(USERS_SHEET_FILE, JSON.stringify(users, null, 2), "utf-8");
+      return res.json({ success: true, count: users.length });
+    }
+    return res.status(400).json({ error: "Users list required" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/admin/update-version-info", (req, res) => {
   try {
     const { version, versionCode, releaseTitle, releaseNotes, downloadUrl, forceUpdate } = req.body;
