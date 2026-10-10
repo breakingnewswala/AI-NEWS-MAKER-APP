@@ -43,6 +43,8 @@ import {
   FolderTree,
   PlusCircle,
   AlertTriangle,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   isUserSuperAdmin,
@@ -1757,10 +1759,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     <optgroup label="पात्र यूज़र्स (Eligible PRO & VIP DESK Users)">
                       {planUsers
                         .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
-                        .map((u) => {
+                        .map((u, idx) => {
                           const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : (u.tier ? u.tier.toUpperCase() : 'BASIC');
                           return (
-                            <option key={u.userId} value={u.email}>
+                            <option key={`${u.userId || u.email}-${idx}`} value={u.email}>
                               ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{tierLabel}]
                             </option>
                           );
@@ -1769,8 +1771,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     <optgroup label="अन्य यूज़र्स (Other Users)">
                       {planUsers
                         .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
-                        .map((u) => (
-                          <option key={u.userId} value={u.email}>
+                        .map((u, idx) => (
+                          <option key={`${u.userId || u.email}-${idx}`} value={u.email}>
                             {u.name ? `${u.name} (${u.email})` : u.email} — [{(u.tier ? u.tier.toUpperCase() : 'BASIC')}]
                           </option>
                         ))}
@@ -2883,8 +2885,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceName(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {savedChannels.map((ch) => (
-                      <option key={ch} value={ch}>{ch}</option>
+                    {savedChannels.map((ch, idx) => (
+                      <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
                     ))}
                   </select>
                 </div>
@@ -2906,8 +2908,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceCategory(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.filter((c) => c.isActive).map((c) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c, idx) => (
+                      <option key={`${c.id}-${idx}`} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -3183,8 +3185,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceName(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
                   >
-                    {savedChannels.map((ch) => (
-                      <option key={ch} value={ch}>{ch}</option>
+                    {savedChannels.map((ch, idx) => (
+                      <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
                     ))}
                   </select>
                 </div>
@@ -3206,8 +3208,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceCategory(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.filter((c) => c.isActive).map((c) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c, idx) => (
+                      <option key={`${c.id}-${idx}`} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -3677,6 +3679,81 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <HelpAndPoliciesView />
             </div>
           )}
+        </div>
+
+        {/* PERMANENT ADMIN SYSTEM CONTROL & APK DOWNLOAD AT BOTTOM OF CONTROL PANEL */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-4 my-6">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold">
+                ⚙️
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  एडमिन सिस्टम टूल्स व एक्शन बटन्स (Admin Control Actions)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  एंड्रॉइड APK डाउनलोड, गूगल शीट यूज़र्स सिंक व बैकअप टूल
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-amber-500 text-slate-950 text-xs font-black rounded-lg">
+              ADMIN ONLY
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            {/* APK Download Button */}
+            <a
+              href="/app-release.apk"
+              download="ainewsmaker-app-v1.2.0.apk"
+              onClick={() => {
+                setTimeout(() => {
+                  window.location.href = '/app-release.apk';
+                }, 300);
+              }}
+              className="p-4 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold">
+                  📲
+                </div>
+                <div>
+                  <div className="text-xs font-black text-white group-hover:text-amber-300 transition">
+                    एंड्रॉइड ऐप APK डाउनलोड करें
+                  </div>
+                  <div className="text-[11px] text-amber-200/80">
+                    Official Release v1.2.0 (38 MB Direct)
+                  </div>
+                </div>
+              </div>
+              <Download className="w-5 h-5 text-amber-400 group-hover:scale-110 transition" />
+            </a>
+
+            {/* Google Sheets Users Sync Button */}
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('ai_news_open_users_sheet_modal'));
+              }}
+              className="p-4 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
+                  📊
+                </div>
+                <div>
+                  <div className="text-xs font-black text-white group-hover:text-emerald-300 transition">
+                    "एआई न्यूज़ मेकर ऐप की गूगल शीट" ऑटो-सिंक
+                  </div>
+                  <div className="text-[11px] text-emerald-200/80">
+                    यूज़र्स डेटाबेस ऑटो-सिंक व गूगल शीट सेटिंग्स
+                  </div>
+                </div>
+              </div>
+              <FileSpreadsheet className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition" />
+            </button>
+          </div>
         </div>
     </div>
   );

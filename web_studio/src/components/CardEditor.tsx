@@ -2486,6 +2486,49 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </span>
               </div>
 
+              {/* EXTRACTED ARTICLE MULTI-PHOTO SELECTOR */}
+              {card.extractedArticlePhotos && card.extractedArticlePhotos.length > 1 && (
+                <div className="p-3 bg-neutral-950 border border-yellow-500/40 rounded-xl space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-yellow-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>लेख की लिंक में उपलब्ध फोटोज़ ({card.extractedArticlePhotos.length}):</span>
+                    </span>
+                    <span className="text-[10px] text-neutral-400">टच करके प्राइमरी फोटो बदलें</span>
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {card.extractedArticlePhotos.map((photoUrl, pIdx) => {
+                      const isSelected = card.images?.main === photoUrl || card.photoUrl === photoUrl;
+                      return (
+                        <button
+                          key={`ext-photo-${pIdx}`}
+                          type="button"
+                          onClick={() => {
+                            onChange({
+                              photoUrl,
+                              images: {
+                                ...card.images,
+                                main: photoUrl,
+                              },
+                            });
+                          }}
+                          className={`relative shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-yellow-400 ring-2 ring-yellow-400/50 scale-105 shadow-lg'
+                              : 'border-neutral-800 opacity-60 hover:opacity-100'
+                          }`}
+                        >
+                          <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
+                            फोटो {pIdx + 1}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* SINGLE PHOTO WORKSPACE: Exactly 1 Photo Slot */}
               {(card.layout === 'single' || card.layout === 'full' || card.frameDesign === 'jacket-quote') && (
                 <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 space-y-3">

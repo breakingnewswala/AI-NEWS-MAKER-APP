@@ -1040,6 +1040,20 @@ export function registerOrUpdateUser(userData: {
     }
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
     window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+
+    // Permanent Backend Database Sync & Realtime Google Sheet Sync
+    const recordToSync = idx >= 0 ? users[idx] : users[users.length - 1];
+    if (recordToSync) {
+      fetch('/api/admin/register-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recordToSync),
+      }).catch(() => {});
+
+      import('./googleSheetsUserSync').then(({ syncUsersToGoogleSheet }) => {
+        syncUsersToGoogleSheet(users).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (e) {
     console.warn('Error in registerOrUpdateUser:', e);
   }

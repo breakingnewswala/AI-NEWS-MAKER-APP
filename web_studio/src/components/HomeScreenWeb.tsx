@@ -192,6 +192,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
+  // 7-day rolling date boundaries
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const sevenDaysAgoStr = useMemo(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), []);
+
+  const [localPosts, setLocalPosts] = useState<NewsFeedPost[]>(() => posts);
+  useEffect(() => {
+    setLocalPosts(posts);
+  }, [posts]);
+
   // Admin Raw News modal state
   const [isRawNewsModalOpen, setIsRawNewsModalOpen] = useState(false);
   const [rawText, setRawText] = useState('');
@@ -200,6 +209,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [rawLocation, setRawLocation] = useState('सेंट्रल डेस्क');
   const [rawSourceUrl, setRawSourceUrl] = useState('');
   const [rawImageUrl, setRawImageUrl] = useState('');
+  const [rawAdditionalImageUrl, setRawAdditionalImageUrl] = useState('');
   const [rawStatus, setRawStatus] = useState<'Draft' | 'Pending' | 'Published'>('Published');
   const [rawSaving, setRawSaving] = useState(false);
   const [rawPreviewMode, setRawPreviewMode] = useState(false);
@@ -223,6 +233,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const handleRawAdditionalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      setRawAdditionalImageUrl(loadEvt.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveRawNews = async () => {
     if (!rawHeadline.trim() && !rawText.trim()) {
       alert('कृपया कम से कम हेडलाइन या रॉ टेक्स्ट दर्ज करें।');
@@ -230,32 +250,68 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
     setRawSaving(true);
     try {
-      const res = await fetch('/api/admin/raw-news', {
+      const finalTitle = rawHeadline.trim() || rawText.slice(0, 120);
+      const finalSummary = rawDescription.trim() || rawText;
+
+      const newRawPost: NewsFeedPost = {
+        id: `raw-${Date.now()}`,
+        title: finalTitle,
+        summary: finalSummary,
+        sourceChannel: currentUser?.channelName || 'एडमिन डेस्क',
+        sourceUrl: rawSourceUrl || '',
+        category: 'breaking',
+        categoryName: 'रॉ न्यूज़',
+        publishedTime: 'अभी-अभी',
+        imageUrl: rawImageUrl || 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80',
+        additionalPhotos: rawAdditionalImageUrl ? [rawAdditionalImageUrl] : [],
+        breaking: true,
+        isExclusive: true,
+        timestamp: Date.now(),
+        location: rawLocation || 'सेंट्रल डेस्क',
+        fullContent: finalSummary,
+      };
+
+      // 1. Prepend to local state & localStorage for zero-latency home feed publishing
+      setLocalPosts((prev) => {
+        const updated = [newRawPost, ...prev];
+        try {
+          localStorage.setItem('app_news_posts_v2', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      // 2. Also send to backend
+      fetch('/api/admin/raw-news', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawText,
-          headline: rawHeadline || rawText.slice(0, 120),
-          description: rawDescription || rawText,
+          headline: finalTitle,
+          description: finalSummary,
           location: rawLocation,
           sourceUrl: rawSourceUrl,
           imageUrl: rawImageUrl,
+          additionalImageUrl: rawAdditionalImageUrl,
           status: rawStatus,
           author: currentUser?.name || currentUser?.username || 'एडमिन',
         }),
-      });
-      if (res.ok) {
-        setIsRawNewsModalOpen(false);
-        if (onRefreshLiveNews) onRefreshLiveNews();
-        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-        alert(
-          rawStatus === 'Published'
-            ? 'समाचार सफलतापूर्वक प्रकाशित किया गया और होम फ़ीड में जुड़ गया!'
-            : 'रॉ न्यूज़ सुरक्षित कर ली गई!'
-        );
-      } else {
-        alert('रॉ न्यूज़ सहेजने में विफल।');
-      }
+      }).catch(() => {});
+
+      setIsRawNewsModalOpen(false);
+      setRawText('');
+      setRawHeadline('');
+      setRawDescription('');
+      setRawImageUrl('');
+      setRawAdditionalImageUrl('');
+
+      if (onRefreshLiveNews) onRefreshLiveNews();
+      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+
+      alert(
+        rawStatus === 'Published'
+          ? 'रॉ न्यूज़ सफलतापूर्वक होम फ़ीड पर प्रकाशित की गई!'
+          : 'रॉ न्यूज़ सुरक्षित कर ली गई!'
+      );
     } catch (err) {
       console.error('Error saving raw news:', err);
       alert('रॉ न्यूज़ सहेजने में त्रुटि हुई।');
@@ -361,9 +417,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Merge active RSS/Web posts with database news posts seamlessly & shuffle/interleave across categories
   const combinedPosts = useMemo(() => {
     const deletedIds = getDeletedIds();
-    const existingIds = new Set(posts.map((p) => p.id));
+    const existingIds = new Set(localPosts.map((p) => p.id));
     const newFromRss = activeRssPosts.filter((p) => !existingIds.has(p.id) && !deletedIds.has(p.id));
-    const validPosts = posts.filter((p) => !deletedIds.has(p.id));
+    const validPosts = localPosts.filter((p) => !deletedIds.has(p.id));
 
     const rawList = [...newFromRss, ...validPosts];
 
@@ -579,25 +635,89 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
-      {/* Admin Filter Bar */}
+      {/* Admin Filter Bar (Unfreezed - Scrolls naturally with content) */}
       {canModerate && (
-        <div className="sticky top-[56px] sm:top-[64px] z-30 bg-slate-950/95 backdrop-blur-md border-b border-amber-500/30 px-3 sm:px-6 lg:px-8 py-2.5 shadow-xl">
+        <div className="relative z-20 bg-slate-900 border-b border-amber-500/30 px-3 sm:px-6 lg:px-8 py-2.5 shadow-xl">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
               <span className="text-xs font-bold text-amber-300">
-                एडमिन फ़िल्टर
+                एडमिन फ़िल्टर (होम फ़ीड)
               </span>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              {/* 1. Date Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-bold text-slate-300">तारीख:</span>
+                <input
+                  type="date"
+                  min={sevenDaysAgoStr}
+                  max={todayStr}
+                  value={adminFilterDate}
+                  onChange={(e) => setAdminFilterDate(e.target.value)}
+                  className="bg-transparent text-amber-300 text-xs font-mono font-bold outline-none cursor-pointer"
+                />
+                {adminFilterDate && (
+                  <button
+                    type="button"
+                    onClick={() => setAdminFilterDate('')}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* 2. Channel Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                <span className="text-[11px] font-bold text-slate-300">चैनल:</span>
+                <select
+                  value={adminFilterChannel}
+                  onChange={(e) => setAdminFilterChannel(e.target.value)}
+                  className="bg-transparent text-amber-300 text-xs font-bold outline-none cursor-pointer max-w-[130px]"
+                >
+                  <option value="" className="bg-slate-900 text-white">सभी चैनल</option>
+                  {savedChannels.map((c, idx) => (
+                    <option key={`${c.id || 'chan'}-${idx}`} value={c.name} className="bg-slate-900 text-white">
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                {adminFilterChannel && (
+                  <button
+                    type="button"
+                    onClick={() => setAdminFilterChannel('')}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* 3. RSS Pending Approval Toggle */}
+              <button
+                type="button"
+                onClick={() => setAdminPendingOnly(!adminPendingOnly)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  adminPendingOnly
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                    : 'bg-slate-950 text-amber-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span>⏳ पेंडिंग RSS ({pendingRssCount})</span>
+              </button>
+
+              {/* Raw News Button */}
               <button
                 type="button"
                 onClick={() => setIsRawNewsModalOpen(true)}
-                className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white rounded-xl sm:rounded-lg text-xs font-black flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
                 title="रॉ न्यूज़ जोड़ें"
               >
                 <PlusCircle className="w-4 h-4 shrink-0" />
-                <span>रॉ न्यूज़ जोड़ें</span>
+                <span>+ रॉ न्यूज़</span>
               </button>
             </div>
           </div>
@@ -605,42 +725,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       )}
       {/* Centered Container: All boxes share the exact same width and alignment */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-6">
-
-        {/* PROMINENT ACTIVE HOME SCREEN APK DOWNLOAD BANNER */}
-        <div className="w-full bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border-2 border-emerald-500/80 rounded-2xl p-4 shadow-2xl flex items-center justify-between flex-wrap gap-3 animate-in fade-in">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-slate-950 font-black shadow-lg shrink-0">
-              <Smartphone className="w-6 h-6 text-slate-950" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm sm:text-base font-black text-white truncate">
-                  📲 AI News Maker एंड्रॉइड ऐप (APK) डाउनलोड करें
-                </h3>
-                <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider">
-                  Official Mobile App v1.2.0
-                </span>
-              </div>
-              <p className="text-xs text-emerald-200/90 truncate mt-0.5">
-                अपने मोबाइल में ऐप्स की तरह यूज़ करें और 1-क्लिक में न्यूज़ ग्राफिक व वीडियो बनाएं!
-              </p>
-            </div>
-          </div>
-
-          <a
-            href="/app-release.apk"
-            download="ainewsmaker-app-v1.2.0.apk"
-            onClick={() => {
-              setTimeout(() => {
-                window.location.href = '/app-release.apk';
-              }, 300);
-            }}
-            className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shrink-0"
-          >
-            <Download className="w-4 h-4 text-slate-950" />
-            <span>APK डाउनलोड करें (38 MB Direct)</span>
-          </a>
-        </div>
 
         {/* 1. Live Breaking News Ticker (Centered Box, 1 news at a time, auto-changes every 4 seconds) */}
         {breakingPosts.length > 0 && currentTickerPost && (
@@ -1355,8 +1439,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     }}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.map((c) => (
-                      <option key={c.id} value={c.id}>
+                    {feedCategories.map((c, idx) => (
+                      <option key={`${c.id}-${idx}`} value={c.id}>
                         {c.name}
                       </option>
                     ))}
@@ -1658,38 +1742,76 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Photo Upload & Preview */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  समाचार फोटो (Image / Photo):
-                </label>
-                <div className="flex items-center gap-3">
-                  <label className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition">
-                    <Upload className="w-4 h-4 text-sky-400" />
-                    <span>{rawImageUrl ? 'फोटो बदलें' : 'फोटो अपलोड करें'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleRawImageUpload}
-                    />
+              {/* Photo Uploads: Primary Photo & Additional Photo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Primary Photo */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    प्राइमरी फोटो (Primary Photo / Thumbnail):
                   </label>
-                  {rawImageUrl && (
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={rawImageUrl}
-                        alt="Preview"
-                        className="w-12 h-12 object-cover rounded-lg border border-slate-700"
+                  <div className="flex items-center gap-3">
+                    <label className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition">
+                      <Upload className="w-4 h-4 text-sky-400" />
+                      <span>{rawImageUrl ? 'फोटो बदलें' : 'मुख्य फोटो चुनें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleRawImageUpload}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setRawImageUrl('')}
-                        className="text-xs text-red-400 hover:text-red-300 cursor-pointer"
-                      >
-                        हटाएं
-                      </button>
-                    </div>
-                  )}
+                    </label>
+                    {rawImageUrl && (
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={rawImageUrl}
+                          alt="Preview"
+                          className="w-10 h-10 object-cover rounded-lg border border-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setRawImageUrl('')}
+                          className="text-xs text-red-400 hover:text-red-300 cursor-pointer font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Additional Photo */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    अतिरिक्त फोटो (Additional Photo):
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition">
+                      <Upload className="w-4 h-4 text-emerald-400" />
+                      <span>{rawAdditionalImageUrl ? 'फोटो बदलें' : 'दूसरी फोटो जोड़ें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleRawAdditionalImageUpload}
+                      />
+                    </label>
+                    {rawAdditionalImageUrl && (
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={rawAdditionalImageUrl}
+                          alt="Secondary Preview"
+                          className="w-10 h-10 object-cover rounded-lg border border-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setRawAdditionalImageUrl('')}
+                          className="text-xs text-red-400 hover:text-red-300 cursor-pointer font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

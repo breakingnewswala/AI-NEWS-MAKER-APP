@@ -34,14 +34,23 @@ export interface VideoFeedItem {
   category: string;
 }
 
-// 4-Day Auto Delete Rule: Videos older than 4 days (96 hours) are automatically removed
-export const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+// 7-Day Auto Delete Rule: Videos & News older than 7 days (168 hours) are automatically removed
+export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+export const FOUR_DAYS_MS = SEVEN_DAYS_MS; // Backwards compatibility alias
 
 export function filterActiveVideos(videos: VideoFeedItem[]): VideoFeedItem[] {
   const now = Date.now();
   return videos.filter((v) => {
     if (!v.createdAt) return true;
-    return now - v.createdAt < FOUR_DAYS_MS;
+    return now - v.createdAt < SEVEN_DAYS_MS;
+  });
+}
+
+export function filterActiveNews(posts: NewsFeedPost[]): NewsFeedPost[] {
+  const now = Date.now();
+  return posts.filter((p) => {
+    if (!p.timestamp) return true;
+    return now - p.timestamp < SEVEN_DAYS_MS;
   });
 }
 

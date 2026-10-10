@@ -1096,6 +1096,9 @@ export default function App() {
     setCard((prev) => {
       const pickedMain = photoData || result.pickedImages?.main;
       const pickedSecond = result.pickedImages?.second;
+      const galleryList = result.pickedImages?.gallery || [];
+      const extractedList = galleryList.length > 0 ? galleryList : (pickedMain ? [pickedMain] : []);
+
       return {
         ...prev,
         headline: result.headline,
@@ -1104,6 +1107,7 @@ export default function App() {
         location: result.location || prev.location,
         summary: result.summary || prev.summary,
         category: result.category || prev.category,
+        extractedArticlePhotos: extractedList.length > 0 ? extractedList : prev.extractedArticlePhotos,
         images: pickedMain
           ? {
               ...prev.images,

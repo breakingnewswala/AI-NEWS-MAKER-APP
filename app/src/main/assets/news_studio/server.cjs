@@ -4391,15 +4391,24 @@ app.get(
   (_req, res) => {
     const possibleApkLocations = [
       import_path.default.join(process.cwd(), "app-release.apk"),
+      import_path.default.join(process.cwd(), "ainewsmaker-app.apk"),
       import_path.default.join(process.cwd(), "public", "app-release.apk"),
+      import_path.default.join(process.cwd(), "public", "ainewsmaker-app.apk"),
       import_path.default.join(process.cwd(), "dist", "app-release.apk"),
+      import_path.default.join(process.cwd(), "dist", "ainewsmaker-app.apk"),
       import_path.default.join(process.cwd(), "web_studio", "dist", "app-release.apk"),
       import_path.default.join(process.cwd(), "web_studio", "public", "app-release.apk"),
-      import_path.default.join(process.cwd(), "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
       import_path.default.join(safeDirname, "app-release.apk"),
+      import_path.default.join(safeDirname, "ainewsmaker-app.apk"),
       import_path.default.join(safeDirname, "..", "app-release.apk"),
       import_path.default.join(safeDirname, "..", "public", "app-release.apk"),
       import_path.default.join(safeDirname, "..", "dist", "app-release.apk"),
+      "/app/applet/app-release.apk",
+      "/app/applet/public/app-release.apk",
+      "/app/applet/dist/app-release.apk",
+      "/app/public/app-release.apk",
+      "/app/dist/app-release.apk",
+      "/app/app-release.apk",
       "/app-release.apk",
       "/public/app-release.apk"
     ];
@@ -4432,11 +4441,53 @@ app.get(
   }
 );
 var USERS_SHEET_FILE = import_path.default.join(process.cwd(), "users_sheet_database.json");
+var USERS_MASTER_FILE = import_path.default.join(process.cwd(), "users_master_database.json");
+function loadUsersMasterDatabase() {
+  try {
+    if (import_fs.default.existsSync(USERS_MASTER_FILE)) {
+      const raw = import_fs.default.readFileSync(USERS_MASTER_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list;
+    }
+  } catch {
+  }
+  return [];
+}
+function saveUsersMasterDatabase(data) {
+  try {
+    import_fs.default.writeFileSync(USERS_MASTER_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing users_master_database.json:", e);
+    return false;
+  }
+}
+app.get("/api/admin/users", (_req, res) => {
+  const users = loadUsersMasterDatabase();
+  return res.json({ success: true, users });
+});
+app.post("/api/admin/register-user", (req, res) => {
+  try {
+    const user = req.body;
+    if (!user || !user.email && !user.userId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    const current = loadUsersMasterDatabase();
+    const cleanEmail = (user.email || user.userId || "").toLowerCase().trim();
+    const filtered = current.filter((u) => (u.email || u.userId || "").toLowerCase().trim() !== cleanEmail);
+    const updated = [user, ...filtered];
+    saveUsersMasterDatabase(updated);
+    return res.json({ success: true, user, totalUsers: updated.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/admin/sync-users-sheet", (req, res) => {
   try {
     const { users } = req.body;
     if (Array.isArray(users)) {
       import_fs.default.writeFileSync(USERS_SHEET_FILE, JSON.stringify(users, null, 2), "utf-8");
+      saveUsersMasterDatabase(users);
       return res.json({ success: true, count: users.length });
     }
     return res.status(400).json({ error: "Users list required" });

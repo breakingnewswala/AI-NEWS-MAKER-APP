@@ -49,11 +49,21 @@ targets.forEach((target) => {
     fs.cpSync(distDir, target, {
       recursive: true,
       force: true,
-      filter: (src) => !src.endsWith('.apk')
+      filter: (src) => {
+        // Do not copy apk into Android assets dir
+        if (target.includes('assets') && src.endsWith('.apk')) return false;
+        return true;
+      }
     });
-    // Never allow an APK inside assets directory
-    const assetApk = path.resolve(rootDir, 'app/src/main/assets/news_studio/app-release.apk');
-    if (fs.existsSync(assetApk)) fs.unlinkSync(assetApk);
+
+    // Explicitly copy app-release.apk to target root if it exists
+    const rootApk = path.resolve(rootDir, 'app-release.apk');
+    if (fs.existsSync(rootApk) && !target.includes('assets')) {
+      try {
+        fs.copyFileSync(rootApk, path.join(target, 'app-release.apk'));
+        fs.copyFileSync(rootApk, path.join(target, 'ainewsmaker-app.apk'));
+      } catch {}
+    }
     console.log(` ✅ Updated: ${path.relative(rootDir, target)}`);
   } catch (err) {
     console.error(` ❌ Error copying to ${target}:`, err.message);

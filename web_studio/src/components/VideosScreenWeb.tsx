@@ -64,13 +64,28 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     return filterActiveVideos(videos);
   }, [videos]);
 
-  // Frame Filter State: 'all' | '9:16' | '4:3' | '1:1'
-  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '4:3' | '1:1'>('all');
+  // Date & Ratio Filter State for Video & Reels
+  const [videoFilterDate, setVideoFilterDate] = useState<string>('');
+  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '16:9' | '4:3' | '1:1' | '4:5'>('all');
 
   const filteredVideos = useMemo(() => {
-    if (selectedRatioFilter === 'all') return activeVideos;
-    return activeVideos.filter((v) => v.aspectRatio === selectedRatioFilter);
-  }, [activeVideos, selectedRatioFilter]);
+    return activeVideos.filter((v) => {
+      if (selectedRatioFilter !== 'all' && v.aspectRatio !== selectedRatioFilter) {
+        return false;
+      }
+      if (videoFilterDate) {
+        const vDate = new Date(v.createdAt || Date.now());
+        let istDateStr = '';
+        try {
+          istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(vDate);
+        } catch {
+          istDateStr = `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}-${String(vDate.getDate()).padStart(2, '0')}`;
+        }
+        if (istDateStr !== videoFilterDate) return false;
+      }
+      return true;
+    });
+  }, [activeVideos, selectedRatioFilter, videoFilterDate]);
 
   // Role-based Admin check: ONLY Super Admin and Admin have access to video upload controls
   const isAdmin = isEffectiveAdmin(currentUser) || isUserSuperAdmin(currentUser) || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
@@ -115,10 +130,63 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     setIsAdminPanelOpen(false);
   };
 
+  // 7-day rolling date boundaries
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const sevenDaysAgoStr = useMemo(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
+      {/* Admin Filter Bar for Video & Reels */}
+      {isAdmin && (
+        <div className="relative z-20 bg-slate-900 border-b border-amber-500/30 px-4 sm:px-6 py-2.5 shadow-xl">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-xs font-bold text-amber-300">
+                एडमिन फ़िल्टर (वीडियो व रील्स)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Date Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-bold text-slate-300">तारीख:</span>
+                <input
+                  type="date"
+                  min={sevenDaysAgoStr}
+                  max={todayStr}
+                  value={videoFilterDate}
+                  onChange={(e) => setVideoFilterDate(e.target.value)}
+                  className="bg-transparent text-amber-300 text-xs font-mono font-bold outline-none cursor-pointer"
+                />
+                {videoFilterDate && (
+                  <button
+                    type="button"
+                    onClick={() => setVideoFilterDate('')}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Upload Button */}
+              <button
+                type="button"
+                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>वीडियो अपलोड</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
-      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-4 sm:px-6 py-4 sticky top-[56px] sm:top-[64px] z-20 backdrop-blur-md">
+      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-4 sm:px-6 py-4 relative z-10 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg">
@@ -135,22 +203,12 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 4-Day Auto-Delete Tag */}
-            <span className="hidden md:inline-flex px-2.5 py-1 bg-amber-950/70 border border-amber-600/40 text-amber-300 text-[11px] font-bold rounded-lg items-center gap-1">
-              <Calendar className="w-3 h-3 text-amber-400" />
-              4-दिन ऑटो-डिलीट सक्रिय
-            </span>
-
-            {/* Admin Upload Button - ONLY for Super Admin & Admin */}
+            {/* 4-Day Auto-Delete Tag - ADMIN ONLY */}
             {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>वीडियो अपलोड</span>
-              </button>
+              <span className="hidden md:inline-flex px-2.5 py-1 bg-amber-950/70 border border-amber-600/40 text-amber-300 text-[11px] font-bold rounded-lg items-center gap-1">
+                <Calendar className="w-3 h-3 text-amber-400" />
+                4-दिन ऑटो-डिलीट सक्रिय
+              </span>
             )}
 
             <span className="hidden sm:inline-flex px-3 py-1 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full items-center gap-1.5">

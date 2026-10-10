@@ -136,6 +136,9 @@ export interface NewsCardData {
   breakingRibbonOffsetY?: number; // Vertical offset of ribbon (-60px to +60px, default 0)
   breakingRibbonScale?: number; // Scaling percentage of ribbon (55% to 95%, default 70%)
   
+  // Article Extracted Photos
+  extractedArticlePhotos?: string[];
+
   // Template specific attributes
   speakerName?: string; // For jacket-quote (बयान देने वाले का नाम)
   speakerTitle?: string; // For jacket-quote (पद / पदवी)
@@ -350,6 +353,7 @@ export interface AIAnalysisResult {
   pickedImages?: {
     main?: string;
     second?: string;
+    gallery?: string[];
   };
   suggestedImagePrompt?: string;
   speakerName?: string;
