@@ -3720,6 +3720,30 @@ app.get("/api/admin/diagnostic/firestore-test", async (req, res) => {
   }
 });
 
+
+// Admin Migration Trigger: Migrates local JSON files to Firestore with full ADC authorization
+app.post("/api/admin/migration/run-firestore-sync", async (req, res) => {
+  try {
+    const authCheck = verifyDiagnosticKey(req);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.status).json({ error: authCheck.error });
+    }
+
+    const { migrate } = require("../migrate_json_to_firestore.cjs");
+    const isLive = req.body && req.body.live === true;
+    const result = await migrate({ dryRun: !isLive });
+
+    return res.json({
+      success: true,
+      liveMode: isLive,
+      stats: result,
+      message: isLive ? "Data successfully migrated to Cloud Firestore." : "Dry run complete. No writes performed."
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",

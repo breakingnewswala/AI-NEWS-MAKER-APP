@@ -13,6 +13,7 @@ RUN npm install --omit=dev --ignore-scripts
 # Copy pre-compiled server, web client assets, and config
 COPY server.cjs ./
 COPY dev.cjs ./
+COPY migrate_json_to_firestore.cjs ./
 COPY public ./public
 
 # Ensure dist exists inside container by copying public assets to dist if dist is not present

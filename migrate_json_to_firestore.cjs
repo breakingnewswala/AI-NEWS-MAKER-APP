@@ -5,7 +5,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const adapter = require('./web_studio/server_firestore_adapter.cjs');
+const adapter = (fs.existsSync('./web_studio/server_firestore_adapter.cjs') ? require('./web_studio/server_firestore_adapter.cjs') : require('./server_firestore_adapter.cjs'));
 
 // Safety: Perform reliable source file backup before any operation
 function backupSourceDatabases() {
