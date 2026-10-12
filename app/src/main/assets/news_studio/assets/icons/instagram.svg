@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="ig-rad" cx="15%" cy="100%" r="105%">
+      <stop offset="0%" stop-color="#FFDC80"/>
+      <stop offset="10%" stop-color="#FCAF45"/>
+      <stop offset="45%" stop-color="#F77737"/>
+      <stop offset="60%" stop-color="#F56040"/>
+      <stop offset="75%" stop-color="#FD1D1D"/>
+      <stop offset="90%" stop-color="#E1306C"/>
+    </radialGradient>
+    <radialGradient id="ig-rad2" cx="0%" cy="100%" r="140%">
+      <stop offset="35%" stop-color="#C13584" stop-opacity="0"/>
+      <stop offset="70%" stop-color="#833AB4" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#405DE6" stop-opacity="1"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#ig-rad)"/>
+  <rect width="512" height="512" rx="115" fill="url(#ig-rad2)"/>
+  <rect x="96" y="96" width="320" height="320" rx="80" fill="none" stroke="#FFFFFF" stroke-width="32"/>
+  <circle cx="256" cy="256" r="76" fill="none" stroke="#FFFFFF" stroke-width="32"/>
+  <circle cx="348" cy="164" r="20" fill="#FFFFFF"/>
+</svg>

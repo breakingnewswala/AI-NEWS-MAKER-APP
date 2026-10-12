@@ -1,0 +1,17 @@
+[
+  {
+    "userId": "user-1791697518060",
+    "email": "admin.ainewsmaker@gmail.com",
+    "name": "सुपर एडमिन (Super Admin)",
+    "role": "superadmin",
+    "tier": "ultra",
+    "planName": "VIP DESK",
+    "channelName": "एआई न्यूज़ मेकर",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "mobile": "9669802408",
+    "isProfileLocked": false,
+    "activatedAt": 1791697518060,
+    "expiresAt": 2107057518060,
+    "activatedVia": "Super Admin Preset"
+  }
+]

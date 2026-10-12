@@ -1,0 +1,24 @@
+# .gcloudignore for Cloud Run deployment
+.git/
+.github/
+.gradle/
+gradle/
+app/
+node_modules/
+**/node_modules/
+web_studio/node_modules/
+build/
+**/build/
+*.apk
+*.aab
+*.dex
+*.log
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+backup_pre_repair/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/

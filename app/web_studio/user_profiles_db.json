@@ -1,0 +1,18 @@
+{
+  "admin": {
+    "username": "admin",
+    "fullName": "मुख्य संपादक",
+    "role": "admin",
+    "email": "breakingnewswala.com@gmail.com",
+    "district": "सेंट्रल डेस्क",
+    "channelNameHi": "एआई न्यूज़ मेकर",
+    "channelNameEn": "AI News Maker",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "channelLogoType": "png",
+    "mobileNumber": "9669802408",
+    "showMobileNumber": true,
+    "websiteUrl": "ainewsmaker.online",
+    "tier": "ultra",
+    "updatedAt": 1790877917047
+  }
+}
