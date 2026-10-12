@@ -1926,6 +1926,20 @@ function loadProfilesDatabase(): Record<string, StoredUserProfile> {
 function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean {
   try {
     fs.writeFileSync(PROFILES_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    // Asynchronously replicate every user profile into Cloud Firestore
+    try {
+      const adapter = require("./server_firestore_adapter.cjs");
+      if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
+        for (const [key, profile] of Object.entries(data)) {
+          const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
+          adapter.firestoreWriteDoc("users", docId, {
+            ...profile,
+            uid: docId,
+            updatedAt: Date.now()
+          }).catch((e: any) => console.warn("[Firestore Profile Sync Error]", e.message));
+        }
+      }
+    } catch {}
     return true;
   } catch (err) {
     console.error("Error saving user_profiles_db.json:", err);

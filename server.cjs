@@ -2428,6 +2428,20 @@ function loadProfilesDatabase() {
 function saveProfilesDatabase(data) {
   try {
     import_fs.default.writeFileSync(PROFILES_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    try {
+      const adapter = require_server_firestore_adapter();
+      if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
+        for (const [key, profile] of Object.entries(data)) {
+          const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
+          adapter.firestoreWriteDoc("users", docId, {
+            ...profile,
+            uid: docId,
+            updatedAt: Date.now()
+          }).catch((e) => console.warn("[Firestore Profile Sync Error]", e.message));
+        }
+      }
+    } catch {
+    }
     return true;
   } catch (err) {
     console.error("Error saving user_profiles_db.json:", err);
