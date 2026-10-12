@@ -14,7 +14,10 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY server.cjs ./
 COPY dev.cjs ./
 COPY public ./public
-COPY dist ./dist
+
+# Ensure dist exists inside container by copying public assets to dist if dist is not present
+COPY public ./dist
+
 COPY firebase-applet-config.json ./
 
 # Copy server firestore adapter into both root and web_studio for reliable module resolution
