@@ -6,9 +6,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Install production dependencies
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts
+# Install production dependencies safely even if package-lock is omitted
+COPY package.json ./
+RUN npm install --omit=dev --ignore-scripts
 
 # Copy pre-compiled server, web client assets, and config
 COPY server.cjs ./
