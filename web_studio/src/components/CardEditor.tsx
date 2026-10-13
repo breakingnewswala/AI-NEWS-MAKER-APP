@@ -3143,6 +3143,159 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           </span>
         </div>
 
+        {/* Admin Test Mode Custom Identity (Admin Only) */}
+        {isAdmin && (
+          <div className="p-3 bg-neutral-950/90 border-2 border-purple-500/60 rounded-xl space-y-3 text-xs shadow-lg">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-purple-300 font-black">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span>🧪 टेस्ट मोड (Admin Sample Identity Preview)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !card.isTestMode;
+                  onChange({
+                    isTestMode: nextState,
+                    testChannelName: nextState ? (card.testChannelName || 'सैंपल न्यूज़ नेटवर्क') : card.testChannelName,
+                    testSocialHandle: nextState ? (card.testSocialHandle || '@sample_reporter') : card.testSocialHandle,
+                  });
+                }}
+                className={`px-3 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer active:scale-95 ${
+                  card.isTestMode
+                    ? 'bg-purple-600 text-white border-purple-400 shadow-md ring-2 ring-purple-400/40'
+                    : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
+                }`}
+              >
+                <span>{card.isTestMode ? '✓ टेस्ट मोड चालू (ON)' : '✕ बंद (OFF)'}</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              यह सुविधा एडमिन को किसी नए यूज़र का सैंपल ग्राफ़िक तैयार करने के लिए अलग चैनल नाम, यूज़रनेम, लोगो और फ़ोटो आज़माने की अनुमति देती है। वास्तविक एडमिन प्रोफ़ाइल बिल्कुल सुरक्षित रहती है।
+            </p>
+
+            {card.isTestMode && (
+              <div className="pt-2 border-t border-purple-900/60 space-y-3 animate-in fade-in duration-200">
+                {/* 1. Test Channel Name */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-purple-200 block">
+                    1. टेस्ट चैनल नाम (Test Channel Name):
+                  </label>
+                  <input
+                    type="text"
+                    value={card.testChannelName || ''}
+                    onChange={(e) => onChange({ testChannelName: e.target.value })}
+                    placeholder="उदा. दैनिक एक्सप्रेस / भारत टीवी"
+                    className="w-full p-2 bg-neutral-900 border border-purple-800/80 rounded-lg text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+
+                {/* 2. Test Social Username */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-purple-200 block">
+                    2. टेस्ट सोशल यूज़रनेम (Test Social Username):
+                  </label>
+                  <input
+                    type="text"
+                    value={card.testSocialHandle || ''}
+                    onChange={(e) => onChange({ testSocialHandle: e.target.value })}
+                    placeholder="उदा. @dainik_express या @reporter_rahul"
+                    className="w-full p-2 bg-neutral-900 border border-purple-800/80 rounded-lg text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+
+                {/* 3. Test Logo Upload */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-purple-200">3. टेस्ट लोगो अपलोड (Test Logo):</span>
+                    {card.testLogoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => onChange({ testLogoUrl: undefined })}
+                        className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                      >
+                        हटाएं
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 py-1.5 px-3 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-700/60 rounded-lg text-xs font-bold text-purple-200 flex items-center justify-center gap-1.5 cursor-pointer transition">
+                      <Upload className="w-3.5 h-3.5 text-purple-400" />
+                      <span>{card.testLogoUrl ? '🔄 टेस्ट लोगो बदलें' : '📁 टेस्ट लोगो चुनें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              if (typeof reader.result === 'string') {
+                                onChange({ testLogoUrl: reader.result });
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {card.testLogoUrl && (
+                    <div className="flex items-center gap-2 p-1.5 bg-neutral-900 rounded-lg border border-purple-800/60">
+                      <div className="w-9 h-9 bg-black rounded flex items-center justify-center p-0.5 overflow-hidden">
+                        <img src={card.testLogoUrl} alt="Test Logo" className="max-w-full max-h-full object-contain" />
+                      </div>
+                      <span className="text-[10px] text-purple-300 font-bold">✓ टेस्ट लोगो सक्रिय</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Sample User Photo (Optional for Test Preview) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-purple-200">4. सैंपल यूज़र फोटो (Sample Photo):</span>
+                    {card.testSamplePhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => onChange({ testSamplePhotoUrl: undefined })}
+                        className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                      >
+                        हटाएं
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 py-1.5 px-3 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 rounded-lg text-xs font-bold text-neutral-300 flex items-center justify-center gap-1.5 cursor-pointer transition">
+                      <Upload className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{card.testSamplePhotoUrl ? '🔄 सैंपल फोटो बदलें' : '📁 सैंपल यूज़र फोटो अपलोड'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              if (typeof reader.result === 'string') {
+                                onChange({ testSamplePhotoUrl: reader.result, photoUrl: reader.result });
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+
         {/* 1. Master Branding Card with ON/OFF Toggle (Top of Step 6) */}
         <div className="p-3 bg-neutral-950/80 border border-blue-900/40 rounded-xl space-y-2.5 text-xs">
           <div className="flex items-center justify-between text-blue-300 font-bold">

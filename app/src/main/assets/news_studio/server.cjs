@@ -2531,15 +2531,32 @@ function loadAdminBranding() {
   try {
     if (import_fs.default.existsSync(ADMIN_BRANDING_FILE)) {
       const raw = import_fs.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed && (parsed.channelNameHi || parsed.channelLogoUrl)) {
+        return parsed;
+      }
+    }
+    const allProfiles = loadProfilesDatabase();
+    const masterProf = allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["admin"];
+    if (masterProf) {
+      return {
+        channelNameHi: masterProf.channelNameHi || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
+        channelNameEn: masterProf.channelNameEn || "Breaking News Wala",
+        channelLogoUrl: masterProf.channelLogoUrl || "/assets/breaking_news_wala_logo.png",
+        websiteUrl: masterProf.websiteUrl || "ainewsmaker.online",
+        mobileNumber: masterProf.mobileNumber || "9669802408",
+        showMobileNumber: true,
+        activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
+        updatedAt: masterProf.updatedAt || Date.now()
+      };
     }
   } catch (e) {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-    channelNameEn: "AI News Maker",
-    channelLogoUrl: "/assets/ai_news_maker_logo.png",
+    channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
+    channelNameEn: "Breaking News Wala",
+    channelLogoUrl: "/assets/breaking_news_wala_logo.png",
     websiteUrl: "ainewsmaker.online",
     mobileNumber: "9669802408",
     showMobileNumber: true,
@@ -2570,6 +2587,23 @@ app.post("/api/admin/branding", (req, res) => {
       updatedAt: Date.now()
     };
     saveAdminBranding(updated);
+    try {
+      const allProfiles = loadProfilesDatabase();
+      const targetEmails = ["breakingnewswala.com@gmail.com", "admin.ainewsmaker@gmail.com", "admin"];
+      for (const emailKey of targetEmails) {
+        if (allProfiles[emailKey]) {
+          allProfiles[emailKey] = {
+            ...allProfiles[emailKey],
+            channelNameHi: updated.channelNameHi || allProfiles[emailKey].channelNameHi,
+            channelNameEn: updated.channelNameEn || allProfiles[emailKey].channelNameEn,
+            channelLogoUrl: updated.channelLogoUrl || allProfiles[emailKey].channelLogoUrl,
+            updatedAt: Date.now()
+          };
+        }
+      }
+      saveProfilesDatabase(allProfiles);
+    } catch {
+    }
     return res.json({ success: true, branding: updated });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
