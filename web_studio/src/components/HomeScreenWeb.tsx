@@ -187,7 +187,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
 
   // Admin Date, Channel & Pending News Filter State (Visible to Admin/SuperAdmin)
-  const [adminFilterDate, setAdminFilterDate] = useState<string>('');
+  // Date filter removed per Admin UI requirement
   const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
   const [adminPendingOnly, setAdminPendingOnly] = useState<boolean>(false);
   const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
@@ -527,17 +527,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         }
       }
 
-      // 3. Admin Date Filter (Strict India Timezone YYYY-MM-DD match)
-      if (canModerate && adminFilterDate) {
-        const pDate = new Date(p.timestamp || 0);
-        let istDateStr = '';
-        try {
-          istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(pDate);
-        } catch {
-          istDateStr = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}-${String(pDate.getDate()).padStart(2, '0')}`;
-        }
-        if (istDateStr !== adminFilterDate) return false;
-      }
+      // Date filter removed per requirement
 
       // 4. Admin Channel Filter (Matches sourceChannel)
       if (canModerate && adminFilterChannel) {
@@ -557,7 +547,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const postCatName = (p.categoryName || '').toLowerCase();
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
-  }, [combinedPosts, canModerate, adminPendingOnly, adminFilterDate, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
+  }, [combinedPosts, canModerate, adminPendingOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
 
   const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
     ? visiblePosts.filter((p) => p.breaking)
@@ -669,29 +659,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-              {/* 1. Date Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-                <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[11px] font-bold text-slate-300">तारीख:</span>
-                <input
-                  type="date"
-                  min={sevenDaysAgoStr}
-                  max={todayStr}
-                  value={adminFilterDate}
-                  onChange={(e) => setAdminFilterDate(e.target.value)}
-                  className="bg-transparent text-amber-300 text-xs font-mono font-bold outline-none cursor-pointer"
-                />
-                {adminFilterDate && (
-                  <button
-                    type="button"
-                    onClick={() => setAdminFilterDate('')}
-                    className="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-
               {/* 2. Channel Filter */}
               <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
                 <span className="text-[11px] font-bold text-slate-300">चैनल:</span>

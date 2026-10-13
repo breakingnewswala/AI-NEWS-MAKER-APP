@@ -5621,7 +5621,8 @@ function saveUsersMasterDatabase(data: any[]): boolean {
   }
 }
 
-app.get("/api/admin/users", (_req, res) => {
+// Merged into primary /api/admin/users route above for seamless sync
+app.get("/api/admin/master-users", (_req, res) => {
   const users = loadUsersMasterDatabase();
   return res.json({ success: true, users });
 });
@@ -5632,11 +5633,34 @@ app.post("/api/admin/register-user", (req, res) => {
     if (!user || (!user.email && !user.userId)) {
       return res.status(400).json({ error: "User email or ID required" });
     }
-    const current = loadUsersMasterDatabase();
     const cleanEmail = (user.email || user.userId || "").toLowerCase().trim();
+
+    // 1. Save to users_master_database.json
+    const current = loadUsersMasterDatabase();
     const filtered = current.filter((u) => (u.email || u.userId || "").toLowerCase().trim() !== cleanEmail);
     const updated = [user, ...filtered];
     saveUsersMasterDatabase(updated);
+
+    // 2. Also register into user_profiles_db.json so it is accessible across all profile views
+    const allProfiles = loadProfilesDatabase();
+    const existingProf = allProfiles[cleanEmail] || {};
+    allProfiles[cleanEmail] = {
+      ...existingProf,
+      userId: user.userId || user.id || cleanEmail,
+      email: cleanEmail,
+      username: user.username || existingProf.username || cleanEmail.split('@')[0],
+      fullName: user.name || user.fullName || existingProf.fullName || 'यूज़र',
+      channelNameHi: user.channelName || existingProf.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelNameEn: user.channelName || existingProf.channelNameEn || 'AI News Maker',
+      channelLogoUrl: user.channelLogoUrl || existingProf.channelLogoUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoType: 'png',
+      mobileNumber: user.mobile || existingProf.mobileNumber || '',
+      tier: user.tier || existingProf.tier || 'basic',
+      role: user.role || existingProf.role || 'user',
+      updatedAt: Date.now()
+    };
+    saveProfilesDatabase(allProfiles);
+
     return res.json({ success: true, user, totalUsers: updated.length });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

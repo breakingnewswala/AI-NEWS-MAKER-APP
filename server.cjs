@@ -5,11 +5,7 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -33,395 +29,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// web_studio/server_firestore_adapter.cjs
-var require_server_firestore_adapter = __commonJS({
-  "web_studio/server_firestore_adapter.cjs"(exports2, module2) {
-    var http = require("http");
-    var https = require("https");
-    var fs2 = require("fs");
-    var path2 = require("path");
-    var firebaseConfig = null;
-    try {
-      const cfgPath = path2.join(process.cwd(), "firebase-applet-config.json");
-      if (fs2.existsSync(cfgPath)) {
-        firebaseConfig = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
-      }
-    } catch {
-    }
-    var PROJECT_ID = process.env.FIREBASE_PROJECT_ID || firebaseConfig?.projectId || "ai-news-maker-app";
-    var DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
-    var STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBucket || "ai-news-maker-app.firebasestorage.app";
-    var USE_FIRESTORE = process.env.USE_FIRESTORE === "true";
-    function getMetadataAccessToken() {
-      return new Promise((resolve) => {
-        const req = http.get(
-          {
-            host: "metadata.google.internal",
-            path: "/computeMetadata/v1/instance/service-accounts/default/token",
-            headers: { "Metadata-Flavor": "Google" },
-            timeout: 2500
-          },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => data += c);
-            res.on("end", () => {
-              try {
-                const parsed = JSON.parse(data);
-                resolve(parsed.access_token || null);
-              } catch {
-                resolve(null);
-              }
-            });
-          }
-        );
-        req.on("error", () => resolve(null));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve(null);
-        });
-      });
-    }
-    function getRuntimeServiceAccount() {
-      return new Promise((resolve) => {
-        const req = http.get(
-          {
-            host: "metadata.google.internal",
-            path: "/computeMetadata/v1/instance/service-accounts/default/email",
-            headers: { "Metadata-Flavor": "Google" },
-            timeout: 2500
-          },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => data += c);
-            res.on("end", () => resolve(data.trim() || "unknown"));
-          }
-        );
-        req.on("error", () => resolve("unknown"));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve("unknown");
-        });
-      });
-    }
-    function toFirestoreField(val) {
-      if (val === null || val === void 0) return { nullValue: null };
-      if (typeof val === "boolean") return { booleanValue: val };
-      if (typeof val === "number") {
-        if (Number.isInteger(val)) return { integerValue: String(val) };
-        return { doubleValue: val };
-      }
-      if (typeof val === "string") return { stringValue: val };
-      if (Array.isArray(val)) {
-        return { arrayValue: { values: val.map(toFirestoreField) } };
-      }
-      if (typeof val === "object") {
-        const fields = {};
-        for (const [k, v] of Object.entries(val)) {
-          if (v !== void 0) fields[k] = toFirestoreField(v);
-        }
-        return { mapValue: { fields } };
-      }
-      return { stringValue: String(val) };
-    }
-    function fromFirestoreField(field) {
-      if (!field || typeof field !== "object") return null;
-      if ("stringValue" in field) return field.stringValue;
-      if ("booleanValue" in field) return field.booleanValue;
-      if ("integerValue" in field) return parseInt(field.integerValue, 10);
-      if ("doubleValue" in field) return field.doubleValue;
-      if ("nullValue" in field) return null;
-      if ("arrayValue" in field) {
-        const items = field.arrayValue?.values || [];
-        return items.map(fromFirestoreField);
-      }
-      if ("mapValue" in field) {
-        const res = {};
-        for (const [k, v] of Object.entries(field.mapValue?.fields || {})) {
-          res[k] = fromFirestoreField(v);
-        }
-        return res;
-      }
-      return null;
-    }
-    function fromFirestoreDoc(doc) {
-      if (!doc || !doc.fields) return null;
-      const res = {};
-      for (const [k, v] of Object.entries(doc.fields)) {
-        res[k] = fromFirestoreField(v);
-      }
-      return res;
-    }
-    async function firestoreWriteDoc(collection, docId, data) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const fields = {};
-      for (const [k, v] of Object.entries(data)) {
-        if (v !== void 0) fields[k] = toFirestoreField(v);
-      }
-      const payload = JSON.stringify({ fields });
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "PATCH",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(payload)
-            },
-            timeout: 4e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                resolve({ success: true, statusCode: res.statusCode });
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.write(payload);
-        req.end();
-      });
-    }
-    async function firestoreReadDoc(collection, docId) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            timeout: 4e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const data = fromFirestoreDoc(parsed);
-                  resolve({ success: true, data, rawDoc: parsed, statusCode: res.statusCode });
-                } catch {
-                  resolve({ success: true, statusCode: res.statusCode });
-                }
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.end();
-      });
-    }
-    async function uploadToFirebaseStorage(destinationPath, buffer, contentType = "image/png") {
-      const token = await getMetadataAccessToken();
-      if (!token) {
-        return { success: false, error: "No access token for Firebase Storage" };
-      }
-      const encodedPath = encodeURIComponent(destinationPath);
-      const uploadUrl = `/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}&uploadType=media`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firebasestorage.googleapis.com",
-            path: uploadUrl,
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": contentType,
-              "Content-Length": buffer.length
-            },
-            timeout: 8e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const publicDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedPath}?alt=media`;
-                  resolve({ success: true, url: publicDownloadUrl, data: parsed });
-                } catch {
-                  resolve({ success: true });
-                }
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.write(buffer);
-        req.end();
-      });
-    }
-    async function runDiagnosticSelfTest() {
-      const sa = await getRuntimeServiceAccount();
-      const testId = `diag_ping_${Date.now()}`;
-      const testPayload = {
-        diagnosticPing: "ok",
-        testedAt: Date.now(),
-        serviceAccount: sa,
-        databaseId: DATABASE_ID
-      };
-      const writeRes = await firestoreWriteDoc("system_health", testId, testPayload);
-      if (!writeRes.success) {
-        return {
-          success: false,
-          stage: "write",
-          serviceAccount: sa,
-          databaseId: DATABASE_ID,
-          statusCode: writeRes.statusCode,
-          error: writeRes.error || "Write failed"
-        };
-      }
-      const readRes = await firestoreReadDoc("system_health", testId);
-      if (!readRes.success) {
-        return {
-          success: false,
-          stage: "read",
-          serviceAccount: sa,
-          databaseId: DATABASE_ID,
-          statusCode: readRes.statusCode,
-          error: readRes.error || "Read failed"
-        };
-      }
-      return {
-        success: true,
-        stage: "complete",
-        serviceAccount: sa,
-        databaseId: DATABASE_ID,
-        writtenId: testId,
-        verifiedData: readRes.data
-      };
-    }
-    module2.exports = {
-      PROJECT_ID,
-      DATABASE_ID,
-      STORAGE_BUCKET,
-      USE_FIRESTORE,
-      getMetadataAccessToken,
-      getRuntimeServiceAccount,
-      firestoreWriteDoc,
-      firestoreReadDoc,
-      uploadToFirebaseStorage,
-      runDiagnosticSelfTest
-    };
-    async function firestoreDeleteDoc(collection, docId) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            timeout: 4e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                resolve({ success: true, statusCode: res.statusCode });
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.end();
-      });
-    }
-    async function firestoreListDocs(collection, pageSize = 100) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}?pageSize=${pageSize}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            timeout: 5e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const documents = (parsed.documents || []).map((doc) => {
-                    const data = fromFirestoreDoc(doc);
-                    const parts = (doc.name || "").split("/");
-                    const id = parts[parts.length - 1];
-                    return { id, ...data };
-                  });
-                  resolve({ success: true, documents, statusCode: res.statusCode });
-                } catch (e) {
-                  resolve({ success: false, error: e.message });
-                }
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.end();
-      });
-    }
-    module2.exports.firestoreDeleteDoc = firestoreDeleteDoc;
-    module2.exports.firestoreListDocs = firestoreListDocs;
-  }
-});
-
 // server_firestore_adapter.cjs
-var require_server_firestore_adapter2 = __commonJS({
+var require_server_firestore_adapter = __commonJS({
   "server_firestore_adapter.cjs"(exports2, module2) {
     var http = require("http");
     var https = require("https");
@@ -807,9 +416,396 @@ var require_server_firestore_adapter2 = __commonJS({
   }
 });
 
-// migrate_json_to_firestore.cjs
+// ../server_firestore_adapter.cjs
+var require_server_firestore_adapter2 = __commonJS({
+  "../server_firestore_adapter.cjs"(exports2, module2) {
+    var http = require("http");
+    var https = require("https");
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var firebaseConfig = null;
+    try {
+      const cfgPath = path2.join(process.cwd(), "firebase-applet-config.json");
+      if (fs2.existsSync(cfgPath)) {
+        firebaseConfig = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
+      }
+    } catch {
+    }
+    var PROJECT_ID = process.env.FIREBASE_PROJECT_ID || firebaseConfig?.projectId || "ai-news-maker-app";
+    var DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
+    var STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBucket || "ai-news-maker-app.firebasestorage.app";
+    var USE_FIRESTORE = process.env.USE_FIRESTORE === "true";
+    function getMetadataAccessToken() {
+      return new Promise((resolve) => {
+        const req = http.get(
+          {
+            host: "metadata.google.internal",
+            path: "/computeMetadata/v1/instance/service-accounts/default/token",
+            headers: { "Metadata-Flavor": "Google" },
+            timeout: 2500
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => data += c);
+            res.on("end", () => {
+              try {
+                const parsed = JSON.parse(data);
+                resolve(parsed.access_token || null);
+              } catch {
+                resolve(null);
+              }
+            });
+          }
+        );
+        req.on("error", () => resolve(null));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve(null);
+        });
+      });
+    }
+    function getRuntimeServiceAccount() {
+      return new Promise((resolve) => {
+        const req = http.get(
+          {
+            host: "metadata.google.internal",
+            path: "/computeMetadata/v1/instance/service-accounts/default/email",
+            headers: { "Metadata-Flavor": "Google" },
+            timeout: 2500
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => data += c);
+            res.on("end", () => resolve(data.trim() || "unknown"));
+          }
+        );
+        req.on("error", () => resolve("unknown"));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve("unknown");
+        });
+      });
+    }
+    function toFirestoreField(val) {
+      if (val === null || val === void 0) return { nullValue: null };
+      if (typeof val === "boolean") return { booleanValue: val };
+      if (typeof val === "number") {
+        if (Number.isInteger(val)) return { integerValue: String(val) };
+        return { doubleValue: val };
+      }
+      if (typeof val === "string") return { stringValue: val };
+      if (Array.isArray(val)) {
+        return { arrayValue: { values: val.map(toFirestoreField) } };
+      }
+      if (typeof val === "object") {
+        const fields = {};
+        for (const [k, v] of Object.entries(val)) {
+          if (v !== void 0) fields[k] = toFirestoreField(v);
+        }
+        return { mapValue: { fields } };
+      }
+      return { stringValue: String(val) };
+    }
+    function fromFirestoreField(field) {
+      if (!field || typeof field !== "object") return null;
+      if ("stringValue" in field) return field.stringValue;
+      if ("booleanValue" in field) return field.booleanValue;
+      if ("integerValue" in field) return parseInt(field.integerValue, 10);
+      if ("doubleValue" in field) return field.doubleValue;
+      if ("nullValue" in field) return null;
+      if ("arrayValue" in field) {
+        const items = field.arrayValue?.values || [];
+        return items.map(fromFirestoreField);
+      }
+      if ("mapValue" in field) {
+        const res = {};
+        for (const [k, v] of Object.entries(field.mapValue?.fields || {})) {
+          res[k] = fromFirestoreField(v);
+        }
+        return res;
+      }
+      return null;
+    }
+    function fromFirestoreDoc(doc) {
+      if (!doc || !doc.fields) return null;
+      const res = {};
+      for (const [k, v] of Object.entries(doc.fields)) {
+        res[k] = fromFirestoreField(v);
+      }
+      return res;
+    }
+    async function firestoreWriteDoc(collection, docId, data) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const fields = {};
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== void 0) fields[k] = toFirestoreField(v);
+      }
+      const payload = JSON.stringify({ fields });
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(payload)
+            },
+            timeout: 4e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                resolve({ success: true, statusCode: res.statusCode });
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.write(payload);
+        req.end();
+      });
+    }
+    async function firestoreReadDoc(collection, docId) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            timeout: 4e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  const data = fromFirestoreDoc(parsed);
+                  resolve({ success: true, data, rawDoc: parsed, statusCode: res.statusCode });
+                } catch {
+                  resolve({ success: true, statusCode: res.statusCode });
+                }
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.end();
+      });
+    }
+    async function uploadToFirebaseStorage(destinationPath, buffer, contentType = "image/png") {
+      const token = await getMetadataAccessToken();
+      if (!token) {
+        return { success: false, error: "No access token for Firebase Storage" };
+      }
+      const encodedPath = encodeURIComponent(destinationPath);
+      const uploadUrl = `/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}&uploadType=media`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firebasestorage.googleapis.com",
+            path: uploadUrl,
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": contentType,
+              "Content-Length": buffer.length
+            },
+            timeout: 8e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  const publicDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedPath}?alt=media`;
+                  resolve({ success: true, url: publicDownloadUrl, data: parsed });
+                } catch {
+                  resolve({ success: true });
+                }
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.write(buffer);
+        req.end();
+      });
+    }
+    async function runDiagnosticSelfTest() {
+      const sa = await getRuntimeServiceAccount();
+      const testId = `diag_ping_${Date.now()}`;
+      const testPayload = {
+        diagnosticPing: "ok",
+        testedAt: Date.now(),
+        serviceAccount: sa,
+        databaseId: DATABASE_ID
+      };
+      const writeRes = await firestoreWriteDoc("system_health", testId, testPayload);
+      if (!writeRes.success) {
+        return {
+          success: false,
+          stage: "write",
+          serviceAccount: sa,
+          databaseId: DATABASE_ID,
+          statusCode: writeRes.statusCode,
+          error: writeRes.error || "Write failed"
+        };
+      }
+      const readRes = await firestoreReadDoc("system_health", testId);
+      if (!readRes.success) {
+        return {
+          success: false,
+          stage: "read",
+          serviceAccount: sa,
+          databaseId: DATABASE_ID,
+          statusCode: readRes.statusCode,
+          error: readRes.error || "Read failed"
+        };
+      }
+      return {
+        success: true,
+        stage: "complete",
+        serviceAccount: sa,
+        databaseId: DATABASE_ID,
+        writtenId: testId,
+        verifiedData: readRes.data
+      };
+    }
+    module2.exports = {
+      PROJECT_ID,
+      DATABASE_ID,
+      STORAGE_BUCKET,
+      USE_FIRESTORE,
+      getMetadataAccessToken,
+      getRuntimeServiceAccount,
+      firestoreWriteDoc,
+      firestoreReadDoc,
+      uploadToFirebaseStorage,
+      runDiagnosticSelfTest
+    };
+    async function firestoreDeleteDoc(collection, docId) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            timeout: 4e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                resolve({ success: true, statusCode: res.statusCode });
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.end();
+      });
+    }
+    async function firestoreListDocs(collection, pageSize = 100) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}?pageSize=${pageSize}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            timeout: 5e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  const documents = (parsed.documents || []).map((doc) => {
+                    const data = fromFirestoreDoc(doc);
+                    const parts = (doc.name || "").split("/");
+                    const id = parts[parts.length - 1];
+                    return { id, ...data };
+                  });
+                  resolve({ success: true, documents, statusCode: res.statusCode });
+                } catch (e) {
+                  resolve({ success: false, error: e.message });
+                }
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.end();
+      });
+    }
+    module2.exports.firestoreDeleteDoc = firestoreDeleteDoc;
+    module2.exports.firestoreListDocs = firestoreListDocs;
+  }
+});
+
+// ../migrate_json_to_firestore.cjs
 var require_migrate_json_to_firestore = __commonJS({
-  "migrate_json_to_firestore.cjs"(exports2, module2) {
+  "../migrate_json_to_firestore.cjs"(exports2, module2) {
     var fs2 = require("fs");
     var path2 = require("path");
     var adapter = fs2.existsSync("./web_studio/server_firestore_adapter.cjs") ? require_server_firestore_adapter() : require_server_firestore_adapter2();
@@ -964,7 +960,7 @@ var require_migrate_json_to_firestore = __commonJS({
   }
 });
 
-// web_studio/server.ts
+// server.ts
 var server_exports = {};
 __export(server_exports, {
   TEMPLATE_CONFIG_REGISTRY: () => TEMPLATE_CONFIG_REGISTRY,
@@ -5459,7 +5455,7 @@ function saveUsersMasterDatabase(data) {
     return false;
   }
 }
-app.get("/api/admin/users", (_req, res) => {
+app.get("/api/admin/master-users", (_req, res) => {
   const users = loadUsersMasterDatabase();
   return res.json({ success: true, users });
 });
@@ -5469,11 +5465,29 @@ app.post("/api/admin/register-user", (req, res) => {
     if (!user || !user.email && !user.userId) {
       return res.status(400).json({ error: "User email or ID required" });
     }
-    const current = loadUsersMasterDatabase();
     const cleanEmail = (user.email || user.userId || "").toLowerCase().trim();
+    const current = loadUsersMasterDatabase();
     const filtered = current.filter((u) => (u.email || u.userId || "").toLowerCase().trim() !== cleanEmail);
     const updated = [user, ...filtered];
     saveUsersMasterDatabase(updated);
+    const allProfiles = loadProfilesDatabase();
+    const existingProf = allProfiles[cleanEmail] || {};
+    allProfiles[cleanEmail] = {
+      ...existingProf,
+      userId: user.userId || user.id || cleanEmail,
+      email: cleanEmail,
+      username: user.username || existingProf.username || cleanEmail.split("@")[0],
+      fullName: user.name || user.fullName || existingProf.fullName || "\u092F\u0942\u091C\u093C\u0930",
+      channelNameHi: user.channelName || existingProf.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameEn: user.channelName || existingProf.channelNameEn || "AI News Maker",
+      channelLogoUrl: user.channelLogoUrl || existingProf.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoType: "png",
+      mobileNumber: user.mobile || existingProf.mobileNumber || "",
+      tier: user.tier || existingProf.tier || "basic",
+      role: user.role || existingProf.role || "user",
+      updatedAt: Date.now()
+    };
+    saveProfilesDatabase(allProfiles);
     return res.json({ success: true, user, totalUsers: updated.length });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

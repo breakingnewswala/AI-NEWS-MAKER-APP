@@ -2198,6 +2198,12 @@ export default function App() {
           onAdminAddVideo={(newVid) => {
             setVideos((prev) => [newVid, ...prev]);
           }}
+          onAdminUpdateVideo={(updatedVid) => {
+            setVideos((prev) => prev.map((v) => (v.id === updatedVid.id ? updatedVid : v)));
+          }}
+          onAdminDeleteVideo={(videoId) => {
+            setVideos((prev) => prev.filter((v) => v.id !== videoId));
+          }}
         />
       )}
 

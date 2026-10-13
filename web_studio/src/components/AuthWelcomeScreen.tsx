@@ -417,9 +417,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     if (isExistingUser) {
       // EXISTING user: direct Home
+      // Preserve customized logo from cloudProfile, parsedProfile, or knownProfile
       const existingLogo =
-        knownProfile?.channelLogoUrl ||
+        cloudProfile?.channelLogoUrl ||
         parsedProfile?.channelLogoUrl ||
+        knownProfile?.channelLogoUrl ||
         (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
 
       const finalProfile: ChannelProfile = {
@@ -687,7 +689,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       fullName: knownProfile?.fullName || parsedProfile?.fullName || (isAdmin ? 'मुख्य संपादक (Chief Editor)' : (inputLower.charAt(0).toUpperCase() + inputLower.slice(1))),
       channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
       channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
-      channelLogoUrl: knownProfile?.channelLogoUrl || parsedProfile?.channelLogoUrl || (isAdmin ? '/assets/breaking_news_wala_logo.png' : '/assets/ai_news_maker_logo.png'),
+      channelLogoUrl: parsedProfile?.channelLogoUrl || knownProfile?.channelLogoUrl || (isAdmin ? '/assets/breaking_news_wala_logo.png' : '/assets/ai_news_maker_logo.png'),
       channelLogoType: 'png',
       socialIcons: parsedProfile?.socialIcons || {
         youtube: true,
