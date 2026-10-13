@@ -101,18 +101,13 @@ export interface EPaperAdSettings {
 }
 
 export interface NewsCardData {
-  // Admin Test Mode Identity
-  isTestMode?: boolean;
-  testChannelName?: string;
-  testSocialHandle?: string;
-  testLogoUrl?: string;
-  testSamplePhotoUrl?: string;
-
   id?: string;
   title?: string;
   date?: string;
   photoUrl?: string;
   headline: string;
+  subHeadline?: string;
+  customScript?: string;
   formattedHeadline: string;
   highlightWords: string[];
   location: string;
@@ -361,6 +356,8 @@ export interface AIAnalysisResult {
   pickedImages?: {
     main?: string;
     second?: string;
+    third?: string;
+    fourth?: string;
     gallery?: string[];
   };
   suggestedImagePrompt?: string;
@@ -374,6 +371,7 @@ export interface NewsDraft {
   id: string;
   title: string;
   headline: string;
+  timestamp?: number;
   category: string;
   location: string;
   summary: string;
@@ -388,6 +386,7 @@ export interface NewsDraft {
 export interface ChannelProfile {
   fullName?: string;
   district?: string;
+  location?: string;
   isLocked?: boolean;
   tier?: string;
   email?: string;
@@ -405,6 +404,7 @@ export interface ChannelProfile {
     twitter?: boolean;
     telegram?: boolean;
     whatsapp?: boolean;
+    linkedin?: boolean;
   };
   username: string; // derived from English Channel Name
   mobileNumber: string;

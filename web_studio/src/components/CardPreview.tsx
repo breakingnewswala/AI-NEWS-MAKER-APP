@@ -14,6 +14,7 @@ interface CardPreviewProps {
   card: NewsCardData;
   scale?: number;
   className?: string;
+  containerClassName?: string;
   showSafeZone?: boolean;
   onChange?: (updates: Partial<NewsCardData>) => void;
 }
@@ -26,21 +27,7 @@ const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   target.src = FALLBACK_NEWS_BG;
 };
 
-export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale = 1, className, showSafeZone = false, onChange }) => {
-  // If Admin Test Mode is active, override preview identity cleanly without modifying real admin profile
-  const card = React.useMemo(() => {
-    if (!rawCard.isTestMode) return rawCard;
-    return {
-      ...rawCard,
-      brandName: rawCard.testChannelName || rawCard.brandName,
-      channelNameHi: rawCard.testChannelName || rawCard.channelNameHi,
-      socialHandle: rawCard.testSocialHandle || rawCard.socialHandle,
-      customLogoUrl: rawCard.testLogoUrl || rawCard.customLogoUrl,
-      images: rawCard.testSamplePhotoUrl
-        ? { ...rawCard.images, main: rawCard.testSamplePhotoUrl }
-        : rawCard.images,
-    };
-  }, [rawCard]);
+export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, className, showSafeZone = false, onChange }) => {
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
     ? card.images.main

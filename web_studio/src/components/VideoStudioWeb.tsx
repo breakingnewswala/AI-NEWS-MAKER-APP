@@ -803,7 +803,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <span className="px-1.5 py-0.2 bg-red-600 text-white text-[8px] font-black rounded shrink-0">
                     ताज़ा
                   </span>
-                  <marquee className="truncate">{tickerText}</marquee>
+                  <span className="truncate flex-1">{tickerText}</span>
                 </div>
               </div>
             </div>

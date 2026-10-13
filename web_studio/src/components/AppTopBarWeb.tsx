@@ -31,6 +31,7 @@ import {
   markNotificationAsRead,
   requestNotificationPermission,
   getNotificationPermissionStatus,
+  fetchNotificationsFromServer,
   AppNotification,
 } from '../lib/notificationManager';
 
@@ -73,6 +74,10 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
 
   useEffect(() => {
+    fetchNotificationsFromServer(currentUser?.email).then((list) => {
+      setNotificationsList(list);
+    });
+
     const handleUpdate = () => {
       setCurrentTier(getUserSubscription().tier);
       setAdminSystemModeState(getAdminSystemMode());
@@ -87,7 +92,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     window.addEventListener('ai_news_notifications_updated', handleUpdate);
     window.addEventListener('ai_news_notification_permission_changed', handleUpdate);
     (window as any).onNotificationPermissionResult = (status: string) => {
-      setNotifPermission(status);
+      setNotifPermission(status as NotificationPermission | 'unsupported');
       window.dispatchEvent(new Event('ai_news_notification_permission_changed'));
     };
     return () => {
@@ -98,7 +103,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       window.removeEventListener('ai_news_notifications_updated', handleUpdate);
       window.removeEventListener('ai_news_notification_permission_changed', handleUpdate);
     };
-  }, []);
+  }, [currentUser?.email]);
 
   // Format plan name for display
   const planDisplay = React.useMemo(() => {
@@ -289,7 +294,15 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             {/* Real-time Notifications */}
               <div className="relative">
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() => {
+                    const next = !showNotifications;
+                    setShowNotifications(next);
+                    if (next) {
+                      fetchNotificationsFromServer(currentUser?.email).then((list) => {
+                        setNotificationsList(list);
+                      });
+                    }
+                  }}
                   className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl relative transition-colors cursor-pointer"
                   title="सूचनाएं"
                 >
@@ -319,7 +332,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                         {unreadCount > 0 && (
                           <button
                             onClick={() => {
-                              const updated = markAllNotificationsAsRead();
+                              const updated = markAllNotificationsAsRead(currentUser?.email);
                               setNotificationsList(updated);
                             }}
                             className="text-[10px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer"

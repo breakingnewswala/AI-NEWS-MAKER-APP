@@ -7,6 +7,7 @@ interface VoiceInputButtonProps {
   buttonText?: string;
   size?: 'sm' | 'md';
   language?: string;
+  title?: string;
 }
 
 export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({

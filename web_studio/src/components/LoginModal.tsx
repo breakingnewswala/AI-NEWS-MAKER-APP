@@ -43,6 +43,7 @@ export interface ReporterUser {
   showMobileOnGraphics?: boolean;
   socialLinks?: UserSocialLinks;
   planTier?: string;
+  tier?: string;
   avatarUrl?: string;
 }
 

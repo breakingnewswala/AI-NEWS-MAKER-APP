@@ -11,7 +11,7 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends (Component as any) {
+export class ErrorBoundary extends Component<Props, State> {
   public state: State;
   public props: Props;
 

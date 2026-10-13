@@ -20,7 +20,7 @@ interface CategoriesScreenWebProps {
   videos: VideoFeedItem[];
   onOpenStudioWithNews: (post: NewsFeedPost) => void;
   onOpenStudioWithVideo?: (video: VideoFeedItem) => void;
-  onOpenStudioWithEPaper?: (edition: any) => void;
+  onOpenStudioWithEPaper?: (edition?: any) => void;
 }
 
 const CATEGORY_TABS = [
@@ -53,7 +53,7 @@ export const CategoriesScreenWeb: React.FC<CategoriesScreenWebProps> = ({
         <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-3">
           <CategoryPillSwitcher activeTab={activeTab} onSelectTab={setActiveTab} />
         </div>
-        <EPaperScreenWeb onOpenStudioWithEPaper={onOpenStudioWithEPaper || (() => {})} />
+        <EPaperScreenWeb onOpenStudioWithEPaper={onOpenStudioWithEPaper ? () => onOpenStudioWithEPaper() : undefined} />
       </div>
     );
   }

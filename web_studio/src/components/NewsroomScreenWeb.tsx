@@ -228,29 +228,10 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     }
 
     setInquirySubmitting(true);
-    let resolvedMobile = currentUser?.mobileNumber || '';
-    let resolvedEmail = currentUser?.email || '';
-    let resolvedName = currentUser?.name || currentUser?.username || 'यूज़र';
-    let resolvedUsername = currentUser?.username || '';
-
-    // If mobile is not on currentUser, check stored user profile
-    try {
-      if (typeof window !== 'undefined') {
-        const rawProf = localStorage.getItem('user_channel_profile') || 
-                        (resolvedEmail ? localStorage.getItem(`user_profile_${resolvedEmail}`) : null);
-        if (rawProf) {
-          const parsed = JSON.parse(rawProf);
-          if (!resolvedMobile && parsed.mobileNumber) resolvedMobile = parsed.mobileNumber;
-          if ((!resolvedName || resolvedName === 'यूज़र') && parsed.fullName) resolvedName = parsed.fullName;
-          if (!resolvedUsername && parsed.username) resolvedUsername = parsed.username;
-        }
-      }
-    } catch {}
-
-    const userEmail = resolvedEmail;
-    const userName = resolvedName;
-    const userId = userEmail || resolvedUsername || 'user';
-    const userMobile = resolvedMobile;
+    const userEmail = currentUser?.email || '';
+    const userName = currentUser?.name || currentUser?.username || 'यूज़र';
+    const userId = currentUser?.email || currentUser?.username || 'user';
+    const userMobile = currentUser?.mobileNumber || '';
 
     saveSupportInquiry({
       userId,
@@ -764,19 +745,14 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-black text-white flex items-center gap-1 px-2 py-0.5 bg-slate-950 rounded-lg border border-slate-800">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-bold text-slate-300 flex items-center gap-1">
                           <User className="w-3.5 h-3.5 text-amber-400" />
                           <span>{inq.userName || 'यूज़र'}</span>
                         </span>
                         {inq.userEmail && (
-                          <span className="text-amber-300/90 font-mono text-[11px] px-2 py-0.5 bg-slate-950 rounded-lg border border-slate-800 flex items-center gap-1">
-                            <span>📧 {inq.userEmail}</span>
-                          </span>
-                        )}
-                        {inq.userMobile && (
-                          <span className="text-emerald-400 font-mono font-bold text-[11px] px-2 py-0.5 bg-emerald-950/40 rounded-lg border border-emerald-800/40 flex items-center gap-1">
-                            <span>📱 {inq.userMobile}</span>
+                          <span className="text-slate-400 text-[11px] hidden sm:inline">
+                            ({inq.userEmail})
                           </span>
                         )}
                         {isAdmin && (

@@ -11,10 +11,6 @@ import {
   ShieldCheck,
   Calendar,
   AlertCircle,
-  Edit3,
-  Trash2,
-  Check,
-  X,
   ArrowUp,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
@@ -26,8 +22,6 @@ interface VideosScreenWebProps {
   currentUser?: ReporterUser | null;
   onOpenStudioWithVideo: (video: VideoFeedItem) => void;
   onAdminAddVideo?: (video: VideoFeedItem) => void;
-  onAdminUpdateVideo?: (video: VideoFeedItem) => void;
-  onAdminDeleteVideo?: (videoId: string) => void;
 }
 
 export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
@@ -35,53 +29,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   currentUser,
   onOpenStudioWithVideo,
   onAdminAddVideo,
-  onAdminUpdateVideo,
-  onAdminDeleteVideo,
 }) => {
-  // State for Editing Video Dialog
-  const [editingVideo, setEditingVideo] = useState<VideoFeedItem | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editCaption, setEditCaption] = useState('');
-  const [editRatio, setEditRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5' | '4:3'>('9:16');
-  
-  // State for Delete Confirmation Dialog
-  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
-
-  const startEditingVideo = (vid: VideoFeedItem) => {
-    setEditingVideo(vid);
-    setEditTitle(vid.title || '');
-    setEditCaption(vid.caption || '');
-    setEditRatio((vid.aspectRatio as any) || '9:16');
-  };
-
-  const handleSaveVideoEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingVideo) return;
-    const updated: VideoFeedItem = {
-      ...editingVideo,
-      title: editTitle.trim() || editingVideo.title,
-      caption: editCaption.trim(),
-      aspectRatio: editRatio as any,
-    };
-    if (onAdminUpdateVideo) {
-      onAdminUpdateVideo(updated);
-    }
-    if (activeVideo && activeVideo.id === updated.id) {
-      setActiveVideo(updated);
-    }
-    setEditingVideo(null);
-  };
-
-  const handleConfirmDelete = () => {
-    if (!deletingVideoId) return;
-    if (onAdminDeleteVideo) {
-      onAdminDeleteVideo(deletingVideoId);
-    }
-    if (activeVideo && activeVideo.id === deletingVideoId) {
-      setActiveVideo(null);
-    }
-    setDeletingVideoId(null);
-  };
   const [activeVideo, setActiveVideo] = useState<VideoFeedItem | null>(null);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
 
@@ -117,7 +65,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   }, [videos]);
 
   // Date & Ratio Filter State for Video & Reels
-  // Date filter removed per requirement
+  const [videoFilterDate, setVideoFilterDate] = useState<string>('');
   const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '16:9' | '4:3' | '1:1' | '4:5'>('all');
 
   const filteredVideos = useMemo(() => {
@@ -125,10 +73,19 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       if (selectedRatioFilter !== 'all' && v.aspectRatio !== selectedRatioFilter) {
         return false;
       }
-      // Date filter removed
+      if (videoFilterDate) {
+        const vDate = new Date(v.createdAt || Date.now());
+        let istDateStr = '';
+        try {
+          istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(vDate);
+        } catch {
+          istDateStr = `${vDate.getFullYear()}-${String(vDate.getMonth() + 1).padStart(2, '0')}-${String(vDate.getDate()).padStart(2, '0')}`;
+        }
+        if (istDateStr !== videoFilterDate) return false;
+      }
       return true;
     });
-  }, [activeVideos, selectedRatioFilter]);
+  }, [activeVideos, selectedRatioFilter, videoFilterDate]);
 
   // Role-based Admin check: ONLY Super Admin and Admin have access to video upload controls
   const isAdmin = isEffectiveAdmin(currentUser) || isUserSuperAdmin(currentUser) || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
@@ -191,6 +148,29 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Date Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-bold text-slate-300">तारीख:</span>
+                <input
+                  type="date"
+                  min={sevenDaysAgoStr}
+                  max={todayStr}
+                  value={videoFilterDate}
+                  onChange={(e) => setVideoFilterDate(e.target.value)}
+                  className="bg-transparent text-amber-300 text-xs font-mono font-bold outline-none cursor-pointer"
+                />
+                {videoFilterDate && (
+                  <button
+                    type="button"
+                    onClick={() => setVideoFilterDate('')}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
               {/* Upload Button */}
               <button
                 type="button"
@@ -527,35 +507,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Admin Editing Controls (Edit Info, Caption, Ratio & Delete) */}
-              {isAdmin && (
-                <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => startEditingVideo(vid)}
-                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95"
-                      title="वीडियो, कैप्शन व आस्पेक्ट रेशियो संपादित करें"
-                    >
-                      <Edit3 className="w-3 h-3 text-amber-400" />
-                      <span>एडिट (Edit)</span>
-                    </button>
-                    <span className="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
-                      {vid.aspectRatio || '4:5'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setDeletingVideoId(vid.id)}
-                    className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95"
-                    title="वीडियो डिलीट करें"
-                  >
-                    <Trash2 className="w-3 h-3 text-red-400" />
-                    <span>हटाएं</span>
-                  </button>
-                </div>
-              )}
-
               {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + वीडियो देखें */}
               <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
                 <button
@@ -581,123 +532,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         </div>
       )}
       </div>
-
-      {/* Admin Edit Video Modal */}
-      {editingVideo && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-amber-500/60 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
-                <Edit3 className="w-4 h-4" />
-                <span>वीडियो विवरण व रेशियो एडिट करें (Admin Edit)</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingVideo(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveVideoEdit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">वीडियो शीर्षक (Title):</label>
-                <input
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">वीडियो कैप्शन (Caption):</label>
-                <textarea
-                  value={editCaption}
-                  onChange={(e) => setEditCaption(e.target.value)}
-                  rows={3}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 resize-none"
-                  placeholder="कैप्शन या विवरण लिखें..."
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">आस्पेक्ट रेशियो बदलें (Aspect Ratio):</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {(['9:16', '16:9', '1:1', '4:5'] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setEditRatio(r)}
-                      className={`py-2 rounded-xl text-xs font-black border transition cursor-pointer ${
-                        editRatio === r
-                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md font-black'
-                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setEditingVideo(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  रद्द करें
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 text-xs font-black rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>बदलाव सेव करें</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Delete Video Confirmation Dialog */}
-      {deletingVideoId && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-red-500/60 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in fade-in duration-200">
-            <div className="flex items-center gap-3 text-red-400">
-              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                <Trash2 className="w-5 h-5 text-red-400" />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-white">वीडियो डिलीट करें?</h4>
-                <p className="text-xs text-slate-400">क्या आप वाकई इस वीडियो को हटाना चाहते हैं?</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setDeletingVideoId(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
-              >
-                रद्द करें
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>हाँ, डिलीट करें</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Floating Back to Top Button */}
       {showBackToTop && (

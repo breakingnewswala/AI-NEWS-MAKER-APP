@@ -177,19 +177,7 @@ function drawRoundedRect(
   }
 }
 
-export async function renderCardToCanvas(rawCard: NewsCardData): Promise<HTMLCanvasElement> {
-  const card: NewsCardData = rawCard.isTestMode
-    ? {
-        ...rawCard,
-        brandName: rawCard.testChannelName || rawCard.brandName,
-        channelNameHi: rawCard.testChannelName || rawCard.channelNameHi,
-        socialHandle: rawCard.testSocialHandle || rawCard.socialHandle,
-        customLogoUrl: rawCard.testLogoUrl || rawCard.customLogoUrl,
-        images: rawCard.testSamplePhotoUrl
-          ? { ...rawCard.images, main: rawCard.testSamplePhotoUrl }
-          : rawCard.images,
-      }
-    : rawCard;
+export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvasElement> {
   const selectedFontFamily = card.headlineFontFamily || 'Baloo 2';
 
   // Ensure selected font, Baloo 2, Devanagari, and Arial fonts are fully ready before measuring or drawing

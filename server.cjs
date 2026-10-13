@@ -977,8 +977,7 @@ var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd(
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
-var isAIStudio = Boolean(process.env.APPLET_ID || import_fs.default.existsSync("/app/control-plane-api") || process.env.DEFAULT_APP_PORT);
-var PORT = isAIStudio ? 3e3 : parseInt(process.env.PORT || process.env.APP_PORT || "8080", 10);
+var PORT = parseInt(process.env.PORT || "3000", 10);
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -1605,78 +1604,654 @@ app.delete("/api/channels/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var USERS_MASTER_FILE = import_path.default.join(process.cwd(), "users_master_database.json");
 var USERS_DB_FILE = import_path.default.join(process.cwd(), "users_accounts_db.json");
-function loadUsersDatabase() {
+var NOTIFICATIONS_DB_FILE = import_path.default.join(process.cwd(), "notifications_database.json");
+function isProtectedAdminAccount(email) {
+  if (!email) return false;
+  const clean = email.toLowerCase().trim();
+  return clean === "admin.ainewsmaker@gmail.com" || clean === "breakingnewswala@gmail.com" || clean === "breakingnewswala.com@gmail.com" || clean === "admin@breakingnewswala.com";
+}
+function loadUsersMasterDatabase() {
   try {
-    if (import_fs.default.existsSync(USERS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(USERS_DB_FILE, "utf-8");
+    if (import_fs.default.existsSync(USERS_MASTER_FILE)) {
+      const raw = import_fs.default.readFileSync(USERS_MASTER_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
-    console.error("Error reading users_accounts_db.json:", e);
+    console.error("Error reading users_master_database.json:", e);
   }
   return [];
 }
-function saveUsersDatabase(users) {
+function saveUsersMasterDatabase(users) {
   try {
-    import_fs.default.writeFileSync(USERS_DB_FILE, JSON.stringify(users, null, 2), "utf-8");
+    import_fs.default.writeFileSync(USERS_MASTER_FILE, JSON.stringify(users, null, 2), "utf-8");
+    try {
+      import_fs.default.writeFileSync(USERS_DB_FILE, JSON.stringify(users, null, 2), "utf-8");
+    } catch {
+    }
     return true;
   } catch (e) {
-    console.error("Error writing users_accounts_db.json:", e);
+    console.error("Error writing users_master_database.json:", e);
     return false;
   }
 }
-app.get("/api/users", (_req, res) => {
-  const users = loadUsersDatabase();
-  return res.json({ success: true, users });
+function loadUsersDatabase() {
+  return loadUsersMasterDatabase();
+}
+function saveUsersDatabase(users) {
+  return saveUsersMasterDatabase(users);
+}
+function loadNotificationsDatabase() {
+  try {
+    if (import_fs.default.existsSync(NOTIFICATIONS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error("Error reading notifications_database.json:", err);
+  }
+  return [];
+}
+function saveNotificationsDatabase(notifs) {
+  try {
+    import_fs.default.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing notifications_database.json:", err);
+    return false;
+  }
+}
+function computeTrialFields(u, now = Date.now()) {
+  const isSuper = u.role === "superadmin" || isProtectedAdminAccount(u.email);
+  if (isSuper || u.tier && u.tier !== "basic") {
+    return {
+      daysRemaining: isSuper ? 3650 : Math.max(0, Math.ceil(((u.expiresAt || now) - now) / (24 * 3600 * 1e3))),
+      hoursRemaining: 24,
+      minutesRemaining: 60,
+      isTrialActive: false,
+      isTrialExpired: false,
+      hasActivePaidPlan: true
+    };
+  }
+  const trialEnds = u.trialEndsAt || (u.trialStartedAt || u.createdAt || now) + SEVEN_DAYS_MS;
+  const msRemaining = trialEnds - now;
+  const isExpired = msRemaining <= 0;
+  const daysRemaining = isExpired ? 0 : Math.ceil(msRemaining / (24 * 3600 * 1e3));
+  const hoursRemaining = isExpired ? 0 : Math.floor(Math.max(0, msRemaining) % (24 * 3600 * 1e3) / (3600 * 1e3));
+  const minutesRemaining = isExpired ? 0 : Math.floor(Math.max(0, msRemaining) % (3600 * 1e3) / (60 * 1e3));
+  return {
+    daysRemaining,
+    hoursRemaining,
+    minutesRemaining,
+    isTrialActive: !isExpired,
+    isTrialExpired: isExpired,
+    hasActivePaidPlan: false
+  };
+}
+function checkUserAccess(userEmailOrUid) {
+  if (!userEmailOrUid) return { allowed: true };
+  const clean = userEmailOrUid.toString().toLowerCase().trim();
+  if (isProtectedAdminAccount(clean)) return { allowed: true };
+  const users = loadUsersMasterDatabase();
+  const match = users.find(
+    (u) => u.email && u.email.toLowerCase().trim() === clean || u.email && u.email.toLowerCase().replace(/\s+/g, "") === clean.replace(/\s+/g, "") || u.userId && u.userId.toLowerCase().trim() === clean
+  );
+  if (!match) return { allowed: true };
+  if (isProtectedAdminAccount(match.email) || match.role === "admin" || match.role === "superadmin") {
+    return { allowed: true };
+  }
+  if (match.isBlocked) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0921\u0947\u0938\u094D\u0915 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+      blocked: true
+    };
+  }
+  if (match.tier === "basic") {
+    const trialEnds = match.trialEndsAt || (match.trialStartedAt || match.createdAt) + SEVEN_DAYS_MS;
+    if (Date.now() >= trialEnds) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "\u0906\u092A\u0915\u093E 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0906\u0917\u0947 \u0909\u092A\u092F\u094B\u0917 \u0915\u0947 \u0932\u093F\u090F \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964",
+        trialExpired: true
+      };
+    }
+  }
+  return { allowed: true };
+}
+function extractUserIdentifier(req) {
+  const headerEmail = req.headers["x-user-email"] || void 0;
+  const headerUid = req.headers["x-user-id"] || void 0;
+  const bodyEmail = req.body?.email || req.body?.userEmail || req.body?.reporterEmail;
+  const bodyUid = req.body?.userId || req.body?.uid;
+  const queryEmail = req.query?.email;
+  const queryUid = req.query?.userId;
+  return headerEmail || headerUid || bodyEmail || bodyUid || queryEmail || queryUid;
+}
+function enforceUserAccessMiddleware(req, res, next) {
+  const identifier = extractUserIdentifier(req);
+  if (!identifier) return next();
+  const access = checkUserAccess(identifier);
+  if (!access.allowed) {
+    return res.status(access.status || 403).json({
+      success: false,
+      error: access.error,
+      blocked: access.blocked,
+      isBlocked: access.blocked,
+      trialExpired: access.trialExpired
+    });
+  }
+  next();
+}
+function syncUserToProfiles(u) {
+  try {
+    const allProfiles = loadProfilesDatabase();
+    const cleanKey = u.email ? u.email.toLowerCase().trim() : u.userId;
+    allProfiles[cleanKey] = {
+      username: u.username || u.name || "",
+      fullName: u.fullName || u.name || "",
+      role: u.role === "superadmin" ? "superadmin" : u.role === "admin" ? "admin" : "reporter",
+      userId: u.userId,
+      uid: u.userId,
+      tier: u.tier,
+      email: u.email,
+      district: u.district || "",
+      channelNameHi: u.channelNameHi || u.channelName || "",
+      channelNameEn: u.channelNameEn || "",
+      channelLogoUrl: u.channelLogoUrl || "",
+      channelLogoPngUrl: u.channelLogoPngUrl,
+      channelLogoGifUrl: u.channelLogoGifUrl,
+      channelLogoType: u.channelLogoType || "png",
+      mobileNumber: u.mobileNumber || u.mobile || "",
+      websiteUrl: u.websiteUrl || "ainewsmaker.online",
+      socialIcons: u.socialIcons,
+      updatedAt: Date.now()
+    };
+    saveProfilesDatabase(allProfiles);
+  } catch (err) {
+    console.error("Error syncing to profiles db:", err);
+  }
+}
+function registerOrUpdateUserAuthoritative(userPayload) {
+  if (!userPayload || !userPayload.email && !userPayload.userId) {
+    throw new Error("User email or ID required");
+  }
+  const emailRaw = (userPayload.email || "").toString().trim();
+  const cleanEmail = emailRaw.toLowerCase();
+  const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com";
+  const isAdmin = cleanEmail === "breakingnewswala@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com" || cleanEmail === "admin@breakingnewswala.com";
+  const users = loadUsersMasterDatabase();
+  const idx = users.findIndex(
+    (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || userPayload.userId && u.userId && u.userId.toLowerCase().trim() === userPayload.userId.toLowerCase().trim()
+  );
+  const now = Date.now();
+  let updatedRecord;
+  if (idx >= 0) {
+    const existing = users[idx];
+    const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
+    const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
+    updatedRecord = {
+      ...existing,
+      email: emailRaw || existing.email,
+      name: userPayload.name || userPayload.fullName || existing.name || "\u092F\u0942\u091C\u093C\u0930",
+      fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || "\u092F\u0942\u091C\u093C\u0930",
+      username: userPayload.username || existing.username || (emailRaw ? emailRaw.split("@")[0] : existing.userId),
+      channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || "",
+      channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || "",
+      channelNameEn: userPayload.channelNameEn || existing.channelNameEn || "",
+      channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || "",
+      channelLogoPngUrl: userPayload.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoGifUrl: userPayload.channelLogoGifUrl || existing.channelLogoGifUrl,
+      channelLogoType: userPayload.channelLogoType || existing.channelLogoType || "png",
+      mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
+      mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
+      district: userPayload.district || existing.district || "",
+      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "ainewsmaker.online",
+      socialIcons: userPayload.socialIcons || existing.socialIcons,
+      role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || existing.role || "user",
+      tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing.tier || userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
+      isBlocked: Boolean(existing.isBlocked),
+      blockedAt: existing.blockedAt,
+      blockedBy: existing.blockedBy,
+      createdAt: existing.createdAt || now,
+      trialStartedAt: preservedTrialStart,
+      trialEndsAt: preservedTrialEnds,
+      isTrialExpired: Date.now() >= preservedTrialEnds,
+      lastLoginAt: now,
+      activatedAt: existing.activatedAt || (isSuper || isAdmin ? now : preservedTrialStart),
+      expiresAt: existing.expiresAt || (isSuper || isAdmin ? 2107057518060 : preservedTrialEnds),
+      activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : isAdmin ? "Admin Preset" : "Google Registration")
+    };
+    users[idx] = updatedRecord;
+  } else {
+    const newTrialStart = now;
+    const newTrialEnds = now + SEVEN_DAYS_MS;
+    updatedRecord = {
+      userId: userPayload.userId || userPayload.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      email: emailRaw,
+      name: userPayload.name || userPayload.fullName || "\u092F\u0942\u091C\u093C\u0930",
+      fullName: userPayload.fullName || userPayload.name || "\u092F\u0942\u091C\u093C\u0930",
+      username: userPayload.username || (emailRaw ? emailRaw.split("@")[0] : `user_${Date.now()}`),
+      channelName: userPayload.channelName || userPayload.channelNameHi || "",
+      channelNameHi: userPayload.channelNameHi || userPayload.channelName || "",
+      channelNameEn: userPayload.channelNameEn || "",
+      channelLogoUrl: userPayload.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoPngUrl: userPayload.channelLogoPngUrl,
+      channelLogoGifUrl: userPayload.channelLogoGifUrl,
+      channelLogoType: userPayload.channelLogoType || "png",
+      mobile: userPayload.mobile || userPayload.mobileNumber || "",
+      mobileNumber: userPayload.mobileNumber || userPayload.mobile || "",
+      district: userPayload.district || "",
+      websiteUrl: userPayload.websiteUrl || "ainewsmaker.online",
+      socialIcons: userPayload.socialIcons || { youtube: true, facebook: true, instagram: true, whatsapp: true },
+      role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || "user",
+      tier: isSuper ? "ultra" : isAdmin ? "ultra" : userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : userPayload.planName || "BASIC",
+      isBlocked: false,
+      blockedAt: null,
+      blockedBy: null,
+      createdAt: now,
+      trialStartedAt: newTrialStart,
+      trialEndsAt: newTrialEnds,
+      isTrialExpired: false,
+      lastLoginAt: now,
+      activatedAt: isSuper || isAdmin ? now : newTrialStart,
+      expiresAt: isSuper || isAdmin ? 2107057518060 : newTrialEnds,
+      activatedVia: isSuper ? "Super Admin Preset" : isAdmin ? "Admin Preset" : "Google Registration"
+    };
+    users.unshift(updatedRecord);
+  }
+  saveUsersMasterDatabase(users);
+  syncUserToProfiles(updatedRecord);
+  return updatedRecord;
+}
+function reconcileAllUsers() {
+  try {
+    const existingUsers = loadUsersMasterDatabase();
+    const userMap = /* @__PURE__ */ new Map();
+    for (const u of existingUsers) {
+      if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
+    }
+    const bakFile = import_path.default.join(process.cwd(), "users_master_database.json.bak");
+    if (import_fs.default.existsSync(bakFile)) {
+      try {
+        const baks = JSON.parse(import_fs.default.readFileSync(bakFile, "utf-8"));
+        if (Array.isArray(baks)) {
+          for (const b of baks) {
+            if (b.email && !userMap.has(b.email.toLowerCase().trim())) {
+              userMap.set(b.email.toLowerCase().trim(), b);
+            }
+          }
+        }
+      } catch {
+      }
+    }
+    const profiles = loadProfilesDatabase();
+    for (const [k, p] of Object.entries(profiles)) {
+      const email = (p.email || k).toLowerCase().trim();
+      if (!userMap.has(email)) {
+        userMap.set(email, {
+          userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          email: p.email || k,
+          name: p.fullName || p.username || "\u092F\u0942\u091C\u093C\u0930",
+          fullName: p.fullName,
+          username: p.username,
+          channelName: p.channelNameHi,
+          channelNameHi: p.channelNameHi,
+          channelNameEn: p.channelNameEn,
+          channelLogoUrl: p.channelLogoUrl,
+          channelLogoPngUrl: p.channelLogoPngUrl,
+          channelLogoGifUrl: p.channelLogoGifUrl,
+          channelLogoType: p.channelLogoType || "png",
+          mobile: p.mobileNumber,
+          mobileNumber: p.mobileNumber,
+          district: p.district,
+          websiteUrl: p.websiteUrl || "ainewsmaker.online",
+          socialIcons: p.socialIcons,
+          role: p.role || (email === "admin.ainewsmaker@gmail.com" ? "superadmin" : "user"),
+          tier: p.tier || "basic",
+          planName: p.tier === "ultra" ? "VIP DESK" : "BASIC",
+          isBlocked: false,
+          createdAt: p.updatedAt || Date.now(),
+          trialStartedAt: p.updatedAt || Date.now(),
+          trialEndsAt: (p.updatedAt || Date.now()) + SEVEN_DAYS_MS,
+          lastLoginAt: p.updatedAt || Date.now()
+        });
+      }
+    }
+    const superAdminEmail = "admin.ainewsmaker@gmail.com";
+    const existingSuper = userMap.get(superAdminEmail);
+    userMap.set(superAdminEmail, {
+      userId: existingSuper?.userId || "user-1791697518060",
+      email: superAdminEmail,
+      name: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
+      fullName: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
+      username: "admin.ainewsmaker",
+      role: "superadmin",
+      tier: "ultra",
+      planName: "VIP DESK",
+      channelName: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameEn: "AI News Maker",
+      channelLogoUrl: "/assets/ai_news_maker_logo.png",
+      channelLogoType: "png",
+      mobile: "9669802408",
+      mobileNumber: "9669802408",
+      district: "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+      websiteUrl: "ainewsmaker.online",
+      isBlocked: false,
+      isProfileLocked: false,
+      createdAt: existingSuper?.createdAt || 1791697518060,
+      trialStartedAt: 1791697518060,
+      trialEndsAt: 2107057518060,
+      activatedAt: 1791697518060,
+      expiresAt: 2107057518060,
+      activatedVia: "Super Admin Preset",
+      lastLoginAt: Date.now()
+    });
+    const adminEmail = "breakingnewswala.com@gmail.com";
+    const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala@gmail.com");
+    userMap.set(adminEmail, {
+      userId: existingAdmin?.userId || "usr_627265616b69",
+      email: adminEmail,
+      name: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+      fullName: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+      username: "breakingnewswala",
+      role: "admin",
+      tier: "ultra",
+      planName: "VIP DESK",
+      channelName: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
+      channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
+      channelNameEn: "Breaking News Wala",
+      channelLogoUrl: "/assets/breaking_news_wala_logo.png",
+      channelLogoType: "png",
+      mobile: "9669802408",
+      mobileNumber: "9669802408",
+      district: "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
+      websiteUrl: "ainewsmaker.online",
+      isBlocked: false,
+      isProfileLocked: false,
+      createdAt: existingAdmin?.createdAt || 1791792137805,
+      trialStartedAt: 1791792137805,
+      trialEndsAt: 2107057518060,
+      activatedAt: 1791792137805,
+      expiresAt: 2107057518060,
+      activatedVia: "Admin Preset",
+      lastLoginAt: Date.now()
+    });
+    const testKhabrEmail = "khab ridasnews@gmail.com";
+    const normKhabrKey = "khabridasnews@gmail.com";
+    const foundKhabr = userMap.get(testKhabrEmail.toLowerCase()) || userMap.get(normKhabrKey);
+    const khabrCreationTime = foundKhabr?.createdAt || Date.now() - 2 * 24 * 3600 * 1e3;
+    const khabrTrialStart = foundKhabr?.trialStartedAt || khabrCreationTime;
+    const khabrTrialEnds = foundKhabr?.trialEndsAt || khabrTrialStart + SEVEN_DAYS_MS;
+    const khabrRecord = {
+      userId: foundKhabr?.userId || "usr_khab_ridasnews",
+      email: testKhabrEmail,
+      name: foundKhabr?.name || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
+      fullName: foundKhabr?.fullName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
+      username: foundKhabr?.username || "khabridasnews",
+      channelName: foundKhabr?.channelName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
+      channelNameHi: foundKhabr?.channelNameHi || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
+      channelNameEn: foundKhabr?.channelNameEn || "Khabridas News",
+      channelLogoUrl: foundKhabr?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoType: "png",
+      mobile: foundKhabr?.mobile || "9669802408",
+      mobileNumber: foundKhabr?.mobileNumber || "9669802408",
+      district: foundKhabr?.district || "\u0921\u093F\u091C\u093F\u091F\u0932 \u0921\u0947\u0938\u094D\u0915",
+      websiteUrl: foundKhabr?.websiteUrl || "https://khabridasnews.com",
+      role: "user",
+      tier: foundKhabr?.tier || "basic",
+      planName: foundKhabr?.planName || "BASIC",
+      isBlocked: Boolean(foundKhabr?.isBlocked),
+      blockedAt: foundKhabr?.blockedAt || null,
+      blockedBy: foundKhabr?.blockedBy || null,
+      createdAt: khabrCreationTime,
+      trialStartedAt: khabrTrialStart,
+      trialEndsAt: khabrTrialEnds,
+      isTrialExpired: Date.now() >= khabrTrialEnds,
+      activatedAt: khabrTrialStart,
+      expiresAt: khabrTrialEnds,
+      activatedVia: "Google Sign-In Registration",
+      lastLoginAt: Date.now()
+    };
+    userMap.set(testKhabrEmail.toLowerCase(), khabrRecord);
+    const reconciledList = Array.from(userMap.values());
+    saveUsersMasterDatabase(reconciledList);
+    saveUsersDatabase(reconciledList);
+    for (const u of reconciledList) {
+      syncUserToProfiles(u);
+    }
+    console.log(`[Users Reconciled] Total authoritative users: ${reconciledList.length}`);
+  } catch (err) {
+    console.error("[User Reconciliation Error]:", err);
+  }
+}
+reconcileAllUsers();
+function runTrialExpirationAndNotificationCheck() {
+  const now = Date.now();
+  const users = loadUsersMasterDatabase();
+  let updatedUsers = false;
+  const notifs = loadNotificationsDatabase();
+  const existingIds = new Set(notifs.map((n) => n.id));
+  const newNotifs = [];
+  for (const u of users) {
+    if (isProtectedAdminAccount(u.email) || u.tier !== "basic") continue;
+    const trialEnds = u.trialEndsAt || (u.trialStartedAt || u.createdAt) + SEVEN_DAYS_MS;
+    const oneDayBeforeMs = trialEnds - 24 * 60 * 60 * 1e3;
+    if (now >= oneDayBeforeMs && now < trialEnds && !u.trialWarningNotified) {
+      const userWarnId = `notif_warn_user_${u.userId}_${trialEnds}`;
+      const adminWarnId = `notif_warn_admin_${u.userId}_${trialEnds}`;
+      const expiryDateStr = new Date(trialEnds).toLocaleString("hi-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      if (!existingIds.has(userWarnId)) {
+        newNotifs.push({
+          id: userWarnId,
+          title: "\u26A0\uFE0F 24 \u0918\u0902\u091F\u0947 \u092E\u0947\u0902 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0930\u0939\u093E \u0939\u0948",
+          message: `\u0928\u092E\u0938\u094D\u0924\u0947 ${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}, \u0906\u092A\u0915\u093E 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0915\u0932 (${expiryDateStr}) \u0915\u094B \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091C\u093E\u090F\u0917\u093E\u0964 \u0928\u093F\u0930\u094D\u092C\u093E\u0927 \u0938\u0947\u0935\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
+          time: "\u0905\u092D\u0940",
+          timestamp: now,
+          unread: true,
+          type: "plan",
+          targetUserEmail: u.email,
+          linkTab: "profile"
+        });
+        existingIds.add(userWarnId);
+      }
+      if (!existingIds.has(adminWarnId)) {
+        newNotifs.push({
+          id: adminWarnId,
+          title: `\u{1F514} \u091F\u094D\u0930\u093E\u092F\u0932 \u091A\u0947\u0924\u093E\u0935\u0928\u0940: ${u.name || u.email}`,
+          message: `\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E '${u.name || ""}' (${u.email}) \u0915\u093E 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 24 \u0918\u0902\u091F\u0947 \u092E\u0947\u0902 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B\u0928\u0947 \u0935\u093E\u0932\u093E \u0939\u0948\u0964 \u0938\u092E\u093E\u092A\u094D\u0924\u093F \u0938\u092E\u092F: ${expiryDateStr}\u0964`,
+          time: "\u0905\u092D\u0940",
+          timestamp: now,
+          unread: true,
+          type: "admin",
+          targetUserEmail: "admin",
+          linkTab: "profile"
+        });
+        existingIds.add(adminWarnId);
+      }
+      u.trialWarningNotified = true;
+      updatedUsers = true;
+    }
+    if (now >= trialEnds && !u.trialExpiredNotified) {
+      const userExpId = `notif_exp_user_${u.userId}_${trialEnds}`;
+      const adminExpId = `notif_exp_admin_${u.userId}_${trialEnds}`;
+      if (!existingIds.has(userExpId)) {
+        newNotifs.push({
+          id: userExpId,
+          title: "\u{1F512} 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948",
+          message: `\u0928\u092E\u0938\u094D\u0924\u0947 ${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}, \u0906\u092A\u0915\u093E 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0935 \u090F\u0906\u0908 \u091F\u0942\u0932\u094D\u0938 \u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964 \u091C\u093E\u0930\u0940 \u0930\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u092A\u094D\u0932\u093E\u0928 \u091A\u0941\u0928\u0947\u0902\u0964`,
+          time: "\u0905\u092D\u0940",
+          timestamp: now,
+          unread: true,
+          type: "plan",
+          targetUserEmail: u.email,
+          linkTab: "profile"
+        });
+        existingIds.add(userExpId);
+      }
+      if (!existingIds.has(adminExpId)) {
+        newNotifs.push({
+          id: adminExpId,
+          title: `\u{1F6AB} \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924: ${u.name || u.email}`,
+          message: `\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E '${u.name || ""}' (${u.email}) \u0915\u093E 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948 \u0914\u0930 \u092A\u094D\u0932\u093E\u0928-\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0902 \u0932\u0949\u0915 \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964`,
+          time: "\u0905\u092D\u0940",
+          timestamp: now,
+          unread: true,
+          type: "admin",
+          targetUserEmail: "admin",
+          linkTab: "profile"
+        });
+        existingIds.add(adminExpId);
+      }
+      u.isTrialExpired = true;
+      u.trialExpiredNotified = true;
+      updatedUsers = true;
+    }
+  }
+  if (newNotifs.length > 0) {
+    saveNotificationsDatabase([...newNotifs, ...notifs]);
+  }
+  if (updatedUsers) {
+    saveUsersMasterDatabase(users);
+  }
+}
+runTrialExpirationAndNotificationCheck();
+setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1e3);
+app.get(["/api/users", "/api/admin/users"], (_req, res) => {
+  try {
+    const now = Date.now();
+    const users = loadUsersMasterDatabase();
+    const decorated = users.map((u) => ({
+      ...u,
+      ...computeTrialFields(u, now)
+    }));
+    return res.json({ success: true, users: decorated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
 });
-app.post("/api/users/sync", (req, res) => {
+app.post(["/api/users/sync", "/api/admin/register-user"], (req, res) => {
   try {
     const profile = req.body;
-    if (!profile || !profile.email) {
-      return res.status(400).json({ error: "\u0908\u092E\u0947\u0932 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    if (!profile || !profile.email && !profile.userId) {
+      return res.status(400).json({ error: "\u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
     }
-    let users = loadUsersDatabase();
-    const cleanEmail = profile.email.toLowerCase().trim();
-    const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    const saved = registerOrUpdateUserAuthoritative(profile);
+    const users = loadUsersMasterDatabase().map((u) => ({
+      ...u,
+      ...computeTrialFields(u, Date.now())
+    }));
+    return res.json({ success: true, user: saved, users, totalUsers: users.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user-subscription", (req, res) => {
+  try {
+    const email = (req.query.email || "").toString().toLowerCase().trim();
+    const userId = (req.query.userId || "").toString().toLowerCase().trim();
     const now = Date.now();
-    if (idx >= 0) {
-      users[idx] = {
-        ...users[idx],
-        fullName: profile.fullName || profile.name || users[idx].fullName || "",
-        channelName: profile.channelName || profile.channelNameHi || users[idx].channelName || "",
-        mobile: profile.mobile || profile.mobileNumber || users[idx].mobile || "",
-        channelLogoUrl: profile.channelLogoUrl || users[idx].channelLogoUrl || "",
-        websiteUrl: profile.websiteUrl || users[idx].websiteUrl || "",
-        socialIcons: profile.socialIcons || users[idx].socialIcons,
-        lastLoginAt: now
-      };
-    } else {
-      const newUser = {
-        userId: profile.userId || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        email: cleanEmail,
-        fullName: profile.fullName || profile.username || profile.name || "",
-        channelName: profile.channelName || profile.channelNameHi || "",
-        mobile: profile.mobile || profile.mobileNumber || "",
-        whatsappNumber: profile.whatsappNumber || profile.mobile || "",
-        state: profile.state || "",
-        district: profile.district || "",
-        assembly: profile.assembly || "",
-        village: profile.village || "",
-        role: profile.role || "reporter",
-        tier: profile.tier || "BASIC",
-        planName: profile.planName || "\u092C\u0947\u0938\u093F\u0915 (Basic)",
-        createdAt: profile.createdAt || now,
-        lastLoginAt: now,
-        socialIcons: profile.socialIcons,
-        channelLogoUrl: profile.channelLogoUrl || "",
-        websiteUrl: profile.websiteUrl || ""
-      };
-      users.unshift(newUser);
+    const users = loadUsersMasterDatabase();
+    const match = users.find(
+      (u) => email && u.email && u.email.toLowerCase().trim() === email || email && u.email && u.email.toLowerCase().replace(/\s+/g, "") === email.replace(/\s+/g, "") || userId && u.userId && u.userId.toLowerCase().trim() === userId
+    );
+    if (!match) {
+      return res.json({
+        success: true,
+        subscription: {
+          tier: "basic",
+          planName: "BASIC",
+          trialStartedAt: now,
+          trialEndsAt: now + SEVEN_DAYS_MS,
+          isTrialActive: true,
+          isTrialExpired: false,
+          daysRemaining: 7,
+          hoursRemaining: 24,
+          minutesRemaining: 60,
+          hasActivePaidPlan: false,
+          isBlocked: false,
+          isMobileLocked: false
+        }
+      });
     }
-    saveUsersDatabase(users);
-    return res.json({ success: true, users });
+    const trialFields = computeTrialFields(match, now);
+    return res.json({
+      success: true,
+      subscription: {
+        tier: match.tier || "basic",
+        planName: match.planName || "BASIC",
+        trialStartedAt: match.trialStartedAt,
+        trialEndsAt: match.trialEndsAt,
+        isTrialActive: trialFields.isTrialActive,
+        isTrialExpired: trialFields.isTrialExpired,
+        daysRemaining: trialFields.daysRemaining,
+        hoursRemaining: trialFields.hoursRemaining,
+        minutesRemaining: trialFields.minutesRemaining,
+        hasActivePaidPlan: trialFields.hasActivePaidPlan,
+        isBlocked: Boolean(match.isBlocked),
+        blockedAt: match.blockedAt || null,
+        blockedBy: match.blockedBy || null,
+        primaryMobile: match.mobile,
+        isMobileLocked: Boolean(match.mobile),
+        activatedAt: match.activatedAt,
+        expiresAt: match.expiresAt
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/notifications", (req, res) => {
+  try {
+    const email = (req.query.email || "").toString().toLowerCase().trim();
+    const notifs = loadNotificationsDatabase();
+    if (!email) {
+      return res.json({ success: true, notifications: notifs.slice(0, 50) });
+    }
+    const isAdm = isProtectedAdminAccount(email);
+    const filtered = notifs.filter((n) => {
+      if (!n.targetUserEmail || n.targetUserEmail === "all") return true;
+      if (isAdm && n.targetUserEmail === "admin") return true;
+      const cleanTarget = n.targetUserEmail.toLowerCase().trim();
+      return cleanTarget === email || cleanTarget.replace(/\s+/g, "") === email.replace(/\s+/g, "");
+    });
+    return res.json({ success: true, notifications: filtered.slice(0, 50) });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/notifications/mark-read", (req, res) => {
+  try {
+    const { id, all, email } = req.body;
+    let notifs = loadNotificationsDatabase();
+    if (all) {
+      const cleanEmail = (email || "").toLowerCase().trim();
+      notifs = notifs.map((n) => {
+        if (!cleanEmail || n.targetUserEmail === cleanEmail || n.targetUserEmail === "all" || isProtectedAdminAccount(cleanEmail) && n.targetUserEmail === "admin") {
+          return { ...n, unread: false };
+        }
+        return n;
+      });
+    } else if (id) {
+      notifs = notifs.map((n) => n.id === id ? { ...n, unread: false } : n);
+    }
+    saveNotificationsDatabase(notifs);
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -2451,13 +3026,24 @@ app.get("/api/user-profile", (req, res) => {
   let match = null;
   if (idOrEmail) {
     match = Object.values(allProfiles).find(
-      (p) => p.userId && p.userId.toLowerCase() === idOrEmail || p.uid && p.uid.toLowerCase() === idOrEmail || p.email && p.email.toLowerCase() === idOrEmail || p.username && p.username.toLowerCase() === idOrEmail
+      (p) => p.userId && p.userId.toLowerCase() === idOrEmail || p.uid && p.uid.toLowerCase() === idOrEmail || p.email && p.email.toLowerCase().trim() === idOrEmail || p.email && p.email.toLowerCase().replace(/\s+/g, "") === idOrEmail.replace(/\s+/g, "") || p.username && p.username.toLowerCase() === idOrEmail
     );
   }
   if (!match && username) {
     match = Object.values(allProfiles).find(
       (p) => p.username && p.username.toLowerCase() === username
     );
+  }
+  if (!match && idOrEmail) {
+    const masterUsers = loadUsersMasterDatabase();
+    const masterMatch = masterUsers.find(
+      (u) => u.userId && u.userId.toLowerCase() === idOrEmail || u.email && u.email.toLowerCase().trim() === idOrEmail || u.email && u.email.toLowerCase().replace(/\s+/g, "") === idOrEmail.replace(/\s+/g, "") || u.username && u.username.toLowerCase() === idOrEmail
+    );
+    if (masterMatch) {
+      syncUserToProfiles(masterMatch);
+      const reloaded = loadProfilesDatabase();
+      match = reloaded[masterMatch.email ? masterMatch.email.toLowerCase().trim() : masterMatch.userId] || Object.values(reloaded).find((p) => p.email === masterMatch.email);
+    }
   }
   if (match) {
     return res.json({ success: true, profile: match });
@@ -2521,6 +3107,16 @@ app.post("/api/user-profile", (req, res) => {
       }
     } catch {
     }
+    try {
+      if (updated.email || updated.userId || cleanId.includes("@")) {
+        registerOrUpdateUserAuthoritative({
+          ...updated,
+          email: updated.email || (cleanId.includes("@") ? cleanId : void 0)
+        });
+      }
+    } catch (masterSyncErr) {
+      console.warn("Error auto-syncing profile to master users:", masterSyncErr);
+    }
     return res.json({ success: true, profile: updated });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -2531,32 +3127,15 @@ function loadAdminBranding() {
   try {
     if (import_fs.default.existsSync(ADMIN_BRANDING_FILE)) {
       const raw = import_fs.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (parsed && (parsed.channelNameHi || parsed.channelLogoUrl)) {
-        return parsed;
-      }
-    }
-    const allProfiles = loadProfilesDatabase();
-    const masterProf = allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["admin"];
-    if (masterProf) {
-      return {
-        channelNameHi: masterProf.channelNameHi || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
-        channelNameEn: masterProf.channelNameEn || "Breaking News Wala",
-        channelLogoUrl: masterProf.channelLogoUrl || "/assets/breaking_news_wala_logo.png",
-        websiteUrl: masterProf.websiteUrl || "ainewsmaker.online",
-        mobileNumber: masterProf.mobileNumber || "9669802408",
-        showMobileNumber: true,
-        activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
-        updatedAt: masterProf.updatedAt || Date.now()
-      };
+      return JSON.parse(raw);
     }
   } catch (e) {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
-    channelNameEn: "Breaking News Wala",
-    channelLogoUrl: "/assets/breaking_news_wala_logo.png",
+    channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+    channelNameEn: "AI News Maker",
+    channelLogoUrl: "/assets/ai_news_maker_logo.png",
     websiteUrl: "ainewsmaker.online",
     mobileNumber: "9669802408",
     showMobileNumber: true,
@@ -2587,23 +3166,6 @@ app.post("/api/admin/branding", (req, res) => {
       updatedAt: Date.now()
     };
     saveAdminBranding(updated);
-    try {
-      const allProfiles = loadProfilesDatabase();
-      const targetEmails = ["breakingnewswala.com@gmail.com", "admin.ainewsmaker@gmail.com", "admin"];
-      for (const emailKey of targetEmails) {
-        if (allProfiles[emailKey]) {
-          allProfiles[emailKey] = {
-            ...allProfiles[emailKey],
-            channelNameHi: updated.channelNameHi || allProfiles[emailKey].channelNameHi,
-            channelNameEn: updated.channelNameEn || allProfiles[emailKey].channelNameEn,
-            channelLogoUrl: updated.channelLogoUrl || allProfiles[emailKey].channelLogoUrl,
-            updatedAt: Date.now()
-          };
-        }
-      }
-      saveProfilesDatabase(allProfiles);
-    } catch {
-    }
     return res.json({ success: true, branding: updated });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -2639,7 +3201,7 @@ app.get("/api/custom-frames", (req, res) => {
   const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === "general");
   return res.json({ success: true, frames: userFrames });
 });
-app.post("/api/custom-frames", (req, res) => {
+app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
   try {
     const payload = req.body;
     if (!payload || !payload.assetUrl && !payload.headerUrl && !payload.footerUrl) {
@@ -2991,7 +3553,7 @@ app.delete("/api/admin/raw-news/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/upload-logo", (req, res) => {
+app.post("/api/upload-logo", enforceUserAccessMiddleware, (req, res) => {
   try {
     const { dataUrl, logoType, username } = req.body;
     if (!dataUrl || typeof dataUrl !== "string") {
@@ -3025,6 +3587,10 @@ app.post("/api/upload-logo", (req, res) => {
         }
         allProfiles[key].updatedAt = Date.now();
         saveProfilesDatabase(allProfiles);
+        try {
+          registerOrUpdateUserAuthoritative(allProfiles[key]);
+        } catch {
+        }
       }
     }
     return res.json({ success: true, logoUrl, logoType: isGif ? "gif" : "png" });
@@ -3054,75 +3620,24 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/admin/users", (req, res) => {
-  try {
-    const allProfiles = loadProfilesDatabase();
-    const allUsersDb = loadUsersDatabase();
-    const mergedMap = {};
-    const TEST_USER_KEY = "testuser@ainewsmaker.online";
-    mergedMap[TEST_USER_KEY] = {
-      userId: "usr_test_account_permanent_001",
-      email: TEST_USER_KEY,
-      name: "\u0938\u0948\u0902\u092A\u0932 \u091F\u0947\u0938\u094D\u091F \u092F\u0942\u091C\u093C\u0930 (Test User)",
-      username: "test_reporter",
-      channelName: "\u0938\u0948\u0902\u092A\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915",
-      channelLogoUrl: "/assets/placeholder_news_photo.png",
-      mobile: "9999999999",
-      tier: "basic",
-      planName: "BASIC (Test)",
-      role: "user",
-      accountType: "TEST_USER",
-      isTestUser: true,
-      createdAt: 1726e9,
-      activatedVia: "Permanent Test Sandbox",
-      isProfileLocked: false
-    };
-    if (Array.isArray(allUsersDb)) {
-      for (const u of allUsersDb) {
-        if (!u.email) continue;
-        const key = u.email.toLowerCase().trim();
-        mergedMap[key] = {
-          userId: u.userId || u.id || `usr_${key}`,
-          email: u.email,
-          name: u.fullName || u.name || "\u092F\u0942\u091C\u093C\u0930",
-          username: u.username || "",
-          channelName: u.channelName || "",
-          mobile: u.mobile || "",
-          channelLogoUrl: u.channelLogoUrl || "",
-          websiteUrl: u.websiteUrl || "",
-          socialIcons: u.socialIcons || {},
-          tier: u.tier || "basic",
-          role: u.role || (u.email === "admin.ainewsmaker@gmail.com" ? "admin" : "user"),
-          createdAt: u.createdAt || Date.now()
-        };
-      }
-    }
-    if (allProfiles && typeof allProfiles === "object") {
-      for (const [k, p] of Object.entries(allProfiles)) {
-        const key = (p.email || k).toLowerCase().trim();
-        mergedMap[key] = {
-          ...mergedMap[key] || {},
-          ...p,
-          userId: p.userId || p.id || mergedMap[key]?.userId || `usr_${key}`,
-          email: p.email || mergedMap[key]?.email || key,
-          name: p.fullName || p.name || mergedMap[key]?.name || "\u092F\u0942\u091C\u093C\u0930",
-          channelName: p.channelNameHi || p.channelName || mergedMap[key]?.channelName || "",
-          mobile: p.mobileNumber || p.mobile || mergedMap[key]?.mobile || "",
-          channelLogoUrl: p.channelLogoUrl || mergedMap[key]?.channelLogoUrl || "",
-          websiteUrl: p.websiteUrl || mergedMap[key]?.websiteUrl || ""
-        };
-      }
-    }
-    return res.json({ success: true, users: Object.values(mergedMap) });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
 app.post("/api/admin/update-user", (req, res) => {
   try {
     const { userId, updates } = req.body;
     if (!userId) return res.status(400).json({ error: "userId is required" });
     const key = userId.trim().toLowerCase();
+    const users = loadUsersMasterDatabase();
+    const idx = users.findIndex(
+      (u) => u.userId && u.userId.toLowerCase().trim() === key || u.email && u.email.toLowerCase().trim() === key || u.username && u.username.toLowerCase().trim() === key
+    );
+    if (idx >= 0) {
+      users[idx] = {
+        ...users[idx],
+        ...updates
+      };
+      saveUsersMasterDatabase(users);
+      syncUserToProfiles(users[idx]);
+      return res.json({ success: true, user: users[idx] });
+    }
     const allProfiles = loadProfilesDatabase();
     const existing = allProfiles[key] || Object.values(allProfiles).find((p) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
     const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
@@ -3137,15 +3652,87 @@ app.post("/api/admin/update-user", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.post("/api/admin/block-user", (req, res) => {
+  try {
+    const { userId, userEmail, blockedBy } = req.body;
+    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
+    if (!identifier) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    }
+    if (isProtectedAdminAccount(identifier)) {
+      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    }
+    const users = loadUsersMasterDatabase();
+    const idx = users.findIndex(
+      (u) => u.email && u.email.toLowerCase().trim() === identifier || u.email && u.email.toLowerCase().replace(/\s+/g, "") === identifier.replace(/\s+/g, "") || u.userId && u.userId.toLowerCase().trim() === identifier
+    );
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    if (isProtectedAdminAccount(users[idx].email) || users[idx].role === "superadmin" || users[idx].role === "admin") {
+      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u094B\u0902 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092E\u0924\u093F \u0928\u0939\u0940\u0902 \u0939\u0948" });
+    }
+    users[idx].isBlocked = true;
+    users[idx].blockedAt = Date.now();
+    users[idx].blockedBy = blockedBy || "Admin";
+    users[idx].unblockedAt = null;
+    users[idx].unblockedBy = null;
+    saveUsersMasterDatabase(users);
+    syncUserToProfiles(users[idx]);
+    return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948", user: users[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/unblock-user", (req, res) => {
+  try {
+    const { userId, userEmail, unblockedBy } = req.body;
+    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
+    if (!identifier) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    }
+    const users = loadUsersMasterDatabase();
+    const idx = users.findIndex(
+      (u) => u.email && u.email.toLowerCase().trim() === identifier || u.email && u.email.toLowerCase().replace(/\s+/g, "") === identifier.replace(/\s+/g, "") || u.userId && u.userId.toLowerCase().trim() === identifier
+    );
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    users[idx].isBlocked = false;
+    users[idx].unblockedAt = Date.now();
+    users[idx].unblockedBy = unblockedBy || "Admin";
+    saveUsersMasterDatabase(users);
+    syncUserToProfiles(users[idx]);
+    return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948", user: users[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/admin/delete-user", (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId is required" });
-    const key = userId.trim().toLowerCase();
+    const { userId, userEmail } = req.body;
+    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
+    if (!identifier) return res.status(400).json({ error: "userId is required" });
+    if (isProtectedAdminAccount(identifier)) {
+      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    }
+    let users = loadUsersMasterDatabase();
+    const targetUser = users.find(
+      (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
+    );
+    if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === "superadmin")) {
+      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    }
+    users = users.filter(
+      (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier)
+    );
+    saveUsersMasterDatabase(users);
     const allProfiles = loadProfilesDatabase();
-    delete allProfiles[key];
+    delete allProfiles[identifier];
+    if (targetUser?.email) delete allProfiles[targetUser.email.toLowerCase().trim()];
+    if (targetUser?.username) delete allProfiles[targetUser.username.toLowerCase().trim()];
     saveProfilesDatabase(allProfiles);
-    return res.json({ success: true });
+    return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -3980,7 +4567,7 @@ app.get("/api/health", (_req, res) => {
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
-app.post("/api/analyze-image", async (req, res) => {
+app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => {
   try {
     const {
       imageBase64,
@@ -4099,7 +4686,7 @@ app.post("/api/analyze-image", async (req, res) => {
     });
   }
 });
-app.post("/api/process-news-command", async (req, res) => {
+app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
   const {
     input,
     command,
@@ -4624,7 +5211,7 @@ function createEpaperLocalFallback(rawInput, city = "", reporterName = "") {
     category: "\u092A\u094D\u0930\u0936\u093E\u0938\u0928"
   };
 }
-app.post("/api/process-epaper-pressnote", async (req, res) => {
+app.post("/api/process-epaper-pressnote", enforceUserAccessMiddleware, async (req, res) => {
   try {
     const {
       pressNoteText = "",
@@ -4827,7 +5414,7 @@ function pickCuratedNewsPressPhoto(text, variation = 0) {
   }
   return pickFrom(CURATED_NEWS_PRESS_PHOTOS.general);
 }
-app.post("/api/generate-ai-image", async (req, res) => {
+app.post("/api/generate-ai-image", enforceUserAccessMiddleware, async (req, res) => {
   try {
     const { headline, customPrompt, aspectRatio = "4:5", variation = 0, aiProvider = "gemini" } = req.body;
     if (!headline && !customPrompt) {
@@ -5005,7 +5592,7 @@ Return ONLY the English prompt string.`
     });
   }
 });
-app.post("/api/generate-caption", async (req, res) => {
+app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) => {
   const { headline, location, existingSummary, category, style = "detailed_3_para", customInstruction, aiProvider = "gemini" } = req.body;
   try {
     if (!headline) {
@@ -5119,7 +5706,7 @@ var CURATED_MORNING_PRESS_PHOTOS = [
   "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?q=80&w=1200&auto=format&fit=crop"
   // Warm gentle morning daylight in peaceful nature
 ];
-app.post("/api/generate-morning-jacket", async (req, res) => {
+app.post("/api/generate-morning-jacket", enforceUserAccessMiddleware, async (req, res) => {
   try {
     const {
       topicPrompt,
@@ -5486,199 +6073,19 @@ app.get(
   }
 );
 var USERS_SHEET_FILE = import_path.default.join(process.cwd(), "users_sheet_database.json");
-var USERS_MASTER_FILE = import_path.default.join(process.cwd(), "users_master_database.json");
-function loadUsersMasterDatabase() {
-  try {
-    if (import_fs.default.existsSync(USERS_MASTER_FILE)) {
-      const raw = import_fs.default.readFileSync(USERS_MASTER_FILE, "utf-8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) return list;
-    }
-  } catch {
-  }
-  return [];
-}
-function saveUsersMasterDatabase(data) {
-  try {
-    import_fs.default.writeFileSync(USERS_MASTER_FILE, JSON.stringify(data, null, 2), "utf-8");
-    return true;
-  } catch (e) {
-    console.error("Error writing users_master_database.json:", e);
-    return false;
-  }
-}
-var VIDEOS_DB_FILE = import_path.default.join(process.cwd(), "videos_database.json");
-var DELETED_VIDEOS_FILE = import_path.default.join(process.cwd(), "deleted_videos_database.json");
-var FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1e3;
-function loadDeletedVideoIds() {
-  try {
-    if (import_fs.default.existsSync(DELETED_VIDEOS_FILE)) {
-      const raw = import_fs.default.readFileSync(DELETED_VIDEOS_FILE, "utf-8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) return new Set(list);
-    }
-  } catch {
-  }
-  return /* @__PURE__ */ new Set();
-}
-function saveDeletedVideoId(id) {
-  try {
-    const deletedSet = loadDeletedVideoIds();
-    deletedSet.add(id);
-    import_fs.default.writeFileSync(DELETED_VIDEOS_FILE, JSON.stringify(Array.from(deletedSet), null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error saving deleted video id:", err.message);
-  }
-}
-function loadVideosDatabase() {
-  try {
-    let videos = [];
-    if (import_fs.default.existsSync(VIDEOS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(VIDEOS_DB_FILE, "utf-8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) videos = list;
-    }
-    const now = Date.now();
-    const deletedSet = loadDeletedVideoIds();
-    const validVideos = videos.filter((v) => {
-      if (!v || !v.id) return false;
-      if (deletedSet.has(v.id)) return false;
-      const age = now - (v.createdAt || now);
-      if (age > FOUR_DAYS_MS) {
-        return false;
-      }
-      return true;
-    });
-    if (validVideos.length !== videos.length) {
-      saveVideosDatabase(validVideos);
-    }
-    return validVideos;
-  } catch (err) {
-    console.error("Error loading videos database:", err.message);
-    return [];
-  }
-}
-function saveVideosDatabase(videos) {
-  try {
-    import_fs.default.writeFileSync(VIDEOS_DB_FILE, JSON.stringify(videos, null, 2), "utf-8");
-    return true;
-  } catch (err) {
-    console.error("Error saving videos database:", err.message);
-    return false;
-  }
-}
-app.get("/api/videos", (_req, res) => {
-  try {
-    const videos = loadVideosDatabase();
-    return res.json({ success: true, videos });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.post("/api/admin/videos/upload", (req, res) => {
-  try {
-    const videoData = req.body;
-    if (!videoData || !videoData.title || !videoData.videoUrl) {
-      return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0926\u094B\u0928\u094B\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
-    }
-    const newVideo = {
-      id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: videoData.title.trim(),
-      caption: (videoData.caption || "").trim(),
-      aspectRatio: videoData.aspectRatio || "4:5",
-      createdAt: videoData.createdAt || Date.now(),
-      duration: videoData.duration || "01:30",
-      channel: videoData.channel || "\u090F\u0921\u092E\u093F\u0928 \u0935\u093E\u092F\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
-      views: videoData.views || "1K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
-      videoUrl: videoData.videoUrl,
-      thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
-      category: videoData.category || "\u0935\u093E\u092F\u0930\u0932"
-    };
-    const currentVideos = loadVideosDatabase();
-    const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];
-    saveVideosDatabase(updated);
-    return res.json({ success: true, video: newVideo, total: updated.length });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.put("/api/admin/videos/:id", (req, res) => {
-  try {
-    const videoId = req.params.id;
-    const updates = req.body;
-    const currentVideos = loadVideosDatabase();
-    const idx = currentVideos.findIndex((v) => v.id === videoId);
-    if (idx === -1) {
-      return res.status(404).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
-    }
-    currentVideos[idx] = {
-      ...currentVideos[idx],
-      ...updates,
-      id: videoId
-      // never overwrite id
-    };
-    saveVideosDatabase(currentVideos);
-    return res.json({ success: true, video: currentVideos[idx] });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.delete("/api/admin/videos/:id", (req, res) => {
-  try {
-    const videoId = req.params.id;
-    saveDeletedVideoId(videoId);
-    const currentVideos = loadVideosDatabase();
-    const filtered = currentVideos.filter((v) => v.id !== videoId);
-    saveVideosDatabase(filtered);
-    return res.json({ success: true, deletedId: videoId, remaining: filtered.length });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.get("/api/admin/master-users", (_req, res) => {
-  const users = loadUsersMasterDatabase();
-  return res.json({ success: true, users });
-});
-app.post("/api/admin/register-user", (req, res) => {
-  try {
-    const user = req.body;
-    if (!user || !user.email && !user.userId) {
-      return res.status(400).json({ error: "User email or ID required" });
-    }
-    const cleanEmail = (user.email || user.userId || "").toLowerCase().trim();
-    const current = loadUsersMasterDatabase();
-    const filtered = current.filter((u) => (u.email || u.userId || "").toLowerCase().trim() !== cleanEmail);
-    const updated = [user, ...filtered];
-    saveUsersMasterDatabase(updated);
-    const allProfiles = loadProfilesDatabase();
-    const existingProf = allProfiles[cleanEmail] || {};
-    allProfiles[cleanEmail] = {
-      ...existingProf,
-      userId: user.userId || user.id || cleanEmail,
-      email: cleanEmail,
-      username: user.username || existingProf.username || cleanEmail.split("@")[0],
-      fullName: user.name || user.fullName || existingProf.fullName || "\u092F\u0942\u091C\u093C\u0930",
-      channelNameHi: user.channelName || existingProf.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameEn: user.channelName || existingProf.channelNameEn || "AI News Maker",
-      channelLogoUrl: user.channelLogoUrl || existingProf.channelLogoUrl || "/assets/ai_news_maker_logo.png",
-      channelLogoType: "png",
-      mobileNumber: user.mobile || existingProf.mobileNumber || "",
-      tier: user.tier || existingProf.tier || "basic",
-      role: user.role || existingProf.role || "user",
-      updatedAt: Date.now()
-    };
-    saveProfilesDatabase(allProfiles);
-    return res.json({ success: true, user, totalUsers: updated.length });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
 app.post("/api/admin/sync-users-sheet", (req, res) => {
   try {
     const { users } = req.body;
     if (Array.isArray(users)) {
       import_fs.default.writeFileSync(USERS_SHEET_FILE, JSON.stringify(users, null, 2), "utf-8");
-      saveUsersMasterDatabase(users);
+      for (const u of users) {
+        if (u.email || u.userId) {
+          try {
+            registerOrUpdateUserAuthoritative(u);
+          } catch {
+          }
+        }
+      }
       return res.json({ success: true, count: users.length });
     }
     return res.status(400).json({ error: "Users list required" });
@@ -5707,36 +6114,45 @@ app.post("/api/admin/update-version-info", (req, res) => {
   }
 });
 async function startServer() {
-  const possibleDistPaths = [
-    import_path.default.join(process.cwd(), "dist"),
-    import_path.default.join(process.cwd(), "web_studio", "dist"),
-    import_path.default.join(process.cwd(), "public"),
-    safeDirname,
-    import_path.default.join(safeDirname, "dist")
-  ];
-  const distPath = possibleDistPaths.find((p) => import_fs.default.existsSync(import_path.default.join(p, "index.html"))) || import_path.default.join(process.cwd(), "dist");
-  console.log(`Serving static studio files from: ${distPath}`);
-  app.use(
-    import_express.default.static(distPath, {
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith(".html")) {
-          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-          res.setHeader("Pragma", "no-cache");
-          res.setHeader("Expires", "0");
-        } else if (filePath.includes("/assets/")) {
-          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: { middlewareMode: true, host: "0.0.0.0", port: PORT },
+      appType: "spa"
+    });
+    app.use(vite.middlewares);
+  } else {
+    const possibleDistPaths = [
+      import_path.default.join(process.cwd(), "dist"),
+      import_path.default.join(process.cwd(), "web_studio", "dist"),
+      import_path.default.join(process.cwd(), "public"),
+      safeDirname,
+      import_path.default.join(safeDirname, "dist")
+    ];
+    const distPath = possibleDistPaths.find((p) => import_fs.default.existsSync(import_path.default.join(p, "index.html"))) || import_path.default.join(process.cwd(), "dist");
+    console.log(`Serving static studio files from: ${distPath}`);
+    app.use(
+      import_express.default.static(distPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(".html")) {
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
+          } else if (filePath.includes("/assets/")) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
         }
-      }
-    })
-  );
-  app.get("*", (_req, res) => {
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    res.sendFile(import_path.default.join(distPath, "index.html"));
-  });
+      })
+    );
+    app.get("*", (_req, res) => {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.sendFile(import_path.default.join(distPath, "index.html"));
+    });
+  }
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`News Graphic Studio server running on http://0.0.0.0:${PORT}`);
+    console.log(`AI News Maker server running on http://0.0.0.0:${PORT}`);
   });
   serverInstance.on("error", (err) => {
     console.error("Server listen error:", err.message);

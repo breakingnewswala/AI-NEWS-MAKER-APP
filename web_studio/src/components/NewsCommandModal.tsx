@@ -90,6 +90,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       onApplyResult({
         headline: manualHeadline,
         formattedHeadline: manualHeadline,
+        highlightWords: [],
         summary: manualShortDesc,
         location: manualLocation || 'विशेष कवरेज',
         pickedImages: {
@@ -112,7 +113,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     let cleanSummary = (summary || '').trim();
 
     const hashtagRegex = /#[\w\u0900-\u097F]+/g;
-    const existingTags = cleanSummary.match(hashtagRegex) || [];
+    const existingTags: string[] = cleanSummary.match(hashtagRegex) || [];
     const textWithoutTags = cleanSummary.replace(hashtagRegex, '').trim();
 
     let channelUser = '';
@@ -1006,7 +1007,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
               </div>
               <button
                 type="button"
-                onClick={handleProcess}
+                onClick={() => { void handleProcess(); }}
                 disabled={loading}
                 className="px-2.5 py-1 rounded bg-red-800 hover:bg-red-700 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 cursor-pointer transition-colors"
               >

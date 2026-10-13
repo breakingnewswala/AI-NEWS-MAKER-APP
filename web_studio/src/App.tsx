@@ -443,45 +443,13 @@ export default function App() {
   const [videos, setVideos] = useState<VideoFeedItem[]>(() => {
     try {
       const saved = localStorage.getItem('app_admin_videos');
-      const deletedRaw = localStorage.getItem('app_deleted_video_ids');
-      const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((v: any) => !deletedSet.has(v.id));
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
     return INITIAL_VIDEOS;
   });
-
-  // Real-time video sync with server + 4-day auto-purge filter
-  const fetchLiveVideos = async () => {
-    try {
-      const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/videos`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.videos)) {
-          const deletedRaw = localStorage.getItem('app_deleted_video_ids');
-          const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
-          const cleanList = data.videos.filter((v: any) => !deletedSet.has(v.id));
-          setVideos(cleanList);
-          try {
-            localStorage.setItem('app_admin_videos', JSON.stringify(cleanList));
-          } catch {}
-        }
-      }
-    } catch (err) {
-      console.warn('Real-time videos sync failed:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchLiveVideos();
-    const interval = setInterval(fetchLiveVideos, 15000); // 15-second real-time polling
-    return () => clearInterval(interval);
-  }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // Authentication session - loads from localStorage or Android native bridge
@@ -868,8 +836,24 @@ export default function App() {
     const handleSubUpdate = () => {
       setUserSubscription(getUserSubscription(currentUser?.email));
     };
+    const handleBlocked = () => {
+      setUserSubscription((prev) => ({ ...prev, isBlocked: true }));
+      showToast('⚠️ आपका खाता ब्लॉक कर दिया गया है');
+    };
+    const handleExpired = () => {
+      setUserSubscription((prev) => ({ ...prev, isTrialExpired: true, daysRemaining: 0 }));
+      showToast('🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है');
+    };
+
     window.addEventListener('ai_news_user_plan_updated', handleSubUpdate);
-    return () => window.removeEventListener('ai_news_user_plan_updated', handleSubUpdate);
+    window.addEventListener('user_account_blocked', handleBlocked);
+    window.addEventListener('user_trial_expired', handleExpired);
+
+    return () => {
+      window.removeEventListener('ai_news_user_plan_updated', handleSubUpdate);
+      window.removeEventListener('user_account_blocked', handleBlocked);
+      window.removeEventListener('user_trial_expired', handleExpired);
+    };
   }, [currentUser?.email]);
 
   const isAdminUser = isUserAdmin(currentUser);
@@ -1765,6 +1749,52 @@ export default function App() {
         />
       </div>
 
+      {/* Blocked Account Warning Banner */}
+      {userSubscription?.isBlocked && (
+        <div className="w-full bg-rose-950/95 text-white border-b-2 border-rose-500 py-3 px-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm font-bold z-40 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 max-w-4xl mx-auto sm:mx-0">
+            <span className="text-xl">🚫</span>
+            <div>
+              <span className="font-black text-rose-300">खाता ब्लॉक है: </span>
+              <span>आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। आपकी सभी सेवाएं व टूल्स अस्थाई रूप से रोक दिए गए हैं।</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentTab('profile');
+              window.location.hash = 'profile';
+            }}
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
+          >
+            सहायता / सपोर्ट डेस्क
+          </button>
+        </div>
+      )}
+
+      {/* Trial Expired Warning Banner */}
+      {!userSubscription?.isBlocked && userSubscription?.tier === 'basic' && (userSubscription?.isTrialExpired || (userSubscription?.daysRemaining !== undefined && userSubscription.daysRemaining <= 0)) && (
+        <div className="w-full bg-amber-950/95 text-white border-b-2 border-amber-400 py-2.5 px-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm font-bold z-40 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 max-w-4xl mx-auto sm:mx-0">
+            <span className="text-xl">🔒</span>
+            <div>
+              <span className="font-black text-amber-300">7-दिवसीय फ्री ट्रायल समाप्त: </span>
+              <span>आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व वीडियो टूल्स लॉक हैं। जारी रखने के लिए प्लान अपग्रेड करें।</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentTab('profile');
+              window.location.hash = 'profile';
+            }}
+            className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
+          >
+            प्लान अपग्रेड करें
+          </button>
+        </div>
+      )}
+
       {/* 1. Home Feed Tab */}
       {currentTab === 'home' && (
         <HomeScreenWeb
@@ -2229,43 +2259,6 @@ export default function App() {
           }}
           onAdminAddVideo={(newVid) => {
             setVideos((prev) => [newVid, ...prev]);
-            try {
-              const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
-              localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
-              fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newVid),
-              }).catch(() => {});
-            } catch {}
-          }}
-          onAdminUpdateVideo={(updatedVid) => {
-            setVideos((prev) => prev.map((v) => (v.id === updatedVid.id ? updatedVid : v)));
-            try {
-              fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(updatedVid.id)}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedVid),
-              }).catch(() => {});
-            } catch {}
-          }}
-          onAdminDeleteVideo={(videoId) => {
-            // Permanently delete video - will NEVER reappear
-            setVideos((prev) => prev.filter((v) => v.id !== videoId));
-            try {
-              const deletedRaw = localStorage.getItem('app_deleted_video_ids');
-              const deletedList = deletedRaw ? JSON.parse(deletedRaw) : [];
-              if (!deletedList.includes(videoId)) {
-                deletedList.push(videoId);
-                localStorage.setItem('app_deleted_video_ids', JSON.stringify(deletedList));
-              }
-              const currentSaved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
-              localStorage.setItem('app_admin_videos', JSON.stringify(currentSaved.filter((v: any) => v.id !== videoId)));
-
-              fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(videoId)}`, {
-                method: 'DELETE',
-              }).catch(() => {});
-            } catch {}
           }}
         />
       )}
