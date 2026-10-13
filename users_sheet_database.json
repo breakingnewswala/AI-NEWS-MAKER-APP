@@ -1,0 +1,34 @@
+[
+  {
+    "userId": "usr_test_account_permanent_001",
+    "email": "testuser@ainewsmaker.online",
+    "name": "सैंपल टेस्ट यूज़र (Test User)",
+    "username": "test_reporter",
+    "role": "user",
+    "channelName": "सैंपल न्यूज़ नेटवर्क",
+    "channelLogoUrl": "/assets/placeholder_news_photo.png",
+    "mobile": "9999999999",
+    "tier": "basic",
+    "planName": "BASIC",
+    "activatedAt": 1726000000000,
+    "expiresAt": 1757536000000,
+    "activatedVia": "Permanent Test Sandbox",
+    "isLocked": false,
+    "isProfileLocked": false
+  },
+  {
+    "userId": "user-1791885216776",
+    "email": "admin.ainewsmaker@gmail.com",
+    "name": "सुपर एडमिन (Super Admin)",
+    "role": "superadmin",
+    "tier": "ultra",
+    "planName": "VIP DESK",
+    "channelName": "ब्रेकिंग न्यूज़ वाला",
+    "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
+    "mobile": "9669802408",
+    "isProfileLocked": false,
+    "activatedAt": 1791885216776,
+    "expiresAt": 2107245216776,
+    "activatedVia": "Super Admin Preset"
+  }
+]

@@ -5633,6 +5633,177 @@ function saveUsersMasterDatabase(data: any[]): boolean {
   }
 }
 
+
+// =========================================================================
+// VIDEOS DATABASE & 4-DAY AUTO-CLEANUP + PERMANENT DELETE (videos_database.json)
+// =========================================================================
+const VIDEOS_DB_FILE = path.join(process.cwd(), "videos_database.json");
+const DELETED_VIDEOS_FILE = path.join(process.cwd(), "deleted_videos_database.json");
+const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+
+interface StoredVideoItem {
+  id: string;
+  title: string;
+  caption?: string;
+  aspectRatio: string;
+  createdAt: number;
+  duration?: string;
+  channel?: string;
+  views?: string;
+  videoUrl: string;
+  thumbnailUrl?: string;
+  category?: string;
+}
+
+function loadDeletedVideoIds(): Set<string> {
+  try {
+    if (fs.existsSync(DELETED_VIDEOS_FILE)) {
+      const raw = fs.readFileSync(DELETED_VIDEOS_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch {}
+  return new Set();
+}
+
+function saveDeletedVideoId(id: string): void {
+  try {
+    const deletedSet = loadDeletedVideoIds();
+    deletedSet.add(id);
+    fs.writeFileSync(DELETED_VIDEOS_FILE, JSON.stringify(Array.from(deletedSet), null, 2), "utf-8");
+  } catch (err: any) {
+    console.error("Error saving deleted video id:", err.message);
+  }
+}
+
+function loadVideosDatabase(): StoredVideoItem[] {
+  try {
+    let videos: StoredVideoItem[] = [];
+    if (fs.existsSync(VIDEOS_DB_FILE)) {
+      const raw = fs.readFileSync(VIDEOS_DB_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) videos = list;
+    }
+
+    const now = Date.now();
+    const deletedSet = loadDeletedVideoIds();
+
+    // 4-day auto-delete rule: createdAt < (now - FOUR_DAYS_MS) are permanently purged
+    // Also purge any videos explicitly deleted by Admin
+    const validVideos = videos.filter((v) => {
+      if (!v || !v.id) return false;
+      if (deletedSet.has(v.id)) return false;
+      const age = now - (v.createdAt || now);
+      if (age > FOUR_DAYS_MS) {
+        return false; // older than 4 days -> auto delete
+      }
+      return true;
+    });
+
+    if (validVideos.length !== videos.length) {
+      // Save back auto-purged database
+      saveVideosDatabase(validVideos);
+    }
+
+    return validVideos;
+  } catch (err: any) {
+    console.error("Error loading videos database:", err.message);
+    return [];
+  }
+}
+
+function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
+  try {
+    fs.writeFileSync(VIDEOS_DB_FILE, JSON.stringify(videos, null, 2), "utf-8");
+    return true;
+  } catch (err: any) {
+    console.error("Error saving videos database:", err.message);
+    return false;
+  }
+}
+
+// 1. GET /api/videos - Real-time videos for all users & admins
+app.get("/api/videos", (_req, res) => {
+  try {
+    const videos = loadVideosDatabase();
+    return res.json({ success: true, videos });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 2. POST /api/admin/videos/upload - Admin uploads video to server
+app.post("/api/admin/videos/upload", (req, res) => {
+  try {
+    const videoData = req.body;
+    if (!videoData || !videoData.title || !videoData.videoUrl) {
+      return res.status(400).json({ error: "वीडियो और शीर्षक दोनों अनिवार्य हैं।" });
+    }
+
+    const newVideo: StoredVideoItem = {
+      id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: videoData.title.trim(),
+      caption: (videoData.caption || "").trim(),
+      aspectRatio: videoData.aspectRatio || "4:5",
+      createdAt: videoData.createdAt || Date.now(),
+      duration: videoData.duration || "01:30",
+      channel: videoData.channel || "एडमिन वायरल डेस्क",
+      views: videoData.views || "1K देखा गया",
+      videoUrl: videoData.videoUrl,
+      thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+      category: videoData.category || "वायरल",
+    };
+
+    const currentVideos = loadVideosDatabase();
+    // Prepend so users see it immediately in real-time
+    const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];
+    saveVideosDatabase(updated);
+
+    return res.json({ success: true, video: newVideo, total: updated.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 3. PUT /api/admin/videos/:id - Admin updates video (title, caption, aspect ratio)
+app.put("/api/admin/videos/:id", (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const updates = req.body;
+    const currentVideos = loadVideosDatabase();
+    const idx = currentVideos.findIndex((v) => v.id === videoId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "वीडियो नहीं मिला।" });
+    }
+
+    currentVideos[idx] = {
+      ...currentVideos[idx],
+      ...updates,
+      id: videoId, // never overwrite id
+    };
+
+    saveVideosDatabase(currentVideos);
+    return res.json({ success: true, video: currentVideos[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 4. DELETE /api/admin/videos/:id - Admin permanently deletes video (never reappears)
+app.delete("/api/admin/videos/:id", (req, res) => {
+  try {
+    const videoId = req.params.id;
+    saveDeletedVideoId(videoId); // mark permanently deleted
+    const currentVideos = loadVideosDatabase();
+    const filtered = currentVideos.filter((v) => v.id !== videoId);
+    saveVideosDatabase(filtered);
+
+    return res.json({ success: true, deletedId: videoId, remaining: filtered.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // Merged into primary /api/admin/users route above for seamless sync
 app.get("/api/admin/master-users", (_req, res) => {
   const users = loadUsersMasterDatabase();

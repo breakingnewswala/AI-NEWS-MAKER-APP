@@ -443,13 +443,45 @@ export default function App() {
   const [videos, setVideos] = useState<VideoFeedItem[]>(() => {
     try {
       const saved = localStorage.getItem('app_admin_videos');
+      const deletedRaw = localStorage.getItem('app_deleted_video_ids');
+      const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((v: any) => !deletedSet.has(v.id));
+        }
       }
     } catch {}
     return INITIAL_VIDEOS;
   });
+
+  // Real-time video sync with server + 4-day auto-purge filter
+  const fetchLiveVideos = async () => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      const res = await fetch(`${baseUrl}/api/videos`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.videos)) {
+          const deletedRaw = localStorage.getItem('app_deleted_video_ids');
+          const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
+          const cleanList = data.videos.filter((v: any) => !deletedSet.has(v.id));
+          setVideos(cleanList);
+          try {
+            localStorage.setItem('app_admin_videos', JSON.stringify(cleanList));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Real-time videos sync failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveVideos();
+    const interval = setInterval(fetchLiveVideos, 15000); // 15-second real-time polling
+    return () => clearInterval(interval);
+  }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // Authentication session - loads from localStorage or Android native bridge
@@ -2197,12 +2229,43 @@ export default function App() {
           }}
           onAdminAddVideo={(newVid) => {
             setVideos((prev) => [newVid, ...prev]);
+            try {
+              const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
+              localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
+              fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newVid),
+              }).catch(() => {});
+            } catch {}
           }}
           onAdminUpdateVideo={(updatedVid) => {
             setVideos((prev) => prev.map((v) => (v.id === updatedVid.id ? updatedVid : v)));
+            try {
+              fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(updatedVid.id)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedVid),
+              }).catch(() => {});
+            } catch {}
           }}
           onAdminDeleteVideo={(videoId) => {
+            // Permanently delete video - will NEVER reappear
             setVideos((prev) => prev.filter((v) => v.id !== videoId));
+            try {
+              const deletedRaw = localStorage.getItem('app_deleted_video_ids');
+              const deletedList = deletedRaw ? JSON.parse(deletedRaw) : [];
+              if (!deletedList.includes(videoId)) {
+                deletedList.push(videoId);
+                localStorage.setItem('app_deleted_video_ids', JSON.stringify(deletedList));
+              }
+              const currentSaved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
+              localStorage.setItem('app_admin_videos', JSON.stringify(currentSaved.filter((v: any) => v.id !== videoId)));
+
+              fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(videoId)}`, {
+                method: 'DELETE',
+              }).catch(() => {});
+            } catch {}
           }}
         />
       )}

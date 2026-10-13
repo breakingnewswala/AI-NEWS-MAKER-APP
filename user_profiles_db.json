@@ -34,5 +34,32 @@
     "tier": "ultra",
     "onboardingCompleted": true,
     "updatedAt": 1791792137806
+  },
+  "breakingnewswala": {
+    "fullName": "सुपर एडमिन (Super Admin)",
+    "channelNameHi": "ब्रेकिंग न्यूज़ वाला",
+    "channelNameEn": "Breaking News Wala",
+    "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
+    "channelLogoType": "png",
+    "socialIcons": {
+      "youtube": true,
+      "facebook": true,
+      "instagram": true,
+      "twitter": false,
+      "telegram": false,
+      "whatsapp": true
+    },
+    "username": "breakingnewswala",
+    "mobileNumber": "9669802408",
+    "showMobileNumber": true,
+    "websiteUrl": "ainewsmaker.online",
+    "email": "",
+    "userId": "breakingnewswala",
+    "uid": "breakingnewswala",
+    "onboardingCompleted": true,
+    "role": "reporter",
+    "district": "",
+    "tier": "basic",
+    "updatedAt": 1791885217310
   }
 }
