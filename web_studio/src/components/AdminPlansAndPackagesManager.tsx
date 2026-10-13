@@ -2157,7 +2157,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           <td className="p-3">
                             <div className="font-bold text-white flex items-center gap-1.5">
                               <span>{u.name || u.email.split('@')[0]}</span>
-                              {u.role === 'superadmin' ? (
+                              {u.email === 'testuser@ainewsmaker.online' || (u as any).accountType === 'TEST_USER' ? (
+                                <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/50 text-[9px] font-black rounded uppercase flex items-center gap-1 shadow-sm">
+                                  🧪 TEST_USER (स्थायी टेस्ट यूज़र)
+                                </span>
+                              ) : u.role === 'superadmin' ? (
                                 <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
                                   👑 Super Admin
                                 </span>

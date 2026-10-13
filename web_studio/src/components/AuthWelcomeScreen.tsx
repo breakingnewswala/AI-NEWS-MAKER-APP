@@ -59,57 +59,23 @@ export interface AuthWelcomeScreenProps {
   onOpenGoogleApiGuide?: () => void;
 }
 
+// STRICTLY ONLY TWO AUTHORIZED ADMIN PROFILES:
+// 1. Super Admin: admin.ainewsmaker@gmail.com
+// 2. Admin: breakingnewswala.com@gmail.com
+// Ordinary users can never assign themselves Admin or Super Admin roles.
 export const KNOWN_REGISTERED_USERS: Record<
   string,
   Partial<ChannelProfile & { role: 'admin' | 'superadmin' | 'reporter' | 'user'; district: string }>
 > = {
   'admin.ainewsmaker@gmail.com': {
-    channelNameHi: 'एआई न्यूज़ मेकर',
-    channelNameEn: 'AI News Maker',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    channelLogoType: 'png',
-    username: 'superadmin',
-    mobileNumber: '9669802408',
-    websiteUrl: 'ainewsmaker.online',
+    role: 'superadmin',
     fullName: 'सुपर एडमिन (Super Admin)',
     district: 'हेडक्वार्टर सेंट्रल डेस्क',
-    role: 'superadmin',
-  },
-  superadmin: {
-    channelNameHi: 'एआई न्यूज़ मेकर',
-    channelNameEn: 'AI News Maker',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    channelLogoType: 'png',
-    username: 'superadmin',
-    mobileNumber: '9669802408',
-    websiteUrl: 'ainewsmaker.online',
-    fullName: 'सुपर एडमिन (Super Admin)',
-    district: 'हेडक्वार्टर सेंट्रल डेस्क',
-    role: 'superadmin',
   },
   'breakingnewswala.com@gmail.com': {
-    channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
-    channelNameEn: 'Breaking News Wala',
-    channelLogoUrl: '/assets/breaking_news_wala_logo.png',
-    channelLogoType: 'png',
-    username: 'breakingnewswala',
-    mobileNumber: '9669802408',
-    websiteUrl: 'ainewsmaker.online',
+    role: 'admin',
     fullName: 'मुख्य संपादक',
     district: 'सेंट्रल डेस्क / भोपाल',
-    role: 'admin',
-  },
-  'admin@breakingnewswala.com': {
-    channelNameHi: 'एआई न्यूज़ मेकर',
-    channelNameEn: 'AI News Maker',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    channelLogoType: 'png',
-    username: 'admin',
-    mobileNumber: '9669802408',
-    websiteUrl: 'ainewsmaker.online',
-    fullName: 'एडमिन',
-    district: 'डिजिटल डेस्क',
-    role: 'admin',
   },
 };
 

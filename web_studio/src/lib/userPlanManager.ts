@@ -530,18 +530,43 @@ export interface PlanUserRecord {
   socialIcons?: Record<string, boolean>;
 }
 
+export const PERMANENT_TEST_USER: PlanUserRecord = {
+  userId: 'usr_test_account_permanent_001',
+  email: 'testuser@ainewsmaker.online',
+  name: 'सैंपल टेस्ट यूज़र (Test User)',
+  username: 'test_reporter',
+  role: 'user',
+  channelName: 'सैंपल न्यूज़ नेटवर्क',
+  channelLogoUrl: '/assets/placeholder_news_photo.png',
+  mobile: '9999999999',
+  tier: 'basic',
+  planName: 'BASIC',
+  activatedAt: 1726000000000,
+  expiresAt: 1726000000000 + 365 * 24 * 60 * 60 * 1000,
+  activatedVia: 'Permanent Test Sandbox',
+  isLocked: false,
+  isProfileLocked: false,
+};
+
 export function getPlanUsers(): PlanUserRecord[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return [PERMANENT_TEST_USER];
   try {
     const saved = localStorage.getItem(STORAGE_KEY_ASSIGNED_USERS);
+    let list: PlanUserRecord[] = [];
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) list = parsed;
     }
+    // Ensure PERMANENT_TEST_USER is present exactly once
+    const exists = list.some((u) => u.email.toLowerCase() === PERMANENT_TEST_USER.email.toLowerCase() || u.userId === PERMANENT_TEST_USER.userId);
+    if (!exists) {
+      list = [PERMANENT_TEST_USER, ...list];
+    }
+    return list;
   } catch (e) {
     console.warn('Error reading plan users:', e);
   }
-  return [];
+  return [PERMANENT_TEST_USER];
 }
 
 export function recordUserPlanAssignment(record: PlanUserRecord): void {

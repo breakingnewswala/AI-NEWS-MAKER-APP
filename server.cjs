@@ -3059,6 +3059,24 @@ app.get("/api/admin/users", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const allUsersDb = loadUsersDatabase();
     const mergedMap = {};
+    const TEST_USER_KEY = "testuser@ainewsmaker.online";
+    mergedMap[TEST_USER_KEY] = {
+      userId: "usr_test_account_permanent_001",
+      email: TEST_USER_KEY,
+      name: "\u0938\u0948\u0902\u092A\u0932 \u091F\u0947\u0938\u094D\u091F \u092F\u0942\u091C\u093C\u0930 (Test User)",
+      username: "test_reporter",
+      channelName: "\u0938\u0948\u0902\u092A\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915",
+      channelLogoUrl: "/assets/placeholder_news_photo.png",
+      mobile: "9999999999",
+      tier: "basic",
+      planName: "BASIC (Test)",
+      role: "user",
+      accountType: "TEST_USER",
+      isTestUser: true,
+      createdAt: 1726e9,
+      activatedVia: "Permanent Test Sandbox",
+      isProfileLocked: false
+    };
     if (Array.isArray(allUsersDb)) {
       for (const u of allUsersDb) {
         if (!u.email) continue;

@@ -15,53 +15,8 @@ export interface AdminRssSource {
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
 
-export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
-  {
-    id: 'src_aajtak_live',
-    name: 'आज तक (Aaj Tak) - ब्रेकिंग न्यूज़',
-    url: 'https://feeds.feedburner.com/aajtak/top',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: 1726000000000,
-  },
-  {
-    id: 'src_amarujala_live',
-    name: 'अमर उजाला (Amar Ujala) - देश',
-    url: 'https://www.amarujala.com/rss/breaking-news.xml',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: 1726000001000,
-  },
-  {
-    id: 'src_ndtv_live',
-    name: 'NDTV इंडिया - लाइव समाचार',
-    url: 'https://feeds.feedburner.com/ndtvkhabar',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: 1726000002000,
-  },
-  {
-    id: 'src_bbc_live',
-    name: 'बीबीसी हिंदी (BBC Hindi)',
-    url: 'https://feeds.bbci.co.uk/hindi/rss.xml',
-    type: 'rss',
-    category: 'अंतरराष्ट्रीय',
-    isActive: true,
-    createdAt: 1726000003000,
-  },
-  {
-    id: 'src_nbt_live',
-    name: 'नवभारत टाइम्स (NBT)',
-    url: 'https://navbharattimes.indiatimes.com/rssfeedstopstories.cms',
-    type: 'rss',
-    category: 'राज्य',
-    isActive: true,
-    createdAt: 1726000004000,
-  },
-];
+// No fake/seeded defaults - Only actual records entered by Admin or Super Admin
+export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [];
 
 let memoryRssSources: AdminRssSource[] = [];
 
