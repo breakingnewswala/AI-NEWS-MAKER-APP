@@ -134,6 +134,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     profile?.showMobileNumber ?? true
   );
 
+  // Listen to profile updates (Video feed prioritizes GIF logo, falls back to PNG primary logo)
+  useEffect(() => {
+    const handleProfileUpdate = (e: any) => {
+      const p = e.detail;
+      if (p) {
+        const logo = p.channelLogoGifUrl || p.channelLogoPngUrl || p.channelLogoUrl || '';
+        if (logo) setChannelLogoUrl(logo);
+      }
+    };
+    window.addEventListener('channel_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('channel_profile_updated', handleProfileUpdate);
+  }, []);
+
   const [tickerText, setTickerText] = useState<string>(
     '⚡ ताज़ा बुलेटिन: देश भर के डिजिटल पत्रकारों के लिए नई प्रेस नियमावली जारी • लाइव अपडेट्स जारी'
   );

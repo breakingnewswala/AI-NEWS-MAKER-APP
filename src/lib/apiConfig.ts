@@ -71,3 +71,41 @@ export function getApiUrl(endpoint: string): string {
   }
   return `${base}${cleanEndpoint}`;
 }
+
+export function getAuthToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const direct = localStorage.getItem('reporter_auth_token');
+    if (direct) return direct.trim();
+    const session = localStorage.getItem('reporter_auth_session');
+    if (session) {
+      const u = JSON.parse(session);
+      if (u.token) return u.token.trim();
+    }
+  } catch {}
+  return '';
+}
+
+export function setAuthToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) {
+      localStorage.setItem('reporter_auth_token', token.trim());
+    } else {
+      localStorage.removeItem('reporter_auth_token');
+    }
+  } catch {}
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export function getAdminAuthHeaders(): Record<string, string> {
+  return getAuthHeaders();
+}

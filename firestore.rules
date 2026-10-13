@@ -27,7 +27,8 @@ service cloud.firestore {
     function isMasterAdminEmail() {
       return isSignedIn() && (
         request.auth.token.email == 'admin.ainewsmaker@gmail.com' ||
-        request.auth.token.email == 'breakingnewswala.com@gmail.com'
+        request.auth.token.email == 'breakingnewswala.com@gmail.com' ||
+        request.auth.token.email == 'editor.bnwtv@gmail.com'
       );
     }
 

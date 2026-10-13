@@ -893,8 +893,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
       </div>
 
-      {/* Optional Full Frame Overlay PNG - active when custom-png frame is selected OR when master branding is OFF */}
-      {(card.frameDesign === 'custom-png' || card.showMasterBranding === false) && card.customFrameOverlayPng && (
+      {/* Optional Full Frame Overlay PNG - active when customFrameOverlayPng is present */}
+      {card.customFrameOverlayPng && (
         <img
           src={card.customFrameOverlayPng}
           alt="Frame Overlay"
@@ -949,6 +949,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none overflow-hidden">
           {/* Top Half: Transparent Photo Viewport with Framing Accents & Header Controls */}
           <div className="relative w-full h-[53%] flex flex-col justify-between p-3 sm:p-5">
+            {/* Custom Header PNG if user assigned custom header */}
+            {getActiveHeaderPng(card) && (
+              <div className="absolute top-0 inset-x-0 z-35 pointer-events-none">
+                <img
+                  src={getActiveHeaderPng(card)}
+                  alt="Custom Header"
+                  className="w-full h-auto object-contain block"
+                />
+              </div>
+            )}
             {/* Top Header Row: Top-Left Channel Logo Area & Top-Right Location Box */}
             <div className="flex items-start justify-between w-full pointer-events-auto z-30">
               {/* Logo Area: Login user's saved logo with preserved ratio, no 'YOUR LOGO' text */}

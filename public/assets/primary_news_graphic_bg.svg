@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1350" width="1080" height="1350">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="headerBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#050810"/>
+      <stop offset="100%" stop-color="#0B0F1A"/>
+    </linearGradient>
+    <linearGradient id="photoBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#080305"/>
+      <stop offset="50%" stop-color="#140609"/>
+      <stop offset="100%" stop-color="#090204"/>
+    </linearGradient>
+    <linearGradient id="headlineRedGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF2424"/>
+      <stop offset="15%" stop-color="#E20613"/>
+      <stop offset="65%" stop-color="#B8000A"/>
+      <stop offset="100%" stop-color="#800005"/>
+    </linearGradient>
+    <linearGradient id="streakGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FF1A1A" stop-opacity="0"/>
+      <stop offset="35%" stop-color="#FF4D00" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#FFE600" stop-opacity="1"/>
+      <stop offset="65%" stop-color="#FF4D00" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#FF1A1A" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.8"/>
+    </filter>
+    <pattern id="dotPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.5" fill="#1E293B" opacity="0.6"/>
+    </pattern>
+  </defs>
+
+  <!-- 1. BASE BACKGROUND & TOP HEADER AREA (Y: 0 to 180) -->
+  <rect x="0" y="0" width="1080" height="180" fill="url(#headerBg)"/>
+  <rect x="0" y="0" width="1080" height="180" fill="url(#dotPattern)"/>
+
+  <!-- Subtle red atmosphere streaks in header -->
+  <ellipse cx="155" cy="95" rx="140" ry="80" fill="#E20613" opacity="0.25" filter="url(#glowEffect)"/>
+  <ellipse cx="880" cy="95" rx="140" ry="70" fill="#E20613" opacity="0.2" filter="url(#glowEffect)"/>
+
+  <!-- TOP-LEFT: CIRCULAR LOGO BADGE (X: 155, Y: 95) -->
+  <g id="logoArea">
+    <!-- Outer red aura ring -->
+    <circle cx="155" cy="95" r="76" fill="none" stroke="#E20613" stroke-width="4" filter="url(#glowEffect)"/>
+    <circle cx="155" cy="95" r="72" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="3" filter="url(#softShadow)"/>
+    <!-- Default Text inside logo circle -->
+    <text x="155" y="86" text-anchor="middle" font-family="'Arial Black', Impact, sans-serif" font-size="24" font-weight="900" fill="#0A0A0A" letter-spacing="1">YOUR</text>
+    <text x="155" y="118" text-anchor="middle" font-family="'Arial Black', Impact, sans-serif" font-size="28" font-weight="900" fill="#0A0A0A" letter-spacing="1">LOGO</text>
+  </g>
+
+  <!-- TOP-RIGHT: LOCATION BADGE CAPSULE (X: 720 to 1020, Y: 62 to 128) -->
+  <g id="locationArea" filter="url(#softShadow)">
+    <!-- Red outer capsule -->
+    <rect x="720" y="62" width="300" height="66" rx="33" fill="#DC2626"/>
+    <!-- Left white circle with location pin -->
+    <circle cx="755" cy="95" r="23" fill="#FFFFFF"/>
+    <!-- Pin icon inside circle -->
+    <path d="M755 81 C750 81 746 85 746 90 C746 96 755 106 755 106 C755 106 764 96 764 90 C764 85 760 81 755 81 Z M755 93 C753.3 93 752 91.7 752 90 C752 88.3 753.3 87 755 87 C756.7 87 758 88.3 758 90 C758 91.7 756.7 93 755 93 Z" fill="#DC2626"/>
+    <!-- Right white pill container -->
+    <rect x="790" y="68" width="222" height="54" rx="12" fill="#FFFFFF"/>
+    <text x="901" y="104" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="28" font-weight="800" fill="#090A0F">लोकेशन</text>
+  </g>
+
+  <!-- Fiery divider streak below header -->
+  <rect x="0" y="168" width="1080" height="4" fill="url(#streakGlow)" filter="url(#glowEffect)"/>
+
+  <!-- 2. PHOTO VIEWPORT / STEP 4 AREA (Y: 172 to 780) -->
+  <rect x="0" y="172" width="1080" height="608" fill="url(#photoBg)"/>
+
+  <!-- Perspective angled beams in photo background -->
+  <polygon points="0,220 1080,260 1080,310 0,270" fill="#800005" opacity="0.15"/>
+  <polygon points="0,480 1080,440 1080,490 0,530" fill="#800005" opacity="0.15"/>
+
+  <!-- Watermark 'NEWS' text in background -->
+  <text x="140" y="360" font-family="'Arial Black', Impact, sans-serif" font-size="80" font-weight="900" fill="#E20613" opacity="0.12" transform="rotate(-6 140 360)">NEWS</text>
+  <text x="880" y="420" font-family="'Arial Black', Impact, sans-serif" font-size="80" font-weight="900" fill="#E20613" opacity="0.12" transform="rotate(6 880 420)">NEWS</text>
+
+  <!-- Step 4 Default Content (Yellow camera circle + Instructions) -->
+  <g id="step4Placeholder" filter="url(#softShadow)">
+    <!-- Yellow camera circle -->
+    <circle cx="540" cy="320" r="92" fill="#0A0A0A" stroke="#FFFFFF" stroke-width="3" opacity="0.8"/>
+    <circle cx="540" cy="320" r="84" fill="#FFE600" stroke="#000000" stroke-width="2"/>
+    <!-- Camera Glyph -->
+    <path d="M505 305 L522 305 L528 295 L552 295 L558 305 L575 305 C580 305 584 309 584 314 L584 344 C584 349 580 353 575 353 L505 353 C500 353 496 349 496 344 L496 314 C496 309 500 305 505 305 Z M540 344 C551 344 560 335 560 324 C560 313 551 304 540 304 C529 304 520 313 520 324 C520 335 529 344 540 344 Z" fill="#0A0A0A"/>
+    <circle cx="540" cy="324" r="9" fill="#FFE600"/>
+
+    <!-- Red Step 4 Pill Badge -->
+    <rect x="330" y="440" width="420" height="58" rx="29" fill="#DC2626" stroke="#FFFFFF" stroke-width="1.5"/>
+    <!-- Photo icon inside pill -->
+    <rect x="365" y="456" width="28" height="24" rx="4" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+    <circle cx="374" cy="465" r="3" fill="#FFFFFF"/>
+    <path d="M367 476 L376 468 L384 476" stroke="#FFFFFF" stroke-width="2.5" fill="none"/>
+    <text x="555" y="479" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">स्टेप 4 : फोटो जोड़ें</text>
+
+    <!-- Main Instruction -->
+    <text x="540" y="555" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="44" font-weight="900" fill="#FFFFFF" filter="url(#softShadow)">कृपया अपनी न्यूज़ फोटो अपलोड करें</text>
+
+    <!-- Secondary Golden Text -->
+    <text x="540" y="612" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="34" font-weight="800" fill="#FFE600" filter="url(#softShadow)">गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं</text>
+
+    <!-- Tertiary Gray Hint Text -->
+    <text x="540" y="662" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="24" font-weight="600" fill="#CBD5E1">(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)</text>
+  </g>
+
+  <!-- 3. GLOWING DIVIDER BEAM (Y: 775) -->
+  <rect x="0" y="774" width="1080" height="6" fill="url(#streakGlow)" filter="url(#glowEffect)"/>
+
+  <!-- 4. RED HEADLINE BANNER SECTION (Y: 780 to 1220, Height: 440) -->
+  <g id="headlineBannerArea">
+    <!-- Red gradient background -->
+    <rect x="0" y="780" width="1080" height="440" fill="url(#headlineRedGrad)"/>
+
+    <!-- Left & Right Dark Red Chevron Accent Stripes -->
+    <g fill="#7A0005" opacity="0.6">
+      <polygon points="0,800 60,800 30,860 0,860"/>
+      <polygon points="0,880 75,880 35,960 0,960"/>
+      <polygon points="0,980 90,980 40,1080 0,1080"/>
+      <polygon points="0,1100 80,1100 30,1200 0,1200"/>
+
+      <polygon points="1080,800 1020,800 1050,860 1080,860"/>
+      <polygon points="1080,880 1005,880 1045,960 1080,960"/>
+      <polygon points="1080,980 990,980 1040,1080 1080,1080"/>
+      <polygon points="1080,1100 1000,1100 1050,1200 1080,1200"/>
+    </g>
+
+    <!-- Default Step 3 Instruction Headlines -->
+    <g id="defaultHeadlineText" filter="url(#softShadow)">
+      <text x="540" y="890" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">आप स्टेप 3 (हेडलाइन) में जाकर</text>
+      <text x="540" y="975" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">अपनी मुख्य खबर के शीर्षक को</text>
+      <text x="540" y="1060" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">2-3 लाइन में दर्ज कर सकते हैं</text>
+    </g>
+  </g>
+
+  <!-- 5. BOTTOM WHITE FOOTER BAR (Y: 1220 to 1350, Height: 130) -->
+  <g id="footerBarArea">
+    <rect x="0" y="1220" width="1080" height="130" fill="#F8FAFC"/>
+    <line x1="0" y1="1220" x2="1080" y2="1220" stroke="#E2E8F0" stroke-width="2"/>
+    <!-- Subtle bottom dark grain/texture -->
+    <rect x="0" y="1335" width="1080" height="15" fill="#E2E8F0" opacity="0.4"/>
+
+    <!-- Default footer placeholder text -->
+    <text x="540" y="1295" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="34" font-weight="700" fill="#1E293B">सोशल मीडिया / वेबसाइट जानकारी हेतु स्थान</text>
+  </g>
+</svg>

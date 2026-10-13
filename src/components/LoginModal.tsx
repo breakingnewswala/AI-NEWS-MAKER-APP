@@ -45,6 +45,7 @@ export interface ReporterUser {
   planTier?: string;
   tier?: string;
   avatarUrl?: string;
+  token?: string;
 }
 
 interface LoginModalProps {
@@ -209,6 +210,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             user.planTier = data.user.tier || user.planTier;
             user.channelName = data.user.channelNameHi || user.channelName;
             user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
+            if (data.token) {
+              localStorage.setItem('reporter_auth_token', data.token);
+              (user as any).token = data.token;
+            }
           }
         }
       } catch (authErr) {
@@ -362,7 +367,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             channelLogoUrl: data.user.channelLogoUrl,
             mobileNumber: data.user.mobileNumber,
             channelWebsite: data.user.websiteUrl,
+            token: data.token,
           };
+          if (data.token) {
+            localStorage.setItem('reporter_auth_token', data.token);
+          }
           localStorage.setItem('reporter_auth_session', JSON.stringify(authUser));
           setLoading(false);
           onLoginSuccess(authUser);

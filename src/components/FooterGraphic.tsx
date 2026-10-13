@@ -2,7 +2,6 @@ import React from 'react';
 
 export interface FooterGraphicProps {
   socialHandle?: string;
-  channelName?: string;
   whatsappNumber?: string;
   customFooterPng?: string;
   websiteUrl?: string;
@@ -37,7 +36,6 @@ const ICON_PATHS: Record<string, string> = {
   facebook: '/assets/icons/facebook.png',
   instagram: '/assets/icons/instagram.png',
   twitter: '/assets/icons/twitter.png',
-  x: '/assets/icons/x.png',
   youtube: '/assets/icons/youtube.png',
   linkedin: '/assets/icons/linkedin.png',
   whatsapp: '/assets/icons/whatsapp.png',
@@ -46,7 +44,6 @@ const ICON_PATHS: Record<string, string> = {
 
 export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   socialHandle,
-  channelName,
   whatsappNumber,
   customFooterPng,
   websiteUrl,
@@ -84,22 +81,20 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     : (isLightBg ? '#0F172A' : '#FFFFFF');
   const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
 
-  // 1. Social Username or Channel Name: From user profile only, no hardcoded sample text
-  const rawHandle = (socialHandle || channelName || '').trim();
+  // 1. Social Username: From user profile only, no hardcoded '@AINewsMaker' default
+  const rawHandle = (socialHandle || '').trim();
   const displayHandle = rawHandle
     ? (rawHandle.startsWith('@') || rawHandle.startsWith('/') ? rawHandle : `@${rawHandle}`)
     : '';
 
-  // Social platforms: Facebook and Instagram enabled by default; YouTube, Twitter/X, LinkedIn when active
+  // Social platforms: Facebook and Instagram are MANDATORY & locked (always included); YouTube, Twitter/X, LinkedIn optional
   const socialIconsList: string[] = [];
-  const rawList = Array.isArray(activeSocialIcons) ? activeSocialIcons : [];
-  if (rawList.includes('youtube')) socialIconsList.push('youtube');
-  if (rawList.length === 0 || rawList.includes('facebook')) socialIconsList.push('facebook');
-  if (rawList.length === 0 || rawList.includes('instagram')) socialIconsList.push('instagram');
-  if (rawList.includes('twitter') || rawList.includes('x')) socialIconsList.push('twitter');
-  if (rawList.includes('linkedin')) socialIconsList.push('linkedin');
-
-  const isSocialActive = Boolean(socialIconsList.length > 0 && displayHandle);
+  if (activeSocialIcons.includes('youtube')) socialIconsList.push('youtube');
+  // Facebook & Instagram are ALWAYS active and locked
+  socialIconsList.push('facebook');
+  socialIconsList.push('instagram');
+  if (activeSocialIcons.includes('twitter')) socialIconsList.push('twitter');
+  if (activeSocialIcons.includes('linkedin')) socialIconsList.push('linkedin');
 
   // 2. Website Element (Element 2) - Only if provided & enabled, no defaults
   const cleanWebsite = (websiteUrl || '')
@@ -120,19 +115,14 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     : '';
 
   // Determine active elements count for dynamic centering and adaptive sizing
-  const activeElements: ('social' | 'website' | 'whatsapp')[] = [];
-  if (isSocialActive) activeElements.push('social');
+  const activeElements: ('social' | 'website' | 'whatsapp')[] = ['social'];
   if (isWebsiteActive) activeElements.push('website');
   if (isWhatsappActive) activeElements.push('whatsapp');
-
-  if (activeElements.length === 0) {
-    return null;
-  }
 
   const totalActive = activeElements.length;
   const isMulti = totalActive >= 2;
 
-  // Responsive larger typography & uncropped icon sizes
+  // Responsive larger typography & uncropped icon sizes (Task 2 & User Request: icon and text further enlarged)
   const textSizeClass = totalActive >= 3
     ? 'text-[13.5px] sm:text-[15px]'
     : isMulti
@@ -172,8 +162,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
                 loading="eager"
                 onError={(e) => {
                   const target = e.currentTarget;
-                  target.onerror = null;
-                  target.src = `/assets/icons/${platform === 'x' ? 'twitter' : platform}.svg`;
+                  target.src = `/assets/icons/${platform}.svg`;
                 }}
               />
             ))}
@@ -211,7 +200,6 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
               loading="eager"
               onError={(e) => {
                 const target = e.currentTarget;
-                target.onerror = null;
                 target.src = '/assets/icons/website.svg';
               }}
             />
@@ -245,7 +233,6 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
               loading="eager"
               onError={(e) => {
                 const target = e.currentTarget;
-                target.onerror = null;
                 target.src = '/assets/icons/whatsapp.svg';
               }}
             />

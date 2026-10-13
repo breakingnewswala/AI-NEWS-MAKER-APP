@@ -1143,8 +1143,8 @@ fun ProfileAndPlanTabContent(
 
         // 6B. Web Version & Desktop Studio Access Card
         item {
-            val devWebStudioUrl = "https://ais-dev-ymjokrnulobq2aemilipe6-496088405107.asia-southeast1.run.app/"
-            val devWebAdminUrl = "https://ais-dev-ymjokrnulobq2aemilipe6-496088405107.asia-southeast1.run.app/admin/index.html"
+            val devWebStudioUrl = "https://ainewsmaker.online/"
+            val devWebAdminUrl = "https://ainewsmaker.online/admin/index.html"
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Slate900,

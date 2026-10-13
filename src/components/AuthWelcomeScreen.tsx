@@ -47,7 +47,6 @@ import {
   setAdminSystemMode,
   checkAccountUniqueness,
 } from '../lib/userPlanManager';
-import { getApiUrl } from '../lib/apiConfig';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 
@@ -64,63 +63,51 @@ export const KNOWN_REGISTERED_USERS: Record<
   Partial<ChannelProfile & { role: 'admin' | 'superadmin' | 'reporter' | 'user'; district: string }>
 > = {
   'admin.ainewsmaker@gmail.com': {
-    channelNameHi: '',
-    channelNameEn: '',
-    channelLogoUrl: '',
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
     channelLogoType: 'png',
-    username: 'admin.ainewsmaker',
-    mobileNumber: '',
-    websiteUrl: '',
+    username: 'superadmin',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
     fullName: 'सुपर एडमिन (Super Admin)',
-    district: '',
+    district: 'हेडक्वार्टर सेंट्रल डेस्क',
     role: 'superadmin',
   },
   superadmin: {
-    channelNameHi: '',
-    channelNameEn: '',
-    channelLogoUrl: '',
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
     channelLogoType: 'png',
-    username: 'admin.ainewsmaker',
-    mobileNumber: '',
-    websiteUrl: '',
+    username: 'superadmin',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
     fullName: 'सुपर एडमिन (Super Admin)',
-    district: '',
+    district: 'हेडक्वार्टर सेंट्रल डेस्क',
     role: 'superadmin',
   },
-  'breakingnewswala@gmail.com': {
-    channelNameHi: '',
-    channelNameEn: '',
-    channelLogoUrl: '',
-    channelLogoType: 'png',
-    username: 'breakingnewswala',
-    mobileNumber: '',
-    websiteUrl: '',
-    fullName: 'मुख्य संपादक',
-    district: '',
-    role: 'admin',
-  },
   'breakingnewswala.com@gmail.com': {
-    channelNameHi: '',
-    channelNameEn: '',
-    channelLogoUrl: '',
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/breaking_news_wala_logo.png',
     channelLogoType: 'png',
     username: 'breakingnewswala',
-    mobileNumber: '',
-    websiteUrl: '',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
     fullName: 'मुख्य संपादक',
-    district: '',
+    district: 'सेंट्रल डेस्क / भोपाल',
     role: 'admin',
   },
   'admin@breakingnewswala.com': {
-    channelNameHi: '',
-    channelNameEn: '',
-    channelLogoUrl: '',
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
     channelLogoType: 'png',
-    username: 'breakingnewswala',
-    mobileNumber: '',
-    websiteUrl: '',
-    fullName: 'मुख्य संपादक',
-    district: '',
+    username: 'admin',
+    mobileNumber: '9669802408',
+    websiteUrl: 'ainewsmaker.online',
+    fullName: 'एडमिन',
+    district: 'डिजिटल डेस्क',
     role: 'admin',
   },
 };
@@ -201,8 +188,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     facebook: initialProfile.socialIcons?.facebook ?? true,
     instagram: initialProfile.socialIcons?.instagram ?? true,
     twitter: initialProfile.socialIcons?.twitter ?? false,
-    telegram: initialProfile.socialIcons?.telegram ?? false,
-    whatsapp: initialProfile.socialIcons?.whatsapp ?? true,
+    linkedin: initialProfile.socialIcons?.linkedin ?? false,
   });
 
   const [username, setUsername] = useState<string>(initialProfile.username || '');
@@ -351,42 +337,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   };
 
   // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
-  const handleGoogleUserSuccess = async (email: string, name?: string, picture?: string) => {
+  const handleGoogleUserSuccess = (email: string, name?: string, picture?: string) => {
     activateFreeTrial();
     const cleanEmail = email.toLowerCase().trim();
-
-    // Query Cloud Profile and Master Users DB so refresh/cache-clear doesn't lose profile
-    let cloudProfile: any = null;
-    let cloudMasterUser: any = null;
-    try {
-      const [profRes, usersRes] = await Promise.allSettled([
-        fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`)),
-        fetch(getApiUrl('/api/admin/users')),
-      ]);
-      if (profRes.status === 'fulfilled' && profRes.value.ok) {
-        const profData = await profRes.value.json();
-        if (profData?.success && profData.profile) {
-          cloudProfile = profData.profile;
-        }
-      }
-      if (usersRes.status === 'fulfilled' && usersRes.value.ok) {
-        const uData = await usersRes.value.json();
-        if (uData?.success && Array.isArray(uData.users)) {
-          const matched = uData.users.find(
-            (u: any) => (u.email || u.userId || '').toLowerCase().trim() === cleanEmail
-          );
-          if (matched) cloudMasterUser = matched;
-        }
-      }
-    } catch (fetchErr) {
-      console.warn('Could not query cloud profile on login:', fetchErr);
-    }
 
     const isSuper = isUserSuperAdmin(cleanEmail);
     let isAssignedAdmin = false;
     try {
       const users = getPlanUsers();
-      const matched = users.find((u) => u.email.toLowerCase().trim() === cleanEmail) || cloudMasterUser;
+      const matched = users.find((u) => u.email.toLowerCase().trim() === cleanEmail);
       if (matched && (matched.role === 'admin' || matched.role === 'superadmin')) {
         isAssignedAdmin = true;
       }
@@ -408,20 +367,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         parsedProfile = null;
       }
     }
-    // Restore parsedProfile from cloud if local was wiped
-    if (!parsedProfile && cloudProfile) {
-      parsedProfile = cloudProfile;
-      try {
-        localStorage.setItem(userProfileKey, JSON.stringify(cloudProfile));
-        localStorage.setItem('user_channel_profile', JSON.stringify(cloudProfile));
-      } catch {}
-    }
 
     const hasCompletedProfile = Boolean(
-      (knownProfile && (knownProfile.channelLogoUrl || knownProfile.channelNameHi)) ||
-      (parsedProfile && (parsedProfile.channelNameHi || parsedProfile.channelLogoUrl || parsedProfile.onboardingCompleted)) ||
-      (cloudMasterUser && (cloudMasterUser.channelName || cloudMasterUser.channelLogoUrl)) ||
-      (cloudProfile && (cloudProfile.channelNameHi || cloudProfile.onboardingCompleted || cloudProfile.username))
+      (knownProfile && knownProfile.channelLogoUrl) ||
+      (parsedProfile && parsedProfile.channelLogoUrl && parsedProfile.channelNameHi && parsedProfile.mobileNumber)
     );
 
     // Only genuine existing users with completed setup (or admins) bypass onboarding directly to Home
@@ -437,30 +386,31 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       const finalProfile: ChannelProfile = {
         fullName: knownProfile?.fullName || parsedProfile?.fullName || name || (isAdmin ? 'मुख्य संपादक' : 'यूज़र'),
         channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
-        channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || '',
+        channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
         channelLogoUrl: existingLogo,
         channelLogoPngUrl: parsedProfile?.channelLogoPngUrl || (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''),
         channelLogoGifUrl: parsedProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
         channelLogoType: knownProfile?.channelLogoType || parsedProfile?.channelLogoType || 'png',
         socialIcons: parsedProfile?.socialIcons || {
-          youtube: false,
-          facebook: false,
-          instagram: false,
+          youtube: true,
+          facebook: true,
+          instagram: true,
           twitter: false,
           telegram: false,
-          whatsapp: false,
+          whatsapp: true,
         },
         username: knownProfile?.username || parsedProfile?.username || '',
-        mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || primaryMobileNumber || '',
+        mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || primaryMobileNumber || '9669802408',
+        whatsappNumber: parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
         showMobileNumber: true,
-        websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || '',
+        websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
       };
 
       const googleUser: ReporterUser = {
         username: finalProfile.username || '',
         name: finalProfile.fullName || name || 'यूज़र',
         role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'user'),
-        district: knownProfile?.district || parsedProfile?.district || '',
+        district: knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
         email: cleanEmail,
         avatarUrl: picture, // Avatar photo only, NEVER channel logo
       };
@@ -480,24 +430,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       localStorage.removeItem('auth_current_step');
 
       registerOrUpdateUser({
-        userId: cleanEmail,
-        uid: cleanEmail,
         email: cleanEmail,
         username: finalProfile.username,
         name: googleUser.name,
-        fullName: finalProfile.fullName || googleUser.name,
         mobile: finalProfile.mobileNumber,
-        mobileNumber: finalProfile.mobileNumber,
         channelName: finalProfile.channelNameHi,
-        channelNameHi: finalProfile.channelNameHi,
-        channelNameEn: finalProfile.channelNameEn,
         channelLogoUrl: finalProfile.channelLogoUrl,
-        channelLogoPngUrl: finalProfile.channelLogoPngUrl,
-        channelLogoGifUrl: finalProfile.channelLogoGifUrl,
-        channelLogoType: finalProfile.channelLogoType,
-        websiteUrl: finalProfile.websiteUrl,
-        district: finalProfile.district || googleUser.district,
-        socialIcons: finalProfile.socialIcons,
         tier: isAdmin ? 'ultra' : 'basic',
         role: googleUser.role,
         isLocked: !isAdmin,
@@ -709,22 +647,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     const finalProfile: ChannelProfile = {
       fullName: knownProfile?.fullName || parsedProfile?.fullName || (isAdmin ? 'मुख्य संपादक (Chief Editor)' : (inputLower.charAt(0).toUpperCase() + inputLower.slice(1))),
-      channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || '',
-      channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || '',
-      channelLogoUrl: knownProfile?.channelLogoUrl || parsedProfile?.channelLogoUrl || '',
+      channelNameHi: knownProfile?.channelNameHi || parsedProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelNameEn: knownProfile?.channelNameEn || parsedProfile?.channelNameEn || 'AI News Maker',
+      channelLogoUrl: knownProfile?.channelLogoUrl || parsedProfile?.channelLogoUrl || (isAdmin ? '/assets/breaking_news_wala_logo.png' : '/assets/ai_news_maker_logo.png'),
       channelLogoType: 'png',
       socialIcons: parsedProfile?.socialIcons || {
-        youtube: false,
-        facebook: false,
-        instagram: false,
+        youtube: true,
+        facebook: true,
+        instagram: true,
         twitter: false,
         telegram: false,
-        whatsapp: false,
+        whatsapp: true,
       },
-      username: knownProfile?.username || parsedProfile?.username || (isAdmin ? 'breakingnewswala' : inputLower.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || ''),
-      mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || '',
+      username: knownProfile?.username || parsedProfile?.username || (isAdmin ? 'breakingnewswala' : inputLower.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 16) || 'reporter'),
+      mobileNumber: knownProfile?.mobileNumber || parsedProfile?.mobileNumber || '9669802408',
       showMobileNumber: true,
-      websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || '',
+      websiteUrl: knownProfile?.websiteUrl || parsedProfile?.websiteUrl || 'ainewsmaker.online',
     };
 
     const loggedUser: ReporterUser = {
@@ -875,6 +813,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
 
     const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
+    const finalWhatsapp = graphicContactNumber.trim() || primaryMobileNumber.trim();
 
     const finalProfile: ChannelProfile = {
       fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
@@ -885,9 +824,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       channelLogoType: detailChannelLogoType,
       socialIcons,
       username: username.replace(/^@/, "").trim(),
-      mobileNumber: finalContact,
+      mobileNumber: primaryMobileNumber.trim() || finalContact,
+      whatsappNumber: finalWhatsapp,
       showMobileNumber,
-      websiteUrl: websiteUrl.trim(),
+      websiteUrl: websiteUrl.trim() || "ainewsmaker.online",
       isLocked: !isAdm,
     };
 
@@ -909,28 +849,40 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       localStorage.setItem(`terms_accepted_${cleanEmail}`, "true");
       localStorage.setItem(`onboarding_completed_${cleanEmail}`, "true");
       localStorage.removeItem(`onboarding_draft_${cleanEmail}`);
+
+      // Sync permanently to backend /api/user-profile
+      try {
+        fetch('/api/user-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: cleanEmail,
+            email: cleanEmail,
+            username: finalProfile.username,
+            fullName: finalProfile.fullName,
+            role: updatedUser.role,
+            district: updatedUser.district,
+            channelNameHi: finalProfile.channelNameHi,
+            channelNameEn: finalProfile.channelNameEn,
+            channelLogoUrl: finalProfile.channelLogoUrl,
+            mobileNumber: finalProfile.mobileNumber,
+            whatsappNumber: finalProfile.whatsappNumber,
+            showMobileNumber: finalProfile.showMobileNumber,
+            websiteUrl: finalProfile.websiteUrl,
+            socialIcons: finalProfile.socialIcons,
+            tier: isAdm ? 'ultra' : 'basic',
+          }),
+        }).catch(() => {});
+      } catch {}
     }
 
-    // Register or update in Admin directory with full profile payload
+    // Register or update in Admin directory
     registerOrUpdateUser({
-      userId: updatedUser.email,
-      uid: updatedUser.email,
       email: updatedUser.email,
-      username: finalProfile.username,
       name: updatedUser.name,
-      fullName: finalProfile.fullName,
-      mobile: finalContact,
-      mobileNumber: finalContact,
+      mobile: finalProfile.mobileNumber,
       channelName: finalProfile.channelNameHi,
-      channelNameHi: finalProfile.channelNameHi,
-      channelNameEn: finalProfile.channelNameEn,
       channelLogoUrl: finalProfile.channelLogoUrl,
-      channelLogoPngUrl: finalProfile.channelLogoPngUrl,
-      channelLogoGifUrl: finalProfile.channelLogoGifUrl,
-      channelLogoType: finalProfile.channelLogoType,
-      websiteUrl: finalProfile.websiteUrl,
-      district: reportingDistrict || updatedUser.district,
-      socialIcons: finalProfile.socialIcons,
       tier: isAdm ? "ultra" : "basic",
       role: updatedUser.role,
       isLocked: !isAdm,
@@ -1103,7 +1055,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       required
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="admin@breakingnewswala.com या admin"
+                      placeholder="admin.ainewsmaker@gmail.com या admin"
                       className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden font-mono"
                     />
                   </div>
@@ -1634,14 +1586,13 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <span className="text-[10px] text-slate-400">ऑन / ऑफ टॉगल</span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {[
                     { key: 'youtube', label: 'YouTube (यूट्यूब)', color: 'text-red-500' },
                     { key: 'facebook', label: 'Facebook (फेसबुक)', color: 'text-blue-500' },
                     { key: 'instagram', label: 'Instagram (इंस्टा)', color: 'text-pink-500' },
                     { key: 'twitter', label: 'X / Twitter (ट्विटर)', color: 'text-slate-200' },
-                    { key: 'telegram', label: 'Telegram (टेलीग्राम)', color: 'text-sky-400' },
-                    { key: 'whatsapp', label: 'WhatsApp (व्हाट्सएप)', color: 'text-emerald-400' },
+                    { key: 'linkedin', label: 'LinkedIn (लिंक्डइन)', color: 'text-sky-400' },
                   ].map((soc) => {
                     const isChecked = (socialIcons as any)[soc.key];
                     return (

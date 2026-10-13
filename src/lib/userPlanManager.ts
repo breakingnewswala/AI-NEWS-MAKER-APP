@@ -7,6 +7,7 @@ export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
 export const SUPER_ADMIN_EMAILS = [
   'admin.ainewsmaker@gmail.com',
   'breakingnewswala.com@gmail.com',
+  'editor.bnwtv@gmail.com',
 ];
 
 export function isUserSuperAdmin(userOrEmail?: any): boolean {
@@ -43,24 +44,22 @@ export function isEffectiveSuperAdmin(user?: any): boolean {
 export interface UserSubscriptionInfo {
   tier: UserPlanTier;
   planName: PlanKeyName;
+  planKey?: PlanKeyName;
   trialStartedAt: number;
   trialEndsAt: number;
   isTrialActive: boolean;
+  isTrialExpired?: boolean;
+  hasActivePaidPlan?: boolean;
   daysRemaining: number;
-  planKey?: PlanKeyName;
   hoursRemaining?: number;
   minutesRemaining?: number;
-  hasActivePaidPlan?: boolean;
-  isTrialExpired?: boolean;
-  isBlocked?: boolean;
-  blockedAt?: number | null;
-  blockedBy?: string | null;
-  isLocked?: boolean;
   primaryMobile?: string;
   isMobileLocked: boolean;
   activatedAt?: number;
   expiresAt?: number;
   activatedViaPromoCode?: string;
+  allowed?: boolean;
+  reason?: string;
 }
 
 export interface PlanFeatureDetail {
@@ -540,20 +539,6 @@ export interface PlanUserRecord {
   assignedFooterUrl?: string;
   assignedCustomActive?: boolean;
   socialIcons?: Record<string, boolean>;
-  isBlocked?: boolean;
-  blockedAt?: number | null;
-  blockedBy?: string | null;
-  unblockedAt?: number | null;
-  unblockedBy?: string | null;
-  createdAt?: number;
-  trialStartedAt?: number;
-  trialEndsAt?: number;
-  isTrialActive?: boolean;
-  isTrialExpired?: boolean;
-  daysRemaining?: number;
-  hoursRemaining?: number;
-  minutesRemaining?: number;
-  hasActivePaidPlan?: boolean;
 }
 
 export function getPlanUsers(): PlanUserRecord[] {
@@ -671,7 +656,7 @@ export function assignCustomHeaderFooterToUser(
 // ==========================================
 // 4. USER SUBSCRIPTION RETRIEVAL
 // ==========================================
-export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo {
+export function getUserSubscription(userEmail?: string): UserSubscriptionInfo {
   if (typeof window === 'undefined') {
     return {
       tier: 'basic',
@@ -679,83 +664,146 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
       trialStartedAt: Date.now(),
       trialEndsAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
       isTrialActive: true,
+      isTrialExpired: false,
+      hasActivePaidPlan: false,
       daysRemaining: 7,
+      hoursRemaining: 0,
+      minutesRemaining: 0,
       isMobileLocked: false,
-      isBlocked: false,
+      allowed: true,
     };
   }
 
-  // Resolve current active user email
-  const activeEmail = (targetEmail || (() => {
-    try {
-      const sess = localStorage.getItem('reporter_auth_session');
-      if (sess) {
-        const u = JSON.parse(sess);
-        return u?.email || '';
-      }
-    } catch {}
-    return '';
-  })()).toLowerCase().trim();
+  // 1. Check cached server authoritative subscription
+  let serverSub: any = null;
+  try {
+    const raw = localStorage.getItem('ai_news_maker_server_subscription');
+    if (raw) serverSub = JSON.parse(raw);
+  } catch {}
 
-  const planUsers = getPlanUsers();
-  const matchedUser = planUsers.find(u =>
-    (activeEmail && u.email && u.email.toLowerCase().trim() === activeEmail) ||
-    (activeEmail && u.email && u.email.toLowerCase().replace(/\s+/g, '') === activeEmail.replace(/\s+/g, ''))
-  );
+  let storedTier = (serverSub?.tier || localStorage.getItem(STORAGE_KEY_TIER) || 'basic') as UserPlanTier;
+  let startStr = serverSub?.trialStartedAt || localStorage.getItem(STORAGE_KEY_TRIAL_START);
+  let startTime = startStr ? parseInt(startStr.toString(), 10) : 0;
 
-  const isBlocked = Boolean(
-    matchedUser?.isBlocked ||
-    (activeEmail && localStorage.getItem(`user_blocked_${activeEmail}`) === 'true')
-  );
-
-  let storedTier = (matchedUser?.tier || localStorage.getItem(STORAGE_KEY_TIER) as UserPlanTier) || 'basic';
-  const now = Date.now();
-
-  let startTime = matchedUser?.trialStartedAt || (() => {
-    const startStr = localStorage.getItem(STORAGE_KEY_TRIAL_START);
-    const parsed = startStr ? parseInt(startStr, 10) : 0;
-    return parsed && !isNaN(parsed) ? parsed : (matchedUser?.createdAt || now);
-  })();
+  if (!startTime || isNaN(startTime)) {
+    startTime = Date.now();
+    localStorage.setItem(STORAGE_KEY_TRIAL_START, startTime.toString());
+  }
 
   const planDetail = getPlanDetail(storedTier);
-  let expiresAt = matchedUser?.trialEndsAt || (() => {
-    const expiresAtStr = localStorage.getItem('ai_news_maker_plan_expires_at');
-    const parsed = expiresAtStr ? parseInt(expiresAtStr, 10) : 0;
-    return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
-  })();
+  const expiresAtVal = serverSub?.trialEndsAt || serverSub?.expiresAt || localStorage.getItem('ai_news_maker_plan_expires_at');
+  let expiresAt = expiresAtVal ? parseInt(expiresAtVal.toString(), 10) : 0;
 
+  if (!expiresAt) {
+    expiresAt = startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000;
+  }
+
+  const now = Date.now();
   const msRemaining = Math.max(0, expiresAt - now);
-  const isExpired = msRemaining <= 0;
-  const daysRemaining = isExpired ? 0 : Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
-  const hoursRemaining = isExpired ? 0 : Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
-  const minutesRemaining = isExpired ? 0 : Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
+  const daysRemaining = Math.floor(msRemaining / (24 * 60 * 60 * 1000));
+  const hoursRemaining = Math.floor((msRemaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const minutesRemaining = Math.floor((msRemaining % (60 * 60 * 1000)) / (60 * 1000));
 
-  const hasPaidPlan = storedTier !== 'basic';
-  const isTrialActive = !isExpired && (storedTier === 'basic' || storedTier === 'ultra');
+  const hasActivePaidPlan = Boolean(
+    (storedTier === 'advanced' || storedTier === 'professional' || storedTier === 'ultra') &&
+    (expiresAt > now || expiresAt === 0)
+  );
 
-  const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
-  const isMobileLocked = Boolean(primaryMobile.trim());
+  const isTrialActive = hasActivePaidPlan || msRemaining > 0;
+  const isTrialExpired = !hasActivePaidPlan && msRemaining === 0;
+
+  const primaryMobile = localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
+  const isMobileLocked = !!primaryMobile.trim();
   const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || undefined;
 
   return {
     tier: storedTier,
-    planName: matchedUser?.planName || PLAN_KEY_MAP[storedTier] || 'BASIC',
+    planName: PLAN_KEY_MAP[storedTier] || 'BASIC',
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isTrialExpired: isExpired && storedTier === 'basic',
+    isTrialExpired,
+    hasActivePaidPlan,
     daysRemaining,
     hoursRemaining,
     minutesRemaining,
-    hasActivePaidPlan: hasPaidPlan,
-    isBlocked,
-    blockedAt: matchedUser?.blockedAt,
-    blockedBy: matchedUser?.blockedBy,
     primaryMobile: primaryMobile.trim() || undefined,
     isMobileLocked,
     expiresAt,
     activatedViaPromoCode: promoUsed,
+    allowed: hasActivePaidPlan || isTrialActive,
+    reason: isTrialExpired
+      ? 'आपका 7-Day Free Trial समाप्त हो चुका है। कार्ड डाउनलोड व कैप्शन सुविधा का उपयोग करने के लिए कृपया एक वैध पैकेज/प्लान चुनें।'
+      : undefined,
   };
+}
+
+export async function fetchAuthoritativeSubscription(userOrEmail?: any): Promise<UserSubscriptionInfo> {
+  let email = '';
+  if (typeof userOrEmail === 'string') {
+    email = userOrEmail.trim().toLowerCase();
+  } else if (userOrEmail && typeof userOrEmail === 'object') {
+    email = (userOrEmail.email || userOrEmail.userId || userOrEmail.username || '').trim().toLowerCase();
+  } else if (typeof window !== 'undefined') {
+    try {
+      const sess = localStorage.getItem('reporter_auth_session');
+      if (sess) {
+        const parsed = JSON.parse(sess);
+        email = (parsed.email || parsed.username || '').trim().toLowerCase();
+      }
+    } catch {}
+  }
+
+  if (!email && typeof window !== 'undefined') {
+    try {
+      const prof = localStorage.getItem('user_channel_profile');
+      if (prof) {
+        const parsed = JSON.parse(prof);
+        email = (parsed.email || '').trim().toLowerCase();
+      }
+    } catch {}
+  }
+
+  try {
+    const res = await fetch(getApiUrl(`/api/user-subscription?email=${encodeURIComponent(email)}`));
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.subscription) {
+        const sub = data.subscription;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('ai_news_maker_server_subscription', JSON.stringify(sub));
+          if (sub.tier && ['basic', 'advanced', 'professional', 'ultra'].includes(sub.tier)) {
+            localStorage.setItem(STORAGE_KEY_TIER, sub.tier);
+          }
+          if (sub.trialStartedAt) {
+            localStorage.setItem(STORAGE_KEY_TRIAL_START, sub.trialStartedAt.toString());
+          }
+          if (sub.trialEndsAt) {
+            localStorage.setItem('ai_news_maker_plan_expires_at', sub.trialEndsAt.toString());
+          }
+          window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: { subscription: sub } }));
+        }
+        return getUserSubscription(email);
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch authoritative subscription:', e);
+  }
+
+  return getUserSubscription(email);
+}
+
+export function isUserActionAllowed(currentUser?: any, sub?: UserSubscriptionInfo): { allowed: boolean; reason?: string } {
+  if (isUserAdmin(currentUser)) return { allowed: true };
+  const currentSub = sub || getUserSubscription();
+  if (currentSub.hasActivePaidPlan) return { allowed: true };
+  if (currentSub.isTrialExpired) {
+    return {
+      allowed: false,
+      reason: 'आपका 7-Day Free Trial समाप्त हो चुका है। कार्ड डाउनलोड व कैप्शन सुविधा का उपयोग करने के लिए कृपया एक वैध पैकेज/प्लान चुनें।',
+    };
+  }
+  return { allowed: true };
 }
 
 export function setUserPlanTier(newTier: UserPlanTier): void {
@@ -1047,26 +1095,14 @@ export function checkAccountUniqueness(input: {
 // Register or Update User
 export function registerOrUpdateUser(userData: {
   name: string;
-  fullName?: string;
   email: string;
   channelName?: string;
-  channelNameHi?: string;
-  channelNameEn?: string;
   channelLogoUrl?: string;
-  channelLogoPngUrl?: string;
-  channelLogoGifUrl?: string;
-  channelLogoType?: 'png' | 'gif';
   mobile?: string;
-  mobileNumber?: string;
-  websiteUrl?: string;
-  district?: string;
-  socialIcons?: any;
   isLocked?: boolean;
   username?: string;
   tier?: UserPlanTier;
   role?: 'superadmin' | 'admin' | 'reporter' | 'user' | string;
-  userId?: string;
-  uid?: string;
 }): void {
   if (typeof window === 'undefined') return;
   try {
@@ -1075,83 +1111,50 @@ export function registerOrUpdateUser(userData: {
     const isSuper = isUserSuperAdmin(cleanEmail);
     const assignedRole = (isSuper ? 'superadmin' : (userData.role || 'user')) as any;
     const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
-    const effectiveName = userData.fullName || userData.name;
-    const effectiveMobile = userData.mobile || userData.mobileNumber || '';
-    const effectiveChannelName = userData.channelName || userData.channelNameHi || '';
-
-    let updatedRecord: PlanUserRecord;
     if (idx >= 0) {
-      updatedRecord = {
+      users[idx] = {
         ...users[idx],
         email: cleanEmail,
-        name: effectiveName || users[idx].name,
+        name: userData.name || users[idx].name,
         role: users[idx].role || assignedRole,
-        channelName: effectiveChannelName || users[idx].channelName,
-        channelLogoUrl: userData.channelLogoUrl !== undefined ? userData.channelLogoUrl : users[idx].channelLogoUrl,
-        mobile: effectiveMobile || users[idx].mobile,
+        channelName: userData.channelName || users[idx].channelName,
+        channelLogoUrl: userData.channelLogoUrl || users[idx].channelLogoUrl,
+        mobile: userData.mobile || users[idx].mobile,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : users[idx].isProfileLocked,
       };
-      users[idx] = updatedRecord;
     } else {
-      updatedRecord = {
-        userId: userData.userId || userData.uid || `user-${Date.now()}`,
+      users.push({
+        userId: `user-${Date.now()}`,
         email: cleanEmail,
-        name: effectiveName,
+        name: userData.name,
         role: assignedRole,
         tier: isSuper ? 'ultra' : (userData.tier || 'basic'),
         planName: isSuper ? 'VIP DESK' : 'BASIC',
-        channelName: effectiveChannelName,
-        channelLogoUrl: userData.channelLogoUrl || '',
-        mobile: effectiveMobile,
+        channelName: userData.channelName,
+        channelLogoUrl: userData.channelLogoUrl,
+        mobile: userData.mobile,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : true,
         activatedAt: Date.now(),
         expiresAt: Date.now() + (isSuper ? 3650 : 7) * 24 * 60 * 60 * 1000,
         activatedVia: isSuper ? 'Super Admin Preset' : 'Profile Registration',
-      };
-      users.push(updatedRecord);
+      });
     }
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
     window.dispatchEvent(new Event('ai_news_plan_users_changed'));
 
-    // Full Payload for Authoritative Backend Sync
-    const syncPayload = {
-      ...updatedRecord,
-      fullName: effectiveName,
-      username: userData.username || cleanEmail.split('@')[0],
-      channelNameHi: effectiveChannelName,
-      channelNameEn: userData.channelNameEn || '',
-      channelLogoPngUrl: userData.channelLogoPngUrl || (userData.channelLogoType !== 'gif' ? userData.channelLogoUrl : ''),
-      channelLogoGifUrl: userData.channelLogoGifUrl || (userData.channelLogoType === 'gif' ? userData.channelLogoUrl : ''),
-      channelLogoType: userData.channelLogoType || 'png',
-      websiteUrl: userData.websiteUrl || '',
-      district: userData.district || '',
-      socialIcons: userData.socialIcons,
-    };
+    // Permanent Backend Database Sync & Realtime Google Sheet Sync
+    const recordToSync = idx >= 0 ? users[idx] : users[users.length - 1];
+    if (recordToSync) {
+      fetch('/api/admin/register-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recordToSync),
+      }).catch(() => {});
 
-    fetch(getApiUrl('/api/users/sync'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(syncPayload),
-    }).then(async (res) => {
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.users)) {
-          localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(json.users));
-          window.dispatchEvent(new Event('ai_news_plan_users_changed'));
-        }
-      }
-    }).catch(() => {});
-
-    // Sync profile document as well
-    fetch(getApiUrl('/api/user-profile'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(syncPayload),
-    }).catch(() => {});
-
-    import('./googleSheetsUserSync').then(({ syncUsersToGoogleSheet }) => {
-      syncUsersToGoogleSheet(users).catch(() => {});
-    }).catch(() => {});
+      import('./googleSheetsUserSync').then(({ syncUsersToGoogleSheet }) => {
+        syncUsersToGoogleSheet(users).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (e) {
     console.warn('Error in registerOrUpdateUser:', e);
   }
@@ -1289,58 +1292,11 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
       const data = await res.json();
       if (Array.isArray(data.users)) {
         localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(data.users));
-        window.dispatchEvent(new Event('ai_news_plan_users_changed'));
         return data.users;
       }
     }
-  } catch (err) {
-    console.warn('syncCloudUsers error:', err);
-  }
+  } catch {}
   return getPlanUsers();
-}
-
-export async function blockUserAuthoritative(
-  userEmailOrId: string,
-  blockedBy?: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(getApiUrl('/api/admin/block-user'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, blockedBy: blockedBy || 'Admin' }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      await syncCloudUsers();
-      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
-      return { success: true };
-    }
-    return { success: false, error: json.error || 'उपयोगकर्ता को ब्लॉक करने में त्रुटि' };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-}
-
-export async function unblockUserAuthoritative(
-  userEmailOrId: string,
-  unblockedBy?: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(getApiUrl('/api/admin/unblock-user'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, unblockedBy: unblockedBy || 'Admin' }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      await syncCloudUsers();
-      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
-      return { success: true };
-    }
-    return { success: false, error: json.error || 'उपयोगकर्ता को अनब्लॉक करने में त्रुटि' };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
 }
 
 export async function adminUpdateCloudUser(
@@ -1386,6 +1342,8 @@ export function rejectLogoChangeRequest(requestId: string): void {
   }
 }
 
+
+
 export function adminDeleteUserRecord(emailOrUserId: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -1401,48 +1359,4 @@ export function adminDeleteUserRecord(emailOrUserId: string): boolean {
     console.warn('Error deleting user record:', e);
     return false;
   }
-}
-
-export async function fetchAuthoritativeSubscription(email?: string): Promise<UserSubscriptionInfo> {
-  const current = getUserSubscription(email);
-  if (!email) return current;
-  try {
-    const res = await fetch(`/api/user-subscription?email=${encodeURIComponent(email)}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.success && data.subscription) {
-        const sub = data.subscription;
-        const cleanEmail = email.toLowerCase().trim();
-        if (sub.isBlocked) {
-          localStorage.setItem(`user_blocked_${cleanEmail}`, 'true');
-          window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: sub }));
-        } else {
-          localStorage.removeItem(`user_blocked_${cleanEmail}`);
-        }
-        return sub;
-      }
-    }
-  } catch {}
-  return current;
-}
-
-export function isUserActionAllowed(
-  user?: any | null,
-  subscription?: UserSubscriptionInfo | null
-): { allowed: boolean; reason?: string } {
-  if (!user) return { allowed: true };
-  if (isUserAdmin(user) || isUserSuperAdmin(user.email || '')) {
-    return { allowed: true };
-  }
-  const sub = subscription || getUserSubscription(user?.email);
-  if (sub.isBlocked) {
-    return { allowed: false, reason: 'आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।' };
-  }
-  if (sub.tier === 'basic' && (sub.isTrialExpired || (sub.daysRemaining !== undefined && sub.daysRemaining <= 0))) {
-    return { allowed: false, reason: 'आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। कृपया आगे उपयोग के लिए प्लान चुनें।' };
-  }
-  if (sub.isLocked) {
-    return { allowed: false, reason: 'आपका खाता लॉक है।' };
-  }
-  return { allowed: true };
 }

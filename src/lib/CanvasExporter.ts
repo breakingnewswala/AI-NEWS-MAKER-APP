@@ -177,19 +177,7 @@ function drawRoundedRect(
   }
 }
 
-export async function renderCardToCanvas(rawCard: NewsCardData): Promise<HTMLCanvasElement> {
-  const card: NewsCardData = rawCard.isTestMode
-    ? {
-        ...rawCard,
-        brandName: rawCard.testChannelName || rawCard.brandName,
-        channelNameHi: rawCard.testChannelName || rawCard.channelNameHi,
-        socialHandle: rawCard.testSocialHandle || rawCard.socialHandle,
-        customLogoUrl: rawCard.testLogoUrl || rawCard.customLogoUrl,
-        images: rawCard.testSamplePhotoUrl
-          ? { ...rawCard.images, main: rawCard.testSamplePhotoUrl }
-          : rawCard.images,
-      }
-    : rawCard;
+export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvasElement> {
   const selectedFontFamily = card.headlineFontFamily || 'Baloo 2';
 
   // Ensure selected font, Baloo 2, Devanagari, and Arial fonts are fully ready before measuring or drawing
@@ -1010,8 +998,7 @@ export async function renderCardToCanvas(rawCard: NewsCardData): Promise<HTMLCan
       card.footerBgColor || '#FFFFFF',
       card.footerTextColor,
       card.footerIconStyle || 'color',
-      card.showWebsite,
-      card.channelNameEn || card.channelNameHi || card.brandName
+      card.showWebsite
     );
   }
 
@@ -1802,15 +1789,40 @@ async function drawGraphic001Canvas(
       ctx.shadowOffsetY = 4;
       ctx.drawImage(customLogoImg, 42, 38, lW, lH);
       ctx.restore();
+    } else {
+      // Default "YOUR LOGO" Box matching media sample
+      ctx.save();
+      const boxX = 42;
+      const boxY = 38;
+      const boxW = 220;
+      const boxH = 68;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+      ctx.fill();
+
+      ctx.strokeStyle = '#FFE600';
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#FFE600';
+      ctx.font = '900 28px "Poppins", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
+      ctx.restore();
     }
   }
 
   // 6. TOP-RIGHT LOCATION BOX (White rounded pill with red pin square, strictly hidden when showLocation is false)
-  if (card.showLocation !== false) {
-    const cleanLoc = (card.location || '')
+  if (card.showLocation !== false && card.location && card.location.trim()) {
+    const cleanLoc = card.location
       .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
       .replace(/[:\-–—]+$/, '')
-      .trim() || 'लोकेशन';
+      .trim();
 
     if (cleanLoc) {
       ctx.save();
@@ -1925,10 +1937,7 @@ async function drawGraphic001Canvas(
     card.headline.trim().length > 0 &&
     card.headline.trim() !== 'ताज़ा समाचार' &&
     !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
-    !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
-    !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
-    !card.headline.includes('स्टेप 3 में जाकर अपनी मुख्य खबर') &&
-    card.headline.trim() !== 'आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं'
+    !card.headline.includes('आपकी चुनी गयी खबर को यहां')
   );
 
   if (hasUserHeadline) {
@@ -1970,12 +1979,19 @@ async function drawGraphic001Canvas(
       startY += headlineLineH;
     }
   } else {
-    // Default single-line instruction (Requirement 4)
+    // Default 3-Line Sample Headline matching Media Sample
     ctx.fillStyle = '#090A0E';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '900 32px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं', width / 2, boxY + boxH / 2);
+
+    ctx.font = '900 56px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('यहाँ आपकी न्यूज़ की', width / 2, boxY + 75);
+
+    ctx.font = '900 64px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('हेडलाइन की दूसरी लाइन', width / 2, boxY + 155);
+
+    ctx.font = '900 56px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+    ctx.fillText('यहाँ तीसरी लाइन आएगी', width / 2, boxY + 235);
   }
   ctx.restore();
 
@@ -6248,8 +6264,8 @@ async function drawThemeFooterBar(
   width: number,
   height: number,
   barH: number,
-  socialHandle: string = '',
-  whatsappNumber: string = '',
+  socialHandle: string = '/AINewsMaker',
+  whatsappNumber: string = '+91 96698 02408',
   customFooterPng?: string,
   websiteUrl?: string,
   activeSocialIcons?: string[],
@@ -6257,8 +6273,7 @@ async function drawThemeFooterBar(
   footerBgColor: string = '#FFFFFF',
   footerTextColor?: string,
   footerIconStyle: 'color' | 'dark' | 'neutral' = 'color',
-  showWebsite?: boolean,
-  channelName?: string
+  showWebsite?: boolean
 ) {
   // If user uploaded custom Footer.png, draw it directly
   if (customFooterPng) {
@@ -6311,8 +6326,8 @@ async function drawThemeFooterBar(
 
   const iconY = barY + barH / 2;
 
-  // Clean social handle or channel name (no hardcoded sample text)
-  let displayHandle = (socialHandle || channelName || '').trim();
+  // Clean social handle (only from user profile, no '@AINewsMaker' default)
+  let displayHandle = (socialHandle || '').trim();
   if (displayHandle && !displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
     displayHandle = `@${displayHandle}`;
   }
@@ -6334,26 +6349,24 @@ async function drawThemeFooterBar(
     ? (cleanPhone.startsWith('+') ? cleanPhone : `+91 ${cleanPhone}`)
     : '';
 
-  // Active social icons: Facebook & Instagram enabled by default; YouTube, Twitter/X, LinkedIn when active
+  // Active social icons: Facebook & Instagram are MANDATORY (always locked/included)
   const icons: string[] = [];
   const rawIcons = Array.isArray(activeSocialIcons) ? activeSocialIcons : [];
   if (rawIcons.includes('youtube')) icons.push('youtube');
-  if (rawIcons.length === 0 || rawIcons.includes('facebook')) icons.push('facebook');
-  if (rawIcons.length === 0 || rawIcons.includes('instagram')) icons.push('instagram');
-  if (rawIcons.includes('twitter') || rawIcons.includes('x')) icons.push('twitter');
+  icons.push('facebook');
+  icons.push('instagram');
+  if (rawIcons.includes('twitter')) icons.push('twitter');
   if (rawIcons.includes('linkedin')) icons.push('linkedin');
 
-  const hasSocial = Boolean(icons.length > 0 && displayHandle);
-
-  // Base typography & sizing
+  // Base typography & sizing - Noticeably larger text (Task 2 & User Request)
   let baseFontSize = 28;
   let iconRadius = 16;
   const iconDiameter = iconRadius * 2;
   const iconSpacing = 8;
-  const iconsGroupWidth = hasSocial ? (icons.length * iconDiameter + Math.max(0, icons.length - 1) * iconSpacing) : 0;
+  const iconsGroupWidth = icons.length * iconDiameter + Math.max(0, icons.length - 1) * iconSpacing;
 
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  const handleWidth = hasSocial && displayHandle ? ctx.measureText(displayHandle).width : 0;
+  const handleWidth = displayHandle ? ctx.measureText(displayHandle).width : 0;
   const separatorWidth = ctx.measureText('|').width;
 
   const webIconWidth = cleanWebsite ? 30 : 0;
@@ -6364,7 +6377,8 @@ async function drawThemeFooterBar(
   const phoneTextWidth = cleanPhone ? ctx.measureText(displayPhone).width : 0;
   const phoneGroupWidth = cleanPhone ? phoneIconWidth + 8 + phoneTextWidth : 0;
 
-  const socialGroupWidth = hasSocial ? (iconsGroupWidth + (displayHandle ? 8 + handleWidth : 0)) : 0;
+  const hasSocial = icons.length > 0 || Boolean(displayHandle);
+  const socialGroupWidth = iconsGroupWidth + (displayHandle ? 8 + handleWidth : 0);
 
   // Total raw width
   let totalWidth = socialGroupWidth;
@@ -6372,12 +6386,6 @@ async function drawThemeFooterBar(
   totalWidth += webGroupWidth;
   if ((hasSocial || webGroupWidth > 0) && phoneGroupWidth > 0) totalWidth += 18 + separatorWidth + 18;
   totalWidth += phoneGroupWidth;
-
-  // If nothing to draw, return
-  if (totalWidth <= 0) {
-    ctx.restore();
-    return;
-  }
 
   // Adaptive scale to strictly fit in one line
   const maxAllowedWidth = width - 48;
@@ -6391,10 +6399,10 @@ async function drawThemeFooterBar(
   // Recalculate with scaled values
   const finalIconDiam = iconRadius * 2;
   const finalIconSpacing = Math.round(iconSpacing * scale);
-  const finalIconsGroupWidth = hasSocial ? (icons.length * finalIconDiam + Math.max(0, icons.length - 1) * finalIconSpacing) : 0;
+  const finalIconsGroupWidth = icons.length * finalIconDiam + Math.max(0, icons.length - 1) * finalIconSpacing;
 
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  const finalHandleWidth = hasSocial && displayHandle ? ctx.measureText(displayHandle).width : 0;
+  const finalHandleWidth = displayHandle ? ctx.measureText(displayHandle).width : 0;
   const finalSepWidth = ctx.measureText('|').width;
   const finalWebTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
   const finalPhoneTextWidth = cleanPhone ? ctx.measureText(displayPhone).width : 0;
@@ -6402,7 +6410,7 @@ async function drawThemeFooterBar(
   const finalPhoneIconWidth = cleanPhone ? Math.round(24 * scale) : 0;
   const finalSepMargin = Math.round(16 * scale);
 
-  let finalTotalWidth = hasSocial ? (finalIconsGroupWidth + (displayHandle ? Math.round(8 * scale) + finalHandleWidth : 0)) : 0;
+  let finalTotalWidth = finalIconsGroupWidth + (displayHandle ? Math.round(8 * scale) + finalHandleWidth : 0);
   if (cleanWebsite) {
     if (hasSocial) finalTotalWidth += finalSepMargin * 2 + finalSepWidth;
     finalTotalWidth += finalWebIconWidth + 6 + finalWebTextWidth;
@@ -6488,25 +6496,23 @@ async function drawThemeFooterBar(
     ctx.restore();
   };
 
-  // 1. Draw Social Icons & Handle (only if hasSocial is true)
-  if (hasSocial) {
-    for (const iconType of icons) {
-      drawOriginalIcon(curX, iconType);
-      curX += finalIconDiam + finalIconSpacing;
-    }
-    if (icons.length > 0) {
-      curX += Math.round(6 * scale);
-    }
+  // 1. Draw Social Icons
+  for (const iconType of icons) {
+    drawOriginalIcon(curX, iconType);
+    curX += finalIconDiam + finalIconSpacing;
+  }
+  if (icons.length > 0) {
+    curX += Math.round(6 * scale);
+  }
 
-    // 2. Draw Social Handle
-    if (displayHandle) {
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = textColor;
-      ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-      ctx.fillText(displayHandle, curX, iconY);
-      curX += finalHandleWidth;
-    }
+  // 2. Draw Social Handle (if present in user profile)
+  if (displayHandle) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = textColor;
+    ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(displayHandle, curX, iconY);
+    curX += finalHandleWidth;
   }
 
   // 3. Draw Separator and Website

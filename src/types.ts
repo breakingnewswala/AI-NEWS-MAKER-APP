@@ -101,12 +101,6 @@ export interface EPaperAdSettings {
 }
 
 export interface NewsCardData {
-  // Admin Test Mode Identity
-  isTestMode?: boolean;
-  testChannelName?: string;
-  testSocialHandle?: string;
-  testLogoUrl?: string;
-  testSamplePhotoUrl?: string;
   id?: string;
   title?: string;
   date?: string;
@@ -377,7 +371,6 @@ export interface NewsDraft {
   id: string;
   title: string;
   headline: string;
-  timestamp?: number;
   category: string;
   location: string;
   summary: string;
@@ -387,6 +380,7 @@ export interface NewsDraft {
   thumbnailUrl?: string;
   createdAt: number;
   updatedAt: number;
+  timestamp?: number;
 }
 
 export interface ChannelProfile {
@@ -408,8 +402,6 @@ export interface ChannelProfile {
     facebook?: boolean;
     instagram?: boolean;
     twitter?: boolean;
-    telegram?: boolean;
-    whatsapp?: boolean;
     linkedin?: boolean;
   };
   username: string; // derived from English Channel Name
