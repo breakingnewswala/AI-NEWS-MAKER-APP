@@ -2132,6 +2132,135 @@ function runTrialExpirationAndNotificationCheck() {
 }
 runTrialExpirationAndNotificationCheck();
 setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1e3);
+var VIDEOS_DB_FILE = import_path.default.join(process.cwd(), "videos_database.json");
+var DELETED_VIDEOS_FILE = import_path.default.join(process.cwd(), "deleted_videos_ids.json");
+var FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1e3;
+function loadDeletedVideoIds() {
+  try {
+    if (import_fs.default.existsSync(DELETED_VIDEOS_FILE)) {
+      const raw = import_fs.default.readFileSync(DELETED_VIDEOS_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch (err) {
+    console.error("Error reading deleted videos file:", err.message);
+  }
+  return /* @__PURE__ */ new Set();
+}
+function saveDeletedVideoId(id) {
+  try {
+    const deletedSet = loadDeletedVideoIds();
+    deletedSet.add(id);
+    import_fs.default.writeFileSync(DELETED_VIDEOS_FILE, JSON.stringify(Array.from(deletedSet), null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving deleted video id:", err.message);
+  }
+}
+function loadVideosDatabase() {
+  try {
+    let videos = [];
+    if (import_fs.default.existsSync(VIDEOS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(VIDEOS_DB_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) videos = list;
+    }
+    const now = Date.now();
+    const deletedSet = loadDeletedVideoIds();
+    const validVideos = videos.filter((v) => {
+      if (!v || !v.id) return false;
+      if (deletedSet.has(v.id)) return false;
+      const age = now - (v.createdAt || now);
+      if (age > FOUR_DAYS_MS) {
+        return false;
+      }
+      return true;
+    });
+    if (validVideos.length !== videos.length) {
+      saveVideosDatabase(validVideos);
+    }
+    return validVideos;
+  } catch (err) {
+    console.error("Error loading videos database:", err.message);
+    return [];
+  }
+}
+function saveVideosDatabase(videos) {
+  try {
+    import_fs.default.writeFileSync(VIDEOS_DB_FILE, JSON.stringify(videos, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error saving videos database:", err.message);
+    return false;
+  }
+}
+app.get("/api/videos", (_req, res) => {
+  try {
+    const videos = loadVideosDatabase();
+    return res.json({ success: true, videos });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/videos/upload", (req, res) => {
+  try {
+    const videoData = req.body;
+    if (!videoData || !videoData.title || !videoData.videoUrl) {
+      return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0926\u094B\u0928\u094B\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+    }
+    const newVideo = {
+      id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: videoData.title.trim(),
+      caption: (videoData.caption || "").trim(),
+      aspectRatio: videoData.aspectRatio || "4:5",
+      createdAt: videoData.createdAt || Date.now(),
+      duration: videoData.duration || "01:30",
+      channel: videoData.channel || "\u090F\u0921\u092E\u093F\u0928 \u0935\u093E\u092F\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+      views: videoData.views || "1K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
+      videoUrl: videoData.videoUrl,
+      thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+      category: videoData.category || "\u0935\u093E\u092F\u0930\u0932"
+    };
+    const currentVideos = loadVideosDatabase();
+    const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];
+    saveVideosDatabase(updated);
+    return res.json({ success: true, video: newVideo, total: updated.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/admin/videos/:id", (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const updates = req.body;
+    const currentVideos = loadVideosDatabase();
+    const idx = currentVideos.findIndex((v) => v.id === videoId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    currentVideos[idx] = {
+      ...currentVideos[idx],
+      ...updates,
+      id: videoId
+      // never overwrite id
+    };
+    saveVideosDatabase(currentVideos);
+    return res.json({ success: true, video: currentVideos[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/admin/videos/:id", (req, res) => {
+  try {
+    const videoId = req.params.id;
+    saveDeletedVideoId(videoId);
+    const currentVideos = loadVideosDatabase();
+    const filtered = currentVideos.filter((v) => v.id !== videoId);
+    saveVideosDatabase(filtered);
+    return res.json({ success: true, deletedId: videoId, remaining: filtered.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.get(["/api/users", "/api/admin/users"], (_req, res) => {
   try {
     const now = Date.now();
@@ -3021,7 +3150,7 @@ function saveProfilesDatabase(data) {
 }
 app.get("/api/user-profile", (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
-  const idOrEmail = (req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
+  const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const allProfiles = loadProfilesDatabase();
   let match = null;
   if (idOrEmail) {

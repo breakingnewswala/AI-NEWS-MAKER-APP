@@ -51,6 +51,7 @@ import {
   setUserPlanTier,
   savePrimaryMobileNumber,
   isUserAdmin,
+  isEffectiveAdmin,
   isUserSuperAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
@@ -150,7 +151,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       district: 'डिजिटल डेस्क'
     };
   })();
-  const isAdmin = isUserAdmin(effectiveUser);
+  const isRealAdmin = isUserAdmin(effectiveUser);
+  const isAdmin = isEffectiveAdmin(effectiveUser);
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
@@ -2474,7 +2476,7 @@ return (
         {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
         {/* Modes != Plans != Promo Codes                                            */}
         {/* ========================================================================= */}
-        {isAdmin && (
+        {isRealAdmin && (
           <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 border-2 border-purple-500/80 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">

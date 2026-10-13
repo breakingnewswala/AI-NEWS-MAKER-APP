@@ -25,7 +25,7 @@
     "activatedAt": 1791697518060,
     "expiresAt": 2107057518060,
     "activatedVia": "Super Admin Preset",
-    "lastLoginAt": 1791890926151
+    "lastLoginAt": 1791892712618
   },
   {
     "userId": "usr_627265616b69",
@@ -53,7 +53,7 @@
     "activatedAt": 1791792137805,
     "expiresAt": 2107057518060,
     "activatedVia": "Admin Preset",
-    "lastLoginAt": 1791890926151
+    "lastLoginAt": 1791892712618
   },
   {
     "userId": "usr_khab_ridasnews",
@@ -74,8 +74,8 @@
     "tier": "basic",
     "planName": "BASIC",
     "isBlocked": false,
-    "blockedAt": 1791890307766,
-    "blockedBy": "Super Admin",
+    "blockedAt": null,
+    "blockedBy": null,
     "createdAt": 1791717128168,
     "trialStartedAt": 1791717128168,
     "trialEndsAt": 1792321928168,
@@ -83,6 +83,6 @@
     "activatedAt": 1791717128168,
     "expiresAt": 1792321928168,
     "activatedVia": "Google Sign-In Registration",
-    "lastLoginAt": 1791890926151
+    "lastLoginAt": 1791892712618
   }
 ]
