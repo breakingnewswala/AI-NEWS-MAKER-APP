@@ -1,0 +1,703 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Play,
+  Sparkles,
+  Clock,
+  Eye,
+  Film,
+  Flame,
+  Upload,
+  PlusCircle,
+  ShieldCheck,
+  Calendar,
+  AlertCircle,
+  Edit3,
+  Trash2,
+  Check,
+  X,
+  ArrowUp,
+} from 'lucide-react';
+import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
+import { ReporterUser } from './LoginModal';
+import { isEffectiveAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
+
+interface VideosScreenWebProps {
+  videos: VideoFeedItem[];
+  currentUser?: ReporterUser | null;
+  onOpenStudioWithVideo: (video: VideoFeedItem) => void;
+  onAdminAddVideo?: (video: VideoFeedItem) => void;
+  onAdminUpdateVideo?: (video: VideoFeedItem) => void;
+  onAdminDeleteVideo?: (videoId: string) => void;
+}
+
+export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
+  videos,
+  currentUser,
+  onOpenStudioWithVideo,
+  onAdminAddVideo,
+  onAdminUpdateVideo,
+  onAdminDeleteVideo,
+}) => {
+  // State for Editing Video Dialog
+  const [editingVideo, setEditingVideo] = useState<VideoFeedItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCaption, setEditCaption] = useState('');
+  const [editRatio, setEditRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5' | '4:3'>('9:16');
+  
+  // State for Delete Confirmation Dialog
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
+
+  const startEditingVideo = (vid: VideoFeedItem) => {
+    setEditingVideo(vid);
+    setEditTitle(vid.title || '');
+    setEditCaption(vid.caption || '');
+    setEditRatio((vid.aspectRatio as any) || '9:16');
+  };
+
+  const handleSaveVideoEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVideo) return;
+    const updated: VideoFeedItem = {
+      ...editingVideo,
+      title: editTitle.trim() || editingVideo.title,
+      caption: editCaption.trim(),
+      aspectRatio: editRatio as any,
+    };
+    if (onAdminUpdateVideo) {
+      onAdminUpdateVideo(updated);
+    }
+    if (activeVideo && activeVideo.id === updated.id) {
+      setActiveVideo(updated);
+    }
+    setEditingVideo(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingVideoId) return;
+    if (onAdminDeleteVideo) {
+      onAdminDeleteVideo(deletingVideoId);
+    }
+    if (activeVideo && activeVideo.id === deletingVideoId) {
+      setActiveVideo(null);
+    }
+    setDeletingVideoId(null);
+  };
+  const [activeVideo, setActiveVideo] = useState<VideoFeedItem | null>(null);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
+
+  // Floating Back to Top state
+  const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      if (typeof window !== 'undefined') {
+        setShowBackToTop(window.scrollY > 300);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Admin Upload Form State
+  const [adminTitle, setAdminTitle] = useState('');
+  const [adminCaption, setAdminCaption] = useState('');
+  const [adminRatio, setAdminRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5'>('4:5');
+  const [adminVideoUrl, setAdminVideoUrl] = useState('');
+  const [adminChannel, setAdminChannel] = useState(currentUser?.channelName || 'एडमिन वायरल डेस्क');
+  const [adminCategory, setAdminCategory] = useState('breaking');
+
+  // Filter out videos older than 4 days (4-Day Auto-Delete System)
+  const activeVideos = useMemo(() => {
+    return filterActiveVideos(videos);
+  }, [videos]);
+
+  // Date & Ratio Filter State for Video & Reels
+  // Date filter removed per requirement
+  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '16:9' | '4:3' | '1:1' | '4:5'>('all');
+
+  const filteredVideos = useMemo(() => {
+    return activeVideos.filter((v) => {
+      if (selectedRatioFilter !== 'all' && v.aspectRatio !== selectedRatioFilter) {
+        return false;
+      }
+      // Date filter removed
+      return true;
+    });
+  }, [activeVideos, selectedRatioFilter]);
+
+  // Role-based Admin check: ONLY Super Admin and Admin have access to video upload controls
+  const isAdmin = isEffectiveAdmin(currentUser) || isUserSuperAdmin(currentUser) || currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+
+  const handleAdminFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAdminVideoUrl(url);
+    }
+  };
+
+  const handleAdminSubmitVideo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminTitle.trim() || !adminVideoUrl.trim()) {
+      alert('कृपया वीडियो और शीर्षक दोनों प्रदान करें');
+      return;
+    }
+
+    const newVideo: VideoFeedItem = {
+      id: `vid-admin-${Date.now()}`,
+      title: adminTitle.trim(),
+      caption: adminCaption.trim(),
+      aspectRatio: adminRatio,
+      createdAt: Date.now(), // set timestamp for 4-day auto-delete
+      duration: '01:30',
+      channel: adminChannel || 'एडमिन वायरल डेस्क',
+      views: '1K देखा गया',
+      videoUrl: adminVideoUrl,
+      thumbnailUrl: 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop',
+      category: adminCategory,
+    };
+
+    if (onAdminAddVideo) {
+      onAdminAddVideo(newVideo);
+    }
+
+    // Reset Form
+    setAdminTitle('');
+    setAdminCaption('');
+    setAdminVideoUrl('');
+    setIsAdminPanelOpen(false);
+  };
+
+  // 7-day rolling date boundaries
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const sevenDaysAgoStr = useMemo(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), []);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white pb-24">
+      {/* Top Header */}
+      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg shrink-0">
+              <Film className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                वीडियो एंड रील्स
+              </h1>
+              <p className="text-xs text-slate-400">
+                एक्सक्लूसिव वीडियो रिपोर्ट्स एवं डिजिटल क्लिप्स
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Admin Video Upload Button - Available directly for Super Admin & Admin */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              >
+                <PlusCircle className="w-4 h-4 text-slate-950" />
+                <span>वीडियो अपलोड</span>
+              </button>
+            )}
+
+            {/* 4-Day Auto-Delete Tag - ADMIN ONLY */}
+            {isAdmin && (
+              <span className="hidden md:inline-flex px-2.5 py-1 bg-amber-950/70 border border-amber-600/40 text-amber-300 text-[11px] font-bold rounded-lg items-center gap-1">
+                <Calendar className="w-3 h-3 text-amber-400" />
+                4-दिन ऑटो-डिलीट सक्रिय
+              </span>
+            )}
+
+            <span className="px-3 py-1.5 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full flex items-center gap-1.5">
+              <Flame className="w-3.5 h-3.5 text-red-500" />
+              {filteredVideos.length} वीडियो
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 space-y-5">
+        {/* Frame Filter Buttons Bar: Supported Ratios 9:16, 16:9, 1:1, 4:5 */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {[
+            { id: 'all', label: 'सभी' },
+            { id: '9:16', label: '9:16' },
+            { id: '16:9', label: '16:9' },
+            { id: '1:1', label: '1:1' },
+            { id: '4:5', label: '4:5' },
+          ].map((f) => {
+            const isSelected = selectedRatioFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSelectedRatioFilter(f.id as any)}
+                className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 border ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 text-slate-950 border-amber-300 shadow-lg font-black scale-105 ring-2 ring-amber-400/50'
+                    : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span>{f.label}</span>
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Admin Video Upload Panel (Control Panel) - ONLY for Super Admin & Admin */}
+        {isAdmin && isAdminPanelOpen && (
+          <div className="bg-slate-900 border-2 border-amber-500/60 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
+                <ShieldCheck className="w-4 h-4" />
+                <span>कंट्रोल पैनल — एडमिन वीडियो अपलोड (Auto-Delete 4 Days)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAdminPanelOpen(false)}
+                className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded-lg cursor-pointer"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminSubmitVideo} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Video File / URL */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    📹 वीडियो फाइल अपलोड या URL:*
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-200 flex items-center justify-center gap-2 cursor-pointer transition">
+                      <Upload className="w-4 h-4 text-amber-400" />
+                      <span>{adminVideoUrl ? 'वीडियो चुना गया ✅' : 'डिवाइस से वीडियो चुनें'}</span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={handleAdminFileUpload}
+                      />
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    value={adminVideoUrl}
+                    onChange={(e) => setAdminVideoUrl(e.target.value)}
+                    placeholder="या वीडियो वेब लिंक (MP4 / WebM URL) पेस्ट करें..."
+                    className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                {/* 2. Video Ratio */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    📐 वीडियो रेशियो (Aspect Ratio):*
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: '4:5', label: '4:5', desc: 'सोशल / पोर्ट्रेट फीड' },
+                      { id: '9:16', label: '9:16', desc: 'रील्स / शॉर्ट्स' },
+                      { id: '16:9', label: '16:9', desc: 'यूट्यूब / लैंडस्केप' },
+                      { id: '1:1', label: '1:1', desc: 'स्क्वायर / इंस्टा' },
+                    ].map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => setAdminRatio(r.id as any)}
+                        className={`p-2 rounded-xl border text-center transition cursor-pointer ${
+                          adminRatio === r.id
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md'
+                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{r.label}</div>
+                        <div className="text-[10px] opacity-80">{r.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Video Title */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 block">
+                  📰 वीडियो शीर्षक (Headline):*
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adminTitle}
+                  onChange={(e) => setAdminTitle(e.target.value)}
+                  placeholder="उदा. संसद में डिजिटल मीडिया बिल पास, नए नियम लागू..."
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              {/* 4. Video Caption (वायरल वीडियो की जानकारी / संदर्भ) */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 block">
+                  📝 वीडियो कैप्शन (वायरल वीडियो की जानकारी / संदर्भ - Video Studio में ट्रांसफर होगा):
+                </label>
+                <textarea
+                  rows={3}
+                  value={adminCaption}
+                  onChange={(e) => setAdminCaption(e.target.value)}
+                  placeholder="इस वायरल वीडियो की पूरी पृष्ठभूमि, स्थान, और महत्वपूर्ण तथ्य यहाँ लिखें। यह Video Studio में स्वतः पहुँचेगा और AI इसी आधार पर हेडलाइन बनाएगा..."
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>यह वीडियो 4 दिन बाद स्वतः फीड से डिलीट हो जाएगा</span>
+                </div>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
+                >
+                  🚀 वीडियो फीड में प्रकाशित करें
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Featured Video Player if active */}
+        {activeVideo && (
+          <div className="bg-slate-900 border border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 bg-red-600 text-white text-xs font-black rounded-md">
+                  लाइव वीडियो प्लेयर
+                </span>
+                {activeVideo.aspectRatio && (
+                  <span className="px-2 py-0.5 bg-slate-800 text-amber-400 text-[10px] font-bold rounded">
+                    रेशियो: {activeVideo.aspectRatio}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setActiveVideo(null)}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+
+            <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-[480px] w-full mx-auto">
+              <video
+                src={activeVideo.videoUrl}
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+              <div>
+                <h3 className="text-lg font-bold text-white">{activeVideo.title}</h3>
+                {activeVideo.caption && (
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    📌 {activeVideo.caption}
+                  </p>
+                )}
+                <div className="flex items-center gap-3 text-xs text-slate-400 mt-2">
+                  <span className="flex items-center gap-1 text-amber-400 font-semibold">
+                    <Eye className="w-3.5 h-3.5" />
+                    {activeVideo.views}
+                  </span>
+                  <span>•</span>
+                  <span>अवधि: {activeVideo.duration}</span>
+                </div>
+              </div>
+
+              {/* Requirement 10: Button 'वीडियो स्टूडियो में ले जाएँ' */}
+              <button
+                onClick={() => onOpenStudioWithVideo(activeVideo)}
+                className="px-5 py-3 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-2 shrink-0 transition-transform active:scale-95 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>वीडियो स्टूडियो में ले जाएँ</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Video Grid */}
+        {filteredVideos.length === 0 ? (
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-10 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+              <Film className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-bold text-slate-300">
+              {selectedRatioFilter === 'all'
+                ? 'कोई वीडियो उपलब्ध नहीं है'
+                : `${selectedRatioFilter} रेशियो में कोई वीडियो नहीं मिला`}
+            </h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              अन्य रेशियो फ़िल्टर चुनें या "सभी (All)" पर क्लिक करके सभी उपलब्ध वीडियो देखें।
+            </p>
+            <button
+              type="button"
+              onClick={() => setSelectedRatioFilter('all')}
+              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl transition cursor-pointer"
+            >
+              सभी वीडियो देखें
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredVideos.map((vid) => (
+            <div
+              key={vid.id}
+              className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all hover:shadow-xl flex flex-col justify-between group"
+            >
+              <div>
+                {/* Thumbnail with Play Overlay */}
+                <div
+                  onClick={() => setActiveVideo(vid)}
+                  className="relative h-48 w-full bg-slate-950 cursor-pointer overflow-hidden group"
+                >
+                  <img
+                    src={vid.thumbnailUrl}
+                    alt={vid.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+                  />
+                  <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                      <Play className="w-5 h-5 ml-1 fill-white" />
+                    </div>
+                  </div>
+
+                  <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-amber-400" />
+                    {vid.duration}
+                  </div>
+
+                  <div className="absolute top-3 left-3 px-2.5 py-0.5 bg-red-600/90 backdrop-blur-sm text-white text-[10px] font-black rounded uppercase">
+                    {vid.aspectRatio ? `${vid.aspectRatio}` : 'वीडियो'}
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-2">
+                  <div className="flex items-center text-xs text-slate-400">
+                    <span className="flex items-center gap-1.5 font-medium text-amber-400">
+                      <Eye className="w-3.5 h-3.5" />
+                      {vid.views}
+                    </span>
+                  </div>
+
+                  <h3
+                    onClick={() => setActiveVideo(vid)}
+                    className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
+                  >
+                    {vid.title}
+                  </h3>
+
+                  {vid.caption && (
+                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {vid.caption}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Admin Editing Controls (Edit Info, Caption, Ratio & Delete) */}
+              {isAdmin && (
+                <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => startEditingVideo(vid)}
+                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95"
+                      title="वीडियो, कैप्शन व आस्पेक्ट रेशियो संपादित करें"
+                    >
+                      <Edit3 className="w-3 h-3 text-amber-400" />
+                      <span>एडिट (Edit)</span>
+                    </button>
+                    <span className="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
+                      {vid.aspectRatio || '4:5'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeletingVideoId(vid.id)}
+                    className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95"
+                    title="वीडियो डिलीट करें"
+                  >
+                    <Trash2 className="w-3 h-3 text-red-400" />
+                    <span>हटाएं</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + वीडियो देखें */}
+              <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenStudioWithVideo(vid)}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                  <span>वीडियो स्टूडियो में ले जाएँ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveVideo(vid)}
+                  className="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer active:scale-95 shrink-0"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current text-amber-400" />
+                  <span>वीडियो देखें</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      </div>
+
+      {/* Admin Edit Video Modal */}
+      {editingVideo && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-amber-500/60 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
+                <Edit3 className="w-4 h-4" />
+                <span>वीडियो विवरण व रेशियो एडिट करें (Admin Edit)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingVideo(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVideoEdit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 block">वीडियो शीर्षक (Title):</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 block">वीडियो कैप्शन (Caption):</label>
+                <textarea
+                  value={editCaption}
+                  onChange={(e) => setEditCaption(e.target.value)}
+                  rows={3}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 resize-none"
+                  placeholder="कैप्शन या विवरण लिखें..."
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 block">आस्पेक्ट रेशियो बदलें (Aspect Ratio):</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['9:16', '16:9', '1:1', '4:5'] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setEditRatio(r)}
+                      className={`py-2 rounded-xl text-xs font-black border transition cursor-pointer ${
+                        editRatio === r
+                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md font-black'
+                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingVideo(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 text-xs font-black rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>बदलाव सेव करें</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Delete Video Confirmation Dialog */}
+      {deletingVideoId && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-red-500/60 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white">वीडियो डिलीट करें?</h4>
+                <p className="text-xs text-slate-400">क्या आप वाकई इस वीडियो को हटाना चाहते हैं?</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletingVideoId(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>हाँ, डिलीट करें</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Back to Top Button */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="fixed bottom-20 right-4 z-40 px-3.5 py-2 bg-slate-900/90 hover:bg-slate-800 text-amber-400 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-1.5 text-xs font-black transition-all transform hover:scale-105 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
+          title="शीर्ष पर वापस जाएं"
+        >
+          <ArrowUp className="w-4 h-4 text-amber-400" />
+          <span>ऊपर जाएँ</span>
+        </button>
+      )}
+    </div>
+  );
+};

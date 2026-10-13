@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  Calendar,
   Sparkles,
   Flame,
   Share2,
@@ -168,11 +167,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   onOpenAdminLogin,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedDateFilter, setSelectedDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
-  const [customDateFilter, setCustomDateFilter] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [speakingPostId, setSpeakingPostId] = useState<string | null>(null);
@@ -186,16 +180,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Dynamic Unified Categories (Single Source of Truth from CategoryManager)
   const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
 
-  // Admin Date, Channel & Pending News Filter State (Visible to Admin/SuperAdmin)
-  const [adminFilterDate, setAdminFilterDate] = useState<string>('');
+  // Admin Channel & Pending News Filter State (Visible to Admin/SuperAdmin)
   const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
   const [adminPendingOnly, setAdminPendingOnly] = useState<boolean>(false);
   const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
-
-  // 7-day rolling date boundaries
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const sevenDaysAgoStr = useMemo(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), []);
 
   const [localPosts, setLocalPosts] = useState<NewsFeedPost[]>(() => posts);
   useEffect(() => {
@@ -527,19 +516,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         }
       }
 
-      // 3. Admin Date Filter (Strict India Timezone YYYY-MM-DD match)
-      if (canModerate && adminFilterDate) {
-        const pDate = new Date(p.timestamp || 0);
-        let istDateStr = '';
-        try {
-          istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(pDate);
-        } catch {
-          istDateStr = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}-${String(pDate.getDate()).padStart(2, '0')}`;
-        }
-        if (istDateStr !== adminFilterDate) return false;
-      }
-
-      // 4. Admin Channel Filter (Matches sourceChannel)
+      // 3. Admin Channel Filter (Matches sourceChannel)
       if (canModerate && adminFilterChannel) {
         const cleanChan = cleanViewerChannel(p.sourceChannel).toLowerCase();
         const filterChan = adminFilterChannel.toLowerCase();
@@ -548,7 +525,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         }
       }
 
-      // 5. Category Filter
+      // 4. Category Filter
       if (selectedCategory === 'all') return true;
       if (selectedCategory === 'breaking') return p.breaking;
       const catObj = feedCategories.find((c) => c.id === selectedCategory);
@@ -557,7 +534,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const postCatName = (p.categoryName || '').toLowerCase();
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
-  }, [combinedPosts, canModerate, adminPendingOnly, adminFilterDate, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
+  }, [combinedPosts, canModerate, adminPendingOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
 
   const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
     ? visiblePosts.filter((p) => p.breaking)
@@ -669,28 +646,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-              {/* 1. Date Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-                <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[11px] font-bold text-slate-300">तारीख:</span>
-                <input
-                  type="date"
-                  min={sevenDaysAgoStr}
-                  max={todayStr}
-                  value={adminFilterDate}
-                  onChange={(e) => setAdminFilterDate(e.target.value)}
-                  className="bg-transparent text-amber-300 text-xs font-mono font-bold outline-none cursor-pointer"
-                />
-                {adminFilterDate && (
-                  <button
-                    type="button"
-                    onClick={() => setAdminFilterDate('')}
-                    className="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
 
               {/* 2. Channel Filter */}
               <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">

@@ -416,550 +416,6 @@ var require_server_firestore_adapter = __commonJS({
   }
 });
 
-// ../server_firestore_adapter.cjs
-var require_server_firestore_adapter2 = __commonJS({
-  "../server_firestore_adapter.cjs"(exports2, module2) {
-    var http = require("http");
-    var https = require("https");
-    var fs2 = require("fs");
-    var path2 = require("path");
-    var firebaseConfig = null;
-    try {
-      const cfgPath = path2.join(process.cwd(), "firebase-applet-config.json");
-      if (fs2.existsSync(cfgPath)) {
-        firebaseConfig = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
-      }
-    } catch {
-    }
-    var PROJECT_ID = process.env.FIREBASE_PROJECT_ID || firebaseConfig?.projectId || "ai-news-maker-app";
-    var DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
-    var STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBucket || "ai-news-maker-app.firebasestorage.app";
-    var USE_FIRESTORE = process.env.USE_FIRESTORE === "true";
-    function getMetadataAccessToken() {
-      return new Promise((resolve) => {
-        const req = http.get(
-          {
-            host: "metadata.google.internal",
-            path: "/computeMetadata/v1/instance/service-accounts/default/token",
-            headers: { "Metadata-Flavor": "Google" },
-            timeout: 2500
-          },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => data += c);
-            res.on("end", () => {
-              try {
-                const parsed = JSON.parse(data);
-                resolve(parsed.access_token || null);
-              } catch {
-                resolve(null);
-              }
-            });
-          }
-        );
-        req.on("error", () => resolve(null));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve(null);
-        });
-      });
-    }
-    function getRuntimeServiceAccount() {
-      return new Promise((resolve) => {
-        const req = http.get(
-          {
-            host: "metadata.google.internal",
-            path: "/computeMetadata/v1/instance/service-accounts/default/email",
-            headers: { "Metadata-Flavor": "Google" },
-            timeout: 2500
-          },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => data += c);
-            res.on("end", () => resolve(data.trim() || "unknown"));
-          }
-        );
-        req.on("error", () => resolve("unknown"));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve("unknown");
-        });
-      });
-    }
-    function toFirestoreField(val) {
-      if (val === null || val === void 0) return { nullValue: null };
-      if (typeof val === "boolean") return { booleanValue: val };
-      if (typeof val === "number") {
-        if (Number.isInteger(val)) return { integerValue: String(val) };
-        return { doubleValue: val };
-      }
-      if (typeof val === "string") return { stringValue: val };
-      if (Array.isArray(val)) {
-        return { arrayValue: { values: val.map(toFirestoreField) } };
-      }
-      if (typeof val === "object") {
-        const fields = {};
-        for (const [k, v] of Object.entries(val)) {
-          if (v !== void 0) fields[k] = toFirestoreField(v);
-        }
-        return { mapValue: { fields } };
-      }
-      return { stringValue: String(val) };
-    }
-    function fromFirestoreField(field) {
-      if (!field || typeof field !== "object") return null;
-      if ("stringValue" in field) return field.stringValue;
-      if ("booleanValue" in field) return field.booleanValue;
-      if ("integerValue" in field) return parseInt(field.integerValue, 10);
-      if ("doubleValue" in field) return field.doubleValue;
-      if ("nullValue" in field) return null;
-      if ("arrayValue" in field) {
-        const items = field.arrayValue?.values || [];
-        return items.map(fromFirestoreField);
-      }
-      if ("mapValue" in field) {
-        const res = {};
-        for (const [k, v] of Object.entries(field.mapValue?.fields || {})) {
-          res[k] = fromFirestoreField(v);
-        }
-        return res;
-      }
-      return null;
-    }
-    function fromFirestoreDoc(doc) {
-      if (!doc || !doc.fields) return null;
-      const res = {};
-      for (const [k, v] of Object.entries(doc.fields)) {
-        res[k] = fromFirestoreField(v);
-      }
-      return res;
-    }
-    async function firestoreWriteDoc(collection, docId, data) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const fields = {};
-      for (const [k, v] of Object.entries(data)) {
-        if (v !== void 0) fields[k] = toFirestoreField(v);
-      }
-      const payload = JSON.stringify({ fields });
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "PATCH",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(payload)
-            },
-            timeout: 4e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                resolve({ success: true, statusCode: res.statusCode });
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.write(payload);
-        req.end();
-      });
-    }
-    async function firestoreReadDoc(collection, docId) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            timeout: 4e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const data = fromFirestoreDoc(parsed);
-                  resolve({ success: true, data, rawDoc: parsed, statusCode: res.statusCode });
-                } catch {
-                  resolve({ success: true, statusCode: res.statusCode });
-                }
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.end();
-      });
-    }
-    async function uploadToFirebaseStorage(destinationPath, buffer, contentType = "image/png") {
-      const token = await getMetadataAccessToken();
-      if (!token) {
-        return { success: false, error: "No access token for Firebase Storage" };
-      }
-      const encodedPath = encodeURIComponent(destinationPath);
-      const uploadUrl = `/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}&uploadType=media`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firebasestorage.googleapis.com",
-            path: uploadUrl,
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": contentType,
-              "Content-Length": buffer.length
-            },
-            timeout: 8e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const publicDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedPath}?alt=media`;
-                  resolve({ success: true, url: publicDownloadUrl, data: parsed });
-                } catch {
-                  resolve({ success: true });
-                }
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.write(buffer);
-        req.end();
-      });
-    }
-    async function runDiagnosticSelfTest() {
-      const sa = await getRuntimeServiceAccount();
-      const testId = `diag_ping_${Date.now()}`;
-      const testPayload = {
-        diagnosticPing: "ok",
-        testedAt: Date.now(),
-        serviceAccount: sa,
-        databaseId: DATABASE_ID
-      };
-      const writeRes = await firestoreWriteDoc("system_health", testId, testPayload);
-      if (!writeRes.success) {
-        return {
-          success: false,
-          stage: "write",
-          serviceAccount: sa,
-          databaseId: DATABASE_ID,
-          statusCode: writeRes.statusCode,
-          error: writeRes.error || "Write failed"
-        };
-      }
-      const readRes = await firestoreReadDoc("system_health", testId);
-      if (!readRes.success) {
-        return {
-          success: false,
-          stage: "read",
-          serviceAccount: sa,
-          databaseId: DATABASE_ID,
-          statusCode: readRes.statusCode,
-          error: readRes.error || "Read failed"
-        };
-      }
-      return {
-        success: true,
-        stage: "complete",
-        serviceAccount: sa,
-        databaseId: DATABASE_ID,
-        writtenId: testId,
-        verifiedData: readRes.data
-      };
-    }
-    module2.exports = {
-      PROJECT_ID,
-      DATABASE_ID,
-      STORAGE_BUCKET,
-      USE_FIRESTORE,
-      getMetadataAccessToken,
-      getRuntimeServiceAccount,
-      firestoreWriteDoc,
-      firestoreReadDoc,
-      uploadToFirebaseStorage,
-      runDiagnosticSelfTest
-    };
-    async function firestoreDeleteDoc(collection, docId) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            timeout: 4e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                resolve({ success: true, statusCode: res.statusCode });
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.end();
-      });
-    }
-    async function firestoreListDocs(collection, pageSize = 100) {
-      const token = await getMetadataAccessToken();
-      if (!token) return { success: false, error: "No access token available" };
-      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}?pageSize=${pageSize}`;
-      return new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: "firestore.googleapis.com",
-            path: docPath,
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            timeout: 5e3
-          },
-          (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
-            res.on("end", () => {
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const documents = (parsed.documents || []).map((doc) => {
-                    const data = fromFirestoreDoc(doc);
-                    const parts = (doc.name || "").split("/");
-                    const id = parts[parts.length - 1];
-                    return { id, ...data };
-                  });
-                  resolve({ success: true, documents, statusCode: res.statusCode });
-                } catch (e) {
-                  resolve({ success: false, error: e.message });
-                }
-              } else {
-                resolve({ success: false, statusCode: res.statusCode, error: body });
-              }
-            });
-          }
-        );
-        req.on("error", (err) => resolve({ success: false, error: err.message }));
-        req.on("timeout", () => {
-          req.destroy();
-          resolve({ success: false, error: "timeout" });
-        });
-        req.end();
-      });
-    }
-    module2.exports.firestoreDeleteDoc = firestoreDeleteDoc;
-    module2.exports.firestoreListDocs = firestoreListDocs;
-  }
-});
-
-// ../migrate_json_to_firestore.cjs
-var require_migrate_json_to_firestore = __commonJS({
-  "../migrate_json_to_firestore.cjs"(exports2, module2) {
-    var fs2 = require("fs");
-    var path2 = require("path");
-    var adapter = fs2.existsSync("./web_studio/server_firestore_adapter.cjs") ? require_server_firestore_adapter() : require_server_firestore_adapter2();
-    function backupSourceDatabases() {
-      const timestamp = Date.now();
-      const backupDir = path2.resolve(process.cwd(), `backups_phase5/migration_pre_backup_${timestamp}`);
-      try {
-        fs2.mkdirSync(backupDir, { recursive: true });
-        const filesToBackup = [
-          "user_profiles_db.json",
-          "news_database.json",
-          "rss_sources_database.json",
-          "drafts_database.json",
-          "account_deletion_requests.json"
-        ];
-        let copied = 0;
-        for (const f of filesToBackup) {
-          if (fs2.existsSync(f)) {
-            fs2.copyFileSync(f, path2.join(backupDir, f));
-            copied++;
-          }
-        }
-        console.log(`[Backup] Successfully created snapshot of ${copied} database files in ${backupDir}`);
-        return { success: true, backupDir, copied };
-      } catch (err) {
-        console.error("[Backup Failed] Aborting migration:", err.message);
-        return { success: false, error: err.message };
-      }
-    }
-    async function migrate({ dryRun = true } = {}) {
-      console.log(`=== Starting JSON-to-Firestore Migration (DRY_RUN=${dryRun}) ===`);
-      console.log("Project:", adapter.PROJECT_ID);
-      console.log("Database:", adapter.DATABASE_ID);
-      if (!dryRun) {
-        const backupRes = backupSourceDatabases();
-        if (!backupRes.success) {
-          throw new Error(`Migration aborted: Backup creation failed (${backupRes.error})`);
-        }
-      } else {
-        console.log("[Dry Run Mode] No writes, modifications or destructive operations will occur.");
-      }
-      const stats = {
-        users: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
-        news: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
-        rss: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
-        deletionRequests: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 }
-      };
-      if (fs2.existsSync("user_profiles_db.json")) {
-        const users = JSON.parse(fs2.readFileSync("user_profiles_db.json", "utf8") || "{}");
-        const userKeys = Object.keys(users);
-        stats.users.total = userKeys.length;
-        for (const [key, profile] of Object.entries(users)) {
-          const docId = (profile.uid || profile.userId || key).toLowerCase().trim();
-          let existing = { success: false };
-          try {
-            existing = await adapter.firestoreReadDoc("users", docId);
-          } catch (e) {
-            existing = { success: false, error: e.message };
-          }
-          if (existing.success && existing.data) {
-            stats.users.wouldSkip++;
-            console.log(`  [User] Skip: Document '${docId}' already exists in Firestore`);
-          } else {
-            stats.users.wouldCreate++;
-            if (!dryRun) {
-              const res = await adapter.firestoreWriteDoc("users", docId, {
-                ...profile,
-                docId,
-                migratedAt: Date.now()
-              });
-              if (!res.success) {
-                console.error(`  [User Error] Failed to write docId ${docId}:`, res.error);
-              }
-            }
-          }
-        }
-      }
-      if (fs2.existsSync("news_database.json")) {
-        const posts = JSON.parse(fs2.readFileSync("news_database.json", "utf8") || "[]");
-        stats.news.total = posts.length;
-        for (const p of posts) {
-          const docId = p.id;
-          if (!docId) {
-            stats.news.conflicts++;
-            continue;
-          }
-          let existing = { success: false };
-          try {
-            existing = await adapter.firestoreReadDoc("news_posts", docId);
-          } catch (e) {
-            existing = { success: false, error: e.message };
-          }
-          if (existing.success && existing.data) {
-            stats.news.wouldSkip++;
-          } else {
-            stats.news.wouldCreate++;
-            if (!dryRun) {
-              const res = await adapter.firestoreWriteDoc("news_posts", docId, {
-                ...p,
-                migratedAt: Date.now()
-              });
-              if (!res.success) {
-                console.error(`  [News Error] Failed to write docId ${docId}:`, res.error);
-              }
-            }
-          }
-        }
-      }
-      if (fs2.existsSync("account_deletion_requests.json")) {
-        const delReqs = JSON.parse(fs2.readFileSync("account_deletion_requests.json", "utf8") || "[]");
-        stats.deletionRequests.total = delReqs.length;
-        for (const r of delReqs) {
-          const docId = r.id || `DEL_${Date.now()}`;
-          let existing = { success: false };
-          try {
-            existing = await adapter.firestoreReadDoc("account_deletion_requests", docId);
-          } catch (e) {
-            existing = { success: false, error: e.message };
-          }
-          if (existing.success && existing.data) {
-            stats.deletionRequests.wouldSkip++;
-          } else {
-            stats.deletionRequests.wouldCreate++;
-            if (!dryRun) {
-              await adapter.firestoreWriteDoc("account_deletion_requests", docId, {
-                ...r,
-                migratedAt: Date.now()
-              });
-            }
-          }
-        }
-      }
-      console.log("=== Migration Summary Report ===");
-      console.log("Users:", stats.users);
-      console.log("News Posts:", stats.news);
-      console.log("Account Deletions:", stats.deletionRequests);
-      console.log(`Dry Run Complete (Writes Performed: ${dryRun ? 0 : "Yes"})`);
-      return stats;
-    }
-    if (require.main === module2) {
-      const isLive = process.argv.includes("--live");
-      migrate({ dryRun: !isLive }).then((stats) => {
-        console.log("Finished with stats:", stats);
-        process.exit(0);
-      }).catch((err) => {
-        console.error("Migration failed:", err);
-        process.exit(1);
-      });
-    } else {
-      module2.exports = { migrate, backupSourceDatabases };
-    }
-  }
-});
-
 // server.ts
 var server_exports = {};
 __export(server_exports, {
@@ -977,7 +433,7 @@ var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd(
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
-var PORT = parseInt(process.env.PORT || "3000", 10);
+var PORT = 3e3;
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -1091,6 +547,13 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
   }
 });
 var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
+var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
+var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
+var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+try {
+  import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+} catch {
+}
 function getInitialRichNewsPosts() {
   const now = Date.now();
   return [
@@ -1768,7 +1231,7 @@ function syncUserToProfiles(u) {
       channelLogoGifUrl: u.channelLogoGifUrl,
       channelLogoType: u.channelLogoType || "png",
       mobileNumber: u.mobileNumber || u.mobile || "",
-      websiteUrl: u.websiteUrl || "ainewsmaker.online",
+      websiteUrl: u.websiteUrl || "",
       socialIcons: u.socialIcons,
       updatedAt: Date.now()
     };
@@ -1811,7 +1274,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
       district: userPayload.district || existing.district || "",
-      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "ainewsmaker.online",
+      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons || existing.socialIcons,
       role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || existing.role || "user",
       tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing.tier || userPayload.tier || "basic",
@@ -1841,15 +1304,15 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelName: userPayload.channelName || userPayload.channelNameHi || "",
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || "",
       channelNameEn: userPayload.channelNameEn || "",
-      channelLogoUrl: userPayload.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoUrl: userPayload.channelLogoUrl || "",
       channelLogoPngUrl: userPayload.channelLogoPngUrl,
       channelLogoGifUrl: userPayload.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || "",
       district: userPayload.district || "",
-      websiteUrl: userPayload.websiteUrl || "ainewsmaker.online",
-      socialIcons: userPayload.socialIcons || { youtube: true, facebook: true, instagram: true, whatsapp: true },
+      websiteUrl: userPayload.websiteUrl || "",
+      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || "user",
       tier: isSuper ? "ultra" : isAdmin ? "ultra" : userPayload.tier || "basic",
       planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : userPayload.planName || "BASIC",
@@ -1878,20 +1341,6 @@ function reconcileAllUsers() {
     for (const u of existingUsers) {
       if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
     }
-    const bakFile = import_path.default.join(process.cwd(), "users_master_database.json.bak");
-    if (import_fs.default.existsSync(bakFile)) {
-      try {
-        const baks = JSON.parse(import_fs.default.readFileSync(bakFile, "utf-8"));
-        if (Array.isArray(baks)) {
-          for (const b of baks) {
-            if (b.email && !userMap.has(b.email.toLowerCase().trim())) {
-              userMap.set(b.email.toLowerCase().trim(), b);
-            }
-          }
-        }
-      } catch {
-      }
-    }
     const profiles = loadProfilesDatabase();
     for (const [k, p] of Object.entries(profiles)) {
       const email = (p.email || k).toLowerCase().trim();
@@ -1900,23 +1349,23 @@ function reconcileAllUsers() {
           userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           email: p.email || k,
           name: p.fullName || p.username || "\u092F\u0942\u091C\u093C\u0930",
-          fullName: p.fullName,
-          username: p.username,
-          channelName: p.channelNameHi,
-          channelNameHi: p.channelNameHi,
-          channelNameEn: p.channelNameEn,
-          channelLogoUrl: p.channelLogoUrl,
-          channelLogoPngUrl: p.channelLogoPngUrl,
-          channelLogoGifUrl: p.channelLogoGifUrl,
+          fullName: p.fullName || "",
+          username: p.username || "",
+          channelName: p.channelNameHi || "",
+          channelNameHi: p.channelNameHi || "",
+          channelNameEn: p.channelNameEn || "",
+          channelLogoUrl: p.channelLogoUrl || "",
+          channelLogoPngUrl: p.channelLogoPngUrl || "",
+          channelLogoGifUrl: p.channelLogoGifUrl || "",
           channelLogoType: p.channelLogoType || "png",
-          mobile: p.mobileNumber,
-          mobileNumber: p.mobileNumber,
-          district: p.district,
-          websiteUrl: p.websiteUrl || "ainewsmaker.online",
+          mobile: p.mobileNumber || "",
+          mobileNumber: p.mobileNumber || "",
+          district: p.district || "",
+          websiteUrl: p.websiteUrl || "",
           socialIcons: p.socialIcons,
-          role: p.role || (email === "admin.ainewsmaker@gmail.com" ? "superadmin" : "user"),
-          tier: p.tier || "basic",
-          planName: p.tier === "ultra" ? "VIP DESK" : "BASIC",
+          role: p.role || (email === "admin.ainewsmaker@gmail.com" ? "superadmin" : email === "breakingnewswala@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "admin" : "user"),
+          tier: p.tier || (email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "ultra" : "basic"),
+          planName: p.tier === "ultra" || email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : "BASIC",
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -1927,24 +1376,27 @@ function reconcileAllUsers() {
     }
     const superAdminEmail = "admin.ainewsmaker@gmail.com";
     const existingSuper = userMap.get(superAdminEmail);
+    const superProf = profiles[superAdminEmail];
     userMap.set(superAdminEmail, {
       userId: existingSuper?.userId || "user-1791697518060",
       email: superAdminEmail,
-      name: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
-      fullName: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
-      username: "admin.ainewsmaker",
+      name: superProf?.fullName || existingSuper?.fullName || "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
+      fullName: superProf?.fullName || existingSuper?.fullName || "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
+      username: superProf?.username || existingSuper?.username || "admin.ainewsmaker",
       role: "superadmin",
       tier: "ultra",
       planName: "VIP DESK",
-      channelName: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameEn: "AI News Maker",
-      channelLogoUrl: "/assets/ai_news_maker_logo.png",
-      channelLogoType: "png",
-      mobile: "9669802408",
-      mobileNumber: "9669802408",
-      district: "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
-      websiteUrl: "ainewsmaker.online",
+      channelName: superProf?.channelNameHi || existingSuper?.channelName || "",
+      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || "",
+      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || "",
+      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || "",
+      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || "",
+      channelLogoGifUrl: superProf?.channelLogoGifUrl || existingSuper?.channelLogoGifUrl || "",
+      channelLogoType: superProf?.channelLogoType || existingSuper?.channelLogoType || "png",
+      mobile: superProf?.mobileNumber || existingSuper?.mobile || "",
+      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || "",
+      district: superProf?.district || existingSuper?.district || "",
+      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || "",
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingSuper?.createdAt || 1791697518060,
@@ -1953,28 +1405,31 @@ function reconcileAllUsers() {
       activatedAt: 1791697518060,
       expiresAt: 2107057518060,
       activatedVia: "Super Admin Preset",
-      lastLoginAt: Date.now()
+      lastLoginAt: existingSuper?.lastLoginAt || Date.now()
     });
-    const adminEmail = "breakingnewswala.com@gmail.com";
-    const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala@gmail.com");
+    const adminEmail = "breakingnewswala@gmail.com";
+    const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala.com@gmail.com");
+    const adminProf = profiles[adminEmail] || profiles["breakingnewswala.com@gmail.com"];
     userMap.set(adminEmail, {
       userId: existingAdmin?.userId || "usr_627265616b69",
       email: adminEmail,
-      name: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
-      fullName: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
-      username: "breakingnewswala",
+      name: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+      fullName: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+      username: adminProf?.username || existingAdmin?.username || "breakingnewswala",
       role: "admin",
       tier: "ultra",
       planName: "VIP DESK",
-      channelName: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
-      channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
-      channelNameEn: "Breaking News Wala",
-      channelLogoUrl: "/assets/breaking_news_wala_logo.png",
-      channelLogoType: "png",
-      mobile: "9669802408",
-      mobileNumber: "9669802408",
-      district: "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
-      websiteUrl: "ainewsmaker.online",
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || "",
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || "",
+      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || "",
+      channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || "",
+      channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || "",
+      channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || "",
+      channelLogoType: adminProf?.channelLogoType || existingAdmin?.channelLogoType || "png",
+      mobile: adminProf?.mobileNumber || existingAdmin?.mobile || "",
+      mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || "",
+      district: adminProf?.district || existingAdmin?.district || "",
+      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "",
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -1983,45 +1438,8 @@ function reconcileAllUsers() {
       activatedAt: 1791792137805,
       expiresAt: 2107057518060,
       activatedVia: "Admin Preset",
-      lastLoginAt: Date.now()
+      lastLoginAt: existingAdmin?.lastLoginAt || Date.now()
     });
-    const testKhabrEmail = "khab ridasnews@gmail.com";
-    const normKhabrKey = "khabridasnews@gmail.com";
-    const foundKhabr = userMap.get(testKhabrEmail.toLowerCase()) || userMap.get(normKhabrKey);
-    const khabrCreationTime = foundKhabr?.createdAt || Date.now() - 2 * 24 * 3600 * 1e3;
-    const khabrTrialStart = foundKhabr?.trialStartedAt || khabrCreationTime;
-    const khabrTrialEnds = foundKhabr?.trialEndsAt || khabrTrialStart + SEVEN_DAYS_MS;
-    const khabrRecord = {
-      userId: foundKhabr?.userId || "usr_khab_ridasnews",
-      email: testKhabrEmail,
-      name: foundKhabr?.name || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      fullName: foundKhabr?.fullName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      username: foundKhabr?.username || "khabridasnews",
-      channelName: foundKhabr?.channelName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      channelNameHi: foundKhabr?.channelNameHi || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      channelNameEn: foundKhabr?.channelNameEn || "Khabridas News",
-      channelLogoUrl: foundKhabr?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
-      channelLogoType: "png",
-      mobile: foundKhabr?.mobile || "9669802408",
-      mobileNumber: foundKhabr?.mobileNumber || "9669802408",
-      district: foundKhabr?.district || "\u0921\u093F\u091C\u093F\u091F\u0932 \u0921\u0947\u0938\u094D\u0915",
-      websiteUrl: foundKhabr?.websiteUrl || "https://khabridasnews.com",
-      role: "user",
-      tier: foundKhabr?.tier || "basic",
-      planName: foundKhabr?.planName || "BASIC",
-      isBlocked: Boolean(foundKhabr?.isBlocked),
-      blockedAt: foundKhabr?.blockedAt || null,
-      blockedBy: foundKhabr?.blockedBy || null,
-      createdAt: khabrCreationTime,
-      trialStartedAt: khabrTrialStart,
-      trialEndsAt: khabrTrialEnds,
-      isTrialExpired: Date.now() >= khabrTrialEnds,
-      activatedAt: khabrTrialStart,
-      expiresAt: khabrTrialEnds,
-      activatedVia: "Google Sign-In Registration",
-      lastLoginAt: Date.now()
-    };
-    userMap.set(testKhabrEmail.toLowerCase(), khabrRecord);
     const reconciledList = Array.from(userMap.values());
     saveUsersMasterDatabase(reconciledList);
     saveUsersDatabase(reconciledList);
@@ -3105,14 +2523,6 @@ app.all("/api/user-data/delete-account", (req, res) => {
 app.get("/api/account-deletion-requests", (_req, res) => {
   return res.json({ success: true, requests: loadAccountDeletionRequests() });
 });
-var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
-var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
-var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
-try {
-  import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
-} catch {
-}
 app.use("/uploads", import_express.default.static(import_path.default.join(process.cwd(), "public", "uploads")));
 function loadProfilesDatabase() {
   try {
@@ -3262,13 +2672,13 @@ function loadAdminBranding() {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-    channelNameEn: "AI News Maker",
-    channelLogoUrl: "/assets/ai_news_maker_logo.png",
-    websiteUrl: "ainewsmaker.online",
-    mobileNumber: "9669802408",
-    showMobileNumber: true,
-    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
+    channelNameHi: "",
+    channelNameEn: "",
+    channelLogoUrl: "",
+    websiteUrl: "",
+    mobileNumber: "",
+    showMobileNumber: false,
+    activeSocialIcons: [],
     updatedAt: Date.now()
   };
 }
@@ -3415,11 +2825,11 @@ app.post("/api/auth/login", (req, res) => {
         email: "admin.ainewsmaker@gmail.com",
         userId: "master_admin_001",
         tier: "ultra",
-        channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-        channelNameEn: "AI News Maker",
-        channelLogoUrl: "/assets/ai_news_maker_logo.png",
-        websiteUrl: "ainewsmaker.online",
-        mobileNumber: "9669802408"
+        channelNameHi: "",
+        channelNameEn: "",
+        channelLogoUrl: "",
+        websiteUrl: "",
+        mobileNumber: ""
       };
       return res.json({ success: true, user: masterUser });
     }
@@ -3736,7 +3146,7 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const key = targetUsername.trim().toLowerCase();
     if (allProfiles[key]) {
-      allProfiles[key].channelLogoUrl = "/assets/ai_news_maker_logo.png";
+      allProfiles[key].channelLogoUrl = "";
       allProfiles[key].channelLogoPngUrl = void 0;
       allProfiles[key].channelLogoGifUrl = void 0;
       allProfiles[key].channelLogoType = "png";
@@ -4657,7 +4067,7 @@ app.get("/api/admin/diagnostic/firestore-test", async (req, res) => {
     try {
       adapter = require_server_firestore_adapter();
     } catch {
-      adapter = require_server_firestore_adapter();
+      adapter = require("../web_studio/server_firestore_adapter.cjs");
     }
     const result = await adapter.runDiagnosticSelfTest();
     return res.json({
@@ -4676,7 +4086,7 @@ app.post("/api/admin/migration/run-firestore-sync", async (req, res) => {
     if (!authCheck.authorized) {
       return res.status(authCheck.status).json({ error: authCheck.error });
     }
-    const { migrate } = require_migrate_json_to_firestore();
+    const { migrate } = require("../migrate_json_to_firestore.cjs");
     const isLive = req.body && req.body.live === true;
     const result = await migrate({ dryRun: !isLive });
     return res.json({
@@ -6250,6 +5660,18 @@ async function startServer() {
       appType: "spa"
     });
     app.use(vite.middlewares);
+    app.use("*", async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        const indexPath = import_path.default.resolve(process.cwd(), "index.html");
+        let template = import_fs.default.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e) {
+        if (vite && typeof vite.ssrFixStacktrace === "function") vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const possibleDistPaths = [
       import_path.default.join(process.cwd(), "dist"),
@@ -6287,7 +5709,11 @@ async function startServer() {
     console.error("Server listen error:", err.message);
   });
 }
-startServer();
+setInterval(() => {
+}, 6e4);
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+});
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   TEMPLATE_CONFIG_REGISTRY,

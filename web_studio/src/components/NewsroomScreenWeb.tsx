@@ -390,43 +390,58 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </div>
       </div>
 
-      {/* 2. Top Navigation Tabs: Drafts Workspace VS Support Inbox */}
-      <div className="flex items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md">
+      {/* 2. Three Main Options in Exact Sequence: 1. Drafts & Projects, 2. Support Inbox, 3. E-Paper (Disabled Coming Soon) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl">
+        {/* First: Drafts & Projects */}
         <button
           type="button"
           onClick={() => setActiveTab('drafts')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+          className={`py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
             activeTab === 'drafts'
               ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-              : 'text-slate-400 hover:text-white'
+              : 'text-slate-400 hover:text-white bg-slate-950/40'
           }`}
         >
           <FolderOpen className="w-4 h-4 shrink-0" />
           <span>ड्राफ्ट्स एवं प्रोजेक्ट्स</span>
-          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-            activeTab === 'drafts' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+            activeTab === 'drafts' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'
           }`}>
             {drafts.length}
           </span>
         </button>
 
+        {/* Second: Support Inbox */}
         <button
           type="button"
           onClick={() => setActiveTab('support')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+          className={`py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
             activeTab === 'support'
               ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-              : 'text-slate-400 hover:text-white'
+              : 'text-slate-400 hover:text-white bg-slate-950/40'
           }`}
         >
           <MessageSquare className="w-4 h-4 shrink-0" />
           <span>सपोर्ट इनबॉक्स</span>
           {pendingCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-600 text-white font-bold animate-pulse">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse">
               {pendingCount}
             </span>
           )}
         </button>
+
+        {/* Third: E-Paper (Bottom/3rd position, highlighted with COMING SOON, disabled & non-interactive) */}
+        <div
+          aria-disabled="true"
+          title="ई-पेपर फीचर जल्द उपलब्ध होगा"
+          className="py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-950/60 border border-slate-800/80 text-slate-500 opacity-60 cursor-not-allowed select-none flex items-center justify-center gap-2"
+        >
+          <Newspaper className="w-4 h-4 shrink-0 text-slate-500" />
+          <span>ई-पेपर (E-Paper)</span>
+          <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 font-black tracking-wider uppercase">
+            COMING SOON
+          </span>
+        </div>
       </div>
 
       {/* 3A. TAB 1: Drafts & Saved News Projects */}

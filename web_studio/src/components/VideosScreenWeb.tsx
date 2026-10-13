@@ -179,37 +179,11 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
-      {/* Admin Filter Bar for Video & Reels */}
-      {isAdmin && (
-        <div className="relative z-20 bg-slate-900 border-b border-amber-500/30 px-4 sm:px-6 py-2.5 shadow-xl">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="text-xs font-bold text-amber-300">
-                एडमिन फ़िल्टर (वीडियो व रील्स)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Upload Button */}
-              <button
-                type="button"
-                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>वीडियो अपलोड</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Top Header */}
-      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-4 sm:px-6 py-4 relative z-10 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg">
+            <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg shrink-0">
               <Film className="w-5 h-5" />
             </div>
             <div>
@@ -222,7 +196,19 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Admin Video Upload Button - Available directly for Super Admin & Admin */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              >
+                <PlusCircle className="w-4 h-4 text-slate-950" />
+                <span>वीडियो अपलोड</span>
+              </button>
+            )}
+
             {/* 4-Day Auto-Delete Tag - ADMIN ONLY */}
             {isAdmin && (
               <span className="hidden md:inline-flex px-2.5 py-1 bg-amber-950/70 border border-amber-600/40 text-amber-300 text-[11px] font-bold rounded-lg items-center gap-1">
@@ -231,7 +217,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </span>
             )}
 
-            <span className="hidden sm:inline-flex px-3 py-1 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full items-center gap-1.5">
+            <span className="px-3 py-1.5 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full flex items-center gap-1.5">
               <Flame className="w-3.5 h-3.5 text-red-500" />
               {filteredVideos.length} वीडियो
             </span>
@@ -239,14 +225,15 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 space-y-5">
-        {/* Frame Filter Buttons Bar (सभी, 9:16, 4:3, 1:1) */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 space-y-5">
+        {/* Frame Filter Buttons Bar: Supported Ratios 9:16, 16:9, 1:1, 4:5 */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: 'all', label: 'सभी' },
             { id: '9:16', label: '9:16' },
-            { id: '4:3', label: '4:3' },
+            { id: '16:9', label: '16:9' },
             { id: '1:1', label: '1:1' },
+            { id: '4:5', label: '4:5' },
           ].map((f) => {
             const isSelected = selectedRatioFilter === f.id;
             return (
@@ -254,7 +241,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 key={f.id}
                 type="button"
                 onClick={() => setSelectedRatioFilter(f.id as any)}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 border ${
+                className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 border ${
                   isSelected
                     ? 'bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 text-slate-950 border-amber-300 shadow-lg font-black scale-105 ring-2 ring-amber-400/50'
                     : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'

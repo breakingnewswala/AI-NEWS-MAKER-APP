@@ -327,8 +327,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     };
   }, [currentUser?.email, isAdmin]);
 
-  // Tabs: 'profile', 'plans_packages', 'templates', 'dashboard' (Admin only gets multi-tab access)
-  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'templates_manager' | 'policies' | ''>('profile');
+  // Tabs: 'profile', 'membership', 'templates_manager', 'policies' - initially closed per requirement
+  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'templates_manager' | 'policies' | ''>('');
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
     if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();

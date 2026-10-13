@@ -127,8 +127,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onAddCategory,
   onDeleteCategory,
 }) => {
-  // Sub-tabs: 10 main accordions in exact order
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('profile');
+  // Sub-tabs: 10 main accordions in exact order - initially closed per requirement
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
   const isSuperAdminUser = isUserSuperAdmin(currentUser);
 
@@ -142,13 +142,26 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Cloud user sync on mount & whenever users subTab is opened
+  // Authoritative real-time user sync on mount, subTab change, window focus & periodic interval
   useEffect(() => {
-    syncCloudUsers().then((synced) => {
-      if (Array.isArray(synced) && synced.length > 0) {
-        setPlanUsers(synced);
-      }
-    });
+    let isMounted = true;
+    const fetchUsers = () => {
+      syncCloudUsers().then((synced) => {
+        if (isMounted && Array.isArray(synced)) {
+          setPlanUsers(synced);
+        }
+      }).catch(() => {});
+    };
+
+    fetchUsers();
+    const interval = setInterval(fetchUsers, 12000);
+    window.addEventListener('focus', fetchUsers);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchUsers);
+    };
   }, [subTab]);
 
   // Edit User State

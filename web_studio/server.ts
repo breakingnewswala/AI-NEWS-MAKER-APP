@@ -12,7 +12,7 @@ const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(
 dotenv.config();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = 3000;
 
 // Enable CORS for web apps, custom domains (ainewsmaker.online), and dev endpoints
 app.use((req, res, next) => {
@@ -176,6 +176,14 @@ interface StoredNewsPost {
 }
 
 const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
+const PROFILES_DB_FILE = path.join(process.cwd(), "user_profiles_db.json");
+const UPLOAD_LOGOS_DIR = path.join(process.cwd(), "public", "uploads", "logos");
+const WEB_UPLOAD_LOGOS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+
+try {
+  fs.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+} catch { }
+
 
 function getInitialRichNewsPosts(): StoredNewsPost[] {
   const now = Date.now();
@@ -1088,7 +1096,7 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       channelLogoGifUrl: u.channelLogoGifUrl,
       channelLogoType: u.channelLogoType || 'png',
       mobileNumber: u.mobileNumber || u.mobile || '',
-      websiteUrl: u.websiteUrl || 'ainewsmaker.online',
+      websiteUrl: u.websiteUrl || '',
       socialIcons: u.socialIcons,
       updatedAt: Date.now(),
     };
@@ -1138,7 +1146,7 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || '',
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || '',
       district: userPayload.district || existing.district || '',
-      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || 'ainewsmaker.online',
+      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
       socialIcons: userPayload.socialIcons || existing.socialIcons,
       role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : (userPayload.role || existing.role || 'user')),
       tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : (existing.tier || userPayload.tier || 'basic')),
@@ -1169,15 +1177,15 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       channelName: userPayload.channelName || userPayload.channelNameHi || '',
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || '',
       channelNameEn: userPayload.channelNameEn || '',
-      channelLogoUrl: userPayload.channelLogoUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoUrl: userPayload.channelLogoUrl || '',
       channelLogoPngUrl: userPayload.channelLogoPngUrl,
       channelLogoGifUrl: userPayload.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || 'png',
       mobile: userPayload.mobile || userPayload.mobileNumber || '',
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || '',
       district: userPayload.district || '',
-      websiteUrl: userPayload.websiteUrl || 'ainewsmaker.online',
-      socialIcons: userPayload.socialIcons || { youtube: true, facebook: true, instagram: true, whatsapp: true },
+      websiteUrl: userPayload.websiteUrl || '',
+      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : (userPayload.role || 'user')),
       tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : (userPayload.tier || 'basic')),
       planName: isSuper ? 'VIP DESK' : (isAdmin ? 'VIP DESK' : (userPayload.planName || 'BASIC')),
@@ -1211,22 +1219,7 @@ function reconcileAllUsers() {
       if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
     }
 
-    // 2. Ingest backup if available
-    const bakFile = path.join(process.cwd(), "users_master_database.json.bak");
-    if (fs.existsSync(bakFile)) {
-      try {
-        const baks = JSON.parse(fs.readFileSync(bakFile, "utf-8"));
-        if (Array.isArray(baks)) {
-          for (const b of baks) {
-            if (b.email && !userMap.has(b.email.toLowerCase().trim())) {
-              userMap.set(b.email.toLowerCase().trim(), b);
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // 3. Ingest profiles db
+    // 2. Ingest profiles db
     const profiles = loadProfilesDatabase();
     for (const [k, p] of Object.entries(profiles)) {
       const email = (p.email || k).toLowerCase().trim();
@@ -1235,23 +1228,23 @@ function reconcileAllUsers() {
           userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           email: p.email || k,
           name: p.fullName || p.username || 'यूज़र',
-          fullName: p.fullName,
-          username: p.username,
-          channelName: p.channelNameHi,
-          channelNameHi: p.channelNameHi,
-          channelNameEn: p.channelNameEn,
-          channelLogoUrl: p.channelLogoUrl,
-          channelLogoPngUrl: p.channelLogoPngUrl,
-          channelLogoGifUrl: p.channelLogoGifUrl,
+          fullName: p.fullName || '',
+          username: p.username || '',
+          channelName: p.channelNameHi || '',
+          channelNameHi: p.channelNameHi || '',
+          channelNameEn: p.channelNameEn || '',
+          channelLogoUrl: p.channelLogoUrl || '',
+          channelLogoPngUrl: p.channelLogoPngUrl || '',
+          channelLogoGifUrl: p.channelLogoGifUrl || '',
           channelLogoType: p.channelLogoType || 'png',
-          mobile: p.mobileNumber,
-          mobileNumber: p.mobileNumber,
-          district: p.district,
-          websiteUrl: p.websiteUrl || 'ainewsmaker.online',
+          mobile: p.mobileNumber || '',
+          mobileNumber: p.mobileNumber || '',
+          district: p.district || '',
+          websiteUrl: p.websiteUrl || '',
           socialIcons: p.socialIcons,
-          role: (p.role as any) || (email === 'admin.ainewsmaker@gmail.com' ? 'superadmin' : 'user'),
-          tier: (p.tier as any) || 'basic',
-          planName: (p.tier === 'ultra' ? 'VIP DESK' : 'BASIC'),
+          role: (p.role as any) || (email === 'admin.ainewsmaker@gmail.com' ? 'superadmin' : (email === 'breakingnewswala@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'admin' : 'user')),
+          tier: (p.tier as any) || (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'ultra' : 'basic'),
+          planName: (p.tier === 'ultra' || email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : 'BASIC'),
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -1261,27 +1254,30 @@ function reconcileAllUsers() {
       }
     }
 
-    // 4. Guaranteed Privileged Accounts
+    // 3. Guaranteed Privileged Accounts: ONLY Super Admin & Admin
     const superAdminEmail = 'admin.ainewsmaker@gmail.com';
     const existingSuper = userMap.get(superAdminEmail);
+    const superProf = profiles[superAdminEmail];
     userMap.set(superAdminEmail, {
       userId: existingSuper?.userId || 'user-1791697518060',
       email: superAdminEmail,
-      name: 'सुपर एडमिन (Super Admin)',
-      fullName: 'सुपर एडमिन (Super Admin)',
-      username: 'admin.ainewsmaker',
+      name: superProf?.fullName || existingSuper?.fullName || 'सुपर एडमिन (Super Admin)',
+      fullName: superProf?.fullName || existingSuper?.fullName || 'सुपर एडमिन (Super Admin)',
+      username: superProf?.username || existingSuper?.username || 'admin.ainewsmaker',
       role: 'superadmin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: 'एआई न्यूज़ मेकर',
-      channelNameHi: 'एआई न्यूज़ मेकर',
-      channelNameEn: 'AI News Maker',
-      channelLogoUrl: '/assets/ai_news_maker_logo.png',
-      channelLogoType: 'png',
-      mobile: '9669802408',
-      mobileNumber: '9669802408',
-      district: 'हेडक्वार्टर सेंट्रल डेस्क',
-      websiteUrl: 'ainewsmaker.online',
+      channelName: superProf?.channelNameHi || existingSuper?.channelName || '',
+      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || '',
+      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || '',
+      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || '',
+      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || '',
+      channelLogoGifUrl: superProf?.channelLogoGifUrl || existingSuper?.channelLogoGifUrl || '',
+      channelLogoType: superProf?.channelLogoType || existingSuper?.channelLogoType || 'png',
+      mobile: superProf?.mobileNumber || existingSuper?.mobile || '',
+      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || '',
+      district: superProf?.district || existingSuper?.district || '',
+      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || '',
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingSuper?.createdAt || 1791697518060,
@@ -1290,29 +1286,32 @@ function reconcileAllUsers() {
       activatedAt: 1791697518060,
       expiresAt: 2107057518060,
       activatedVia: 'Super Admin Preset',
-      lastLoginAt: Date.now(),
+      lastLoginAt: existingSuper?.lastLoginAt || Date.now(),
     });
 
-    const adminEmail = 'breakingnewswala.com@gmail.com';
-    const existingAdmin = userMap.get(adminEmail) || userMap.get('breakingnewswala@gmail.com');
+    const adminEmail = 'breakingnewswala@gmail.com';
+    const existingAdmin = userMap.get(adminEmail) || userMap.get('breakingnewswala.com@gmail.com');
+    const adminProf = profiles[adminEmail] || profiles['breakingnewswala.com@gmail.com'];
     userMap.set(adminEmail, {
       userId: existingAdmin?.userId || 'usr_627265616b69',
       email: adminEmail,
-      name: 'मुख्य संपादक',
-      fullName: 'मुख्य संपादक',
-      username: 'breakingnewswala',
+      name: adminProf?.fullName || existingAdmin?.fullName || 'मुख्य संपादक',
+      fullName: adminProf?.fullName || existingAdmin?.fullName || 'मुख्य संपादक',
+      username: adminProf?.username || existingAdmin?.username || 'breakingnewswala',
       role: 'admin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: 'ब्रेकिंग न्यूज़ वाला',
-      channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
-      channelNameEn: 'Breaking News Wala',
-      channelLogoUrl: '/assets/breaking_news_wala_logo.png',
-      channelLogoType: 'png',
-      mobile: '9669802408',
-      mobileNumber: '9669802408',
-      district: 'सेंट्रल डेस्क / भोपाल',
-      websiteUrl: 'ainewsmaker.online',
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || '',
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || '',
+      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || '',
+      channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || '',
+      channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || '',
+      channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || '',
+      channelLogoType: adminProf?.channelLogoType || existingAdmin?.channelLogoType || 'png',
+      mobile: adminProf?.mobileNumber || existingAdmin?.mobile || '',
+      mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || '',
+      district: adminProf?.district || existingAdmin?.district || '',
+      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || '',
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -1321,49 +1320,9 @@ function reconcileAllUsers() {
       activatedAt: 1791792137805,
       expiresAt: 2107057518060,
       activatedVia: 'Admin Preset',
-      lastLoginAt: Date.now(),
+      lastLoginAt: existingAdmin?.lastLoginAt || Date.now(),
     });
 
-    // 5. Guaranteed Test & Registered User: khab ridasnews@gmail.com
-    const testKhabrEmail = 'khab ridasnews@gmail.com';
-    const normKhabrKey = 'khabridasnews@gmail.com';
-    const foundKhabr = userMap.get(testKhabrEmail.toLowerCase()) || userMap.get(normKhabrKey);
-
-    const khabrCreationTime = foundKhabr?.createdAt || (Date.now() - 2 * 24 * 3600 * 1000);
-    const khabrTrialStart = foundKhabr?.trialStartedAt || khabrCreationTime;
-    const khabrTrialEnds = foundKhabr?.trialEndsAt || (khabrTrialStart + SEVEN_DAYS_MS);
-
-    const khabrRecord: AuthoritativeUser = {
-      userId: foundKhabr?.userId || 'usr_khab_ridasnews',
-      email: testKhabrEmail,
-      name: foundKhabr?.name || 'खबरिदास न्यूज़',
-      fullName: foundKhabr?.fullName || 'खबरिदास न्यूज़',
-      username: foundKhabr?.username || 'khabridasnews',
-      channelName: foundKhabr?.channelName || 'खबरिदास न्यूज़',
-      channelNameHi: foundKhabr?.channelNameHi || 'खबरिदास न्यूज़',
-      channelNameEn: foundKhabr?.channelNameEn || 'Khabridas News',
-      channelLogoUrl: foundKhabr?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-      channelLogoType: 'png',
-      mobile: foundKhabr?.mobile || '9669802408',
-      mobileNumber: foundKhabr?.mobileNumber || '9669802408',
-      district: foundKhabr?.district || 'डिजिटल डेस्क',
-      websiteUrl: foundKhabr?.websiteUrl || 'https://khabridasnews.com',
-      role: 'user',
-      tier: foundKhabr?.tier || 'basic',
-      planName: foundKhabr?.planName || 'BASIC',
-      isBlocked: Boolean(foundKhabr?.isBlocked),
-      blockedAt: foundKhabr?.blockedAt || null,
-      blockedBy: foundKhabr?.blockedBy || null,
-      createdAt: khabrCreationTime,
-      trialStartedAt: khabrTrialStart,
-      trialEndsAt: khabrTrialEnds,
-      isTrialExpired: Date.now() >= khabrTrialEnds,
-      activatedAt: khabrTrialStart,
-      expiresAt: khabrTrialEnds,
-      activatedVia: 'Google Sign-In Registration',
-      lastLoginAt: Date.now(),
-    };
-    userMap.set(testKhabrEmail.toLowerCase(), khabrRecord);
 
     const reconciledList = Array.from(userMap.values());
     saveUsersMasterDatabase(reconciledList);
@@ -2729,14 +2688,7 @@ app.get("/api/account-deletion-requests", (_req, res) => {
 // ==========================================
 // PERSISTENT USER PROFILES & CHANNEL BRANDING
 // ==========================================
-const PROFILES_DB_FILE = path.join(process.cwd(), "user_profiles_db.json");
-const UPLOAD_LOGOS_DIR = path.join(process.cwd(), "public", "uploads", "logos");
-const WEB_UPLOAD_LOGOS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "logos");
 
-try {
-  fs.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
-  fs.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
-} catch { }
 
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
@@ -2949,13 +2901,13 @@ function loadAdminBranding(): AdminBrandingRecord {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "एआई न्यूज़ मेकर",
-    channelNameEn: "AI News Maker",
-    channelLogoUrl: "/assets/ai_news_maker_logo.png",
-    websiteUrl: "ainewsmaker.online",
-    mobileNumber: "9669802408",
-    showMobileNumber: true,
-    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
+    channelNameHi: "",
+    channelNameEn: "",
+    channelLogoUrl: "",
+    websiteUrl: "",
+    mobileNumber: "",
+    showMobileNumber: false,
+    activeSocialIcons: [],
     updatedAt: Date.now(),
   };
 }
@@ -3138,11 +3090,11 @@ app.post("/api/auth/login", (req, res) => {
         email: "admin.ainewsmaker@gmail.com",
         userId: "master_admin_001",
         tier: "ultra",
-        channelNameHi: "एआई न्यूज़ मेकर",
-        channelNameEn: "AI News Maker",
-        channelLogoUrl: "/assets/ai_news_maker_logo.png",
-        websiteUrl: "ainewsmaker.online",
-        mobileNumber: "9669802408",
+        channelNameHi: "",
+        channelNameEn: "",
+        channelLogoUrl: "",
+        websiteUrl: "",
+        mobileNumber: "",
       };
       return res.json({ success: true, user: masterUser });
     }
@@ -3534,7 +3486,7 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const key = targetUsername.trim().toLowerCase();
     if (allProfiles[key]) {
-      allProfiles[key].channelLogoUrl = "/assets/ai_news_maker_logo.png";
+      allProfiles[key].channelLogoUrl = "";
       allProfiles[key].channelLogoPngUrl = undefined;
       allProfiles[key].channelLogoGifUrl = undefined;
       allProfiles[key].channelLogoType = "png";
@@ -6598,6 +6550,18 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+    app.use("*", async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        const indexPath = path.resolve(process.cwd(), "index.html");
+        let template = fs.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e: any) {
+        if (vite && typeof vite.ssrFixStacktrace === "function") vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const possibleDistPaths = [
       path.join(process.cwd(), "dist"),
@@ -6639,4 +6603,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// Keep process active and prevent event loop from exiting
+setInterval(() => {}, 60000);
+
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+});
+

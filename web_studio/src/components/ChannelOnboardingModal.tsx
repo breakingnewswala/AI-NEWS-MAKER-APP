@@ -75,13 +75,13 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
 
   // Username: Auto initialized from English channel name
   const [username, setUsername] = useState<string>(
-    initialProfile?.username || 'ainewsmaker'
+    initialProfile?.username || ''
   );
   const [isUsernameCustomized, setIsUsernameCustomized] = useState<boolean>(false);
 
   // Mobile number & visibility
   const [mobileNumber, setMobileNumber] = useState<string>(
-    initialProfile?.mobileNumber || '9669802408'
+    initialProfile?.mobileNumber || ''
   );
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     initialProfile?.showMobileNumber ?? true
@@ -89,7 +89,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
 
   // Website address & visibility
   const [websiteUrl, setWebsiteUrl] = useState<string>(
-    initialProfile?.websiteUrl || 'ainewsmaker.online'
+    initialProfile?.websiteUrl || ''
   );
   const [showWebsite, setShowWebsite] = useState<boolean>(
     initialProfile?.showWebsite ?? true

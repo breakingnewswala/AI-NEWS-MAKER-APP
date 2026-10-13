@@ -1047,14 +1047,26 @@ export function checkAccountUniqueness(input: {
 // Register or Update User
 export function registerOrUpdateUser(userData: {
   name: string;
+  fullName?: string;
   email: string;
   channelName?: string;
+  channelNameHi?: string;
+  channelNameEn?: string;
   channelLogoUrl?: string;
+  channelLogoPngUrl?: string;
+  channelLogoGifUrl?: string;
+  channelLogoType?: 'png' | 'gif';
   mobile?: string;
+  mobileNumber?: string;
+  websiteUrl?: string;
+  district?: string;
+  socialIcons?: any;
   isLocked?: boolean;
   username?: string;
   tier?: UserPlanTier;
   role?: 'superadmin' | 'admin' | 'reporter' | 'user' | string;
+  userId?: string;
+  uid?: string;
 }): void {
   if (typeof window === 'undefined') return;
   try {
@@ -1063,50 +1075,83 @@ export function registerOrUpdateUser(userData: {
     const isSuper = isUserSuperAdmin(cleanEmail);
     const assignedRole = (isSuper ? 'superadmin' : (userData.role || 'user')) as any;
     const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    const effectiveName = userData.fullName || userData.name;
+    const effectiveMobile = userData.mobile || userData.mobileNumber || '';
+    const effectiveChannelName = userData.channelName || userData.channelNameHi || '';
+
+    let updatedRecord: PlanUserRecord;
     if (idx >= 0) {
-      users[idx] = {
+      updatedRecord = {
         ...users[idx],
         email: cleanEmail,
-        name: userData.name || users[idx].name,
+        name: effectiveName || users[idx].name,
         role: users[idx].role || assignedRole,
-        channelName: userData.channelName || users[idx].channelName,
-        channelLogoUrl: userData.channelLogoUrl || users[idx].channelLogoUrl,
-        mobile: userData.mobile || users[idx].mobile,
+        channelName: effectiveChannelName || users[idx].channelName,
+        channelLogoUrl: userData.channelLogoUrl !== undefined ? userData.channelLogoUrl : users[idx].channelLogoUrl,
+        mobile: effectiveMobile || users[idx].mobile,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : users[idx].isProfileLocked,
       };
+      users[idx] = updatedRecord;
     } else {
-      users.push({
-        userId: `user-${Date.now()}`,
+      updatedRecord = {
+        userId: userData.userId || userData.uid || `user-${Date.now()}`,
         email: cleanEmail,
-        name: userData.name,
+        name: effectiveName,
         role: assignedRole,
         tier: isSuper ? 'ultra' : (userData.tier || 'basic'),
         planName: isSuper ? 'VIP DESK' : 'BASIC',
-        channelName: userData.channelName,
-        channelLogoUrl: userData.channelLogoUrl,
-        mobile: userData.mobile,
+        channelName: effectiveChannelName,
+        channelLogoUrl: userData.channelLogoUrl || '',
+        mobile: effectiveMobile,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : true,
         activatedAt: Date.now(),
         expiresAt: Date.now() + (isSuper ? 3650 : 7) * 24 * 60 * 60 * 1000,
         activatedVia: isSuper ? 'Super Admin Preset' : 'Profile Registration',
-      });
+      };
+      users.push(updatedRecord);
     }
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
     window.dispatchEvent(new Event('ai_news_plan_users_changed'));
 
-    // Permanent Backend Database Sync & Realtime Google Sheet Sync
-    const recordToSync = idx >= 0 ? users[idx] : users[users.length - 1];
-    if (recordToSync) {
-      fetch('/api/admin/register-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(recordToSync),
-      }).catch(() => {});
+    // Full Payload for Authoritative Backend Sync
+    const syncPayload = {
+      ...updatedRecord,
+      fullName: effectiveName,
+      username: userData.username || cleanEmail.split('@')[0],
+      channelNameHi: effectiveChannelName,
+      channelNameEn: userData.channelNameEn || '',
+      channelLogoPngUrl: userData.channelLogoPngUrl || (userData.channelLogoType !== 'gif' ? userData.channelLogoUrl : ''),
+      channelLogoGifUrl: userData.channelLogoGifUrl || (userData.channelLogoType === 'gif' ? userData.channelLogoUrl : ''),
+      channelLogoType: userData.channelLogoType || 'png',
+      websiteUrl: userData.websiteUrl || '',
+      district: userData.district || '',
+      socialIcons: userData.socialIcons,
+    };
 
-      import('./googleSheetsUserSync').then(({ syncUsersToGoogleSheet }) => {
-        syncUsersToGoogleSheet(users).catch(() => {});
-      }).catch(() => {});
-    }
+    fetch(getApiUrl('/api/users/sync'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncPayload),
+    }).then(async (res) => {
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.users)) {
+          localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(json.users));
+          window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+        }
+      }
+    }).catch(() => {});
+
+    // Sync profile document as well
+    fetch(getApiUrl('/api/user-profile'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncPayload),
+    }).catch(() => {});
+
+    import('./googleSheetsUserSync').then(({ syncUsersToGoogleSheet }) => {
+      syncUsersToGoogleSheet(users).catch(() => {});
+    }).catch(() => {});
   } catch (e) {
     console.warn('Error in registerOrUpdateUser:', e);
   }
