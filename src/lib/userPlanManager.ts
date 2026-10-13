@@ -50,6 +50,10 @@ export interface UserSubscriptionInfo {
   isTrialActive: boolean;
   isTrialExpired?: boolean;
   hasActivePaidPlan?: boolean;
+  isBlocked?: boolean;
+  blockedAt?: number | null;
+  blockedBy?: string | null;
+  isLocked?: boolean;
   daysRemaining: number;
   hoursRemaining?: number;
   minutesRemaining?: number;
@@ -539,6 +543,20 @@ export interface PlanUserRecord {
   assignedFooterUrl?: string;
   assignedCustomActive?: boolean;
   socialIcons?: Record<string, boolean>;
+  isBlocked?: boolean;
+  blockedAt?: number | null;
+  blockedBy?: string | null;
+  unblockedAt?: number | null;
+  unblockedBy?: string | null;
+  createdAt?: number;
+  trialStartedAt?: number;
+  trialEndsAt?: number;
+  isTrialActive?: boolean;
+  isTrialExpired?: boolean;
+  daysRemaining?: number;
+  hoursRemaining?: number;
+  minutesRemaining?: number;
+  hasActivePaidPlan?: boolean;
 }
 
 export function getPlanUsers(): PlanUserRecord[] {
@@ -1328,6 +1346,50 @@ export async function adminDeleteCloudUser(userId: string): Promise<{ success: b
     if (res.ok) return await res.json();
   } catch {}
   return { success: true };
+}
+
+export async function blockUserAuthoritative(
+  userEmailOrId: string,
+  blockedBy?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(getApiUrl('/api/admin/block-user'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, blockedBy: blockedBy || 'Admin' }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      await syncCloudUsers();
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+      return { success: true };
+    }
+    return { success: false, error: json.error || 'उपयोगकर्ता को ब्लॉक करने में त्रुटि' };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function unblockUserAuthoritative(
+  userEmailOrId: string,
+  unblockedBy?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(getApiUrl('/api/admin/unblock-user'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, unblockedBy: unblockedBy || 'Admin' }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      await syncCloudUsers();
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+      return { success: true };
+    }
+    return { success: false, error: json.error || 'उपयोगकर्ता को अनब्लॉक करने में त्रुटि' };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
 export function rejectLogoChangeRequest(requestId: string): void {

@@ -1,6 +1,7 @@
 import React from 'react';
 
 export interface FooterGraphicProps {
+  channelName?: string;
   socialHandle?: string;
   whatsappNumber?: string;
   customFooterPng?: string;

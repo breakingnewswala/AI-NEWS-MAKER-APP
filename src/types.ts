@@ -101,6 +101,12 @@ export interface EPaperAdSettings {
 }
 
 export interface NewsCardData {
+  // Admin Test Mode Identity
+  isTestMode?: boolean;
+  testChannelName?: string;
+  testSocialHandle?: string;
+  testLogoUrl?: string;
+  testSamplePhotoUrl?: string;
   id?: string;
   title?: string;
   date?: string;
@@ -402,6 +408,8 @@ export interface ChannelProfile {
     facebook?: boolean;
     instagram?: boolean;
     twitter?: boolean;
+    telegram?: boolean;
+    whatsapp?: boolean;
     linkedin?: boolean;
   };
   username: string; // derived from English Channel Name
