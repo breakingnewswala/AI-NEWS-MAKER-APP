@@ -275,17 +275,65 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     }
 
     const formattedUsername = `@${clean}`;
-    setChannelProfile(prev => ({ ...prev, username: formattedUsername }));
+    const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
 
-    if (currentUser?.email) {
-      const emailKey = `user_profile_${currentUser.email.toLowerCase().trim()}`;
+    setChannelProfile(prev => {
+      const updated = { ...prev, username: formattedUsername };
       try {
-        const saved = localStorage.getItem(emailKey);
-        const obj = saved ? JSON.parse(saved) : {};
-        obj.username = formattedUsername;
-        localStorage.setItem(emailKey, JSON.stringify(obj));
+        localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+        localStorage.setItem('user_profile_data', JSON.stringify(updated));
+        if (cleanEmail) {
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+        }
       } catch {}
-    }
+
+      // Immediate server persistence across page refresh
+      try {
+        fetch(getApiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...updated,
+            email: cleanEmail,
+            username: clean,
+          }),
+        }).catch(() => {});
+
+        if (cleanEmail) {
+          fetch(getApiUrl('/api/admin/update-user'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: cleanEmail,
+              updates: {
+                username: clean,
+              },
+            }),
+          }).catch(() => {});
+        }
+      } catch {}
+
+      try {
+        registerOrUpdateUser({
+          email: cleanEmail || 'admin.ainewsmaker@gmail.com',
+          name: updated.fullName || 'मुख्य संपादक',
+          username: clean,
+          isLocked: !isAdmin,
+        });
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('channel_profile_updated', {
+            detail: {
+              ...updated,
+              username: clean,
+            },
+          })
+        );
+      }
+      return updated;
+    });
 
     try {
       const sessStr = localStorage.getItem('reporter_auth_session');
@@ -713,6 +761,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         } catch (err) {
           console.warn('PNG upload sync warning:', err);
         }
+        const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
         setChannelProfile((prev) => {
           const updated = {
             ...prev,
@@ -723,7 +772,61 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           try {
             localStorage.setItem('user_channel_profile', JSON.stringify(updated));
             localStorage.setItem('user_profile_data', JSON.stringify(updated));
+            if (cleanEmail) {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+            }
           } catch {}
+
+          // Immediate server persistence across page refresh
+          try {
+            fetch(getApiUrl('/api/user-profile'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...updated,
+                email: cleanEmail,
+                channelLogoUrl: finalUrl,
+                channelLogoPngUrl: finalUrl,
+              }),
+            }).catch(() => {});
+
+            if (cleanEmail) {
+              fetch(getApiUrl('/api/admin/update-user'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: cleanEmail,
+                  updates: {
+                    channelLogoUrl: finalUrl,
+                    channelLogoPngUrl: finalUrl,
+                  },
+                }),
+              }).catch(() => {});
+            }
+          } catch {}
+
+          try {
+            registerOrUpdateUser({
+              email: cleanEmail || 'admin.ainewsmaker@gmail.com',
+              name: updated.fullName || 'मुख्य संपादक',
+              channelName: updated.channelNameHi,
+              channelLogoUrl: finalUrl,
+              username: updated.username,
+              isLocked: !isAdmin,
+            });
+          } catch {}
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('channel_profile_updated', {
+                detail: {
+                  ...updated,
+                  channelLogoUrl: finalUrl,
+                  channelLogoPngUrl: finalUrl,
+                },
+              })
+            );
+          }
           return updated;
         });
         setPngUploadLoading(false);
@@ -764,6 +867,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         } catch (err) {
           console.warn('GIF upload server sync warning:', err);
         }
+        const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
         setChannelProfile((prev) => {
           const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
           const updated = {
@@ -776,7 +880,47 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           try {
             localStorage.setItem('user_channel_profile', JSON.stringify(updated));
             localStorage.setItem('user_profile_data', JSON.stringify(updated));
+            if (cleanEmail) {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+            }
           } catch {}
+
+          // Immediate server persistence across page refresh
+          try {
+            fetch(getApiUrl('/api/user-profile'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...updated,
+                email: cleanEmail,
+                channelLogoGifUrl: finalUrl,
+              }),
+            }).catch(() => {});
+
+            if (cleanEmail) {
+              fetch(getApiUrl('/api/admin/update-user'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: cleanEmail,
+                  updates: {
+                    channelLogoGifUrl: finalUrl,
+                  },
+                }),
+              }).catch(() => {});
+            }
+          } catch {}
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('channel_profile_updated', {
+                detail: {
+                  ...updated,
+                  channelLogoGifUrl: finalUrl,
+                },
+              })
+            );
+          }
           return updated;
         });
         setGifUploadLoading(false);
@@ -787,6 +931,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   // 2b. Remove GIF Logo (Immediately fallbacks Video Feed to PNG Primary Logo)
   const handleRemoveGifLogo = async () => {
+    const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
     setChannelProfile((prev) => {
       const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
       const updated = {
@@ -799,7 +944,33 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       try {
         localStorage.setItem('user_channel_profile', JSON.stringify(updated));
         localStorage.setItem('user_profile_data', JSON.stringify(updated));
+        if (cleanEmail) {
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+        }
       } catch {}
+
+      try {
+        fetch(getApiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...updated,
+            email: cleanEmail,
+            channelLogoGifUrl: '',
+          }),
+        }).catch(() => {});
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('channel_profile_updated', {
+            detail: {
+              ...updated,
+              channelLogoGifUrl: undefined,
+            },
+          })
+        );
+      }
       return updated;
     });
     try {

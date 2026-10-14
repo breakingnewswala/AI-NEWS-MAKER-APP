@@ -1080,11 +1080,16 @@ export function registerOrUpdateUser(userData: {
     const effectiveChannelName = userData.channelName || userData.channelNameHi || '';
 
     let updatedRecord: PlanUserRecord;
+    const cleanUsername = (userData.username && !userData.username.includes('@'))
+      ? userData.username
+      : (effectiveName ? effectiveName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20) : `user_${Date.now().toString().slice(-4)}`);
+
     if (idx >= 0) {
       updatedRecord = {
         ...users[idx],
         email: cleanEmail,
         name: effectiveName || users[idx].name,
+        username: (userData.username && !userData.username.includes('@')) ? userData.username : (users[idx].username || cleanUsername),
         role: users[idx].role || assignedRole,
         channelName: effectiveChannelName || users[idx].channelName,
         channelLogoUrl: userData.channelLogoUrl !== undefined ? userData.channelLogoUrl : users[idx].channelLogoUrl,
@@ -1097,6 +1102,7 @@ export function registerOrUpdateUser(userData: {
         userId: userData.userId || userData.uid || `user-${Date.now()}`,
         email: cleanEmail,
         name: effectiveName,
+        username: cleanUsername,
         role: assignedRole,
         tier: isSuper ? 'ultra' : (userData.tier || 'basic'),
         planName: isSuper ? 'VIP DESK' : 'BASIC',
@@ -1117,7 +1123,7 @@ export function registerOrUpdateUser(userData: {
     const syncPayload = {
       ...updatedRecord,
       fullName: effectiveName,
-      username: userData.username || cleanEmail.split('@')[0],
+      username: updatedRecord.username,
       channelNameHi: effectiveChannelName,
       channelNameEn: userData.channelNameEn || '',
       channelLogoPngUrl: userData.channelLogoPngUrl || (userData.channelLogoType !== 'gif' ? userData.channelLogoUrl : ''),
@@ -1140,6 +1146,13 @@ export function registerOrUpdateUser(userData: {
           window.dispatchEvent(new Event('ai_news_plan_users_changed'));
         }
       }
+    }).catch(() => {});
+
+    // Also register in admin DB endpoint
+    fetch(getApiUrl('/api/admin/register-user'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedRecord),
     }).catch(() => {});
 
     // Sync profile document as well

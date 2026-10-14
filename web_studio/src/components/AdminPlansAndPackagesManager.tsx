@@ -130,7 +130,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // Sub-tabs: 10 main accordions in exact order - initially closed per requirement
   const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
-  const isSuperAdminUser = isUserSuperAdmin(currentUser);
+  const effectiveCurrentUser = currentUser || (() => {
+    try {
+      const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+      if (sess) return JSON.parse(sess);
+    } catch {}
+    return null;
+  })();
+  const isSuperAdminUser = isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -154,13 +161,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     };
 
     fetchUsers();
-    const interval = setInterval(fetchUsers, 12000);
+    const interval = setInterval(fetchUsers, 4000);
     window.addEventListener('focus', fetchUsers);
+    window.addEventListener('ai_news_plan_users_changed', fetchUsers);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', fetchUsers);
+      window.removeEventListener('ai_news_plan_users_changed', fetchUsers);
     };
   }, [subTab]);
 
@@ -178,7 +187,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   const handleOpenEditUser = (u: PlanUserRecord) => {
     setEditingUser(u);
-    setEditUsername(u.userId || u.email.split('@')[0]);
+    setEditUsername(u.username || (u.userId && !u.userId.includes('@') ? u.userId : 'user'));
     setEditFullName(u.name || '');
     setEditMobile(u.mobile || '');
     setEditChannelName(u.channelName || '');
@@ -401,7 +410,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       customAcc[email] = {
         pass: password,
         user: {
-          username: email.split('@')[0],
+          username: name ? name.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16) || `user_${Date.now().toString().slice(-4)}` : `user_${Date.now().toString().slice(-4)}`,
           name: name,
           role: newUserRole,
           email: email,
@@ -494,8 +503,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     facebook: true,
     instagram: true,
     twitter: false,
-    telegram: false,
-    whatsapp: true,
+    linkedin: false,
   });
   const [editBrandMsg, setEditBrandMsg] = useState<string>('');
 
@@ -710,8 +718,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         facebook: true,
         instagram: true,
         twitter: false,
-        telegram: false,
-        whatsapp: true,
+        linkedin: false,
       }
     );
     setEditBrandMsg('');
@@ -2268,7 +2275,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             {/* User & Account */}
                             <td className="p-3">
                               <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>{u.name || u.email.split('@')[0]}</span>
+                                <span>{u.name || u.fullName || u.username || 'यूज़र'}</span>
                                 {isSuper ? (
                                   <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
                                     👑 Super Admin
@@ -2601,8 +2608,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1.5">सोशल आइकन्स (Social Icons)</label>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-200">
-                      {['youtube', 'facebook', 'instagram', 'twitter', 'telegram', 'whatsapp'].map((s) => (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs text-slate-200">
+                      {['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'].map((s) => (
                         <label key={s} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer hover:border-slate-700">
                           <input
                             type="checkbox"
@@ -3876,7 +3883,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   एडमिन सिस्टम टूल्स व एक्शन बटन्स (Admin Control Actions)
                 </h3>
                 <p className="text-xs text-slate-400">
-                  एंड्रॉइड APK डाउनलोड, गूगल शीट यूज़र्स सिंक व बैकअप टूल
+                  गूगल शीट यूज़र्स सिंक व डेटाबेस बैकअप टूल
                 </p>
               </div>
             </div>
@@ -3885,51 +3892,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            {/* APK Download Button */}
-            <a
-              href="/app-release.apk"
-              download="ainewsmaker-app-v1.2.0.apk"
-              onClick={() => {
-                setTimeout(() => {
-                  window.location.href = '/app-release.apk';
-                }, 300);
-              }}
-              className="p-4 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold">
-                  📲
-                </div>
-                <div>
-                  <div className="text-xs font-black text-white group-hover:text-amber-300 transition">
-                    एंड्रॉइड ऐप APK डाउनलोड करें
-                  </div>
-                  <div className="text-[11px] text-amber-200/80">
-                    Official Release v1.2.0 (38 MB Direct)
-                  </div>
-                </div>
-              </div>
-              <Download className="w-5 h-5 text-amber-400 group-hover:scale-110 transition" />
-            </a>
-
+          <div className="pt-2">
             {/* Google Sheets Users Sync Button */}
             <button
               type="button"
               onClick={() => {
                 window.dispatchEvent(new CustomEvent('ai_news_open_users_sheet_modal'));
               }}
-              className="p-4 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
+              className="w-full p-4 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
                   📊
                 </div>
                 <div>
-                  <div className="text-xs font-black text-white group-hover:text-emerald-300 transition">
+                  <div className="text-xs sm:text-sm font-black text-white group-hover:text-emerald-300 transition">
                     "एआई न्यूज़ मेकर ऐप की गूगल शीट" ऑटो-सिंक
                   </div>
-                  <div className="text-[11px] text-emerald-200/80">
+                  <div className="text-[11px] sm:text-xs text-emerald-200/80">
                     यूज़र्स डेटाबेस ऑटो-सिंक व गूगल शीट सेटिंग्स
                   </div>
                 </div>

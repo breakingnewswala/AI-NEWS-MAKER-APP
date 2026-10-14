@@ -716,7 +716,7 @@ export default function App() {
 
     // Persist to Cloud backend /api/user-profile
     try {
-      fetch('/api/user-profile', {
+      fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

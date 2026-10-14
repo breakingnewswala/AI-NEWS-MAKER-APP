@@ -130,7 +130,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // Sub-tabs: 10 main accordions in exact order - initially closed per requirement
   const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
-  const isSuperAdminUser = isUserSuperAdmin(currentUser);
+  const effectiveCurrentUser = currentUser || (() => {
+    try {
+      const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+      if (sess) return JSON.parse(sess);
+    } catch {}
+    return null;
+  })();
+  const isSuperAdminUser = isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -154,13 +161,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     };
 
     fetchUsers();
-    const interval = setInterval(fetchUsers, 12000);
+    const interval = setInterval(fetchUsers, 4000);
     window.addEventListener('focus', fetchUsers);
+    window.addEventListener('ai_news_plan_users_changed', fetchUsers);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', fetchUsers);
+      window.removeEventListener('ai_news_plan_users_changed', fetchUsers);
     };
   }, [subTab]);
 
@@ -178,7 +187,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   const handleOpenEditUser = (u: PlanUserRecord) => {
     setEditingUser(u);
-    setEditUsername(u.userId || u.email.split('@')[0]);
+    setEditUsername(u.username || (u.userId && !u.userId.includes('@') ? u.userId : 'user'));
     setEditFullName(u.name || '');
     setEditMobile(u.mobile || '');
     setEditChannelName(u.channelName || '');
@@ -401,7 +410,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       customAcc[email] = {
         pass: password,
         user: {
-          username: email.split('@')[0],
+          username: name ? name.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16) || `user_${Date.now().toString().slice(-4)}` : `user_${Date.now().toString().slice(-4)}`,
           name: name,
           role: newUserRole,
           email: email,
@@ -2266,7 +2275,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             {/* User & Account */}
                             <td className="p-3">
                               <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>{u.name || u.email.split('@')[0]}</span>
+                                <span>{u.name || u.fullName || u.username || 'यूज़र'}</span>
                                 {isSuper ? (
                                   <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
                                     👑 Super Admin

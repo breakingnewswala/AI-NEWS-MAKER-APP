@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
+import { getApiUrl } from '../lib/apiConfig';
 import {
   Lock,
   User,
@@ -45,6 +46,7 @@ export interface ReporterUser {
   planTier?: string;
   tier?: string;
   avatarUrl?: string;
+  token?: string;
 }
 
 interface LoginModalProps {
@@ -55,15 +57,15 @@ interface LoginModalProps {
   onOpenProfileSetup?: (user: ReporterUser) => void;
 }
 
-// Default role configurations (Passwords verified securely via backend /api/auth/login)
+// Default role configurations (Strictly Master Admin and Admin only)
 const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
   'admin.ainewsmaker@gmail.com': {
     pass: '',
     user: {
-      username: 'admin',
+      username: 'admin.ainewsmaker',
       name: 'मास्टर एडमिन (Master Admin)',
       role: 'superadmin' as any,
-      district: 'सेंट्रल डेस्क',
+      district: 'हेडक्वार्टर सेंट्रल डेस्क',
       email: 'admin.ainewsmaker@gmail.com',
       planTier: 'ultra',
     },
@@ -74,37 +76,9 @@ const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
       username: 'breakingnewswala',
       name: 'मुख्य संपादक (Chief Editor)',
       role: 'admin',
-      district: 'सेंट्रल डेस्क',
+      district: 'सेंट्रल डेस्क / भोपाल',
       email: 'breakingnewswala.com@gmail.com',
       planTier: 'ultra',
-    },
-  },
-
-  reporter: {
-    pass: 'news2026',
-    user: {
-      username: 'reporter',
-      name: 'फील्ड रिपोर्टर (Field Reporter)',
-      role: 'reporter',
-      district: 'मध्य प्रदेश',
-    },
-  },
-  bhopal: {
-    pass: 'news2026',
-    user: {
-      username: 'bhopal',
-      name: 'भोपाल ब्यूरो डेस्क',
-      role: 'bureau',
-      district: 'भोपाल',
-    },
-  },
-  rewa: {
-    pass: 'news2026',
-    user: {
-      username: 'rewa',
-      name: 'रीवा ब्यूरो डेस्क',
-      role: 'bureau',
-      district: 'रीवा',
     },
   },
 };
@@ -164,32 +138,51 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         return;
       }
 
-      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com';
-      const isAdmin = isSuper;
-      const prefix = cleanEmail.split('@')[0];
-      let existingUsername = prefix;
-      try {
-        const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
-        if (savedProfileStr) {
-          const parsed = JSON.parse(savedProfileStr);
-          if (parsed.username) existingUsername = parsed.username;
-        }
-      } catch {}
+      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com';
+      const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
 
-      const defaultName = displayName || prefix.split('.')[0] || 'User';
+      let safeUsername = '';
+      if (isSuper) {
+        safeUsername = 'admin.ainewsmaker';
+      } else if (isAdmin) {
+        safeUsername = 'breakingnewswala';
+      } else {
+        try {
+          const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
+          if (savedProfileStr) {
+            const parsed = JSON.parse(savedProfileStr);
+            if (parsed.username && !parsed.username.includes('@') && !parsed.username.includes('.')) {
+              safeUsername = parsed.username.replace(/^@/, '');
+            }
+          }
+        } catch {}
+
+        if (!safeUsername && displayName) {
+          const cleanName = displayName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
+          if (cleanName.length >= 3) {
+            safeUsername = cleanName.slice(0, 16);
+          }
+        }
+
+        if (!safeUsername) {
+          safeUsername = `reporter_${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+      }
+
+      const defaultName = displayName || (isSuper ? 'सुपर एडमिन' : (isAdmin ? 'मुख्य संपादक' : 'User'));
 
       let user: ReporterUser = {
-        username: existingUsername,
+        username: safeUsername,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
         role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
         email: cleanEmail,
-        district: isAdmin ? 'सेंट्रल डेस्क' : 'डिजिटल डेस्क',
-        planTier: isSuper ? 'ultra' : 'basic',
+        district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
+        planTier: isSuper || isAdmin ? 'ultra' : 'basic',
       };
 
       // Authenticate & sync with Cloud backend /api/auth/login
       try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -209,6 +202,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             user.planTier = data.user.tier || user.planTier;
             user.channelName = data.user.channelNameHi || user.channelName;
             user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
+            if (data.user.username && !data.user.username.includes('@')) {
+              user.username = data.user.username;
+            }
+            if (data.token) {
+              localStorage.setItem('reporter_auth_token', data.token);
+              (user as any).token = data.token;
+            }
           }
         }
       } catch (authErr) {
@@ -220,7 +220,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         const stored = localStorage.getItem('reporter_custom_accounts');
         if (stored) customAccounts = JSON.parse(stored);
         customAccounts[cleanEmail] = { pass: 'google_linked', user };
-        customAccounts[prefix] = { pass: 'google_linked', user };
         localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
         localStorage.setItem('reporter_auth_session', JSON.stringify(user));
 
@@ -230,7 +229,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             name: user.name,
             username: user.username,
             role: user.role,
-            tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : 'basic'),
+            tier: isSuper || isAdmin ? 'ultra' : 'basic',
             isLocked: !isAdmin && !isSuper,
           });
         } catch (gRegErr) {
@@ -240,7 +239,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       // Persist to server user-profile endpoint
       try {
-        fetch('/api/user-profile', {
+        fetch(getApiUrl('/api/user-profile'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -362,7 +361,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             channelLogoUrl: data.user.channelLogoUrl,
             mobileNumber: data.user.mobileNumber,
             channelWebsite: data.user.websiteUrl,
+            token: data.token,
           };
+          if (data.token) {
+            localStorage.setItem('reporter_auth_token', data.token);
+          }
           localStorage.setItem('reporter_auth_session', JSON.stringify(authUser));
           setLoading(false);
           onLoginSuccess(authUser);

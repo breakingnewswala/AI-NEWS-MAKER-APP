@@ -1,0 +1,38 @@
+{
+  "admin.ainewsmaker@gmail.com": {
+    "username": "admin.ainewsmaker",
+    "fullName": "सुपर एडमिन (Super Admin)",
+    "role": "superadmin",
+    "userId": "user-1791697518060",
+    "uid": "user-1791697518060",
+    "tier": "ultra",
+    "email": "admin.ainewsmaker@gmail.com",
+    "district": "हेडक्वार्टर सेंट्रल डेस्क",
+    "channelNameHi": "एआई न्यूज़ मेकर",
+    "channelNameEn": "AI News Maker",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "channelLogoPngUrl": "/assets/ai_news_maker_logo.png",
+    "channelLogoType": "png",
+    "mobileNumber": "9669802408",
+    "websiteUrl": "ainewsmaker.online",
+    "updatedAt": 1791902222335
+  },
+  "breakingnewswala.com@gmail.com": {
+    "username": "breakingnewswala",
+    "fullName": "मुख्य संपादक",
+    "role": "admin",
+    "userId": "usr_627265616b69",
+    "uid": "usr_627265616b69",
+    "tier": "ultra",
+    "email": "breakingnewswala.com@gmail.com",
+    "district": "सेंट्रल डेस्क / भोपाल",
+    "channelNameHi": "एआई न्यूज़ मेकर",
+    "channelNameEn": "AI News Maker",
+    "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
+    "channelLogoPngUrl": "/assets/breaking_news_wala_logo.png",
+    "channelLogoType": "png",
+    "mobileNumber": "9669802408",
+    "websiteUrl": "ainewsmaker.online",
+    "updatedAt": 1791902222335
+  }
+}

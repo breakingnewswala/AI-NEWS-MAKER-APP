@@ -1,4 +1,16 @@
 {
+  "admin.ainewsmaker@gmail.com": {
+    "channelNameHi": "एआई न्यूज़ मेकर",
+    "channelNameEn": "AI News Maker",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "channelLogoType": "png",
+    "username": "admin.ainewsmaker",
+    "mobileNumber": "9669802408",
+    "websiteUrl": "ainewsmaker.online",
+    "fullName": "सुपर एडमिन (Super Admin)",
+    "district": "हेडक्वार्टर सेंट्रल डेस्क",
+    "role": "superadmin"
+  },
   "breakingnewswala.com@gmail.com": {
     "channelNameHi": "ब्रेकिंग न्यूज़ वाला",
     "channelNameEn": "Breaking News Wala",
@@ -9,18 +21,6 @@
     "websiteUrl": "ainewsmaker.online",
     "fullName": "मुख्य संपादक",
     "district": "सेंट्रल डेस्क / भोपाल",
-    "role": "admin"
-  },
-  "admin@breakingnewswala.com": {
-    "channelNameHi": "एआई न्यूज़ मेकर",
-    "channelNameEn": "AI News Maker",
-    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
-    "channelLogoType": "png",
-    "username": "admin",
-    "mobileNumber": "9669802408",
-    "websiteUrl": "ainewsmaker.online",
-    "fullName": "एडमिन",
-    "district": "डिजिटल डेस्क",
     "role": "admin"
   }
 }

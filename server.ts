@@ -911,14 +911,34 @@ export interface StoredNotification {
   linkTab?: string;
 }
 
+function cleanGenerateUsername(requestedUsername?: string, fullName?: string, existingUsername?: string): string {
+  if (requestedUsername && typeof requestedUsername === 'string') {
+    const clean = requestedUsername.trim().replace(/^@/, '');
+    if (clean && !clean.includes('@') && !clean.includes('.')) {
+      return clean;
+    }
+  }
+  if (existingUsername && typeof existingUsername === 'string') {
+    const clean = existingUsername.trim().replace(/^@/, '');
+    if (clean && !clean.includes('@') && !clean.includes('.')) {
+      return clean;
+    }
+  }
+  if (fullName && typeof fullName === 'string') {
+    const englishName = fullName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
+    if (englishName.length >= 3) {
+      return englishName.slice(0, 16);
+    }
+  }
+  return `reporter_${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
 function isProtectedAdminAccount(email?: string): boolean {
   if (!email) return false;
   const clean = email.toLowerCase().trim();
   return (
     clean === 'admin.ainewsmaker@gmail.com' ||
-    clean === 'breakingnewswala@gmail.com' ||
-    clean === 'breakingnewswala.com@gmail.com' ||
-    clean === 'admin@breakingnewswala.com'
+    clean === 'breakingnewswala.com@gmail.com'
   );
 }
 
@@ -1114,7 +1134,7 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
   const emailRaw = (userPayload.email || '').toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
   const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com';
-  const isAdmin = cleanEmail === 'breakingnewswala@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'admin@breakingnewswala.com';
+  const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
 
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex(u =>
@@ -1131,12 +1151,18 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || (preservedTrialStart + SEVEN_DAYS_MS);
 
+    const safeUsername = isSuper
+      ? (existing.username || 'admin.ainewsmaker')
+      : (isAdmin
+          ? (userPayload.username && !userPayload.username.includes('@') ? userPayload.username.replace(/^@/, '') : (existing.username || 'breakingnewswala'))
+          : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username));
+
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
       name: userPayload.name || userPayload.fullName || existing.name || 'यूज़र',
       fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || 'यूज़र',
-      username: userPayload.username || existing.username || (emailRaw ? emailRaw.split('@')[0] : existing.userId),
+      username: safeUsername,
       channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || '',
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || '',
       channelNameEn: userPayload.channelNameEn || existing.channelNameEn || '',
@@ -1169,12 +1195,18 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
 
+    const safeUsername = isSuper
+      ? 'admin.ainewsmaker'
+      : (isAdmin
+          ? 'breakingnewswala'
+          : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name));
+
     updatedRecord = {
       userId: userPayload.userId || userPayload.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       email: emailRaw,
       name: userPayload.name || userPayload.fullName || 'यूज़र',
       fullName: userPayload.fullName || userPayload.name || 'यूज़र',
-      username: userPayload.username || (emailRaw ? emailRaw.split('@')[0] : `user_${Date.now()}`),
+      username: safeUsername,
       channelName: userPayload.channelName || userPayload.channelNameHi || '',
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || '',
       channelNameEn: userPayload.channelNameEn || '',
@@ -1217,20 +1249,28 @@ function reconcileAllUsers() {
 
     // 1. Ingest existing users
     for (const u of existingUsers) {
-      if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
+      if (u.email) {
+        const cleanE = u.email.toLowerCase().trim();
+        if (cleanE !== 'breakingnewswala@gmail.com' && cleanE !== 'admin@breakingnewswala.com') {
+          userMap.set(cleanE, u);
+        }
+      }
     }
 
     // 2. Ingest profiles db
     const profiles = loadProfilesDatabase();
     for (const [k, p] of Object.entries(profiles)) {
       const email = (p.email || k).toLowerCase().trim();
+      if (email === 'breakingnewswala@gmail.com' || email === 'admin@breakingnewswala.com') {
+        continue;
+      }
       if (!userMap.has(email)) {
         userMap.set(email, {
           userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           email: p.email || k,
           name: p.fullName || p.username || 'यूज़र',
           fullName: p.fullName || '',
-          username: p.username || '',
+          username: p.username || cleanGenerateUsername(undefined, p.fullName),
           channelName: p.channelNameHi || '',
           channelNameHi: p.channelNameHi || '',
           channelNameEn: p.channelNameEn || '',
@@ -1243,9 +1283,9 @@ function reconcileAllUsers() {
           district: p.district || '',
           websiteUrl: p.websiteUrl || '',
           socialIcons: p.socialIcons,
-          role: (p.role as any) || (email === 'admin.ainewsmaker@gmail.com' ? 'superadmin' : (email === 'breakingnewswala@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'admin' : 'user')),
-          tier: (p.tier as any) || (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'ultra' : 'basic'),
-          planName: (p.tier === 'ultra' || email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : 'BASIC'),
+          role: (p.role as any) || (email === 'admin.ainewsmaker@gmail.com' ? 'superadmin' : (email === 'breakingnewswala.com@gmail.com' ? 'admin' : 'user')),
+          tier: (p.tier as any) || (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'ultra' : 'basic'),
+          planName: (p.tier === 'ultra' || email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : 'BASIC'),
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -1268,17 +1308,17 @@ function reconcileAllUsers() {
       role: 'superadmin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: superProf?.channelNameHi || existingSuper?.channelName || '',
-      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || '',
-      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || '',
-      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || '',
-      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || '',
+      channelName: superProf?.channelNameHi || existingSuper?.channelName || 'एआई न्यूज़ मेकर',
+      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || 'AI News Maker',
+      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
       channelLogoGifUrl: superProf?.channelLogoGifUrl || existingSuper?.channelLogoGifUrl || '',
       channelLogoType: superProf?.channelLogoType || existingSuper?.channelLogoType || 'png',
-      mobile: superProf?.mobileNumber || existingSuper?.mobile || '',
-      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || '',
-      district: superProf?.district || existingSuper?.district || '',
-      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || '',
+      mobile: superProf?.mobileNumber || existingSuper?.mobile || '9669802408',
+      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || '9669802408',
+      district: superProf?.district || existingSuper?.district || 'हेडक्वार्टर सेंट्रल डेस्क',
+      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || 'ainewsmaker.online',
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingSuper?.createdAt || 1791697518060,
@@ -1290,9 +1330,9 @@ function reconcileAllUsers() {
       lastLoginAt: existingSuper?.lastLoginAt || Date.now(),
     });
 
-    const adminEmail = 'breakingnewswala@gmail.com';
-    const existingAdmin = userMap.get(adminEmail) || userMap.get('breakingnewswala.com@gmail.com');
-    const adminProf = profiles[adminEmail] || profiles['breakingnewswala.com@gmail.com'];
+    const adminEmail = 'breakingnewswala.com@gmail.com';
+    const existingAdmin = userMap.get(adminEmail) || userMap.get('breakingnewswala@gmail.com');
+    const adminProf = profiles[adminEmail] || profiles['breakingnewswala@gmail.com'];
     userMap.set(adminEmail, {
       userId: existingAdmin?.userId || 'usr_627265616b69',
       email: adminEmail,
@@ -1302,17 +1342,17 @@ function reconcileAllUsers() {
       role: 'admin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || '',
-      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || '',
-      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || '',
-      channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || '',
-      channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || '',
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || 'एआई न्यूज़ मेकर',
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || 'AI News Maker',
+      channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || '/assets/breaking_news_wala_logo.png',
+      channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || '/assets/breaking_news_wala_logo.png',
       channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || '',
       channelLogoType: adminProf?.channelLogoType || existingAdmin?.channelLogoType || 'png',
-      mobile: adminProf?.mobileNumber || existingAdmin?.mobile || '',
-      mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || '',
-      district: adminProf?.district || existingAdmin?.district || '',
-      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || '',
+      mobile: adminProf?.mobileNumber || existingAdmin?.mobile || '9669802408',
+      mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || '9669802408',
+      district: adminProf?.district || existingAdmin?.district || 'सेंट्रल डेस्क / भोपाल',
+      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || 'ainewsmaker.online',
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -2839,19 +2879,30 @@ app.post("/api/user-profile", (req, res) => {
       updatedAt: Date.now(),
     };
     allProfiles[cleanId] = updated;
+    if (updated.email) {
+      allProfiles[updated.email.toLowerCase().trim()] = updated;
+    }
+    if (updated.userId) {
+      allProfiles[updated.userId.toLowerCase().trim()] = updated;
+    }
     saveProfilesDatabase(allProfiles);
 
     // Also update matching user in users_accounts_db.json
     try {
       let users = loadUsersDatabase();
-      const uIdx = users.findIndex(u => (u.email && u.email.toLowerCase() === cleanId) || (u.userId && u.userId.toLowerCase() === cleanId));
+      const uIdx = users.findIndex(u => (u.email && u.email.toLowerCase() === cleanId) || (u.userId && u.userId.toLowerCase() === cleanId) || (updated.email && u.email && u.email.toLowerCase() === updated.email.toLowerCase()));
       if (uIdx >= 0) {
         users[uIdx] = {
           ...users[uIdx],
           fullName: updated.fullName || users[uIdx].fullName,
           channelName: updated.channelNameHi || users[uIdx].channelName,
-          mobile: updated.mobileNumber || users[uIdx].mobile,
           channelLogoUrl: updated.channelLogoUrl || users[uIdx].channelLogoUrl,
+          channelLogoPngUrl: updated.channelLogoPngUrl || users[uIdx].channelLogoPngUrl,
+          channelLogoGifUrl: updated.channelLogoGifUrl || users[uIdx].channelLogoGifUrl,
+          channelLogoType: updated.channelLogoType || users[uIdx].channelLogoType,
+          username: updated.username || users[uIdx].username,
+          mobile: updated.mobileNumber || users[uIdx].mobile,
+          mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
           socialIcons: updated.socialIcons || users[uIdx].socialIcons,
           lastLoginAt: Date.now(),
@@ -3043,24 +3094,45 @@ app.post("/api/auth/login", (req, res) => {
       const existing = Object.values(allProfiles).find(
         (p) => (p.uid && p.uid === googleUid) || (p.userId && p.userId === googleUid) || (p.email && p.email.toLowerCase() === cleanId)
       );
-      const isMaster = cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "breakingnewswala.com@gmail.com";
-      const userProfile = existing || {
-        userId: googleUid,
-        uid: googleUid,
+      const isSuper = cleanId === "admin.ainewsmaker@gmail.com";
+      const isAdmin = cleanId === "breakingnewswala.com@gmail.com";
+
+      let safeUsername: string;
+      if (isSuper) {
+        safeUsername = existing?.username || "admin.ainewsmaker";
+      } else if (isAdmin) {
+        safeUsername = existing?.username || "breakingnewswala";
+      } else {
+        safeUsername = cleanGenerateUsername(profileData?.username, profileData?.name || profileData?.fullName, existing?.username);
+      }
+
+      const userPayload: any = {
+        userId: existing?.userId || googleUid,
+        uid: existing?.uid || googleUid,
         email: cleanId,
-        username: profileData?.username || cleanId.split("@")[0],
-        fullName: profileData?.name || profileData?.fullName || "यूज़र",
-        role: isMaster ? "admin" : "reporter",
-        tier: isMaster ? "ultra" : "basic",
-        channelNameHi: profileData?.channelName || "न्यूज़ चैनल",
-        channelNameEn: "News Channel",
-        channelLogoUrl: profileData?.channelLogoUrl || "",
-        mobileNumber: profileData?.mobile || "",
-        websiteUrl: "ainewsmaker.online",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        username: safeUsername,
+        fullName: profileData?.name || profileData?.fullName || existing?.fullName || "यूज़र",
+        name: profileData?.name || profileData?.fullName || existing?.fullName || "यूज़र",
+        role: isSuper ? "superadmin" : (isAdmin ? "admin" : (existing?.role || "user")),
+        tier: isSuper ? "ultra" : (isAdmin ? "ultra" : (existing?.tier || "basic")),
+        planName: isSuper ? "VIP DESK" : (isAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
+        channelName: profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर",
+        channelNameHi: profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर",
+        channelNameEn: existing?.channelNameEn || "AI News Maker",
+        channelLogoUrl: profileData?.channelLogoUrl || existing?.channelLogoUrl || "",
+        channelLogoPngUrl: existing?.channelLogoPngUrl || "",
+        channelLogoGifUrl: existing?.channelLogoGifUrl || "",
+        channelLogoType: existing?.channelLogoType || "png",
+        mobile: profileData?.mobile || existing?.mobileNumber || "",
+        mobileNumber: profileData?.mobile || existing?.mobileNumber || "",
+        district: existing?.district || (isAdmin ? "सेंट्रल डेस्क / भोपाल" : "डिजिटल डेस्क"),
+        websiteUrl: existing?.websiteUrl || "ainewsmaker.online",
+        isProfileLocked: !isAdmin && !isSuper,
       };
-      return res.json({ success: true, user: userProfile });
+
+      // Authoritative sync: user immediately appears in real-time in Users Manager
+      const savedUser = registerOrUpdateUserAuthoritative(userPayload);
+      return res.json({ success: true, user: savedUser });
     }
 
     // 2. Direct Credentials
