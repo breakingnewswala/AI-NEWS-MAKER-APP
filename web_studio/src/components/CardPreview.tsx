@@ -43,6 +43,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     };
   }, [rawCard]);
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
+  const hasUploadedPhoto = Boolean(
+    card.images?.main &&
+    card.images.main.trim().length > 0 &&
+    card.images.main !== FALLBACK_NEWS_BG &&
+    !card.images.main.includes('placeholder_news_photo') &&
+    !card.images.main.includes('placeholder_news_search') &&
+    !card.images.main.includes('preview_placeholder')
+  );
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
     ? card.images.main
     : FALLBACK_NEWS_BG;
@@ -274,13 +282,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
       const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
 
-      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses crisp BLACK text on white headline box)
-      const baseTextColor = (isGraphic1 || isGraphic2 || isGraphic4 || isIvory || isDefault)
+      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses white text and yellow highlight on red banner)
+      const baseTextColor = (isGraphic2 || isGraphic4 || isIvory || isDefault)
         ? '#000000'
-        : (isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')));
+        : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')));
 
       const highlightColor = isGraphic1
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
+        ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
         : isGraphic3
         ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
         : isGraphic4
@@ -398,7 +406,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       }}
     >
       {/* 1. BACKGROUND PHOTOS ACCORDING TO USER'S SELECTED LAYOUT */}
-      {card.frameDesign === 'jacket-morning' ? (
+      {card.frameDesign === 'graphic_001' ? (
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+          <img
+            src="/assets/primary_news_graphic_bg.jpg"
+            alt="Primary Graphic Background"
+            className="w-full h-full object-cover"
+          />
+        </div>
+      ) : card.frameDesign === 'jacket-morning' ? (
         <div className="absolute inset-0 z-0 bg-neutral-950 overflow-hidden">
           {(card.morningCustomBgUrl || (card.images.main && card.images.main.trim().length > 0)) ? (
             <div className="w-full h-full relative">
@@ -467,12 +483,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         </div>
       ) : (
       <div
-        className="absolute inset-x-0 z-0 overflow-hidden bg-neutral-950 transition-all duration-150"
+        className={`absolute inset-x-0 z-1 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
         style={{
           top: card.frameDesign === 'graphic_004' ? '33.2%' : '0px',
           bottom: card.frameDesign === 'graphic_003'
             ? '0px'
-            : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002')
+            : card.frameDesign === 'graphic_001'
+            ? '38.67%'
+            : card.frameDesign === 'graphic_002'
             ? '47%'
             : card.frameDesign === 'graphic_004'
             ? '58px'
@@ -534,9 +552,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         {card.frameDesign === 'jacket-quote' && (
           <div className="absolute inset-x-0 bottom-0 h-36 sm:h-44 bg-gradient-to-b from-transparent via-black/75 to-black pointer-events-none z-10" />
         )}
-        {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
-        {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
-          <div className="w-full h-full overflow-hidden relative">
+        {/* Render photo layouts only when applicable (for graphic_001, when user has uploaded a photo) */}
+        {!(card.frameDesign === 'graphic_001' && !hasUploadedPhoto) && (
+          <>
+            {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
+            {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
+              <div className="w-full h-full overflow-hidden relative">
             <img
               src={mainPhotoSrc}
               alt="News Photo"
@@ -751,6 +772,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           </div>
         )}
+          </>
+        )}
 
         {/* Optional user-controlled dark overlay */}
         {card.darkOverlayOpacity > 0 && (
@@ -857,8 +880,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
       </div>
 
-      {/* Optional Full Frame Overlay PNG - active when custom-png frame is selected OR when master branding is OFF */}
-      {(card.frameDesign === 'custom-png' || card.showMasterBranding === false) && card.customFrameOverlayPng && (
+      {/* Optional Full Frame Overlay PNG - active when customFrameOverlayPng is present */}
+      {card.customFrameOverlayPng && (
         <img
           src={card.customFrameOverlayPng}
           alt="Frame Overlay"
@@ -909,149 +932,124 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
       {/* 3. BOTTOM SECTION: GRAPHIC 1 vs DEFAULT FRAME vs MORNING JACKET vs TEXT BREAKING vs SUPER BREAKING vs QUOTE vs STANDARD ORIGINAL */}
       {card.frameDesign === 'graphic_001' ? (
-        /* ================= GRAPHIC 1 (DEFAULT 4:5 PHOTO NEWS TEMPLATE — SAMPLE EXACT MATCH) ================= */
-        <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none overflow-hidden">
-          {/* Top Half: Transparent Photo Viewport with Framing Accents & Header Controls */}
-          <div className="relative w-full h-[53%] flex flex-col justify-between p-3 sm:p-5">
-            {/* Top Header Row: Top-Left Channel Logo Area & Top-Right Location Box */}
-            <div className="flex items-start justify-between w-full pointer-events-auto z-30">
-              {/* Logo Area (Hidden when Master Branding is OFF) */}
-              {card.showMasterBranding !== false && (
-                <div
-                  className="max-w-[48%]"
-                  style={{
-                    transform: `scale(${card.logoScale ?? 1.25})`,
-                    transformOrigin: 'top left',
-                  }}
-                >
-                  {card.customLogoUrl ? (
-                    <img
-                      src={card.customLogoUrl}
-                      alt="Channel Logo"
-                      className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] bg-transparent"
-                    />
-                  ) : (
-                    <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-1 bg-black/85 backdrop-blur-xs shadow-[0_0_12px_rgba(255,230,0,0.35)] flex items-center justify-center">
-                      <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
-                        YOUR LOGO
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Top-Right Location Box: White rounded box with red pin, strictly hidden if showLocation is false */}
-              {card.showLocation !== false && card.location && card.location.trim() && (
-                <div className="bg-white rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 max-w-[48%] ml-auto pointer-events-auto">
-                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-md bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                    <MapPin className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-white stroke-[2.5]" />
-                  </div>
-                  <span className="font-bold text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
-                    {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Optional Safe Margin Date & Disclaimer Tags on Photo (Default OFF) */}
-            <div className="flex items-end justify-between w-full pointer-events-auto z-30 pb-1">
-              {/* Date Stamp (Visible only when user toggles ON) */}
-              {card.showDate !== false && card.dateStr && card.dateStr.trim() && (
-                <div className="bg-black/60 backdrop-blur-xs border border-white/30 rounded-md px-2 py-0.5 text-[10px] sm:text-xs text-white font-medium">
-                  📅 {card.dateStr}
-                </div>
-              )}
-
-              {/* Watermark / Disclaimer Tag (Visible only when user toggles ON) */}
-              {(card.photoDisclaimerType === 'representative' || card.photoDisclaimerType === 'ai' || (card.showWatermark && card.photoDisclaimerType !== 'none')) && (
-                <div className="ml-auto bg-black/65 backdrop-blur-xs border border-yellow-400/40 rounded-md px-2 py-0.5 text-[10px] sm:text-xs text-yellow-300 font-bold">
-                  {card.photoWatermarkTag || (card.photoDisclaimerType === 'ai' ? 'AI जनरेटेड' : 'प्रतीकात्मक फोटो')}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Middle Radiant Fiery Divider Beam: Dark horizontal bar + glowing orange/amber neon streak */}
-          <div className="relative w-full z-25 pointer-events-none">
-            {/* Dark backing bar */}
-            <div className="w-full h-4 bg-gradient-to-b from-neutral-950 to-[#0A0D14]" />
-            {/* Intense glowing amber/orange light beam */}
-            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3.5px] bg-gradient-to-r from-transparent via-[#FF6A00] to-transparent shadow-[0_0_16px_#FF5500,0_0_32px_#FFAA00]" />
-            {/* Central lens flare hot spot */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-48 sm:w-64 h-5 bg-radial from-amber-300/90 via-orange-500/50 to-transparent blur-[2px]" />
-          </div>
-
-          {/* Bottom Area (Height ~47%): Dark Charcoal Background with Angular Red Borders, White Headline Box, CTA Ribbon & White Footer */}
-          <div className="relative w-full h-[47%] bg-gradient-to-b from-[#090A0E] via-[#0E1118] to-[#090A0E] flex flex-col justify-between overflow-hidden">
-            {/* Left Angular Red Geometric Cuts */}
-            <svg className="absolute top-0 left-0 w-20 sm:w-28 h-full pointer-events-none z-10" viewBox="0 0 100 240" preserveAspectRatio="none" fill="none">
-              <polygon points="0,0 45,0 15,120 0,160" fill="#DC2626" opacity="0.9" />
-              <polygon points="0,0 25,0 0,100" fill="#991B1B" opacity="0.95" />
-              <polygon points="0,140 20,120 5,200 0,220" fill="#DC2626" opacity="0.8" />
-              <line x1="45" y1="0" x2="15" y2="120" stroke="#FF4444" strokeWidth="2.5" />
-            </svg>
-
-            {/* Right Angular Red Geometric Cuts */}
-            <svg className="absolute top-0 right-0 w-20 sm:w-28 h-full pointer-events-none z-10 scale-x-[-1]" viewBox="0 0 100 240" preserveAspectRatio="none" fill="none">
-              <polygon points="0,0 45,0 15,120 0,160" fill="#DC2626" opacity="0.9" />
-              <polygon points="0,0 25,0 0,100" fill="#991B1B" opacity="0.95" />
-              <polygon points="0,140 20,120 5,200 0,220" fill="#DC2626" opacity="0.8" />
-              <line x1="45" y1="0" x2="15" y2="120" stroke="#FF4444" strokeWidth="2.5" />
-            </svg>
-
-            {/* Middle Content: White Textured Headline Box + CTA Ribbon */}
-            <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-4 sm:px-8 py-2 text-center pointer-events-auto">
-              {/* White Headline Container Box (Matching approved sample) */}
-              <div className="w-[92%] sm:w-[90%] bg-white rounded-xl shadow-[0_12px_36px_rgba(0,0,0,0.95)] px-4 sm:px-7 py-3 sm:py-4 flex flex-col items-center justify-center border border-slate-100">
-                {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
-                  <h1
-                    className="font-black leading-snug tracking-tight text-neutral-950 transition-all line-clamp-3 text-center"
-                    style={{
-                      fontFamily: card.headlineFontFamily || 'Baloo 2',
-                      fontSize: `${effectivePreviewFontSize}px`,
-                    }}
-                  >
-                    {renderFormattedHeadline()}
-                  </h1>
-                ) : (
-                  /* Default 3-Line Sample Headline Matching Media Sample */
-                  <div className="flex flex-col items-center justify-center text-center font-['Baloo_2'] font-black leading-snug text-neutral-950">
-                    <span className="text-base sm:text-2xl">यहाँ आपकी न्यूज़ की</span>
-                    <span className="text-lg sm:text-3xl text-neutral-950">हेडलाइन की दूसरी लाइन</span>
-                    <span className="text-base sm:text-2xl">यहाँ तीसरी लाइन आएगी</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Centered CTA Ribbon: Yellow Pill Base + Red Angled Banner */}
-              <div className="mt-2.5 sm:mt-3 inline-flex items-center justify-center">
-                <div className="bg-[#FFE600] rounded-full px-5 sm:px-8 py-1 sm:py-1.5 shadow-[0_4px_16px_rgba(255,230,0,0.4)] flex items-center justify-center">
-                  <div className="bg-[#DC2626] rounded-md px-4 sm:px-6 py-0.5 sm:py-1 -skew-x-6 shadow-xs flex items-center justify-center">
-                    <span className="skew-x-6 text-white font-black text-xs sm:text-sm font-['Baloo_2'] tracking-wide whitespace-nowrap">
-                      पूरी खबर डिस्क्रिप्शन में ...
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom White Master Branding Footer */}
-            <div className="relative z-30 w-full pointer-events-auto">
-              <div className="w-[90%] h-[1px] bg-slate-400/30 mx-auto mb-0.5" />
-              <FooterGraphic
-                socialHandle={card.socialHandle}
-                whatsappNumber={card.whatsappNumber}
-                customFooterPng={getActiveFooterPng(card)}
-                websiteUrl={card.websiteUrl}
-                showWebsite={card.showWebsite}
-                showMobileNumber={card.showMobileNumber}
-                activeSocialIcons={card.activeSocialIcons}
-                footerBgColor={card.footerBgColor || '#FFFFFF'}
-                footerTextColor={card.footerTextColor || '#111827'}
-                footerIconStyle={card.footerIconStyle || 'color'}
-                showMasterBranding={card.showMasterBranding}
+        /* ================= GRAPHIC 1 (AUTHENTIC DEFAULT 4:5 PRIMARY NEWS GRAPHIC) ================= */
+        <div className="absolute inset-0 z-20 pointer-events-none select-none overflow-hidden">
+          {/* Custom Header PNG if user assigned custom header */}
+          {getActiveHeaderPng(card) && (
+            <div className="absolute top-0 inset-x-0 z-35 pointer-events-none">
+              <img
+                src={getActiveHeaderPng(card)}
+                alt="Custom Header"
+                className="w-full h-auto object-contain block"
               />
             </div>
+          )}
+
+          {/* Top-Left Channel Logo Area: Displays login user's logo inside the authentic circular badge */}
+          {card.showMasterBranding !== false && card.customLogoUrl && (
+            <div
+              className="absolute z-30 flex items-center justify-center overflow-hidden rounded-full bg-white border-2 sm:border-[3px] border-[#DC2626] shadow-[0_0_12px_rgba(220,38,38,0.5)] pointer-events-auto"
+              style={{
+                left: '8.1%',
+                top: '4.3%',
+                width: '13.8%',
+                height: '11.1%',
+                transform: `scale(${card.logoScale ?? 1.0})`,
+                transformOrigin: 'center center',
+              }}
+            >
+              <img
+                src={card.customLogoUrl}
+                alt="Channel Logo"
+                className="w-[82%] h-[82%] object-contain"
+              />
+            </div>
+          )}
+
+          {/* Top-Right Location Box: Displays user's actual location in the authentic pill area */}
+          {card.showLocation !== false && (
+            <div
+              className="absolute z-30 flex items-center gap-1.5 bg-white rounded-full px-2.5 py-0.5 sm:px-3.5 sm:py-1 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto"
+              style={{
+                right: '4.8%',
+                top: '6.6%',
+                height: '4.5%',
+                maxWidth: '46%',
+              }}
+            >
+              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
+                <MapPin className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white stroke-[2.5]" />
+              </div>
+              <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                {card.location && card.location.trim() && card.location.trim() !== 'लोकेशन'
+                  ? card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()
+                  : 'लोकेशन'}
+              </span>
+            </div>
+          )}
+
+          {/* Red Headline Area (Top: 61.33%, Height: 28.52%):
+              - When no headline is entered, the authentic background image's Step 3 instructions show.
+              - When user writes a headline, this red banner overlay replaces instructions with their headline in real time. */}
+          {Boolean(
+            card.headline &&
+            card.headline.trim().length > 0 &&
+            card.headline.trim() !== 'ताज़ा समाचार' &&
+            !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
+            !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
+            !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
+            !card.headline.includes('स्टेप 3 में जाकर अपनी मुख्य खबर') &&
+            card.headline.trim() !== 'आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं' &&
+            !card.headline.includes('आप स्टेप 3')
+          ) && (
+            <div
+              className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
+              style={{
+                top: '61.33%',
+                height: '28.52%',
+                background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
+                boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
+              }}
+            >
+              {/* Subtle top & bottom banner highlight bevels */}
+              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-80 pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-80 pointer-events-none" />
+
+              <h1
+                className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-3 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] px-2"
+                style={{
+                  fontFamily: card.headlineFontFamily || 'Baloo 2',
+                  fontSize: `${effectivePreviewFontSize}px`,
+                  textAlign: (card.headlineAlign as any) || 'center',
+                }}
+              >
+                {renderFormattedHeadline()}
+              </h1>
+            </div>
+          )}
+
+          {/* Bottom White Master Branding Footer (Bottom 0 to 10.15%):
+              Renders user's actual saved Footer with correct social media icons */}
+          <div
+            className="absolute inset-x-0 bottom-0 z-30 flex items-center bg-white pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
+            style={{
+              height: '10.15%',
+            }}
+          >
+            <FooterGraphic
+              socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
+              whatsappNumber={card.whatsappNumber}
+              customFooterPng={getActiveFooterPng(card)}
+              websiteUrl={card.websiteUrl}
+              showWebsite={card.showWebsite}
+              showMobileNumber={card.showMobileNumber}
+              activeSocialIcons={card.activeSocialIcons}
+              footerBgColor={card.footerBgColor || '#FFFFFF'}
+              footerTextColor={card.footerTextColor || '#111827'}
+              footerIconStyle={card.footerIconStyle || 'color'}
+              showMasterBranding={card.showMasterBranding}
+            />
           </div>
         </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none">
@@ -1159,6 +1157,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div className="relative z-10 w-full pointer-events-auto">
               <FooterGraphic
                 socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
                 whatsappNumber={card.whatsappNumber}
                 customFooterPng={getActiveFooterPng(card)}
                 websiteUrl={card.websiteUrl}
@@ -1258,6 +1257,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div className="w-full pointer-events-auto">
               <FooterGraphic
                 socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
                 whatsappNumber={card.whatsappNumber}
                 customFooterPng={getActiveFooterPng(card)}
                 websiteUrl={card.websiteUrl}
@@ -1378,6 +1378,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           <div className="relative z-20 w-full pointer-events-auto">
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
@@ -1472,6 +1473,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div className="w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 pointer-events-auto">
               <FooterGraphic
                 socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
                 whatsappNumber={card.whatsappNumber}
                 customFooterPng={getActiveFooterPng(card)}
                 websiteUrl={card.websiteUrl}
@@ -2752,6 +2754,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Yellow Footer Graphic */}
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
@@ -2851,6 +2854,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* D. Yellow Footer Graphic */}
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
@@ -2977,6 +2981,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               {/* E. Yellow Footer Graphic (Same as all other templates) */}
               <FooterGraphic
                 socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
                 whatsappNumber={card.whatsappNumber}
                 customFooterPng={getActiveFooterPng(card)}
                 websiteUrl={card.websiteUrl}
@@ -3067,6 +3072,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           {!(card.frameDesign === 'custom-png' && card.hideDefaultFooterInCustomFrame) && (
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
