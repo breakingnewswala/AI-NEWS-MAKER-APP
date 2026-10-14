@@ -977,7 +977,10 @@ var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd(
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
-var PORT = 3e3;
+var PORT = parseInt(process.env.PORT || "8080", 10);
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/_health", (_req, res) => res.status(200).send("OK"));
+app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");

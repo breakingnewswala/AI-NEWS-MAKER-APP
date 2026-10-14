@@ -4,7 +4,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8080
 
 # Install production dependencies safely even if package-lock is omitted
 COPY package.json ./
@@ -31,6 +31,7 @@ COPY rss_sources_database.json ./
 COPY drafts_database.json ./
 COPY user_profiles_db.json ./
 
+EXPOSE 8080
 EXPOSE 3000
 
 # Cloud Run invokes the standard entry point

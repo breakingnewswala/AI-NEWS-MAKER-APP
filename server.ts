@@ -12,7 +12,12 @@ const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || "8080", 10);
+
+// Health check endpoints for Google Cloud Run, Cloud Build & Firebase App Hosting
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/_health", (_req, res) => res.status(200).send("OK"));
+app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
 
 // Enable CORS for web apps, custom domains (ainewsmaker.online), and dev endpoints
 app.use((req, res, next) => {
