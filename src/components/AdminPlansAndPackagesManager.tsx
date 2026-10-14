@@ -93,6 +93,7 @@ import {
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { UserTemplateManager } from './UserTemplateManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
+import { getApiUrl } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -724,15 +725,32 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     setEditBrandMsg('');
   };
 
-  const handleSaveUserBranding = () => {
+  const handleSaveUserBranding = async () => {
     if (!editingBrandingUser) return;
-    adminUpdateUserRecord(editingBrandingUser.email, {
+    const updates = {
       channelName: editBrandNameHi || editBrandNameEn,
+      channelNameHi: editBrandNameHi || editBrandNameEn,
+      channelNameEn: editBrandNameEn,
       websiteUrl: editBrandWebsite,
       mobile: editBrandMobile,
       channelLogoUrl: editBrandLogoUrl,
       socialIcons: editBrandSocials,
-    });
+    };
+    adminUpdateUserRecord(editingBrandingUser.email, updates);
+    try {
+      await adminUpdateCloudUser(editingBrandingUser.userId || editingBrandingUser.email, updates);
+      await fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: editingBrandingUser.userId || editingBrandingUser.email,
+          email: editingBrandingUser.email,
+          ...updates,
+        }),
+      });
+    } catch (e) {
+      console.warn('Error saving user branding to server:', e);
+    }
     setPlanUsers(getPlanUsers());
     setEditBrandMsg('✅ यूज़र ब्रांडिंग विवरण सफलतापूर्वक सुरक्षित हो गया!');
     setTimeout(() => {

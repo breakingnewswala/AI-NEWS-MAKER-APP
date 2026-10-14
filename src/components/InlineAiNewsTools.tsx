@@ -171,15 +171,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setInputText(rawContent);
     setError(null);
 
-    // Apply additional photos if provided (Single Image remains the default selection per Task 7)
-    if (autoFillNews.additionalPhotos && autoFillNews.additionalPhotos.length > 0) {
+    // Apply news photo and additional photos if provided
+    if (autoFillNews.imageUrl || (autoFillNews.additionalPhotos && autoFillNews.additionalPhotos.length > 0)) {
       onChange({
         images: {
           ...card.images,
           main: autoFillNews.imageUrl || card.images.main,
-          second: autoFillNews.additionalPhotos[0] || card.images.second,
-          third: autoFillNews.additionalPhotos[1] || card.images.third,
-          fourth: autoFillNews.additionalPhotos[2] || card.images.fourth,
+          ...(autoFillNews.additionalPhotos && autoFillNews.additionalPhotos.length > 0 ? {
+            second: autoFillNews.additionalPhotos[0] || card.images.second,
+            third: autoFillNews.additionalPhotos[1] || card.images.third,
+            fourth: autoFillNews.additionalPhotos[2] || card.images.fourth,
+          } : {})
         },
         layout: 'single',
       });
@@ -319,7 +321,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 3) {
+      if (opts.length < 4) {
         if (extraData?.title) {
           const t = cleanHeadlineText(extraData.title);
           if (t && !opts.includes(t)) opts.push(t);
@@ -328,14 +330,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           const s = cleanHeadlineText(res.summary.slice(0, 90));
           if (s && !opts.includes(s)) opts.push(s);
         }
+        if (res.location && res.headline) {
+          const locOpt = cleanHeadlineText(`${res.location}: ${res.headline}`);
+          if (locOpt && !opts.includes(locOpt)) opts.push(locOpt);
+        }
       }
-      setHeadlineOptions(opts);
+      setHeadlineOptions(opts.slice(0, 4));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(opts[0] || res.headline || extraData?.title || card.headline);
       const finalLoc = res.location || extraData?.location || card.location || 'विशेष कवरेज';
-      const finalImage = res.pickedImages?.main || extraData?.imageUrl || card.images.main;
+      const finalImage = (res.pickedImages?.main && !res.pickedImages.main.includes('placeholder'))
+        ? res.pickedImages.main
+        : (extraData?.imageUrl || card.images.main);
 
       onChange({
         headline: finalHeadline,
@@ -372,21 +380,27 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 3) {
+      if (opts.length < 4) {
         if (fallbackResult.summary) {
           opts.push(cleanHeadlineText(fallbackResult.summary.slice(0, 90)));
         }
         opts.push(`${fallbackResult.location}: ${fallbackResult.headline}`);
+        if (opts.length < 4 && extraData?.title) {
+          const t = cleanHeadlineText(extraData.title);
+          if (t && !opts.includes(t)) opts.push(t);
+        }
       }
 
       setResult(fallbackResult);
-      setHeadlineOptions(opts);
+      setHeadlineOptions(opts.slice(0, 4));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || card.headline);
       const finalLoc = fallbackResult.location || extraData?.location || card.location || 'विशेष कवरेज';
-      const finalImage = extraData?.imageUrl || card.images.main;
+      const finalImage = (extraData?.imageUrl && !extraData.imageUrl.includes('placeholder'))
+        ? extraData.imageUrl
+        : (card.images.main || extraData?.imageUrl || '');
 
       onChange({
         headline: finalHeadline,

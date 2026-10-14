@@ -1351,7 +1351,7 @@ export default function App() {
     }
     // Verify entitlement with server
     try {
-      const verifyRes = await fetch('/api/verify-download-entitlement', {
+      const verifyRes = await fetch(getApiUrl('/api/verify-download-entitlement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: currentUser?.email }),
@@ -1509,12 +1509,15 @@ export default function App() {
       return new Set();
     };
 
-    const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id);
-    let targetImageForStudio = (post.imageUrl && !post.imageUrl.includes('placeholder')) ? post.imageUrl : '';
-    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
-      targetImageForStudio = post.manualThumbnailUrl;
-    } else if (post.imageSource === 'default' || hasDefaultPhotoActive) {
-      targetImageForStudio = '';
+    let targetImageForStudio = '';
+    if (post.manualThumbnailUrl && post.manualThumbnailUrl.trim()) {
+      targetImageForStudio = post.manualThumbnailUrl.trim();
+    } else if (post.imageUrl && post.imageUrl.trim() && !post.imageUrl.includes('placeholder')) {
+      targetImageForStudio = post.imageUrl.trim();
+    } else if ((post as any).thumbnailUrl && (post as any).thumbnailUrl.trim() && !(post as any).thumbnailUrl.includes('placeholder')) {
+      targetImageForStudio = (post as any).thumbnailUrl.trim();
+    } else if (post.imageUrl && post.imageUrl.trim()) {
+      targetImageForStudio = post.imageUrl.trim();
     }
 
     // Collect all available photos for this article: primary + up to 3 additional photos

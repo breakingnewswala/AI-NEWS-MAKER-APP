@@ -167,6 +167,12 @@ export interface NewsCardData {
   watermarkOpacity?: number; // 0.04 to 0.30 (default 0.10)
   watermarkColor?: 'black' | 'white' | 'red'; // Default black for white paper, white for dark themes
   watermarkScale?: number; // Size for tiled logo or font size for text
+
+  // Dedicated Text Watermark (Fully decoupled from Photo Watermark / AI label)
+  showTextWatermark?: boolean; // Default false (OFF)
+  textWatermarkContent?: string; // Default user English channel name / username
+  textWatermarkOpacity?: number; // 0.05 to 0.40 (default 0.15)
+  textWatermarkColor?: 'white' | 'black' | 'red'; // Default 'white'
   
   // Text Breaking Jacket specific attributes
   textBreakingStyle?: TextBreakingBadgeStyle; // For jacket-text-breaking (default: 'breaking-3d-en')

@@ -1138,8 +1138,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
   }
   const emailRaw = (userPayload.email || '').toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
-  const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com';
-  const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+  const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com';
+  const isBreakingNewsWala = cleanEmail === 'breakingnewswala.com@gmail.com';
 
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex(u =>
@@ -1156,9 +1156,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || (preservedTrialStart + SEVEN_DAYS_MS);
 
-    const safeUsername = isSuper
+    const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? (existing.username || 'admin.ainewsmaker')
-      : (isAdmin
+      : (isBreakingNewsWala
           ? (userPayload.username && !userPayload.username.includes('@') ? userPayload.username.replace(/^@/, '') : (existing.username || 'breakingnewswala'))
           : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username));
 
@@ -1180,9 +1180,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       district: userPayload.district || existing.district || '',
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
       socialIcons: userPayload.socialIcons || existing.socialIcons,
-      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : (userPayload.role || existing.role || 'user')),
-      tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : (existing.tier || userPayload.tier || 'basic')),
-      planName: isSuper ? 'VIP DESK' : (isAdmin ? 'VIP DESK' : (existing.planName || userPayload.planName || 'BASIC')),
+      role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
+      tier: isSuper ? 'ultra' : (existing.tier || userPayload.tier || 'basic'),
+      planName: isSuper ? 'VIP DESK' : (existing.planName || userPayload.planName || 'BASIC'),
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
@@ -1191,18 +1191,18 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       trialEndsAt: preservedTrialEnds,
       isTrialExpired: Date.now() >= preservedTrialEnds,
       lastLoginAt: now,
-      activatedAt: existing.activatedAt || (isSuper || isAdmin ? now : preservedTrialStart),
-      expiresAt: existing.expiresAt || (isSuper || isAdmin ? 2107057518060 : preservedTrialEnds),
-      activatedVia: existing.activatedVia || (isSuper ? 'Super Admin Preset' : (isAdmin ? 'Admin Preset' : 'Google Registration')),
+      activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
+      expiresAt: existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds),
+      activatedVia: existing.activatedVia || (isSuper ? 'Super Admin Preset' : 'Google Registration'),
     };
     users[idx] = updatedRecord;
   } else {
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
 
-    const safeUsername = isSuper
+    const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'admin.ainewsmaker'
-      : (isAdmin
+      : (isBreakingNewsWala
           ? 'breakingnewswala'
           : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name));
 
@@ -1224,9 +1224,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       district: userPayload.district || '',
       websiteUrl: userPayload.websiteUrl || '',
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
-      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : (userPayload.role || 'user')),
-      tier: isSuper ? 'ultra' : (isAdmin ? 'ultra' : (userPayload.tier || 'basic')),
-      planName: isSuper ? 'VIP DESK' : (isAdmin ? 'VIP DESK' : (userPayload.planName || 'BASIC')),
+      role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
+      tier: isSuper ? 'ultra' : (userPayload.tier || 'basic'),
+      planName: isSuper ? 'VIP DESK' : (userPayload.planName || 'BASIC'),
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
@@ -1235,9 +1235,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       trialEndsAt: newTrialEnds,
       isTrialExpired: false,
       lastLoginAt: now,
-      activatedAt: isSuper || isAdmin ? now : newTrialStart,
-      expiresAt: isSuper || isAdmin ? 2107057518060 : newTrialEnds,
-      activatedVia: isSuper ? 'Super Admin Preset' : (isAdmin ? 'Admin Preset' : 'Google Registration'),
+      activatedAt: isSuper ? now : newTrialStart,
+      expiresAt: isSuper ? 2107057518060 : newTrialEnds,
+      activatedVia: isSuper ? 'Super Admin Preset' : 'Google Registration',
     };
     users.unshift(updatedRecord);
   }
@@ -3727,6 +3727,58 @@ app.post("/api/admin/delete-user", (req, res) => {
   }
 });
 
+app.post("/api/admin/update-user", (req, res) => {
+  try {
+    const { userId, updates } = req.body;
+    const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
+    if (!identifier) {
+      return res.status(400).json({ error: "User ID or email is required" });
+    }
+    const users = loadUsersMasterDatabase();
+    const idx = users.findIndex(u =>
+      (u.email && u.email.toLowerCase().trim() === identifier) ||
+      (u.email && u.email.toLowerCase().replace(/\s+/g, '') === identifier.replace(/\s+/g, '')) ||
+      (u.userId && u.userId.toLowerCase().trim() === identifier)
+    );
+
+    let updatedUser: AuthoritativeUser;
+    if (idx >= 0) {
+      users[idx] = {
+        ...users[idx],
+        ...updates,
+        email: updates.email || users[idx].email,
+        channelName: updates.channelName || updates.channelNameHi || users[idx].channelName,
+        channelNameHi: updates.channelNameHi || updates.channelName || users[idx].channelNameHi,
+        channelNameEn: updates.channelNameEn !== undefined ? updates.channelNameEn : users[idx].channelNameEn,
+        channelLogoUrl: updates.channelLogoUrl !== undefined ? updates.channelLogoUrl : users[idx].channelLogoUrl,
+        channelLogoPngUrl: updates.channelLogoPngUrl !== undefined ? updates.channelLogoPngUrl : users[idx].channelLogoPngUrl,
+        channelLogoGifUrl: updates.channelLogoGifUrl !== undefined ? updates.channelLogoGifUrl : users[idx].channelLogoGifUrl,
+        mobile: updates.mobile || updates.mobileNumber || users[idx].mobile,
+        mobileNumber: updates.mobileNumber || updates.mobile || users[idx].mobileNumber,
+        websiteUrl: updates.websiteUrl !== undefined ? updates.websiteUrl : users[idx].websiteUrl,
+        socialIcons: updates.socialIcons !== undefined ? updates.socialIcons : users[idx].socialIcons,
+        role: updates.role || users[idx].role,
+        tier: updates.tier || users[idx].tier,
+        isLocked: updates.isLocked !== undefined ? updates.isLocked : users[idx].isLocked,
+        updatedAt: Date.now(),
+      };
+      updatedUser = users[idx];
+      saveUsersMasterDatabase(users);
+      syncUserToProfiles(updatedUser);
+    } else {
+      updatedUser = registerOrUpdateUserAuthoritative({
+        ...updates,
+        email: updates.email || (identifier.includes('@') ? identifier : undefined),
+        userId: identifier,
+      });
+    }
+
+    return res.json({ success: true, user: updatedUser });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // ==========================================
 // TWILIO INTEGRATION SERVICE (SMS & WHATSAPP)
 // ==========================================
@@ -5467,7 +5519,7 @@ JSON Format:
 function cleanHeadlineText(text: string): string {
   if (!text) return "";
   let cleaned = text
-    .replace(/^(यह खबर है|जानिए|देखिए|Breaking News[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*)\s*/i, "")
+    .replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "")
     .trim();
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   return cleaned;
@@ -5545,8 +5597,8 @@ function ensureHashtagHierarchy(summaryText: string, location: string = "", user
 function sanitizePressNoteFlattery(text: string): string {
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
-  // 0. Remove prefixes like "यह खबर है", "जानिए", "देखिए", "Breaking News:"
-  cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Breaking News:|ब्रेकिंग न्यूज़:)\s*/i, "");
+  // 0. Remove prefixes like "यह खबर है", "जानिए", "देखिए", "Breaking News:", "Live Update:", "Khabar Update:"
+  cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "");
   // 1. Remove prefixes like 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'श्रीमान', 'श्रीमती', 'सुश्री', 'पूज्य', 'परम पूज्य'
   cleaned = cleaned.replace(
     /(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu,
@@ -5563,7 +5615,7 @@ function sanitizePressNoteFlattery(text: string): string {
 
   cleaned = cleaned.replace(/[ \t]{2,}/g, " ").trim();
   // 4. Strip trailing punctuation
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   return cleaned;
 }
 

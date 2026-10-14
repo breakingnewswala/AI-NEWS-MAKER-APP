@@ -120,6 +120,21 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   // Priority: 1. User Uploaded GIF, 2. Default Saved Channel Logo (PNG/Standard)
   const primaryLogo = profile?.channelLogoGifUrl || profile?.channelLogoPngUrl || profile?.channelLogoUrl || currentUser?.channelLogoUrl || '';
   const [channelLogoUrl, setChannelLogoUrl] = useState<string>(primaryLogo);
+
+  // Listen to profile updates (Video feed prioritizes GIF logo, falls back to PNG primary logo)
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      try {
+        const raw = localStorage.getItem('user_channel_profile');
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        const logo = p.channelLogoGifUrl || p.channelLogoPngUrl || p.channelLogoUrl || '';
+        if (logo) setChannelLogoUrl(logo);
+      } catch {}
+    };
+    window.addEventListener('channel_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('channel_profile_updated', handleProfileUpdate);
+  }, []);
   const [logoScale, setLogoScale] = useState<number>(125); // 50% to 180%, default 125%
   const [socialHandle, setSocialHandle] = useState<string>(
     profile?.username ? (profile.username.startsWith('@') ? profile.username : `@${profile.username}`) : '@AINewsMaker'

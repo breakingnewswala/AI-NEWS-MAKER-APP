@@ -61,11 +61,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   // If user provided custom Footer.png file, render it directly
   if (customFooterPng) {
     return (
-      <div className="w-full bg-white select-none overflow-hidden">
+      <div className="h-full w-full bg-white select-none overflow-hidden flex items-center justify-center">
         <img
           src={customFooterPng}
           alt="News Card Footer"
-          className="w-full h-auto object-contain block"
+          className="w-full h-full object-contain block"
         />
       </div>
     );
@@ -150,7 +150,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         color: effectiveTextColor,
         fontFamily: 'Arial, Helvetica, sans-serif',
       }}
-      className={`w-full border-t border-neutral-300/40 px-2 sm:px-4 ${pyClass} flex items-center justify-center select-none overflow-hidden text-center`}
+      className="h-full w-full border-t border-neutral-300/40 px-2 sm:px-4 py-0 flex items-center justify-center select-none overflow-hidden text-center"
     >
       {/* Dynamic Center Aligned Elements Row: Up to 3 elements, centered */}
       <div className={`flex items-center justify-center ${gapClass} max-w-full overflow-hidden flex-nowrap text-center`}>

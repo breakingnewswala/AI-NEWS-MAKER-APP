@@ -21,20 +21,20 @@
   "breakingnewswala.com@gmail.com": {
     "username": "breakingnewswala",
     "fullName": "मुख्य संपादक",
-    "role": "admin",
+    "role": "superadmin",
     "userId": "usr_627265616b69",
     "uid": "usr_627265616b69",
     "tier": "ultra",
     "email": "breakingnewswala.com@gmail.com",
     "district": "सेंट्रल डेस्क / भोपाल",
-    "channelNameHi": "एआई न्यूज़ मेकर",
-    "channelNameEn": "AI News Maker",
+    "channelNameHi": "ब्रेकिंग न्यूज़ वाला",
+    "channelNameEn": "BREAKING NEWS WALA",
     "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
     "channelLogoPngUrl": "/assets/breaking_news_wala_logo.png",
     "channelLogoGifUrl": "",
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
-    "websiteUrl": "ainewsmaker.online",
+    "websiteUrl": "breakingnewswala.com",
     "updatedAt": 1791958097656
   }
 }

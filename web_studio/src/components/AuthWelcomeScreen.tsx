@@ -49,6 +49,7 @@ import {
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
+import { getApiUrl } from '../lib/apiConfig';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -76,15 +77,15 @@ export const KNOWN_REGISTERED_USERS: Record<
   },
   'breakingnewswala.com@gmail.com': {
     channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
-    channelNameEn: 'Breaking News Wala',
+    channelNameEn: 'BREAKING NEWS WALA',
     channelLogoUrl: '/assets/breaking_news_wala_logo.png',
     channelLogoType: 'png',
     username: 'breakingnewswala',
     mobileNumber: '9669802408',
-    websiteUrl: 'ainewsmaker.online',
+    websiteUrl: 'breakingnewswala.com',
     fullName: 'मुख्य संपादक',
     district: 'सेंट्रल डेस्क / भोपाल',
-    role: 'admin',
+    role: 'superadmin',
   },
 };
 
@@ -416,6 +417,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         role: googleUser.role,
         isLocked: !isAdmin,
       });
+
+      // Background sync to server to preserve login state and profile across restarts
+      try {
+        fetch(getApiUrl('/api/users/sync'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: cleanEmail,
+            email: cleanEmail,
+            username: finalProfile.username,
+            name: googleUser.name,
+            fullName: googleUser.name,
+            mobile: finalProfile.mobileNumber,
+            channelName: finalProfile.channelNameHi,
+            channelLogoUrl: finalProfile.channelLogoUrl,
+            tier: isAdmin ? 'ultra' : 'basic',
+            role: googleUser.role,
+          }),
+        }).catch(() => {});
+      } catch {}
 
       onLoginSuccess(googleUser);
       onCompleteDetails(finalProfile, googleUser);
@@ -828,28 +849,39 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       localStorage.setItem(`onboarding_completed_${cleanEmail}`, "true");
       localStorage.removeItem(`onboarding_draft_${cleanEmail}`);
 
-      // Sync permanently to backend /api/user-profile
+      // Sync permanently to backend /api/user-profile and /api/users/sync
       try {
-        fetch('/api/user-profile', {
+        const payload = {
+          userId: cleanEmail,
+          email: cleanEmail,
+          username: finalProfile.username,
+          fullName: finalProfile.fullName,
+          role: updatedUser.role,
+          district: updatedUser.district,
+          channelName: finalProfile.channelNameHi,
+          channelNameHi: finalProfile.channelNameHi,
+          channelNameEn: finalProfile.channelNameEn,
+          channelLogoUrl: finalProfile.channelLogoUrl,
+          channelLogoPngUrl: finalProfile.channelLogoPngUrl,
+          channelLogoGifUrl: finalProfile.channelLogoGifUrl,
+          channelLogoType: finalProfile.channelLogoType,
+          mobile: finalProfile.mobileNumber,
+          mobileNumber: finalProfile.mobileNumber,
+          whatsappNumber: finalProfile.whatsappNumber,
+          showMobileNumber: finalProfile.showMobileNumber,
+          websiteUrl: finalProfile.websiteUrl,
+          socialIcons: finalProfile.socialIcons,
+          tier: isAdm ? 'ultra' : 'basic',
+        };
+        fetch(getApiUrl('/api/user-profile'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: cleanEmail,
-            email: cleanEmail,
-            username: finalProfile.username,
-            fullName: finalProfile.fullName,
-            role: updatedUser.role,
-            district: updatedUser.district,
-            channelNameHi: finalProfile.channelNameHi,
-            channelNameEn: finalProfile.channelNameEn,
-            channelLogoUrl: finalProfile.channelLogoUrl,
-            mobileNumber: finalProfile.mobileNumber,
-            whatsappNumber: finalProfile.whatsappNumber,
-            showMobileNumber: finalProfile.showMobileNumber,
-            websiteUrl: finalProfile.websiteUrl,
-            socialIcons: finalProfile.socialIcons,
-            tier: isAdm ? 'ultra' : 'basic',
-          }),
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+        fetch(getApiUrl('/api/users/sync'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         }).catch(() => {});
       } catch {}
     }

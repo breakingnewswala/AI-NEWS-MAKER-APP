@@ -784,7 +784,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
 
         {/* Universal subtle watermark across photo area */}
-        {(card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
+        {(card.showTextWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
           <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden flex flex-col justify-around select-none">
             <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
               {[...Array(6)].map((_, rIdx) => (
@@ -798,7 +798,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         className="object-contain"
                         style={{
                           width: `${Math.round((card.watermarkScale || 90) * 0.45)}px`,
-                          opacity: card.watermarkOpacity ?? 0.15,
+                          opacity: card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.15,
                         }}
                       />
                     ) : (
@@ -809,19 +809,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                           fontFamily: 'Arial, Helvetica, sans-serif',
                           fontWeight: 900,
                           color:
-                            (card.watermarkColor || card.breakingWatermarkColor) === 'black'
-                              ? `rgba(0, 0, 0, ${card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
-                              : (card.watermarkColor || card.breakingWatermarkColor) === 'red'
-                              ? `rgba(220, 38, 38, ${card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
-                              : `rgba(255, 255, 255, ${card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
+                            (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                              ? `rgba(0, 0, 0, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                              : (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'red'
+                              ? `rgba(220, 38, 38, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                              : `rgba(255, 255, 255, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
                           textShadow:
-                            (card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                            (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
                               ? '0 1px 2px rgba(255,255,255,0.15)'
                               : '0 1px 2px rgba(0,0,0,0.45)',
                           fontSize: '15px',
                         }}
                       >
-                        {card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
+                        {card.textWatermarkContent || card.channelNameEn || card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
                       </span>
                     )
                   ))}
@@ -892,7 +892,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED (प्रतीकात्मक फोटो)): Vertical along Left Wall, Rotated 90° - Topmost Visual Layer */}
       {(card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
-        card.showWatermark ||
         (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (
         <div
           className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
@@ -945,15 +944,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           )}
 
-          {/* Top-Left Channel Logo Area: Displays login user's logo inside the authentic circular badge */}
+          {/* Top-Left Channel Logo Area: Displays login user's transparent PNG logo in designated logo area */}
           {card.showMasterBranding !== false && card.customLogoUrl && (
             <div
-              className="absolute z-30 flex items-center justify-center overflow-hidden rounded-full bg-white border-2 sm:border-[3px] border-[#DC2626] shadow-[0_0_12px_rgba(220,38,38,0.5)] pointer-events-auto"
+              className="absolute z-30 flex items-center justify-center pointer-events-auto"
               style={{
-                left: '8.1%',
-                top: '4.3%',
-                width: '13.8%',
-                height: '11.1%',
+                left: '6%',
+                top: '4%',
+                width: '18%',
+                height: '11.5%',
                 transform: `scale(${card.logoScale ?? 1.0})`,
                 transformOrigin: 'center center',
               }}
@@ -961,7 +960,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               <img
                 src={card.customLogoUrl}
                 alt="Channel Logo"
-                className="w-[82%] h-[82%] object-contain"
+                className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
               />
             </div>
           )}

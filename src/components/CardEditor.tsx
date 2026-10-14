@@ -62,6 +62,7 @@ import {
 import {
   isTierSufficient,
   isEffectiveAdmin,
+  isEffectiveSuperAdmin,
   getEffectiveUserTier,
   PLAN_KEY_MAP,
   isChannelProfileLocked,
@@ -173,7 +174,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const effectiveTier = getEffectiveUserTier(currentUser);
   const isAdmin = effectiveAdmin;
   const isProfileLocked = !effectiveAdmin && isChannelProfileLocked(currentUser);
-  const canUseCustomHF = true; // Always allow Master Branding toggle and custom branding in Web Studio
+  const canToggleMasterBranding = isEffectiveSuperAdmin(currentUser) || effectiveTier === 'professional' || effectiveTier === 'ultra';
+  const canChangeLogo = isEffectiveSuperAdmin(currentUser) || effectiveTier === 'professional' || effectiveTier === 'ultra' || effectiveTier === 'advanced';
+  const canUseCustomHF = canToggleMasterBranding;
   const canUploadCustomFont = effectiveAdmin || effectiveTier === 'ultra';
 
   // Package-based headline fonts system (prepared for per-package font mappings)
@@ -2910,7 +2913,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         photoWatermarkTag: selId === 'ai' ? 'AI जनरेटेड' : selId === 'representative' ? 'प्रतीकात्मक फोटो' : undefined,
                         representativePhotoText: selId === 'representative' ? (card.representativePhotoText || 'प्रतीकात्मक फोटो') : card.representativePhotoText,
                         aiGeneratedText: selId === 'ai' ? (card.aiGeneratedText || 'AI जनरेटेड') : card.aiGeneratedText,
-                        showWatermark: selId !== 'none',
                       });
                     }}
                     className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all cursor-pointer active:scale-95 ${
@@ -2958,6 +2960,94 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           </div>
         </div>
         )}
+
+        {/* Dedicated Text Watermark: ON/OFF Control (Decoupled from Photo Label) */}
+        <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-black text-amber-300 flex items-center gap-1.5 text-xs">
+              <span>🔤</span>
+              <span>टेक्स्ट वॉटरमार्क (Text Watermark)</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextState = !card.showTextWatermark;
+                onChange({
+                  showTextWatermark: nextState,
+                  textWatermarkContent: card.textWatermarkContent || card.channelNameEn || card.brandName || 'BREAKING NEWS WALA',
+                  textWatermarkOpacity: card.textWatermarkOpacity ?? 0.15,
+                  textWatermarkColor: card.textWatermarkColor || 'white',
+                });
+              }}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
+                card.showTextWatermark
+                  ? 'bg-amber-400 text-neutral-950 border-amber-300 shadow-sm'
+                  : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+              }`}
+            >
+              <span>{card.showTextWatermark ? 'चालू (ON)' : 'बंद (OFF)'}</span>
+            </button>
+          </div>
+
+          <p className="text-[10px] text-neutral-400">
+            इमेज के ऊपर चैनल नाम या टेक्स्ट का सूक्ष्म बैकग्राउंड वॉटरमार्क (Default: OFF)
+          </p>
+
+          {card.showTextWatermark && (
+            <div className="space-y-2 pt-1 border-t border-neutral-800">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] text-neutral-400 whitespace-nowrap">
+                  वॉटरमार्क टेक्स्ट:
+                </label>
+                <input
+                  type="text"
+                  value={card.textWatermarkContent ?? (card.channelNameEn || card.brandName || 'BREAKING NEWS WALA')}
+                  onChange={(e) => onChange({ textWatermarkContent: e.target.value })}
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400 font-['Baloo_2']"
+                  placeholder="चैनल नाम दर्ज करें"
+                />
+              </div>
+
+              {/* Opacity Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] text-neutral-400">
+                  <span>पारदर्शिता (Opacity):</span>
+                  <span className="font-bold text-amber-300">
+                    {Math.round((card.textWatermarkOpacity ?? 0.15) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.40"
+                  step="0.02"
+                  value={card.textWatermarkOpacity ?? 0.15}
+                  onChange={(e) => onChange({ textWatermarkOpacity: parseFloat(e.target.value) })}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+              </div>
+
+              {/* Color Selector */}
+              <div className="flex items-center gap-2 pt-0.5">
+                <span className="text-[11px] text-neutral-400">रंग:</span>
+                {(['white', 'black', 'red'] as const).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => onChange({ textWatermarkColor: c })}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                      (card.textWatermarkColor || 'white') === c
+                        ? 'border-amber-400 text-amber-300 bg-neutral-800'
+                        : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    {c === 'white' ? 'सफेद' : c === 'black' ? 'काला' : 'लाल'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Step 4 Nav Buttons */}
         {mobileViewMode === 'steps' && (
@@ -3299,7 +3389,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <Globe className="w-4 h-4 text-blue-400" />
               <span>मास्टर ब्रांडिंग (Master Branding)</span>
             </span>
-            {canUseCustomHF ? (
+            {canToggleMasterBranding ? (
               <button
                 type="button"
                 onClick={() => onChange({ showMasterBranding: card.showMasterBranding === false ? true : false })}
@@ -3591,31 +3681,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <label className="flex-1 py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{card.customLogoUrl ? 'नया लोगो बदलें' : 'कस्टम लोगो अपलोड'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleLogoUpload(file);
-                      }}
-                    />
-                  </label>
-                  {card.customLogoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => onChange({ customLogoUrl: undefined, brandLogoType: 'default', logoScale: 1.25 })}
-                      className="p-2 rounded-lg bg-red-900/40 hover:bg-red-800/60 text-red-300 border border-red-800/80 cursor-pointer"
-                      title="लोगो हटाएं"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+          {canChangeLogo ? (
+            <div className="flex items-center gap-2">
+              <label className="flex-1 py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
+                <Upload className="w-3.5 h-3.5" />
+                <span>{card.customLogoUrl ? 'नया लोगो बदलें' : 'कस्टम लोगो अपलोड'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLogoUpload(file);
+                  }}
+                />
+              </label>
+              {card.customLogoUrl && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ customLogoUrl: undefined, brandLogoType: 'default', logoScale: 1.25 })}
+                  className="p-2 rounded-lg bg-red-900/40 hover:bg-red-800/60 text-red-300 border border-red-800/80 cursor-pointer"
+                  title="लोगो हटाएं"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="p-2.5 bg-neutral-900 rounded-lg border border-neutral-800 text-neutral-400 text-xs flex items-center justify-between">
+              <span>लोगो सुरक्षित (Basic Plan):</span>
+              <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                <span>लोगो बदलने हेतु Pro/VIP आवश्यक</span>
+              </span>
+            </div>
+          )}
 
               {/* Logo Preview thumbnail */}
               {card.customLogoUrl && (

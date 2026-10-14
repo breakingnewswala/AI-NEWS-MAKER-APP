@@ -75,7 +75,7 @@ const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
     user: {
       username: 'breakingnewswala',
       name: 'मुख्य संपादक (Chief Editor)',
-      role: 'admin',
+      role: 'superadmin' as any,
       district: 'सेंट्रल डेस्क / भोपाल',
       email: 'breakingnewswala.com@gmail.com',
       planTier: 'ultra',

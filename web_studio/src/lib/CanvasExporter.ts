@@ -1631,37 +1631,25 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasValidMainPhoto, nothing is drawn over the photo area,
   // allowing the authentic background image's camera icon and Step 4 instructions to show through!
 
-  // 3. TOP-LEFT LOGO AREA (Inside authentic circular badge)
+  // 3. TOP-LEFT LOGO AREA (Clean transparent PNG in designated logo area)
   if (card.showMasterBranding !== false && customLogoImg) {
     ctx.save();
     const centerX = Math.round(width * 0.15);
-    const centerY = Math.round(height * 0.0985);
-    const radius = Math.round(width * 0.069);
-
-    // Draw white circle background
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Red ring border
-    ctx.strokeStyle = '#DC2626';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-
-    // Clip to circle and draw logo
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius - 2, 0, Math.PI * 2);
-    ctx.clip();
+    const centerY = Math.round(height * 0.0975);
+    const baseW = Math.round(width * 0.18);
+    const baseH = Math.round(height * 0.115);
 
     const scale = card.logoScale ?? 1.0;
     const lRatio = customLogoImg.width / customLogoImg.height;
-    let lW = radius * 1.6 * scale;
+    let lW = baseW * scale;
     let lH = lW / lRatio;
-    if (lH > radius * 1.6 * scale) {
-      lH = radius * 1.6 * scale;
+    if (lH > baseH * scale) {
+      lH = baseH * scale;
       lW = lH * lRatio;
     }
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
     ctx.drawImage(customLogoImg, centerX - lW / 2, centerY - lH / 2, lW, lH);
     ctx.restore();
   }
@@ -6363,7 +6351,7 @@ export async function generateCardCanvas(
     const rawCanvas = await html2canvas(htmlElement, {
       scale: dynamicScale,
       useCORS: true,
-      allowTaint: true,
+      allowTaint: false,
       backgroundColor: '#0a0a0a',
       logging: false,
       imageTimeout: 15000,
@@ -6404,15 +6392,30 @@ export function downloadCanvas(
         cleanFilename = cleanFilename.replace(/\.[^/.]+$/, '') + finalExt;
       }
 
+      // For JPEG export: JPEG doesn't support alpha transparency.
+      // Render onto an opaque solid white canvas to prevent black background or corrupt export
+      let exportCanvas = canvas;
+      if (format === 'jpeg') {
+        const jpgCanvas = document.createElement('canvas');
+        jpgCanvas.width = canvas.width;
+        jpgCanvas.height = canvas.height;
+        const jctx = jpgCanvas.getContext('2d');
+        if (jctx) {
+          jctx.fillStyle = '#FFFFFF';
+          jctx.fillRect(0, 0, jpgCanvas.width, jpgCanvas.height);
+          jctx.drawImage(canvas, 0, 0);
+          exportCanvas = jpgCanvas;
+        }
+      }
+
       // Safe Data URL generator with fallback
       const getSafeDataUrl = (): string | null => {
         try {
-          return canvas.toDataURL(mime, quality);
+          return exportCanvas.toDataURL(mime, quality);
         } catch (e) {
           console.warn('Canvas toDataURL direct call warning:', e);
           try {
-            // If direct call fails, try PNG format as fallback
-            return canvas.toDataURL('image/png');
+            return exportCanvas.toDataURL('image/png');
           } catch (e2) {
             console.warn('Canvas toDataURL fallback failed:', e2);
             return null;
@@ -6440,9 +6443,9 @@ export function downloadCanvas(
 
       // 2. Blob-based object URL download (Primary Web strategy)
       let downloadTriggered = false;
-      if (typeof canvas.toBlob === 'function') {
+      if (typeof exportCanvas.toBlob === 'function') {
         try {
-          canvas.toBlob(
+          exportCanvas.toBlob(
             (blob) => {
               if (blob) {
                 downloadTriggered = true;

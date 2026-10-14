@@ -1812,8 +1812,8 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   }
   const emailRaw = (userPayload.email || "").toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
-  const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com";
-  const isAdmin = cleanEmail === "breakingnewswala.com@gmail.com";
+  const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com";
+  const isBreakingNewsWala = cleanEmail === "breakingnewswala.com@gmail.com";
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex(
     (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || userPayload.userId && u.userId && u.userId.toLowerCase().trim() === userPayload.userId.toLowerCase().trim()
@@ -1824,7 +1824,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const existing = users[idx];
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
-    const safeUsername = isSuper ? existing.username || "admin.ainewsmaker" : isAdmin ? userPayload.username && !userPayload.username.includes("@") ? userPayload.username.replace(/^@/, "") : existing.username || "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username);
+    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? existing.username || "admin.ainewsmaker" : isBreakingNewsWala ? userPayload.username && !userPayload.username.includes("@") ? userPayload.username.replace(/^@/, "") : existing.username || "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username);
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -1843,9 +1843,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       district: userPayload.district || existing.district || "",
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons || existing.socialIcons,
-      role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || existing.role || "user",
-      tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing.tier || userPayload.tier || "basic",
-      planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
+      role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
+      tier: isSuper ? "ultra" : existing.tier || userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
@@ -1854,15 +1854,15 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       trialEndsAt: preservedTrialEnds,
       isTrialExpired: Date.now() >= preservedTrialEnds,
       lastLoginAt: now,
-      activatedAt: existing.activatedAt || (isSuper || isAdmin ? now : preservedTrialStart),
-      expiresAt: existing.expiresAt || (isSuper || isAdmin ? 2107057518060 : preservedTrialEnds),
-      activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : isAdmin ? "Admin Preset" : "Google Registration")
+      activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
+      expiresAt: existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds),
+      activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
     };
     users[idx] = updatedRecord;
   } else {
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
-    const safeUsername = isSuper ? "admin.ainewsmaker" : isAdmin ? "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name);
+    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "admin.ainewsmaker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name);
     updatedRecord = {
       userId: userPayload.userId || userPayload.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       email: emailRaw,
@@ -1881,9 +1881,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       district: userPayload.district || "",
       websiteUrl: userPayload.websiteUrl || "",
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
-      role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || "user",
-      tier: isSuper ? "ultra" : isAdmin ? "ultra" : userPayload.tier || "basic",
-      planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : userPayload.planName || "BASIC",
+      role: isSuper ? "superadmin" : userPayload.role || "user",
+      tier: isSuper ? "ultra" : userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : userPayload.planName || "BASIC",
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
@@ -1892,9 +1892,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       trialEndsAt: newTrialEnds,
       isTrialExpired: false,
       lastLoginAt: now,
-      activatedAt: isSuper || isAdmin ? now : newTrialStart,
-      expiresAt: isSuper || isAdmin ? 2107057518060 : newTrialEnds,
-      activatedVia: isSuper ? "Super Admin Preset" : isAdmin ? "Admin Preset" : "Google Registration"
+      activatedAt: isSuper ? now : newTrialStart,
+      expiresAt: isSuper ? 2107057518060 : newTrialEnds,
+      activatedVia: isSuper ? "Super Admin Preset" : "Google Registration"
     };
     users.unshift(updatedRecord);
   }
@@ -3882,6 +3882,53 @@ app.post("/api/admin/delete-user", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.post("/api/admin/update-user", (req, res) => {
+  try {
+    const { userId, updates } = req.body;
+    const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
+    if (!identifier) {
+      return res.status(400).json({ error: "User ID or email is required" });
+    }
+    const users = loadUsersMasterDatabase();
+    const idx = users.findIndex(
+      (u) => u.email && u.email.toLowerCase().trim() === identifier || u.email && u.email.toLowerCase().replace(/\s+/g, "") === identifier.replace(/\s+/g, "") || u.userId && u.userId.toLowerCase().trim() === identifier
+    );
+    let updatedUser;
+    if (idx >= 0) {
+      users[idx] = {
+        ...users[idx],
+        ...updates,
+        email: updates.email || users[idx].email,
+        channelName: updates.channelName || updates.channelNameHi || users[idx].channelName,
+        channelNameHi: updates.channelNameHi || updates.channelName || users[idx].channelNameHi,
+        channelNameEn: updates.channelNameEn !== void 0 ? updates.channelNameEn : users[idx].channelNameEn,
+        channelLogoUrl: updates.channelLogoUrl !== void 0 ? updates.channelLogoUrl : users[idx].channelLogoUrl,
+        channelLogoPngUrl: updates.channelLogoPngUrl !== void 0 ? updates.channelLogoPngUrl : users[idx].channelLogoPngUrl,
+        channelLogoGifUrl: updates.channelLogoGifUrl !== void 0 ? updates.channelLogoGifUrl : users[idx].channelLogoGifUrl,
+        mobile: updates.mobile || updates.mobileNumber || users[idx].mobile,
+        mobileNumber: updates.mobileNumber || updates.mobile || users[idx].mobileNumber,
+        websiteUrl: updates.websiteUrl !== void 0 ? updates.websiteUrl : users[idx].websiteUrl,
+        socialIcons: updates.socialIcons !== void 0 ? updates.socialIcons : users[idx].socialIcons,
+        role: updates.role || users[idx].role,
+        tier: updates.tier || users[idx].tier,
+        isLocked: updates.isLocked !== void 0 ? updates.isLocked : users[idx].isLocked,
+        updatedAt: Date.now()
+      };
+      updatedUser = users[idx];
+      saveUsersMasterDatabase(users);
+      syncUserToProfiles(updatedUser);
+    } else {
+      updatedUser = registerOrUpdateUserAuthoritative({
+        ...updates,
+        email: updates.email || (identifier.includes("@") ? identifier : void 0),
+        userId: identifier
+      });
+    }
+    return res.json({ success: true, user: updatedUser });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "ACc5f93634dce84c45a2c23c7063571f13";
 var TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "34b06e526dbca37904003a7ef6afae73";
 var TWILIO_API_KEY_SID = process.env.TWILIO_API_KEY_SID || "SK60e777e96b2b42031b71af39f7399b81";
@@ -5290,7 +5337,7 @@ JSON Format:
 });
 function cleanHeadlineText(text) {
   if (!text) return "";
-  let cleaned = text.replace(/^(यह खबर है|जानिए|देखिए|Breaking News[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*)\s*/i, "").trim();
+  let cleaned = text.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "").trim();
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   return cleaned;
 }
@@ -5354,7 +5401,7 @@ ${finalTags.join(" ")}`;
 function sanitizePressNoteFlattery(text) {
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
-  cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Breaking News:|ब्रेकिंग न्यूज़:)\s*/i, "");
+  cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "");
   cleaned = cleaned.replace(
     /(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu,
     " "
@@ -5366,7 +5413,7 @@ function sanitizePressNoteFlattery(text) {
   cleaned = cleaned.replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "");
   cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "");
   cleaned = cleaned.replace(/[ \t]{2,}/g, " ").trim();
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   return cleaned;
 }
 function createEpaperLocalFallback(rawInput, city = "", reporterName = "") {
