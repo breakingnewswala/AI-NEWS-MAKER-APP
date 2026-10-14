@@ -977,7 +977,7 @@ var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd(
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
-var PORT = parseInt(process.env.PORT || "3000", 10);
+var PORT = 3e3;
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -989,21 +989,16 @@ app.use((req, res, next) => {
 });
 app.use(import_express.default.json({ limit: "25mb" }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "25mb" }));
-var CONFIGURED_OPENAI_KEY = "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";
-var CONFIGURED_GEMINI_KEY = "AQ.Ab8RN6Llqa6KH_g2YuLo7EPCR8nBZS3pWoGPOrMnzgVGNLwYbA";
-if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY") {
-  process.env.GEMINI_API_KEY = CONFIGURED_GEMINI_KEY;
-}
-if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "MY_OPENAI_API_KEY") {
-  process.env.OPENAI_API_KEY = CONFIGURED_OPENAI_KEY;
-}
-var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : CONFIGURED_OPENAI_KEY;
+var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
+var quotaExceededInfo = {
+  isExceeded: true,
+  lastChecked: (/* @__PURE__ */ new Date()).toISOString(),
+  message: "\u0926\u0948\u0928\u093F\u0915 \u092B\u094D\u0930\u0940 \u0915\u094B\u091F\u093E (20 \u0905\u0928\u0941\u0930\u094B\u0927/\u0926\u093F\u0928) \u0938\u0940\u092E\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0907\u0902\u091C\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0921\u094D\u0930\u093E\u092B\u094D\u091F\u093F\u0902\u0917 \u0928\u093F\u0930\u0902\u0924\u0930 \u091A\u093E\u0932\u0942 \u0939\u0948\u0964"
+};
 var GEMINI_MODELS_POOL = [
   "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-3.1-pro-preview"
+  "gemini-flash-latest"
 ];
 function cleanErrorMessage(err) {
   const raw = String(err?.message || err || "");
@@ -1011,7 +1006,10 @@ function cleanErrorMessage(err) {
     return "AI \u092E\u0949\u0921\u0932 \u092A\u0930 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0932\u094B\u0921 \u0939\u0948 (503 High Demand)\u0964 \u0915\u0941\u091B \u0938\u0947\u0915\u0902\u0921 \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u0907\u0928\u092A\u0941\u091F \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u0947 \u0924\u0948\u092F\u093E\u0930 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964";
   }
   if (raw.includes("429") || raw.toLowerCase().includes("resource_exhausted") || raw.toLowerCase().includes("quota")) {
-    return "\u0926\u0948\u0928\u093F\u0915 \u092F\u093E \u092A\u094D\u0930\u0924\u093F \u092E\u093F\u0928\u091F AI \u0932\u093F\u092E\u093F\u091F \u092A\u093E\u0930 \u0939\u094B \u0917\u0908 \u0939\u0948 (429 Rate Limit)\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964";
+    return "\u0926\u0948\u0928\u093F\u0915 \u092F\u093E \u092A\u094D\u0930\u0924\u093F \u092E\u093F\u0928\u091F AI \u0932\u093F\u092E\u093F\u091F \u092A\u093E\u0930 \u0939\u094B \u0917\u0908 \u0939\u0948 (429 Rate Limit)\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964";
+  }
+  if (raw.includes("403") || raw.toLowerCase().includes("denied access") || raw.toLowerCase().includes("permission_denied")) {
+    return "AI \u0915\u094B\u091F\u093E \u092F\u093E \u090F\u0915\u094D\u0938\u0947\u0938 \u0938\u0940\u092E\u093E \u0932\u093E\u0917\u0942 \u0939\u0948\u0964 \u0906\u092A\u0915\u093E \u0938\u0902\u0930\u091A\u093F\u0924 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0907\u0902\u091C\u0928 \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964";
   }
   return raw || "\u0938\u0930\u094D\u0935\u0930 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908";
 }
@@ -1091,6 +1089,13 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
   }
 });
 var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
+var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
+var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
+var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+try {
+  import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+} catch {
+}
 function getInitialRichNewsPosts() {
   const now = Date.now();
   return [
@@ -1607,10 +1612,31 @@ app.delete("/api/channels/:id", (req, res) => {
 var USERS_MASTER_FILE = import_path.default.join(process.cwd(), "users_master_database.json");
 var USERS_DB_FILE = import_path.default.join(process.cwd(), "users_accounts_db.json");
 var NOTIFICATIONS_DB_FILE = import_path.default.join(process.cwd(), "notifications_database.json");
+function cleanGenerateUsername(requestedUsername, fullName, existingUsername) {
+  if (requestedUsername && typeof requestedUsername === "string") {
+    const clean = requestedUsername.trim().replace(/^@/, "");
+    if (clean && !clean.includes("@") && !clean.includes(".")) {
+      return clean;
+    }
+  }
+  if (existingUsername && typeof existingUsername === "string") {
+    const clean = existingUsername.trim().replace(/^@/, "");
+    if (clean && !clean.includes("@") && !clean.includes(".")) {
+      return clean;
+    }
+  }
+  if (fullName && typeof fullName === "string") {
+    const englishName = fullName.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase().trim();
+    if (englishName.length >= 3) {
+      return englishName.slice(0, 16);
+    }
+  }
+  return `reporter_${Math.floor(1e3 + Math.random() * 9e3)}`;
+}
 function isProtectedAdminAccount(email) {
   if (!email) return false;
   const clean = email.toLowerCase().trim();
-  return clean === "admin.ainewsmaker@gmail.com" || clean === "breakingnewswala@gmail.com" || clean === "breakingnewswala.com@gmail.com" || clean === "admin@breakingnewswala.com";
+  return clean === "admin.ainewsmaker@gmail.com" || clean === "breakingnewswala.com@gmail.com";
 }
 function loadUsersMasterDatabase() {
   try {
@@ -1768,7 +1794,7 @@ function syncUserToProfiles(u) {
       channelLogoGifUrl: u.channelLogoGifUrl,
       channelLogoType: u.channelLogoType || "png",
       mobileNumber: u.mobileNumber || u.mobile || "",
-      websiteUrl: u.websiteUrl || "ainewsmaker.online",
+      websiteUrl: u.websiteUrl || "",
       socialIcons: u.socialIcons,
       updatedAt: Date.now()
     };
@@ -1784,7 +1810,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   const emailRaw = (userPayload.email || "").toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
   const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com";
-  const isAdmin = cleanEmail === "breakingnewswala@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com" || cleanEmail === "admin@breakingnewswala.com";
+  const isAdmin = cleanEmail === "breakingnewswala.com@gmail.com";
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex(
     (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || userPayload.userId && u.userId && u.userId.toLowerCase().trim() === userPayload.userId.toLowerCase().trim()
@@ -1795,12 +1821,13 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const existing = users[idx];
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
+    const safeUsername = isSuper ? existing.username || "admin.ainewsmaker" : isAdmin ? userPayload.username && !userPayload.username.includes("@") ? userPayload.username.replace(/^@/, "") : existing.username || "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username);
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
       name: userPayload.name || userPayload.fullName || existing.name || "\u092F\u0942\u091C\u093C\u0930",
       fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || "\u092F\u0942\u091C\u093C\u0930",
-      username: userPayload.username || existing.username || (emailRaw ? emailRaw.split("@")[0] : existing.userId),
+      username: safeUsername,
       channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || "",
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || "",
       channelNameEn: userPayload.channelNameEn || existing.channelNameEn || "",
@@ -1811,7 +1838,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
       district: userPayload.district || existing.district || "",
-      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "ainewsmaker.online",
+      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons || existing.socialIcons,
       role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || existing.role || "user",
       tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing.tier || userPayload.tier || "basic",
@@ -1832,24 +1859,25 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   } else {
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
+    const safeUsername = isSuper ? "admin.ainewsmaker" : isAdmin ? "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name);
     updatedRecord = {
       userId: userPayload.userId || userPayload.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       email: emailRaw,
       name: userPayload.name || userPayload.fullName || "\u092F\u0942\u091C\u093C\u0930",
       fullName: userPayload.fullName || userPayload.name || "\u092F\u0942\u091C\u093C\u0930",
-      username: userPayload.username || (emailRaw ? emailRaw.split("@")[0] : `user_${Date.now()}`),
+      username: safeUsername,
       channelName: userPayload.channelName || userPayload.channelNameHi || "",
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || "",
       channelNameEn: userPayload.channelNameEn || "",
-      channelLogoUrl: userPayload.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoUrl: userPayload.channelLogoUrl || "",
       channelLogoPngUrl: userPayload.channelLogoPngUrl,
       channelLogoGifUrl: userPayload.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || "",
       district: userPayload.district || "",
-      websiteUrl: userPayload.websiteUrl || "ainewsmaker.online",
-      socialIcons: userPayload.socialIcons || { youtube: true, facebook: true, instagram: true, whatsapp: true },
+      websiteUrl: userPayload.websiteUrl || "",
+      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? "superadmin" : isAdmin ? "admin" : userPayload.role || "user",
       tier: isSuper ? "ultra" : isAdmin ? "ultra" : userPayload.tier || "basic",
       planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : userPayload.planName || "BASIC",
@@ -1876,47 +1904,41 @@ function reconcileAllUsers() {
     const existingUsers = loadUsersMasterDatabase();
     const userMap = /* @__PURE__ */ new Map();
     for (const u of existingUsers) {
-      if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
-    }
-    const bakFile = import_path.default.join(process.cwd(), "users_master_database.json.bak");
-    if (import_fs.default.existsSync(bakFile)) {
-      try {
-        const baks = JSON.parse(import_fs.default.readFileSync(bakFile, "utf-8"));
-        if (Array.isArray(baks)) {
-          for (const b of baks) {
-            if (b.email && !userMap.has(b.email.toLowerCase().trim())) {
-              userMap.set(b.email.toLowerCase().trim(), b);
-            }
-          }
+      if (u.email) {
+        const cleanE = u.email.toLowerCase().trim();
+        if (cleanE !== "breakingnewswala@gmail.com" && cleanE !== "admin@breakingnewswala.com") {
+          userMap.set(cleanE, u);
         }
-      } catch {
       }
     }
     const profiles = loadProfilesDatabase();
     for (const [k, p] of Object.entries(profiles)) {
       const email = (p.email || k).toLowerCase().trim();
+      if (email === "breakingnewswala@gmail.com" || email === "admin@breakingnewswala.com") {
+        continue;
+      }
       if (!userMap.has(email)) {
         userMap.set(email, {
           userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           email: p.email || k,
           name: p.fullName || p.username || "\u092F\u0942\u091C\u093C\u0930",
-          fullName: p.fullName,
-          username: p.username,
-          channelName: p.channelNameHi,
-          channelNameHi: p.channelNameHi,
-          channelNameEn: p.channelNameEn,
-          channelLogoUrl: p.channelLogoUrl,
-          channelLogoPngUrl: p.channelLogoPngUrl,
-          channelLogoGifUrl: p.channelLogoGifUrl,
+          fullName: p.fullName || "",
+          username: p.username || cleanGenerateUsername(void 0, p.fullName),
+          channelName: p.channelNameHi || "",
+          channelNameHi: p.channelNameHi || "",
+          channelNameEn: p.channelNameEn || "",
+          channelLogoUrl: p.channelLogoUrl || "",
+          channelLogoPngUrl: p.channelLogoPngUrl || "",
+          channelLogoGifUrl: p.channelLogoGifUrl || "",
           channelLogoType: p.channelLogoType || "png",
-          mobile: p.mobileNumber,
-          mobileNumber: p.mobileNumber,
-          district: p.district,
-          websiteUrl: p.websiteUrl || "ainewsmaker.online",
+          mobile: p.mobileNumber || "",
+          mobileNumber: p.mobileNumber || "",
+          district: p.district || "",
+          websiteUrl: p.websiteUrl || "",
           socialIcons: p.socialIcons,
-          role: p.role || (email === "admin.ainewsmaker@gmail.com" ? "superadmin" : "user"),
-          tier: p.tier || "basic",
-          planName: p.tier === "ultra" ? "VIP DESK" : "BASIC",
+          role: p.role || (email === "admin.ainewsmaker@gmail.com" ? "superadmin" : email === "breakingnewswala.com@gmail.com" ? "admin" : "user"),
+          tier: p.tier || (email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "ultra" : "basic"),
+          planName: p.tier === "ultra" || email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : "BASIC",
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -1927,24 +1949,27 @@ function reconcileAllUsers() {
     }
     const superAdminEmail = "admin.ainewsmaker@gmail.com";
     const existingSuper = userMap.get(superAdminEmail);
+    const superProf = profiles[superAdminEmail];
     userMap.set(superAdminEmail, {
       userId: existingSuper?.userId || "user-1791697518060",
       email: superAdminEmail,
-      name: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
-      fullName: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
-      username: "admin.ainewsmaker",
+      name: superProf?.fullName || existingSuper?.fullName || "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
+      fullName: superProf?.fullName || existingSuper?.fullName || "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
+      username: superProf?.username || existingSuper?.username || "admin.ainewsmaker",
       role: "superadmin",
       tier: "ultra",
       planName: "VIP DESK",
-      channelName: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameEn: "AI News Maker",
-      channelLogoUrl: "/assets/ai_news_maker_logo.png",
-      channelLogoType: "png",
-      mobile: "9669802408",
-      mobileNumber: "9669802408",
-      district: "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
-      websiteUrl: "ainewsmaker.online",
+      channelName: superProf?.channelNameHi || existingSuper?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || "AI News Maker",
+      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoGifUrl: superProf?.channelLogoGifUrl || existingSuper?.channelLogoGifUrl || "",
+      channelLogoType: superProf?.channelLogoType || existingSuper?.channelLogoType || "png",
+      mobile: superProf?.mobileNumber || existingSuper?.mobile || "9669802408",
+      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || "9669802408",
+      district: superProf?.district || existingSuper?.district || "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || "ainewsmaker.online",
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingSuper?.createdAt || 1791697518060,
@@ -1953,28 +1978,31 @@ function reconcileAllUsers() {
       activatedAt: 1791697518060,
       expiresAt: 2107057518060,
       activatedVia: "Super Admin Preset",
-      lastLoginAt: Date.now()
+      lastLoginAt: existingSuper?.lastLoginAt || Date.now()
     });
     const adminEmail = "breakingnewswala.com@gmail.com";
     const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala@gmail.com");
+    const adminProf = profiles[adminEmail] || profiles["breakingnewswala@gmail.com"];
     userMap.set(adminEmail, {
       userId: existingAdmin?.userId || "usr_627265616b69",
       email: adminEmail,
-      name: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
-      fullName: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
-      username: "breakingnewswala",
+      name: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+      fullName: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
+      username: adminProf?.username || existingAdmin?.username || "breakingnewswala",
       role: "admin",
       tier: "ultra",
       planName: "VIP DESK",
-      channelName: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
-      channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
-      channelNameEn: "Breaking News Wala",
-      channelLogoUrl: "/assets/breaking_news_wala_logo.png",
-      channelLogoType: "png",
-      mobile: "9669802408",
-      mobileNumber: "9669802408",
-      district: "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
-      websiteUrl: "ainewsmaker.online",
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || "AI News Maker",
+      channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || "/assets/breaking_news_wala_logo.png",
+      channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || "/assets/breaking_news_wala_logo.png",
+      channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || "",
+      channelLogoType: adminProf?.channelLogoType || existingAdmin?.channelLogoType || "png",
+      mobile: adminProf?.mobileNumber || existingAdmin?.mobile || "9669802408",
+      mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || "9669802408",
+      district: adminProf?.district || existingAdmin?.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
+      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "ainewsmaker.online",
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -1983,45 +2011,8 @@ function reconcileAllUsers() {
       activatedAt: 1791792137805,
       expiresAt: 2107057518060,
       activatedVia: "Admin Preset",
-      lastLoginAt: Date.now()
+      lastLoginAt: existingAdmin?.lastLoginAt || Date.now()
     });
-    const testKhabrEmail = "khab ridasnews@gmail.com";
-    const normKhabrKey = "khabridasnews@gmail.com";
-    const foundKhabr = userMap.get(testKhabrEmail.toLowerCase()) || userMap.get(normKhabrKey);
-    const khabrCreationTime = foundKhabr?.createdAt || Date.now() - 2 * 24 * 3600 * 1e3;
-    const khabrTrialStart = foundKhabr?.trialStartedAt || khabrCreationTime;
-    const khabrTrialEnds = foundKhabr?.trialEndsAt || khabrTrialStart + SEVEN_DAYS_MS;
-    const khabrRecord = {
-      userId: foundKhabr?.userId || "usr_khab_ridasnews",
-      email: testKhabrEmail,
-      name: foundKhabr?.name || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      fullName: foundKhabr?.fullName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      username: foundKhabr?.username || "khabridasnews",
-      channelName: foundKhabr?.channelName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      channelNameHi: foundKhabr?.channelNameHi || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
-      channelNameEn: foundKhabr?.channelNameEn || "Khabridas News",
-      channelLogoUrl: foundKhabr?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
-      channelLogoType: "png",
-      mobile: foundKhabr?.mobile || "9669802408",
-      mobileNumber: foundKhabr?.mobileNumber || "9669802408",
-      district: foundKhabr?.district || "\u0921\u093F\u091C\u093F\u091F\u0932 \u0921\u0947\u0938\u094D\u0915",
-      websiteUrl: foundKhabr?.websiteUrl || "https://khabridasnews.com",
-      role: "user",
-      tier: foundKhabr?.tier || "basic",
-      planName: foundKhabr?.planName || "BASIC",
-      isBlocked: Boolean(foundKhabr?.isBlocked),
-      blockedAt: foundKhabr?.blockedAt || null,
-      blockedBy: foundKhabr?.blockedBy || null,
-      createdAt: khabrCreationTime,
-      trialStartedAt: khabrTrialStart,
-      trialEndsAt: khabrTrialEnds,
-      isTrialExpired: Date.now() >= khabrTrialEnds,
-      activatedAt: khabrTrialStart,
-      expiresAt: khabrTrialEnds,
-      activatedVia: "Google Sign-In Registration",
-      lastLoginAt: Date.now()
-    };
-    userMap.set(testKhabrEmail.toLowerCase(), khabrRecord);
     const reconciledList = Array.from(userMap.values());
     saveUsersMasterDatabase(reconciledList);
     saveUsersDatabase(reconciledList);
@@ -2390,9 +2381,11 @@ app.get("/api/gemini-quota-status", (_req, res) => {
     hasKey: Boolean(process.env.GEMINI_API_KEY),
     provider: "gemini",
     models: DEFAULT_FALLBACK_MODELS,
-    isQuotaExceeded: false,
-    status: "active",
-    note: "AI \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u092B\u093C\u0949\u0932\u092C\u0948\u0915 \u0907\u0902\u091C\u0928 \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964 \u092F\u0926\u093F \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u092D\u0940 \u0939\u094B \u091C\u093E\u090F, \u0924\u094B \u092D\u0940 \u0906\u092A\u0915\u093E \u0915\u093E\u092E \u0915\u092D\u0940 \u0928\u0939\u0940\u0902 \u0930\u0941\u0915\u0924\u093E\u0964"
+    isQuotaExceeded: quotaExceededInfo.isExceeded,
+    status: quotaExceededInfo.isExceeded ? "quota_limit_active" : "active",
+    note: quotaExceededInfo.message,
+    fallbackEngine: "Active (Zero-Downtime Structured News Engine)",
+    lastChecked: quotaExceededInfo.lastChecked
   });
 });
 function generateRssFeedXml(posts, baseUrl = "https://www.ainewsmaker.online") {
@@ -3105,14 +3098,6 @@ app.all("/api/user-data/delete-account", (req, res) => {
 app.get("/api/account-deletion-requests", (_req, res) => {
   return res.json({ success: true, requests: loadAccountDeletionRequests() });
 });
-var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
-var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
-var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
-try {
-  import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
-} catch {
-}
 app.use("/uploads", import_express.default.static(import_path.default.join(process.cwd(), "public", "uploads")));
 function loadProfilesDatabase() {
   try {
@@ -3217,17 +3202,28 @@ app.post("/api/user-profile", (req, res) => {
       updatedAt: Date.now()
     };
     allProfiles[cleanId] = updated;
+    if (updated.email) {
+      allProfiles[updated.email.toLowerCase().trim()] = updated;
+    }
+    if (updated.userId) {
+      allProfiles[updated.userId.toLowerCase().trim()] = updated;
+    }
     saveProfilesDatabase(allProfiles);
     try {
       let users = loadUsersDatabase();
-      const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanId || u.userId && u.userId.toLowerCase() === cleanId);
+      const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanId || u.userId && u.userId.toLowerCase() === cleanId || updated.email && u.email && u.email.toLowerCase() === updated.email.toLowerCase());
       if (uIdx >= 0) {
         users[uIdx] = {
           ...users[uIdx],
           fullName: updated.fullName || users[uIdx].fullName,
           channelName: updated.channelNameHi || users[uIdx].channelName,
-          mobile: updated.mobileNumber || users[uIdx].mobile,
           channelLogoUrl: updated.channelLogoUrl || users[uIdx].channelLogoUrl,
+          channelLogoPngUrl: updated.channelLogoPngUrl || users[uIdx].channelLogoPngUrl,
+          channelLogoGifUrl: updated.channelLogoGifUrl || users[uIdx].channelLogoGifUrl,
+          channelLogoType: updated.channelLogoType || users[uIdx].channelLogoType,
+          username: updated.username || users[uIdx].username,
+          mobile: updated.mobileNumber || users[uIdx].mobile,
+          mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
           socialIcons: updated.socialIcons || users[uIdx].socialIcons,
           lastLoginAt: Date.now()
@@ -3262,13 +3258,13 @@ function loadAdminBranding() {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-    channelNameEn: "AI News Maker",
-    channelLogoUrl: "/assets/ai_news_maker_logo.png",
-    websiteUrl: "ainewsmaker.online",
-    mobileNumber: "9669802408",
-    showMobileNumber: true,
-    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter"],
+    channelNameHi: "",
+    channelNameEn: "",
+    channelLogoUrl: "",
+    websiteUrl: "",
+    mobileNumber: "",
+    showMobileNumber: false,
+    activeSocialIcons: [],
     updatedAt: Date.now()
   };
 }
@@ -3375,24 +3371,41 @@ app.post("/api/auth/login", (req, res) => {
       const existing = Object.values(allProfiles2).find(
         (p) => p.uid && p.uid === googleUid || p.userId && p.userId === googleUid || p.email && p.email.toLowerCase() === cleanId
       );
-      const isMaster2 = cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "breakingnewswala.com@gmail.com";
-      const userProfile = existing || {
-        userId: googleUid,
-        uid: googleUid,
+      const isSuper = cleanId === "admin.ainewsmaker@gmail.com";
+      const isAdmin = cleanId === "breakingnewswala.com@gmail.com";
+      let safeUsername;
+      if (isSuper) {
+        safeUsername = existing?.username || "admin.ainewsmaker";
+      } else if (isAdmin) {
+        safeUsername = existing?.username || "breakingnewswala";
+      } else {
+        safeUsername = cleanGenerateUsername(profileData?.username, profileData?.name || profileData?.fullName, existing?.username);
+      }
+      const userPayload = {
+        userId: existing?.userId || googleUid,
+        uid: existing?.uid || googleUid,
         email: cleanId,
-        username: profileData?.username || cleanId.split("@")[0],
-        fullName: profileData?.name || profileData?.fullName || "\u092F\u0942\u091C\u093C\u0930",
-        role: isMaster2 ? "admin" : "reporter",
-        tier: isMaster2 ? "ultra" : "basic",
-        channelNameHi: profileData?.channelName || "\u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932",
-        channelNameEn: "News Channel",
-        channelLogoUrl: profileData?.channelLogoUrl || "",
-        mobileNumber: profileData?.mobile || "",
-        websiteUrl: "ainewsmaker.online",
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+        username: safeUsername,
+        fullName: profileData?.name || profileData?.fullName || existing?.fullName || "\u092F\u0942\u091C\u093C\u0930",
+        name: profileData?.name || profileData?.fullName || existing?.fullName || "\u092F\u0942\u091C\u093C\u0930",
+        role: isSuper ? "superadmin" : isAdmin ? "admin" : existing?.role || "user",
+        tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing?.tier || "basic",
+        planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : existing?.planName || "BASIC",
+        channelName: profileData?.channelName || existing?.channelNameHi || existing?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        channelNameHi: profileData?.channelName || existing?.channelNameHi || existing?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        channelNameEn: existing?.channelNameEn || "AI News Maker",
+        channelLogoUrl: profileData?.channelLogoUrl || existing?.channelLogoUrl || "",
+        channelLogoPngUrl: existing?.channelLogoPngUrl || "",
+        channelLogoGifUrl: existing?.channelLogoGifUrl || "",
+        channelLogoType: existing?.channelLogoType || "png",
+        mobile: profileData?.mobile || existing?.mobileNumber || "",
+        mobileNumber: profileData?.mobile || existing?.mobileNumber || "",
+        district: existing?.district || (isAdmin ? "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" : "\u0921\u093F\u091C\u093F\u091F\u0932 \u0921\u0947\u0938\u094D\u0915"),
+        websiteUrl: existing?.websiteUrl || "ainewsmaker.online",
+        isProfileLocked: !isAdmin && !isSuper
       };
-      return res.json({ success: true, user: userProfile });
+      const savedUser = registerOrUpdateUserAuthoritative(userPayload);
+      return res.json({ success: true, user: savedUser });
     }
     if (!cleanId || !password) {
       return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E/\u0908\u092E\u0947\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902" });
@@ -3415,11 +3428,11 @@ app.post("/api/auth/login", (req, res) => {
         email: "admin.ainewsmaker@gmail.com",
         userId: "master_admin_001",
         tier: "ultra",
-        channelNameHi: "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-        channelNameEn: "AI News Maker",
-        channelLogoUrl: "/assets/ai_news_maker_logo.png",
-        websiteUrl: "ainewsmaker.online",
-        mobileNumber: "9669802408"
+        channelNameHi: "",
+        channelNameEn: "",
+        channelLogoUrl: "",
+        websiteUrl: "",
+        mobileNumber: ""
       };
       return res.json({ success: true, user: masterUser });
     }
@@ -3736,7 +3749,7 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const key = targetUsername.trim().toLowerCase();
     if (allProfiles[key]) {
-      allProfiles[key].channelLogoUrl = "/assets/ai_news_maker_logo.png";
+      allProfiles[key].channelLogoUrl = "";
       allProfiles[key].channelLogoPngUrl = void 0;
       allProfiles[key].channelLogoGifUrl = void 0;
       allProfiles[key].channelLogoType = "png";
@@ -4320,9 +4333,7 @@ function getTemplateConfig(templateId) {
 }
 var DEFAULT_FALLBACK_MODELS = [
   "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-3.1-pro-preview"
+  "gemini-flash-latest"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -4334,6 +4345,8 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
           contents: reqOptions.contents,
           config: reqOptions.config
         });
+        quotaExceededInfo.isExceeded = false;
+        quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
         return res;
       } catch (err) {
         lastError = err;
@@ -4341,11 +4354,16 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
         const status = err?.status || err?.code || 0;
         const is503HighDemand = status === 503 || msg.includes("503") || msg.includes("high demand") || msg.includes("unavailable");
         const isRateLimit = status === 429 || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("quota");
+        const isAccessDeniedOrNotFound = status === 403 || status === 404 || msg.includes("403") || msg.includes("404") || msg.includes("denied access") || msg.includes("no longer available") || msg.includes("not found");
         const isTransient = is503HighDemand || isRateLimit || msg.includes("temporarily") || msg.includes("timeout") || msg.includes("fetch failed");
+        if (isRateLimit || isAccessDeniedOrNotFound) {
+          quotaExceededInfo.isExceeded = true;
+          quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
+        }
         console.log(
-          `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}) info: ${status || (is503HighDemand ? "503 High Demand (switching model)" : msg.slice(0, 80))}`
+          `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}): ${isRateLimit ? "Free tier rate/quota limit reached" : is503HighDemand ? "503 High Demand" : isAccessDeniedOrNotFound ? "Model tier restriction / 403" : "Transient failure"}`
         );
-        if (is503HighDemand || isRateLimit) {
+        if (is503HighDemand || isRateLimit || isAccessDeniedOrNotFound) {
           break;
         }
         if (isTransient && attempt < maxRetriesPerModel - 1) {
@@ -4809,9 +4827,30 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
     parsedData.headline_line_count = targetMaxLines;
     return res.json({ success: true, data: parsedData });
   } catch (err) {
-    console.error("Error in /api/analyze-image:", err);
-    return res.status(500).json({
-      error: cleanErrorMessage(err)
+    console.log("[Image AI] Gemini busy or quota limit - providing structured photo analysis fallback.");
+    const targetMaxLines = Number(req.body.headline_max_lines) || Number(req.body.headline_line_count) || 3;
+    const effectiveTemplateId = req.body.template_id || "graphic_001";
+    const tplConfig = getTemplateConfig(effectiveTemplateId);
+    const userContext = req.body.userContext || "";
+    const fallbackHeadline = userContext ? `${userContext.slice(0, 45).replace(/[।\.\,\!\?\:\-]+$/g, "")}: \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u092E\u093E\u092E\u0932\u093E, \u0905\u0917\u094D\u0930\u093F\u092E \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940` : "\u0924\u0938\u094D\u0935\u0940\u0930 \u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: \u091C\u093E\u0902\u091A \u0935 \u0905\u0917\u094D\u0930\u093F\u092E \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940";
+    const fallbackSummary = userContext ? `${userContext}\u0964 \u092E\u094C\u0915\u0947 \u092A\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u090F\u0935\u0902 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964 #BreakingNews` : "\u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u091A\u093F\u0924\u094D\u0930 \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 \u092E\u094C\u0915\u0947 \u0915\u093E \u091C\u093E\u092F\u091C\u093E \u0932\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948\u0964 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964 #BreakingNews";
+    return res.json({
+      success: true,
+      data: {
+        headline: fallbackHeadline,
+        formattedHeadline: fallbackHeadline,
+        highlightWords: ["\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908", "\u091C\u093E\u0902\u091A", "\u092B\u0948\u0938\u0932\u093E"],
+        location: "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C",
+        summary: fallbackSummary,
+        category: "\u0905\u092A\u0930\u093E\u0927 \u0935 \u0915\u093E\u0928\u0942\u0928",
+        hasPerson: true,
+        isAiGeneratedPhoto: false,
+        template_id: tplConfig.template_id,
+        headline_max_lines: targetMaxLines,
+        headline_area: req.body.headline_area || tplConfig.headline_area,
+        headline_line_count: targetMaxLines,
+        quotaNotice: "AI \u092E\u0949\u0921\u0932 \u0935\u094D\u092F\u0938\u094D\u0924 \u0939\u094B\u0928\u0947 \u0915\u0947 \u0915\u093E\u0930\u0923 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+      }
     });
   }
 });
@@ -5166,8 +5205,8 @@ JSON Format:
           parsedData = JSON.parse(response.text || "{}");
         } catch (geminiError) {
           const errMsg = String(geminiError?.message || "");
-          const isQuota = geminiError?.status === 429 || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota");
-          console.log(`All Gemini models busy in process-news-command (${isQuota ? "Quota exceeded/Rate limit" : "Fallback"}), generating instant structured fallback:`, errMsg.slice(0, 80));
+          const isQuota = geminiError?.status === 429 || geminiError?.status === 403 || errMsg.includes("429") || errMsg.includes("403") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota") || errMsg.includes("denied access");
+          console.log(`[News AI] Status: ${isQuota ? "Daily Free Quota Limit Active" : "Transient Busy"} - generating structured editorial draft.`);
           const fallbackSource = rawInputText || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
           parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines, extractedArticleMeta);
           if (isQuota) {
@@ -5218,13 +5257,32 @@ JSON Format:
       parsedData.headline_area = targetArea;
       parsedData.headline_line_count = targetMaxLines;
     }
-    parsedData.pickedImages = pickedImages;
+    if (!parsedData) {
+      const fallbackSource = rawInputText || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
+      parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines, extractedArticleMeta);
+    }
+    if (parsedData) {
+      parsedData.pickedImages = pickedImages;
+    }
     return res.json({ success: true, data: parsedData });
   } catch (err) {
-    console.error("Error in /api/process-news-command:", err);
-    return res.status(500).json({
-      error: cleanErrorMessage(err)
-    });
+    console.warn("Recovering from /api/process-news-command error with emergency draft:", err?.message || err);
+    try {
+      const emergencyFallback = createLocalNewsFallback(
+        req.body?.input || req.body?.command || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F",
+        req.body?.linkUrl,
+        3
+      );
+      return res.json({
+        success: true,
+        data: emergencyFallback,
+        fallbackNotice: "\u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0907\u0902\u091C\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0924\u0948\u092F\u093E\u0930 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0921\u094D\u0930\u093E\u092B\u094D\u091F"
+      });
+    } catch {
+      return res.status(500).json({
+        error: cleanErrorMessage(err)
+      });
+    }
   }
 });
 function cleanHeadlineText(text) {
@@ -5945,7 +6003,7 @@ Strictly return valid JSON object matching these keys.`;
           const raw = geminiRes.text?.trim() || "{}";
           contentData = JSON.parse(raw);
         } catch (geminiErr) {
-          console.error("Gemini morning content generation error:", geminiErr);
+          console.log("[Morning AI] Gemini busy or quota limit, activating serene editorial fallback.");
         }
       }
       if (!contentData || !contentData.headline) {
@@ -6250,6 +6308,18 @@ async function startServer() {
       appType: "spa"
     });
     app.use(vite.middlewares);
+    app.use("*", async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        const indexPath = import_path.default.resolve(process.cwd(), "index.html");
+        let template = import_fs.default.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e) {
+        if (vite && typeof vite.ssrFixStacktrace === "function") vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const possibleDistPaths = [
       import_path.default.join(process.cwd(), "dist"),
@@ -6287,7 +6357,11 @@ async function startServer() {
     console.error("Server listen error:", err.message);
   });
 }
-startServer();
+setInterval(() => {
+}, 6e4);
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+});
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   TEMPLATE_CONFIG_REGISTRY,

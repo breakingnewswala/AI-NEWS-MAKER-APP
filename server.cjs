@@ -416,6 +416,550 @@ var require_server_firestore_adapter = __commonJS({
   }
 });
 
+// ../server_firestore_adapter.cjs
+var require_server_firestore_adapter2 = __commonJS({
+  "../server_firestore_adapter.cjs"(exports2, module2) {
+    var http = require("http");
+    var https = require("https");
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var firebaseConfig = null;
+    try {
+      const cfgPath = path2.join(process.cwd(), "firebase-applet-config.json");
+      if (fs2.existsSync(cfgPath)) {
+        firebaseConfig = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
+      }
+    } catch {
+    }
+    var PROJECT_ID = process.env.FIREBASE_PROJECT_ID || firebaseConfig?.projectId || "ai-news-maker-app";
+    var DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
+    var STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBucket || "ai-news-maker-app.firebasestorage.app";
+    var USE_FIRESTORE = process.env.USE_FIRESTORE === "true";
+    function getMetadataAccessToken() {
+      return new Promise((resolve) => {
+        const req = http.get(
+          {
+            host: "metadata.google.internal",
+            path: "/computeMetadata/v1/instance/service-accounts/default/token",
+            headers: { "Metadata-Flavor": "Google" },
+            timeout: 2500
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => data += c);
+            res.on("end", () => {
+              try {
+                const parsed = JSON.parse(data);
+                resolve(parsed.access_token || null);
+              } catch {
+                resolve(null);
+              }
+            });
+          }
+        );
+        req.on("error", () => resolve(null));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve(null);
+        });
+      });
+    }
+    function getRuntimeServiceAccount() {
+      return new Promise((resolve) => {
+        const req = http.get(
+          {
+            host: "metadata.google.internal",
+            path: "/computeMetadata/v1/instance/service-accounts/default/email",
+            headers: { "Metadata-Flavor": "Google" },
+            timeout: 2500
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => data += c);
+            res.on("end", () => resolve(data.trim() || "unknown"));
+          }
+        );
+        req.on("error", () => resolve("unknown"));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve("unknown");
+        });
+      });
+    }
+    function toFirestoreField(val) {
+      if (val === null || val === void 0) return { nullValue: null };
+      if (typeof val === "boolean") return { booleanValue: val };
+      if (typeof val === "number") {
+        if (Number.isInteger(val)) return { integerValue: String(val) };
+        return { doubleValue: val };
+      }
+      if (typeof val === "string") return { stringValue: val };
+      if (Array.isArray(val)) {
+        return { arrayValue: { values: val.map(toFirestoreField) } };
+      }
+      if (typeof val === "object") {
+        const fields = {};
+        for (const [k, v] of Object.entries(val)) {
+          if (v !== void 0) fields[k] = toFirestoreField(v);
+        }
+        return { mapValue: { fields } };
+      }
+      return { stringValue: String(val) };
+    }
+    function fromFirestoreField(field) {
+      if (!field || typeof field !== "object") return null;
+      if ("stringValue" in field) return field.stringValue;
+      if ("booleanValue" in field) return field.booleanValue;
+      if ("integerValue" in field) return parseInt(field.integerValue, 10);
+      if ("doubleValue" in field) return field.doubleValue;
+      if ("nullValue" in field) return null;
+      if ("arrayValue" in field) {
+        const items = field.arrayValue?.values || [];
+        return items.map(fromFirestoreField);
+      }
+      if ("mapValue" in field) {
+        const res = {};
+        for (const [k, v] of Object.entries(field.mapValue?.fields || {})) {
+          res[k] = fromFirestoreField(v);
+        }
+        return res;
+      }
+      return null;
+    }
+    function fromFirestoreDoc(doc) {
+      if (!doc || !doc.fields) return null;
+      const res = {};
+      for (const [k, v] of Object.entries(doc.fields)) {
+        res[k] = fromFirestoreField(v);
+      }
+      return res;
+    }
+    async function firestoreWriteDoc(collection, docId, data) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const fields = {};
+      for (const [k, v] of Object.entries(data)) {
+        if (v !== void 0) fields[k] = toFirestoreField(v);
+      }
+      const payload = JSON.stringify({ fields });
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(payload)
+            },
+            timeout: 4e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                resolve({ success: true, statusCode: res.statusCode });
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.write(payload);
+        req.end();
+      });
+    }
+    async function firestoreReadDoc(collection, docId) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            timeout: 4e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  const data = fromFirestoreDoc(parsed);
+                  resolve({ success: true, data, rawDoc: parsed, statusCode: res.statusCode });
+                } catch {
+                  resolve({ success: true, statusCode: res.statusCode });
+                }
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.end();
+      });
+    }
+    async function uploadToFirebaseStorage(destinationPath, buffer, contentType = "image/png") {
+      const token = await getMetadataAccessToken();
+      if (!token) {
+        return { success: false, error: "No access token for Firebase Storage" };
+      }
+      const encodedPath = encodeURIComponent(destinationPath);
+      const uploadUrl = `/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}&uploadType=media`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firebasestorage.googleapis.com",
+            path: uploadUrl,
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": contentType,
+              "Content-Length": buffer.length
+            },
+            timeout: 8e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  const publicDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedPath}?alt=media`;
+                  resolve({ success: true, url: publicDownloadUrl, data: parsed });
+                } catch {
+                  resolve({ success: true });
+                }
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.write(buffer);
+        req.end();
+      });
+    }
+    async function runDiagnosticSelfTest() {
+      const sa = await getRuntimeServiceAccount();
+      const testId = `diag_ping_${Date.now()}`;
+      const testPayload = {
+        diagnosticPing: "ok",
+        testedAt: Date.now(),
+        serviceAccount: sa,
+        databaseId: DATABASE_ID
+      };
+      const writeRes = await firestoreWriteDoc("system_health", testId, testPayload);
+      if (!writeRes.success) {
+        return {
+          success: false,
+          stage: "write",
+          serviceAccount: sa,
+          databaseId: DATABASE_ID,
+          statusCode: writeRes.statusCode,
+          error: writeRes.error || "Write failed"
+        };
+      }
+      const readRes = await firestoreReadDoc("system_health", testId);
+      if (!readRes.success) {
+        return {
+          success: false,
+          stage: "read",
+          serviceAccount: sa,
+          databaseId: DATABASE_ID,
+          statusCode: readRes.statusCode,
+          error: readRes.error || "Read failed"
+        };
+      }
+      return {
+        success: true,
+        stage: "complete",
+        serviceAccount: sa,
+        databaseId: DATABASE_ID,
+        writtenId: testId,
+        verifiedData: readRes.data
+      };
+    }
+    module2.exports = {
+      PROJECT_ID,
+      DATABASE_ID,
+      STORAGE_BUCKET,
+      USE_FIRESTORE,
+      getMetadataAccessToken,
+      getRuntimeServiceAccount,
+      firestoreWriteDoc,
+      firestoreReadDoc,
+      uploadToFirebaseStorage,
+      runDiagnosticSelfTest
+    };
+    async function firestoreDeleteDoc(collection, docId) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            timeout: 4e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                resolve({ success: true, statusCode: res.statusCode });
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.end();
+      });
+    }
+    async function firestoreListDocs(collection, pageSize = 100) {
+      const token = await getMetadataAccessToken();
+      if (!token) return { success: false, error: "No access token available" };
+      const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}?pageSize=${pageSize}`;
+      return new Promise((resolve) => {
+        const req = https.request(
+          {
+            host: "firestore.googleapis.com",
+            path: docPath,
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`
+            },
+            timeout: 5e3
+          },
+          (res) => {
+            let body = "";
+            res.on("data", (d) => body += d);
+            res.on("end", () => {
+              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                try {
+                  const parsed = JSON.parse(body);
+                  const documents = (parsed.documents || []).map((doc) => {
+                    const data = fromFirestoreDoc(doc);
+                    const parts = (doc.name || "").split("/");
+                    const id = parts[parts.length - 1];
+                    return { id, ...data };
+                  });
+                  resolve({ success: true, documents, statusCode: res.statusCode });
+                } catch (e) {
+                  resolve({ success: false, error: e.message });
+                }
+              } else {
+                resolve({ success: false, statusCode: res.statusCode, error: body });
+              }
+            });
+          }
+        );
+        req.on("error", (err) => resolve({ success: false, error: err.message }));
+        req.on("timeout", () => {
+          req.destroy();
+          resolve({ success: false, error: "timeout" });
+        });
+        req.end();
+      });
+    }
+    module2.exports.firestoreDeleteDoc = firestoreDeleteDoc;
+    module2.exports.firestoreListDocs = firestoreListDocs;
+  }
+});
+
+// ../migrate_json_to_firestore.cjs
+var require_migrate_json_to_firestore = __commonJS({
+  "../migrate_json_to_firestore.cjs"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var adapter = fs2.existsSync("./web_studio/server_firestore_adapter.cjs") ? require_server_firestore_adapter() : require_server_firestore_adapter2();
+    function backupSourceDatabases() {
+      const timestamp = Date.now();
+      const backupDir = path2.resolve(process.cwd(), `backups_phase5/migration_pre_backup_${timestamp}`);
+      try {
+        fs2.mkdirSync(backupDir, { recursive: true });
+        const filesToBackup = [
+          "user_profiles_db.json",
+          "news_database.json",
+          "rss_sources_database.json",
+          "drafts_database.json",
+          "account_deletion_requests.json"
+        ];
+        let copied = 0;
+        for (const f of filesToBackup) {
+          if (fs2.existsSync(f)) {
+            fs2.copyFileSync(f, path2.join(backupDir, f));
+            copied++;
+          }
+        }
+        console.log(`[Backup] Successfully created snapshot of ${copied} database files in ${backupDir}`);
+        return { success: true, backupDir, copied };
+      } catch (err) {
+        console.error("[Backup Failed] Aborting migration:", err.message);
+        return { success: false, error: err.message };
+      }
+    }
+    async function migrate({ dryRun = true } = {}) {
+      console.log(`=== Starting JSON-to-Firestore Migration (DRY_RUN=${dryRun}) ===`);
+      console.log("Project:", adapter.PROJECT_ID);
+      console.log("Database:", adapter.DATABASE_ID);
+      if (!dryRun) {
+        const backupRes = backupSourceDatabases();
+        if (!backupRes.success) {
+          throw new Error(`Migration aborted: Backup creation failed (${backupRes.error})`);
+        }
+      } else {
+        console.log("[Dry Run Mode] No writes, modifications or destructive operations will occur.");
+      }
+      const stats = {
+        users: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
+        news: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
+        rss: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
+        deletionRequests: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 }
+      };
+      if (fs2.existsSync("user_profiles_db.json")) {
+        const users = JSON.parse(fs2.readFileSync("user_profiles_db.json", "utf8") || "{}");
+        const userKeys = Object.keys(users);
+        stats.users.total = userKeys.length;
+        for (const [key, profile] of Object.entries(users)) {
+          const docId = (profile.uid || profile.userId || key).toLowerCase().trim();
+          let existing = { success: false };
+          try {
+            existing = await adapter.firestoreReadDoc("users", docId);
+          } catch (e) {
+            existing = { success: false, error: e.message };
+          }
+          if (existing.success && existing.data) {
+            stats.users.wouldSkip++;
+            console.log(`  [User] Skip: Document '${docId}' already exists in Firestore`);
+          } else {
+            stats.users.wouldCreate++;
+            if (!dryRun) {
+              const res = await adapter.firestoreWriteDoc("users", docId, {
+                ...profile,
+                docId,
+                migratedAt: Date.now()
+              });
+              if (!res.success) {
+                console.error(`  [User Error] Failed to write docId ${docId}:`, res.error);
+              }
+            }
+          }
+        }
+      }
+      if (fs2.existsSync("news_database.json")) {
+        const posts = JSON.parse(fs2.readFileSync("news_database.json", "utf8") || "[]");
+        stats.news.total = posts.length;
+        for (const p of posts) {
+          const docId = p.id;
+          if (!docId) {
+            stats.news.conflicts++;
+            continue;
+          }
+          let existing = { success: false };
+          try {
+            existing = await adapter.firestoreReadDoc("news_posts", docId);
+          } catch (e) {
+            existing = { success: false, error: e.message };
+          }
+          if (existing.success && existing.data) {
+            stats.news.wouldSkip++;
+          } else {
+            stats.news.wouldCreate++;
+            if (!dryRun) {
+              const res = await adapter.firestoreWriteDoc("news_posts", docId, {
+                ...p,
+                migratedAt: Date.now()
+              });
+              if (!res.success) {
+                console.error(`  [News Error] Failed to write docId ${docId}:`, res.error);
+              }
+            }
+          }
+        }
+      }
+      if (fs2.existsSync("account_deletion_requests.json")) {
+        const delReqs = JSON.parse(fs2.readFileSync("account_deletion_requests.json", "utf8") || "[]");
+        stats.deletionRequests.total = delReqs.length;
+        for (const r of delReqs) {
+          const docId = r.id || `DEL_${Date.now()}`;
+          let existing = { success: false };
+          try {
+            existing = await adapter.firestoreReadDoc("account_deletion_requests", docId);
+          } catch (e) {
+            existing = { success: false, error: e.message };
+          }
+          if (existing.success && existing.data) {
+            stats.deletionRequests.wouldSkip++;
+          } else {
+            stats.deletionRequests.wouldCreate++;
+            if (!dryRun) {
+              await adapter.firestoreWriteDoc("account_deletion_requests", docId, {
+                ...r,
+                migratedAt: Date.now()
+              });
+            }
+          }
+        }
+      }
+      console.log("=== Migration Summary Report ===");
+      console.log("Users:", stats.users);
+      console.log("News Posts:", stats.news);
+      console.log("Account Deletions:", stats.deletionRequests);
+      console.log(`Dry Run Complete (Writes Performed: ${dryRun ? 0 : "Yes"})`);
+      return stats;
+    }
+    if (require.main === module2) {
+      const isLive = process.argv.includes("--live");
+      migrate({ dryRun: !isLive }).then((stats) => {
+        console.log("Finished with stats:", stats);
+        process.exit(0);
+      }).catch((err) => {
+        console.error("Migration failed:", err);
+        process.exit(1);
+      });
+    } else {
+      module2.exports = { migrate, backupSourceDatabases };
+    }
+  }
+});
+
 // server.ts
 var server_exports = {};
 __export(server_exports, {
@@ -4131,7 +4675,7 @@ app.get("/api/admin/diagnostic/firestore-test", async (req, res) => {
     try {
       adapter = require_server_firestore_adapter();
     } catch {
-      adapter = require("../web_studio/server_firestore_adapter.cjs");
+      adapter = require_server_firestore_adapter();
     }
     const result = await adapter.runDiagnosticSelfTest();
     return res.json({
@@ -4150,7 +4694,7 @@ app.post("/api/admin/migration/run-firestore-sync", async (req, res) => {
     if (!authCheck.authorized) {
       return res.status(authCheck.status).json({ error: authCheck.error });
     }
-    const { migrate } = require("../migrate_json_to_firestore.cjs");
+    const { migrate } = require_migrate_json_to_firestore();
     const isLive = req.body && req.body.live === true;
     const result = await migrate({ dryRun: !isLive });
     return res.json({

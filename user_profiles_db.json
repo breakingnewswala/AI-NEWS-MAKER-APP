@@ -12,10 +12,11 @@
     "channelNameEn": "AI News Maker",
     "channelLogoUrl": "/assets/ai_news_maker_logo.png",
     "channelLogoPngUrl": "/assets/ai_news_maker_logo.png",
+    "channelLogoGifUrl": "",
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1791902222335
+    "updatedAt": 1791956320859
   },
   "breakingnewswala.com@gmail.com": {
     "username": "breakingnewswala",
@@ -30,9 +31,10 @@
     "channelNameEn": "AI News Maker",
     "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
     "channelLogoPngUrl": "/assets/breaking_news_wala_logo.png",
+    "channelLogoGifUrl": "",
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1791902222335
+    "updatedAt": 1791956320864
   }
 }

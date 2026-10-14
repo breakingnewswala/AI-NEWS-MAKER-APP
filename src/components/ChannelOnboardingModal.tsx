@@ -94,9 +94,6 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
   const [showWebsite, setShowWebsite] = useState<boolean>(
     initialProfile?.showWebsite ?? true
   );
-  const [showWebsite, setShowWebsite] = useState<boolean>(
-    initialProfile?.showWebsite ?? true
-  );
 
   // Logo Cropper Modal State
   const [cropperRawImage, setCropperRawImage] = useState<string>('');

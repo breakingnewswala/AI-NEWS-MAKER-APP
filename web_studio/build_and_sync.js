@@ -11,7 +11,27 @@ console.log('====================================================');
 console.log('🚀 Building AI News Maker (Web Studio + Assets)...');
 console.log('====================================================');
 
-// 1. Run web_studio build
+// 1. Ensure web_studio dependencies exist
+const webStudioNodeModules = path.join(__dirname, 'node_modules');
+if (!fs.existsSync(webStudioNodeModules)) {
+  console.log('📦 Installing web_studio dependencies...');
+  try {
+    execSync('npm install --prefer-offline --no-audit', {
+      cwd: __dirname,
+      stdio: 'inherit',
+      shell: true,
+    });
+  } catch (err) {
+    console.warn('⚠️ Fallback to standard npm install:', err.message);
+    execSync('npm install', {
+      cwd: __dirname,
+      stdio: 'inherit',
+      shell: true,
+    });
+  }
+}
+
+// 2. Run web_studio build
 console.log('📦 Step 1: Compiling web_studio frontend & server...');
 execSync('npm run build', {
   cwd: __dirname,
