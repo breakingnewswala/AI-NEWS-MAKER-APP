@@ -11,6 +11,7 @@ import {
   drawInvestigationHeader,
   drawQuoteHeader,
 } from './HeaderDesigns';
+import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 
 // Polyfill CanvasRenderingContext2D.prototype.roundRect for all browsers and Android WebViews
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
@@ -6117,7 +6118,7 @@ async function drawThemeFooterBar(
   if (rawIcons.includes('youtube')) icons.push('youtube');
   icons.push('facebook');
   icons.push('instagram');
-  if (rawIcons.includes('twitter')) icons.push('twitter');
+  if (rawIcons.includes('twitter') || rawIcons.includes('x')) icons.push(rawIcons.includes('x') ? 'x' : 'twitter');
   if (rawIcons.includes('linkedin')) icons.push('linkedin');
 
   // Base typography & sizing - Noticeably larger text (Task 2 & User Request)
@@ -6186,76 +6187,39 @@ async function drawThemeFooterBar(
 
   const iconCache: Record<string, HTMLImageElement> = {};
   await Promise.all(
-    [...icons, 'whatsapp', 'website'].map(async (key) => {
+    ['facebook', 'instagram', 'twitter', 'x', 'youtube', 'linkedin', 'whatsapp', 'website'].map(async (key) => {
       try {
-        iconCache[key] = await loadImage(`/assets/icons/${key}.png`);
-      } catch {}
+        const src = getSocialIconSrc(key);
+        iconCache[key] = await loadImage(src);
+      } catch (err) {
+        console.warn(`Failed to preload icon ${key}:`, err);
+      }
     })
   );
 
-  // Helper to draw original icon without circular clipping (Task 1)
+  // Helper to draw authentic original icon without circular clipping or distortion
   const drawOriginalIcon = (x: number, type: string) => {
-    if (iconCache[type]) {
+    const directKey = (type === 'twitter' || type === 'x') ? (iconCache['x'] ? 'x' : 'twitter') : type;
+    const img = iconCache[directKey] || iconCache[type];
+    if (img && img.naturalWidth > 0) {
       ctx.save();
-      // Draw original icon with natural aspect ratio and transparency (NO circular crop, NO ctx.clip)
-      ctx.drawImage(iconCache[type], x, iconY - iconRadius, finalIconDiam, finalIconDiam);
+      // Draw authentic 512x512 icon preserving natural shape and transparency
+      ctx.drawImage(img, x, iconY - iconRadius, finalIconDiam, finalIconDiam);
       ctx.restore();
       return;
     }
 
-    ctx.save();
-    if (footerIconStyle === 'dark') {
-      ctx.fillStyle = '#000000';
-    } else if (footerIconStyle === 'neutral') {
-      ctx.fillStyle = isLightBg ? '#E2E8F0' : 'rgba(255, 255, 255, 0.2)';
-    } else {
-      if (type === 'youtube') ctx.fillStyle = '#FF0000';
-      else if (type === 'facebook') ctx.fillStyle = '#1877F2';
-      else if (type === 'instagram') ctx.fillStyle = '#E1306C';
-      else if (type === 'twitter') ctx.fillStyle = '#000000';
-      else if (type === 'linkedin') ctx.fillStyle = '#0A66C2';
-      else if (type === 'whatsapp') ctx.fillStyle = '#25D366';
-      else ctx.fillStyle = '#000000';
+    const dataUri = SOCIAL_ICONS_DATA[type] || (type === 'twitter' ? SOCIAL_ICONS_DATA.x : undefined);
+    if (dataUri) {
+      const syncImg = new Image();
+      syncImg.src = dataUri;
+      if (syncImg.complete && syncImg.naturalWidth > 0) {
+        ctx.save();
+        ctx.drawImage(syncImg, x, iconY - iconRadius, finalIconDiam, finalIconDiam);
+        ctx.restore();
+        return;
+      }
     }
-    ctx.fillRect(x, iconY - iconRadius, finalIconDiam, finalIconDiam);
-
-    const glyphColor = footerIconStyle === 'neutral'
-      ? (isLightBg ? '#334155' : '#FFFFFF')
-      : '#FFFFFF';
-
-    ctx.fillStyle = glyphColor;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const sz = iconRadius;
-    if (type === 'instagram') {
-      ctx.strokeStyle = glyphColor;
-      ctx.lineWidth = Math.max(1, sz * 0.14);
-      ctx.strokeRect(x + iconRadius - sz * 0.5, iconY - sz * 0.5, sz, sz);
-      ctx.beginPath();
-      ctx.arc(x + iconRadius, iconY, sz * 0.25, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (type === 'facebook') {
-      ctx.font = `bold ${Math.round(sz * 1.3)}px Arial, sans-serif`;
-      ctx.fillText('f', x + iconRadius, iconY + 1);
-    } else if (type === 'twitter') {
-      ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
-      ctx.fillText('𝕏', x + iconRadius, iconY);
-    } else if (type === 'youtube') {
-      ctx.beginPath();
-      ctx.moveTo(x + iconRadius - sz * 0.35, iconY - sz * 0.4);
-      ctx.lineTo(x + iconRadius + sz * 0.45, iconY);
-      ctx.lineTo(x + iconRadius - sz * 0.35, iconY + sz * 0.4);
-      ctx.closePath();
-      ctx.fill();
-    } else if (type === 'linkedin') {
-      ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
-      ctx.fillText('in', x + iconRadius, iconY);
-    } else if (type === 'whatsapp') {
-      ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
-      ctx.fillText('📞', x + iconRadius, iconY);
-    }
-    ctx.restore();
   };
 
   // 1. Draw Social Icons
@@ -6287,13 +6251,20 @@ async function drawThemeFooterBar(
       curX += finalSepWidth + finalSepMargin;
     }
 
-    // Website icon (original uncropped)
-    if (iconCache['website']) {
-      ctx.drawImage(iconCache['website'], curX, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
+    // Website icon (authentic uncropped)
+    const webImg = iconCache['website'];
+    if (webImg && webImg.naturalWidth > 0) {
+      ctx.drawImage(webImg, curX, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
     } else {
-      ctx.fillStyle = isLightBg ? '#2563EB' : '#60A5FA';
-      ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
-      ctx.fillText('🌐', curX, iconY);
+      const syncImg = new Image();
+      syncImg.src = SOCIAL_ICONS_DATA.website;
+      if (syncImg.complete && syncImg.naturalWidth > 0) {
+        ctx.drawImage(syncImg, curX, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
+      } else {
+        ctx.fillStyle = isLightBg ? '#2563EB' : '#60A5FA';
+        ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
+        ctx.fillText('🌐', curX, iconY);
+      }
     }
     curX += finalWebIconWidth + 6;
 
@@ -6314,13 +6285,20 @@ async function drawThemeFooterBar(
       curX += finalSepWidth + finalSepMargin;
     }
 
-    // Phone / WhatsApp icon (original uncropped, NO circular clip)
-    if (iconCache['whatsapp']) {
-      ctx.drawImage(iconCache['whatsapp'], curX, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
+    // Phone / WhatsApp icon (authentic uncropped, NO circular clip)
+    const phoneImg = iconCache['whatsapp'];
+    if (phoneImg && phoneImg.naturalWidth > 0) {
+      ctx.drawImage(phoneImg, curX, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
     } else {
-      ctx.fillStyle = isLightBg ? '#059669' : '#34D399';
-      ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
-      ctx.fillText('📞', curX, iconY);
+      const syncImg = new Image();
+      syncImg.src = SOCIAL_ICONS_DATA.whatsapp;
+      if (syncImg.complete && syncImg.naturalWidth > 0) {
+        ctx.drawImage(syncImg, curX, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
+      } else {
+        ctx.fillStyle = isLightBg ? '#059669' : '#34D399';
+        ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
+        ctx.fillText('📞', curX, iconY);
+      }
     }
     curX += finalPhoneIconWidth + 6;
 

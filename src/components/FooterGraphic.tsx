@@ -1,4 +1,5 @@
 import React from 'react';
+import { getSocialIconSrc } from '../lib/socialIconsData';
 
 export interface FooterGraphicProps {
   channelName?: string;
@@ -37,6 +38,7 @@ const ICON_PATHS: Record<string, string> = {
   facebook: '/assets/icons/facebook.png',
   instagram: '/assets/icons/instagram.png',
   twitter: '/assets/icons/twitter.png',
+  x: '/assets/icons/x.png',
   youtube: '/assets/icons/youtube.png',
   linkedin: '/assets/icons/linkedin.png',
   whatsapp: '/assets/icons/whatsapp.png',
@@ -94,7 +96,9 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   // Facebook & Instagram are ALWAYS active and locked
   socialIconsList.push('facebook');
   socialIconsList.push('instagram');
-  if (activeSocialIcons.includes('twitter')) socialIconsList.push('twitter');
+  if (activeSocialIcons.includes('twitter') || activeSocialIcons.includes('x')) {
+    socialIconsList.push(activeSocialIcons.includes('x') ? 'x' : 'twitter');
+  }
   if (activeSocialIcons.includes('linkedin')) socialIconsList.push('linkedin');
 
   // 2. Website Element (Element 2) - Only if provided & enabled, no defaults
@@ -157,13 +161,13 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
             {socialIconsList.map((platform) => (
               <img
                 key={platform}
-                src={ICON_PATHS[platform] || `/assets/icons/${platform}.png`}
+                src={getSocialIconSrc(platform)}
                 alt={platform}
                 className={`${iconSizeClass} object-contain shrink-0`}
                 loading="eager"
                 onError={(e) => {
                   const target = e.currentTarget;
-                  target.src = `/assets/icons/${platform}.svg`;
+                  target.src = ICON_PATHS[platform] || `/assets/icons/${platform}.png`;
                 }}
               />
             ))}
@@ -195,13 +199,13 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         {isWebsiteActive && (
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 shrink-0">
             <img
-              src={ICON_PATHS.website}
+              src={getSocialIconSrc('website')}
               alt="Website"
               className={`${iconSizeClass} object-contain shrink-0`}
               loading="eager"
               onError={(e) => {
                 const target = e.currentTarget;
-                target.src = '/assets/icons/website.svg';
+                target.src = ICON_PATHS.website || '/assets/icons/website.png';
               }}
             />
             <span
@@ -228,13 +232,13 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         {isWhatsappActive && (
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 shrink-0">
             <img
-              src={ICON_PATHS.whatsapp}
+              src={getSocialIconSrc('whatsapp')}
               alt="WhatsApp"
               className={`${iconSizeClass} object-contain shrink-0`}
               loading="eager"
               onError={(e) => {
                 const target = e.currentTarget;
-                target.src = '/assets/icons/whatsapp.svg';
+                target.src = ICON_PATHS.whatsapp || '/assets/icons/whatsapp.png';
               }}
             />
             <span
