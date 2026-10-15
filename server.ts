@@ -2813,8 +2813,10 @@ interface StoredUserProfile {
   showMobileNumber?: boolean;
   websiteUrl?: string;
   customHeaderPng?: string;
-  customFooterPng?: string;
+  planName?: string;
+  channelName?: string;
   updatedAt: number;
+  [key: string]: any;
 }
 
 function loadProfilesDatabase(): Record<string, StoredUserProfile> {

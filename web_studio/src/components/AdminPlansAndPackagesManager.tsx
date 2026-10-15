@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import {
   isUserSuperAdmin,
+  isEffectiveSuperAdmin,
   syncCloudUsers,
   adminUpdateCloudUser,
   adminDeleteCloudUser,

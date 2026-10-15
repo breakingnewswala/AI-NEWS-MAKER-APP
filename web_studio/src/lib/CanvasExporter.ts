@@ -14,6 +14,8 @@ import {
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
 
+const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
+
 // Polyfill CanvasRenderingContext2D.prototype.roundRect for all browsers and Android WebViews
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function (
