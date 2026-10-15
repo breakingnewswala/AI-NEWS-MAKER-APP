@@ -20,6 +20,7 @@ import { AppUpdateModal, AppVersionInfo, APP_CURRENT_VERSION } from './component
 import { CloudSettingsModal } from './components/CloudSettingsModal';
 import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModal';
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
+import { InstallPwaModal } from './components/InstallPwaModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
@@ -566,6 +567,40 @@ export default function App() {
   const [loginModalMode, setLoginModalMode] = useState<'user' | 'admin' | 'signup'>('user');
   const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpeg'>('jpeg');
   const [downloadProgressText, setDownloadProgressText] = useState<string>('');
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
+
+  // Trigger PWA "Add to Home Screen / Web App" popup when user is on Home screen
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isAndroidEnvironment) return;
+
+    // Check if already in standalone app
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    if (isStandalone) return;
+
+    const handleOpenModal = () => setIsInstallModalOpen(true);
+    window.addEventListener('open_pwa_install_modal', handleOpenModal);
+
+    // Only prompt when user is on Home screen
+    let timer: any = null;
+    if (currentTab === 'home') {
+      const dismissedUntil = localStorage.getItem('pwa_install_dismissed_until');
+      const alreadyInstalled = localStorage.getItem('pwa_app_installed') === 'true';
+      if (!alreadyInstalled && (!dismissedUntil || Number(dismissedUntil) <= Date.now())) {
+        timer = setTimeout(() => {
+          setIsInstallModalOpen(true);
+        }, 1800);
+      }
+    }
+
+    return () => {
+      window.removeEventListener('open_pwa_install_modal', handleOpenModal);
+      if (timer) clearTimeout(timer);
+    };
+  }, [currentTab, isAndroidEnvironment]);
+
 
   // Mobile detection & Screen Hide/Show state for Graphic Studio
   const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
@@ -2480,6 +2515,11 @@ export default function App() {
           setIsOnboardingCompleted(true);
           setIsOnboardingOpen(false);
           showToast('🎉 चैनल व प्रोफाइल सेटअप सफलतापूर्वक पूर्ण हुआ!');
+          if (!isAndroidEnvironment) {
+            setTimeout(() => {
+              setIsInstallModalOpen(true);
+            }, 1200);
+          }
         }}
         onClose={() => {
           if (localStorage.getItem('is_onboarding_completed') === 'true') {
@@ -2561,6 +2601,12 @@ export default function App() {
       <GoogleSheetsUserSyncModal
         isOpen={isSheetsModalOpen}
         onClose={() => setIsSheetsModalOpen(false)}
+      />
+
+      {/* 11. PWA ADD TO HOME SCREEN / WEB APP PROMPT MODAL */}
+      <InstallPwaModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
       />
     </div>
   );

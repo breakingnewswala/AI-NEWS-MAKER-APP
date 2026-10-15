@@ -15,68 +15,44 @@ export interface AdminRssSource {
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
 
-export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
-  {
-    id: 'src_aajtak_live',
-    name: 'आज तक (Aaj Tak) - ब्रेकिंग न्यूज़',
-    url: 'https://feeds.feedburner.com/aajtak/top',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: 1726000000000,
-  },
-  {
-    id: 'src_amarujala_live',
-    name: 'अमर उजाला (Amar Ujala) - देश',
-    url: 'https://www.amarujala.com/rss/breaking-news.xml',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: 1726000001000,
-  },
-  {
-    id: 'src_ndtv_live',
-    name: 'NDTV इंडिया - लाइव समाचार',
-    url: 'https://feeds.feedburner.com/ndtvkhabar',
-    type: 'rss',
-    category: 'देश',
-    isActive: true,
-    createdAt: 1726000002000,
-  },
-  {
-    id: 'src_bbc_live',
-    name: 'बीबीसी हिंदी (BBC Hindi)',
-    url: 'https://feeds.bbci.co.uk/hindi/rss.xml',
-    type: 'rss',
-    category: 'अंतरराष्ट्रीय',
-    isActive: true,
-    createdAt: 1726000003000,
-  },
-  {
-    id: 'src_nbt_live',
-    name: 'नवभारत टाइम्स (NBT)',
-    url: 'https://navbharattimes.indiatimes.com/rssfeedstopstories.cms',
-    type: 'rss',
-    category: 'राज्य',
-    isActive: true,
-    createdAt: 1726000004000,
-  },
-];
+export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [];
+
+export const DEFAULT_SOURCE_IDS_TO_PURGE = new Set([
+  'src_aajtak_live',
+  'src_amarujala_live',
+  'src_ndtv_live',
+  'src_bbc_live',
+  'src_nbt_live',
+]);
 
 let memoryRssSources: AdminRssSource[] = [];
 
 export function getAdminRssSources(): AdminRssSource[] {
-  if (typeof window === 'undefined') return memoryRssSources;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
-    if (raw !== null) {
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) return list;
+  let list: AdminRssSource[] = memoryRssSources;
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          list = parsed;
+        }
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
-  return memoryRssSources;
+
+  // Permanently purge any default RSS links
+  const cleaned = list.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+  memoryRssSources = cleaned;
+
+  if (typeof window !== 'undefined' && cleaned.length !== list.length) {
+    try {
+      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
+    } catch {}
+  }
+  return cleaned;
 }
 
 export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
@@ -84,13 +60,14 @@ export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[
     const res = await fetch('/api/admin/rss-sources');
     if (res.ok) {
       const data = await res.json();
-      if (data.success && Array.isArray(data.sources)) {
-        memoryRssSources = data.sources;
+      if (data && data.success && Array.isArray(data.sources)) {
+        const cleaned = data.sources.filter((s: AdminRssSource) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+        memoryRssSources = cleaned;
         if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
-          window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: data.sources }));
+          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
+          window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: cleaned }));
         }
-        return data.sources;
+        return cleaned;
       }
     }
   } catch (err) {
@@ -100,16 +77,36 @@ export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[
 }
 
 export function saveAdminRssSources(sources: AdminRssSource[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(sources));
-    window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: sources }));
-    fetch('/api/admin/rss-sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sources }),
-    }).catch(() => {});
-  } catch {}
+  const cleaned = sources.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+  memoryRssSources = cleaned;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
+      window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: cleaned }));
+    } catch {}
+  }
+
+  // Persist permanently to backend database
+  fetch('/api/admin/rss-sources', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+    },
+    body: JSON.stringify({ sources: cleaned, userRole: 'admin' }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (data && data.success && Array.isArray(data.sources)) {
+        memoryRssSources = data.sources;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
+        }
+      }
+    })
+    .catch((err) => {
+      console.warn('Backend saveAdminRssSources warning:', err);
+    });
 }
 
 export function addAdminRssSource(
@@ -128,7 +125,7 @@ export function addAdminRssSource(
     createdAt: Date.now(),
     itemsFetchedCount: 0,
   };
-  const list = [newSource, ...getAdminRssSources()];
+  const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id)];
   saveAdminRssSources(list);
   // Trigger background live sync immediately
   syncAllSourcesLive().catch(() => {});
@@ -146,7 +143,14 @@ export function toggleAdminRssSource(id: string): AdminRssSource[] {
 export function deleteAdminRssSource(id: string): AdminRssSource[] {
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
-  fetch(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+  fetch(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+    },
+    body: JSON.stringify({ userRole: 'admin' }),
+  }).catch(() => {});
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   }

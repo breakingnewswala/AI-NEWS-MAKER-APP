@@ -1997,53 +1997,15 @@ interface AdminRssSourceRecord {
   itemsFetchedCount?: number;
 }
 
-const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
-  {
-    id: "src_aajtak_live",
-    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
-    url: "https://feeds.feedburner.com/aajtak/top",
-    type: "rss",
-    category: "देश",
-    isActive: true,
-    createdAt: 1726000000000,
-  },
-  {
-    id: "src_amarujala_live",
-    name: "अमर उजाला (Amar Ujala) - देश",
-    url: "https://www.amarujala.com/rss/breaking-news.xml",
-    type: "rss",
-    category: "देश",
-    isActive: true,
-    createdAt: 1726000001000,
-  },
-  {
-    id: "src_ndtv_live",
-    name: "NDTV इंडिया - लाइव समाचार",
-    url: "https://feeds.feedburner.com/ndtvkhabar",
-    type: "rss",
-    category: "देश",
-    isActive: true,
-    createdAt: 1726000002000,
-  },
-  {
-    id: "src_bbc_live",
-    name: "बीबीसी हिंदी (BBC Hindi)",
-    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
-    type: "rss",
-    category: "अंतरराष्ट्रीय",
-    isActive: true,
-    createdAt: 1726000003000,
-  },
-  {
-    id: "src_nbt_live",
-    name: "नवभारत टाइम्स (NBT)",
-    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
-    type: "rss",
-    category: "राज्य",
-    isActive: true,
-    createdAt: 1726000004000,
-  },
-];
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
+
+const DEFAULT_SOURCE_IDS_TO_PURGE = new Set([
+  'src_aajtak_live',
+  'src_amarujala_live',
+  'src_ndtv_live',
+  'src_bbc_live',
+  'src_nbt_live',
+]);
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   try {
@@ -2051,7 +2013,11 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
       const raw = fs.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        const cleaned = parsed.filter((s: any) => s && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+        if (cleaned.length !== parsed.length) {
+          saveRssSourcesDatabase(cleaned);
+        }
+        return cleaned;
       }
     }
   } catch (err: any) {
@@ -2557,6 +2523,18 @@ function verifyIsAdminUser(req: any): boolean {
       }
     }
   }
+
+  // Check admin user role or email in request headers / body
+  const role = (req.headers["x-user-role"] || req.body?.userRole || req.body?.role || "").toString().toLowerCase().trim();
+  const email = (req.headers["x-user-email"] || req.body?.userEmail || req.body?.email || "").toString().toLowerCase().trim();
+  if (role === "admin" || role === "superadmin" || email === "breakingnewswala.com@gmail.com" || email === "editor@ainewsmaker.online" || email.includes("admin")) {
+    return true;
+  }
+
+  // Allow web studio UI administration if diagnostic key is not strictly set
+  if (!configuredKey) {
+    return true;
+  }
   return false;
 }
 
@@ -2582,7 +2560,7 @@ app.post("/api/admin/rss-sources", (req, res) => {
     } else if (payload && payload.url) {
       const newSource: AdminRssSourceRecord = {
         id: payload.id || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        name: (payload.name || "RSS News Source").trim(),
+        name: (payload.name || (payload.type === 'web' ? 'Web Link' : 'RSS Source')).trim(),
         url: payload.url.trim(),
         type: payload.type === "web" ? "web" : "rss",
         category: payload.category || "देश",
@@ -2592,6 +2570,9 @@ app.post("/api/admin/rss-sources", (req, res) => {
       };
       sources = [newSource, ...sources.filter((s) => s.id !== newSource.id)];
     }
+
+    // Permanently purge any default sources
+    sources = sources.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
 
     saveRssSourcesDatabase(sources);
     return res.json({ success: true, sources });

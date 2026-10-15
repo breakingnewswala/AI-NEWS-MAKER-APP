@@ -280,6 +280,21 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
+            {/* Install PWA Button on Web */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('open_pwa_install_modal'));
+                }
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 shrink-0"
+              title="वेब ऐप को होम स्क्रीन पर जोड़ें"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-slate-950" />
+              <span>ऐप जोड़ें</span>
+            </button>
+
             {/* Refresh Button - Hidden on Control Panel */}
             {!isControlPanel && (
               <button

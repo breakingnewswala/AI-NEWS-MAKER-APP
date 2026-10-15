@@ -69,3 +69,13 @@ if ('serviceWorker' in navigator && window.location.protocol.startsWith('http'))
     });
   });
 }
+
+// Global PWA install prompt handler
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e: Event) => {
+    e.preventDefault();
+    (window as any).deferredPwaPrompt = e;
+    window.dispatchEvent(new CustomEvent('pwa_install_prompt_ready'));
+  });
+}
+

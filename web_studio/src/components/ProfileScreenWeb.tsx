@@ -2411,9 +2411,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               </div>
             </div>
           </div>
+        </div>
   );
 
-return (
+  return (
     <div className="min-h-screen bg-slate-950 text-white pb-28">
       {/* Top Header */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 shadow-md">
@@ -3036,7 +3037,6 @@ return (
         </div>
       )}
     </div>
-  </div>
   );
 };
 
