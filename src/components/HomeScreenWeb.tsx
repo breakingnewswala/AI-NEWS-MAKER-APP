@@ -186,7 +186,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   // User Report Modal State (Part M)
   const [reportingPost, setReportingPost] = useState<NewsFeedPost | null>(null);
-  const [reportReason, setReportReason] = useState<string>('गलत / भ्रामक खबर (Fake / Misleading News)');
+  const [reportReason, setReportReason] = useState<string>('खबर गलत है');
   const [reportDetails, setReportDetails] = useState<string>('');
   const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
   const [reportFeedback, setReportFeedback] = useState<string>('');
@@ -194,6 +194,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reportingPost || isSubmittingReport) return;
+    if (reportReason === 'अन्य समस्या' && !reportDetails.trim()) {
+      setReportFeedback('⚠️ कृपया "अन्य समस्या" के लिए विवरण दर्ज करें।');
+      return;
+    }
     setIsSubmittingReport(true);
     try {
       const payload = {
@@ -201,7 +205,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         targetId: reportingPost.id,
         targetTitle: reportingPost.title,
         reportReason,
-        message: reportDetails ? `${reportReason}: ${reportDetails}` : reportReason,
+        message: reportReason === 'अन्य समस्या' ? reportDetails.trim() : (reportDetails.trim() ? `${reportReason}: ${reportDetails.trim()}` : reportReason),
         userId: currentUser?.email || 'guest',
         userName: currentUser?.name || 'न्यूज़ पाठक',
         userEmail: currentUser?.email || '',
@@ -2034,9 +2038,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </label>
                 <div className="space-y-1.5 text-xs">
                   {[
-                    'गलत / भ्रामक खबर (Fake / Misleading News)',
-                    'आपत्तिजनक भाषा / सामग्री (Offensive Language / Content)',
-                    'कॉपीराइट या अन्य समस्या (Copyright / Other Issue)',
+                    'खबर गलत है',
+                    'खबर में फोटो गलत है',
+                    'अन्य समस्या',
                   ].map((option) => (
                     <label
                       key={option}
@@ -2056,18 +2060,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  अतिरिक्त विवरण (वैकल्पिक):
-                </label>
-                <textarea
-                  value={reportDetails}
-                  onChange={(e) => setReportDetails(e.target.value)}
-                  placeholder="कृपया समस्या का संक्षेप में विवरण दें..."
-                  rows={3}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
-                />
-              </div>
+              {reportReason === 'अन्य समस्या' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    समस्या का विवरण दर्ज करें <span className="text-rose-400">*</span>:
+                  </label>
+                  <textarea
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value)}
+                    placeholder="कृपया समस्या का विवरण दें (अनिवार्य)..."
+                    rows={3}
+                    required
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              )}
 
               {reportFeedback && (
                 <div className={`p-2.5 rounded-xl text-xs font-bold text-center ${

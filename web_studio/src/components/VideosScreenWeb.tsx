@@ -61,7 +61,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
   // User Video Report Modal State (Part N)
   const [reportingVideo, setReportingVideo] = useState<VideoFeedItem | null>(null);
-  const [videoReportReason, setVideoReportReason] = useState<string>('गलत / भ्रामक वीडियो (Fake / Misleading Video)');
+  const [videoReportReason, setVideoReportReason] = useState<string>('वीडियो में गलती है');
   const [videoReportDetails, setVideoReportDetails] = useState<string>('');
   const [isSubmittingVideoReport, setIsSubmittingVideoReport] = useState<boolean>(false);
   const [videoReportFeedback, setVideoReportFeedback] = useState<string>('');
@@ -69,6 +69,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const handleSubmitVideoReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reportingVideo || isSubmittingVideoReport) return;
+    if (videoReportReason === 'अन्य समस्या' && !videoReportDetails.trim()) {
+      setVideoReportFeedback('⚠️ कृपया "अन्य समस्या" के लिए विवरण दर्ज करें।');
+      return;
+    }
     setIsSubmittingVideoReport(true);
     try {
       const payload = {
@@ -76,7 +80,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         targetId: reportingVideo.id,
         targetTitle: reportingVideo.title,
         reportReason: videoReportReason,
-        message: videoReportDetails ? `${videoReportReason}: ${videoReportDetails}` : videoReportReason,
+        message: videoReportReason === 'अन्य समस्या' ? videoReportDetails.trim() : (videoReportDetails.trim() ? `${videoReportReason}: ${videoReportDetails.trim()}` : videoReportReason),
         userId: currentUser?.email || 'guest',
         userName: currentUser?.name || 'न्यूज़ दर्शक',
         userEmail: currentUser?.email || '',
@@ -1248,9 +1252,9 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </label>
                 <div className="space-y-1.5 text-xs">
                   {[
-                    'गलत / भ्रामक वीडियो (Fake / Misleading Video)',
-                    'आपत्तिजनक दृश्य / भाषा (Offensive Visuals / Language)',
-                    'कॉपीराइट उल्लंघन (Copyright Infringement)',
+                    'वीडियो में गलती है',
+                    'हेडलाइन में गलती है',
+                    'अन्य समस्या',
                   ].map((option) => (
                     <label
                       key={option}
@@ -1270,18 +1274,21 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  अतिरिक्त विवरण (वैकल्पिक):
-                </label>
-                <textarea
-                  value={videoReportDetails}
-                  onChange={(e) => setVideoReportDetails(e.target.value)}
-                  placeholder="कृपया समस्या का संक्षेप में विवरण दें..."
-                  rows={3}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
-                />
-              </div>
+              {videoReportReason === 'अन्य समस्या' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    समस्या का विवरण दर्ज करें <span className="text-rose-400">*</span>:
+                  </label>
+                  <textarea
+                    value={videoReportDetails}
+                    onChange={(e) => setVideoReportDetails(e.target.value)}
+                    placeholder="कृपया समस्या का विवरण दें (अनिवार्य)..."
+                    rows={3}
+                    required
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              )}
 
               {videoReportFeedback && (
                 <div className={`p-2.5 rounded-xl text-xs font-bold text-center ${

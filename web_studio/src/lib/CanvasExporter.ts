@@ -1681,27 +1681,51 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasValidMainPhoto, nothing is drawn over the photo area,
   // allowing the authentic background image's camera icon and Step 4 instructions to show through!
 
-  // 3. TOP-LEFT LOGO AREA (Clean transparent PNG or 'Your Logo' placeholder)
+  // 3. TOP-LEFT LOGO AREA (Clamped strictly to Inner Safe-Zone [10%, 90%] and grows inward)
   if (card.showMasterBranding !== false) {
     ctx.save();
-    const minSafeX = Math.round(width * 0.055);
-    const minSafeY = Math.round(height * 0.055);
+    const safeLeft = Math.round(width * 0.10);
+    const safeTop = Math.round(height * 0.10);
+    const safeRight = Math.round(width * 0.90);
+    const safeBottom = Math.round(height * 0.90);
+
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
+    const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
+
+    let lW = Math.round(baseW * scale);
+    let lH = Math.round(baseH * scale);
 
     if (customLogoImg && customLogoImg.width > 0) {
-      const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.0));
       const lRatio = customLogoImg.width / customLogoImg.height;
-      let lW = baseW * scale;
-      let lH = lW / lRatio;
+      lW = Math.round(baseW * scale);
+      lH = Math.round(lW / lRatio);
       if (lH > baseH * scale) {
-        lH = baseH * scale;
-        lW = lH * lRatio;
+        lH = Math.round(baseH * scale);
+        lW = Math.round(lH * lRatio);
       }
+    }
+
+    if (lW > safeRight - safeLeft) lW = safeRight - safeLeft;
+    if (lH > safeBottom - safeTop) lH = safeBottom - safeTop;
+
+    const userPosX = card.logoX !== undefined ? Math.round((card.logoX / 100) * width) : safeLeft;
+    const userPosY = card.logoY !== undefined ? Math.round((card.logoY / 100) * height) : safeTop;
+
+    let finalX = userPosX;
+    let finalY = userPosY;
+
+    // Inward clamping: ensure logo never crosses any edge of the inner safe zone
+    if (finalX + lW > safeRight) finalX = Math.max(safeLeft, safeRight - lW);
+    if (finalY + lH > safeBottom) finalY = Math.max(safeTop, safeBottom - lH);
+    if (finalX < safeLeft) finalX = safeLeft;
+    if (finalY < safeTop) finalY = safeTop;
+
+    if (customLogoImg && customLogoImg.width > 0) {
       ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 2;
-      ctx.drawImage(customLogoImg, minSafeX, minSafeY, lW, lH);
+      ctx.drawImage(customLogoImg, finalX, finalY, lW, lH);
     } else {
       ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
       ctx.shadowBlur = 6;
@@ -1710,7 +1734,7 @@ async function drawGraphic001Canvas(
       ctx.font = '900 36px "Poppins", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Your Logo', minSafeX + baseW / 2, minSafeY + baseH / 2);
+      ctx.fillText('Your Logo', finalX + lW / 2, finalY + lH / 2);
     }
     ctx.restore();
   }

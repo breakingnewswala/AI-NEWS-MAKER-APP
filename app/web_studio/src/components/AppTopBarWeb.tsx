@@ -11,6 +11,8 @@ import {
   Sparkles,
   ArrowRight,
   UserCheck,
+  FileSpreadsheet,
+  Smartphone,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import {
@@ -29,6 +31,7 @@ import {
   markNotificationAsRead,
   requestNotificationPermission,
   getNotificationPermissionStatus,
+  fetchNotificationsFromServer,
   AppNotification,
 } from '../lib/notificationManager';
 
@@ -36,6 +39,8 @@ interface AppTopBarWebProps {
   currentTab: string;
   currentUser: ReporterUser | null;
   onOpenAdminConsole?: () => void;
+  onOpenGoogleSheets?: () => void;
+  onOpenAppUpdate?: () => void;
   onRefresh: () => void;
   onNavigateToTab: (tab: any) => void;
 }
@@ -43,6 +48,8 @@ interface AppTopBarWebProps {
 export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   currentTab,
   currentUser,
+  onOpenGoogleSheets,
+  onOpenAppUpdate,
   onRefresh,
   onNavigateToTab,
 }) => {
@@ -67,6 +74,10 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
 
   useEffect(() => {
+    fetchNotificationsFromServer(currentUser?.email).then((list) => {
+      setNotificationsList(list);
+    });
+
     const handleUpdate = () => {
       setCurrentTier(getUserSubscription().tier);
       setAdminSystemModeState(getAdminSystemMode());
@@ -81,7 +92,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     window.addEventListener('ai_news_notifications_updated', handleUpdate);
     window.addEventListener('ai_news_notification_permission_changed', handleUpdate);
     (window as any).onNotificationPermissionResult = (status: string) => {
-      setNotifPermission(status);
+      setNotifPermission(status as NotificationPermission | 'unsupported');
       window.dispatchEvent(new Event('ai_news_notification_permission_changed'));
     };
     return () => {
@@ -92,7 +103,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       window.removeEventListener('ai_news_notifications_updated', handleUpdate);
       window.removeEventListener('ai_news_notification_permission_changed', handleUpdate);
     };
-  }, []);
+  }, [currentUser?.email]);
 
   // Format plan name for display
   const planDisplay = React.useMemo(() => {
@@ -172,50 +183,48 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
       <header className={`bg-slate-950/95 backdrop-blur-md border-b border-slate-800 text-white ${isAdminUser && adminSystemMode === 'test' ? 'relative' : 'sticky top-0'} z-40 shadow-md ${isStudio ? 'hidden md:block' : ''}`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className={`h-14 flex items-center ${isStudio ? 'justify-center' : 'justify-between'} gap-2`}>
-            {/* Brand & Logo with Dynamic Plan and Partition Separators - Removed in Studio */}
-            {!isStudio && (
-              <div
-                onClick={() => onNavigateToTab('home')}
-                className="flex items-center gap-2.5 cursor-pointer select-none group shrink-0"
-              >
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-amber-400 via-red-500 to-amber-400 p-[1.5px] shadow-lg shadow-red-950/50 group-hover:scale-105 transition-transform flex items-center justify-center overflow-hidden">
-                  <img
-                    src="/assets/ai_news_maker_logo.png"
-                    alt="AI NEWS MAKER Logo"
-                    className="w-full h-full object-cover rounded-full"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLElement).style.display = 'none';
-                    }}
-                  />
+          <div className={`h-14 flex items-center ${isStudio ? 'justify-center md:justify-between' : 'justify-between'} gap-2`}>
+            {/* Brand & Logo with Dynamic Plan and Partition Separators - Full on Desktop, hidden in Mobile Studio */}
+            <div
+              onClick={() => onNavigateToTab('home')}
+              className={`items-center gap-2.5 cursor-pointer select-none group shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}
+            >
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-amber-400 via-red-500 to-amber-400 p-[1.5px] shadow-lg shadow-red-950/50 group-hover:scale-105 transition-transform flex items-center justify-center overflow-hidden">
+                <img
+                  src="/assets/ai_news_maker_logo.png"
+                  alt="AI NEWS MAKER Logo"
+                  className="w-full h-full object-cover rounded-full"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+
+              <div>
+                {/* Header line: AI News Maker + LIVE Badge */}
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
+                    AI News Maker
+                  </span>
+                  <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
+                    LIVE
+                  </span>
                 </div>
 
-                <div>
-                  {/* Header line: AI News Maker + LIVE Badge (NO duplicate plan name here!) */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
-                      AI News Maker
-                    </span>
-                    <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
-                      LIVE
-                    </span>
-                  </div>
-
-                  <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
-                    <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
-                      {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
-                    </span>
-                    <span className="text-slate-600">•</span>
-                    <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[9px] font-black rounded whitespace-nowrap shadow-xs">
-                      {planDisplay === 'Admin' ? 'एडमिन' : planDisplay}
-                    </span>
-                  </div>
+                <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
+                  <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
+                    {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
+                  </span>
+                  <span className="text-slate-600">•</span>
+                  <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[9px] font-black rounded whitespace-nowrap shadow-xs">
+                    {planDisplay === 'Admin' ? 'एडमिन' : planDisplay}
+                  </span>
                 </div>
               </div>
-            )}
+            </div>
 
           {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
-          <nav className={`hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0 ${isStudio ? 'mx-auto' : ''}`}>
+          <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0">
             <button
               onClick={() => onNavigateToTab('home')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -268,24 +277,47 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             </button>
           </nav>
 
-          {/* Right Action Icons - Removed in Studio */}
-          {!isStudio && (
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Refresh Button - Hidden on Control Panel */}
-              {!isControlPanel && (
-                <button
-                  onClick={handleRefreshClick}
-                  className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
-                  title="फ़ीड रीफ्रेश करें"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                </button>
-              )}
+          {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
+          <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-              {/* Real-time Notifications */}
+            {/* Install PWA Button on Web */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('open_pwa_install_modal'));
+                }
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 shrink-0"
+              title="वेब ऐप को होम स्क्रीन पर जोड़ें"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-slate-950" />
+              <span>ऐप जोड़ें</span>
+            </button>
+
+            {/* Refresh Button - Hidden on Control Panel, Studio, and Newsroom (Part H) */}
+            {!isControlPanel && currentTab !== 'studio' && currentTab !== 'newsroom' && (
+              <button
+                onClick={handleRefreshClick}
+                className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
+                title="फ़ीड रीफ्रेश करें"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+              </button>
+            )}
+
+            {/* Real-time Notifications */}
               <div className="relative">
                 <button
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() => {
+                    const next = !showNotifications;
+                    setShowNotifications(next);
+                    if (next) {
+                      fetchNotificationsFromServer(currentUser?.email).then((list) => {
+                        setNotificationsList(list);
+                      });
+                    }
+                  }}
                   className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl relative transition-colors cursor-pointer"
                   title="सूचनाएं"
                 >
@@ -315,7 +347,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                         {unreadCount > 0 && (
                           <button
                             onClick={() => {
-                              const updated = markAllNotificationsAsRead();
+                              const updated = markAllNotificationsAsRead(currentUser?.email);
                               setNotificationsList(updated);
                             }}
                             className="text-[10px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
@@ -382,7 +414,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 )}
               </div>
             </div>
-          )}
         </div>
       </div>
     </header>

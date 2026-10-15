@@ -295,8 +295,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               <span>ऐप जोड़ें</span>
             </button>
 
-            {/* Refresh Button - Hidden on Control Panel */}
-            {!isControlPanel && (
+            {/* Refresh Button - Hidden on Control Panel, Studio, and Newsroom (Part H) */}
+            {!isControlPanel && currentTab !== 'studio' && currentTab !== 'newsroom' && (
               <button
                 onClick={handleRefreshClick}
                 className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
