@@ -152,6 +152,23 @@ interface CardEditorProps {
   autoFillNews?: AutoFillNewsData | null;
 }
 
+const handleThumbnailImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+  const target = e.currentTarget;
+  const currentSrc = target.src;
+  if (currentSrc.includes('/api/proxy-image') && currentSrc.includes('url=')) {
+    try {
+      const u = new URL(currentSrc, window.location.href);
+      const originalUrl = u.searchParams.get('url');
+      if (originalUrl && originalUrl !== currentSrc) {
+        target.src = originalUrl;
+        return;
+      }
+    } catch {}
+  }
+  target.onerror = null;
+  target.src = '/assets/preview_placeholder.jpg';
+};
+
 export const CardEditor: React.FC<CardEditorProps> = ({
   card,
   onChange,
@@ -2516,7 +2533,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                               : 'border-neutral-800 opacity-60 hover:opacity-100'
                           }`}
                         >
-                          <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" />
+                          <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
                           <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
                             फोटो {pIdx + 1}
                           </span>
@@ -2546,6 +2563,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         src={card.images.main}
                         alt="Photo 1 preview"
                         className="w-16 h-16 object-cover rounded-md border border-neutral-700 shadow-sm shrink-0"
+                        onError={handleThumbnailImgError}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-green-400 font-bold flex items-center gap-1">
@@ -2644,6 +2662,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           src={card.images.second}
                           alt="Photo 2 preview"
                           className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
+                          onError={handleThumbnailImgError}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
@@ -2686,7 +2705,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     {card.images.main && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                        <img src={card.images.main} alt="Photo 1" className="w-10 h-10 object-cover rounded" />
+                        <img src={card.images.main} alt="Photo 1" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
                       </div>
                     )}
@@ -2705,7 +2724,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     {card.images.second && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                        <img src={card.images.second} alt="Photo 2" className="w-10 h-10 object-cover rounded" />
+                        <img src={card.images.second} alt="Photo 2" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
                       </div>
                     )}
@@ -2724,7 +2743,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     {card.images.third && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                        <img src={card.images.third} alt="Photo 3" className="w-10 h-10 object-cover rounded" />
+                        <img src={card.images.third} alt="Photo 3" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
                       </div>
                     )}
@@ -2744,7 +2763,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       </div>
                       {card.images.fourth && (
                         <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                          <img src={card.images.fourth} alt="Photo 4" className="w-10 h-10 object-cover rounded" />
+                          <img src={card.images.fourth} alt="Photo 4" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                           <span className="text-[10px] text-green-400">सक्रिय</span>
                         </div>
                       )}

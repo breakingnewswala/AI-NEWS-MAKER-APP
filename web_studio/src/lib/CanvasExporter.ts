@@ -12,6 +12,7 @@ import {
   drawQuoteHeader,
 } from './HeaderDesigns';
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
+import { getApiUrl } from './apiConfig';
 
 // Polyfill CanvasRenderingContext2D.prototype.roundRect for all browsers and Android WebViews
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
@@ -65,6 +66,11 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
 
   let effectiveSrc = src.trim();
 
+  // If effectiveSrc starts with /api/proxy-image, resolve absolute API url
+  if (effectiveSrc.startsWith('/api/proxy-image')) {
+    effectiveSrc = getApiUrl(effectiveSrc);
+  }
+
   // If source is a remote HTTP/HTTPS URL, convert it to a same-origin Blob URL or proxy to guarantee the canvas is NEVER tainted
   if (
     typeof window !== 'undefined' &&
@@ -80,7 +86,7 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
         effectiveSrc = URL.createObjectURL(b);
       } else {
         // 2. Fall back to backend image proxy
-        const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(effectiveSrc)}`;
+        const proxiedUrl = getApiUrl(`/api/proxy-image?url=${encodeURIComponent(effectiveSrc)}`);
         const proxyRes = await fetch(proxiedUrl).catch(() => null);
         if (proxyRes && proxyRes.ok) {
           const b = await proxyRes.blob();
@@ -110,13 +116,38 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
       fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
       fallback.onload = () => finish(fallback);
       fallback.onerror = () => finish(fallback);
-    }, 4500);
+    }, 6000);
 
     img.onload = () => {
       clearTimeout(timeout);
       finish(img);
     };
     img.onerror = () => {
+      // If the proxied image failed, retry once with the raw target URL if present in query param
+      if (effectiveSrc.includes('/api/proxy-image') && effectiveSrc.includes('url=')) {
+        try {
+          const urlMatch = effectiveSrc.match(/[?&]url=([^&]+)/);
+          if (urlMatch && urlMatch[1]) {
+            const rawUrl = decodeURIComponent(urlMatch[1]);
+            const retryImg = new Image();
+            retryImg.crossOrigin = 'anonymous';
+            retryImg.onload = () => {
+              clearTimeout(timeout);
+              finish(retryImg);
+            };
+            retryImg.onerror = () => {
+              clearTimeout(timeout);
+              const fallback = new Image();
+              fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+              fallback.onload = () => finish(fallback);
+              fallback.onerror = () => finish(fallback);
+            };
+            retryImg.src = rawUrl;
+            return;
+          }
+        } catch {}
+      }
+
       clearTimeout(timeout);
       const fallback = new Image();
       fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
@@ -1516,13 +1547,16 @@ async function drawGraphic001Canvas(
   const getSafeCanvasPhotoUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
+    if (trimmed.startsWith('/api/proxy-image')) {
+      return getApiUrl(trimmed);
+    }
     if (
       (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
       typeof window !== 'undefined' &&
       !trimmed.startsWith(window.location.origin) &&
-      !trimmed.startsWith('/api/proxy-image')
+      !trimmed.includes('/api/proxy-image')
     ) {
-      return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+      return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
     }
     return trimmed;
   };

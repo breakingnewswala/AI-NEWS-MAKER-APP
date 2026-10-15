@@ -5280,6 +5280,12 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
               if (extracted.images[1]) {
                 pickedImages.second = `/api/proxy-image?url=${encodeURIComponent(extracted.images[1])}`;
               }
+              if (extracted.images[2]) {
+                pickedImages.third = `/api/proxy-image?url=${encodeURIComponent(extracted.images[2])}`;
+              }
+              if (extracted.images[3]) {
+                pickedImages.fourth = `/api/proxy-image?url=${encodeURIComponent(extracted.images[3])}`;
+              }
             }
             if (effectiveArticleTitle || effectiveArticleDesc || articleBodySnippets) {
               extractedArticleMeta = {
@@ -5521,6 +5527,14 @@ JSON Schema:
       if (pickedImages.second && (!parsedData.pickedImages || !parsedData.pickedImages.second)) {
         if (!parsedData.pickedImages) parsedData.pickedImages = {};
         parsedData.pickedImages.second = pickedImages.second;
+      }
+      if (pickedImages.third && (!parsedData.pickedImages || !parsedData.pickedImages.third)) {
+        if (!parsedData.pickedImages) parsedData.pickedImages = {};
+        parsedData.pickedImages.third = pickedImages.third;
+      }
+      if (pickedImages.fourth && (!parsedData.pickedImages || !parsedData.pickedImages.fourth)) {
+        if (!parsedData.pickedImages) parsedData.pickedImages = {};
+        parsedData.pickedImages.fourth = pickedImages.fourth;
       }
       if (!parsedData.headline || isInvalidUrlHeadline(parsedData.headline)) {
         parsedData.headline = parsedData.location && parsedData.location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${parsedData.location}: \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u092B\u0948\u0938\u0932\u093E, \u0905\u0917\u094D\u0930\u093F\u092E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940` : "\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u092B\u0948\u0938\u0932\u093E, \u0905\u0917\u094D\u0930\u093F\u092E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940";

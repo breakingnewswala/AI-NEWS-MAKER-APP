@@ -1523,11 +1523,16 @@ export default function App() {
     const safeProxy = (u: string) => {
       if (!u || !u.trim()) return '';
       const trimmed = u.trim();
-      if ((trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
-          typeof window !== 'undefined' &&
-          !trimmed.startsWith(window.location.origin) &&
-          !trimmed.startsWith('/api/proxy-image')) {
-        return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+      if (trimmed.startsWith('/api/proxy-image')) {
+        return getApiUrl(trimmed);
+      }
+      if (
+        (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+        typeof window !== 'undefined' &&
+        !trimmed.startsWith(window.location.origin) &&
+        !trimmed.includes('/api/proxy-image')
+      ) {
+        return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
       }
       return trimmed;
     };
@@ -1535,9 +1540,18 @@ export default function App() {
     const safeTargetImage = safeProxy(targetImageForStudio);
 
     // Collect all available photos for this article: primary + up to 3 additional photos
-    const articlePhotos: string[] = [safeTargetImage || targetImageForStudio];
+    const articlePhotos: string[] = [];
+    if (safeTargetImage) articlePhotos.push(safeTargetImage);
+    else if (targetImageForStudio) articlePhotos.push(targetImageForStudio);
+
     if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
       post.additionalPhotos.forEach((p) => {
+        const safeP = safeProxy(p);
+        if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
+      });
+    }
+    if ((post as any).extractedArticlePhotos && Array.isArray((post as any).extractedArticlePhotos)) {
+      (post as any).extractedArticlePhotos.forEach((p: string) => {
         const safeP = safeProxy(p);
         if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
       });
@@ -1546,6 +1560,11 @@ export default function App() {
     try {
       localStorage.setItem('studio_active_news_photos', JSON.stringify(articlePhotos));
     } catch {}
+
+    const primaryPhoto = articlePhotos[0] || safeTargetImage || '';
+    const secondPhoto = articlePhotos[1] || primaryPhoto;
+    const thirdPhoto = articlePhotos[2] || primaryPhoto;
+    const fourthPhoto = articlePhotos[3] || secondPhoto || primaryPhoto;
 
     setCard((prev) => ({
       ...prev,
@@ -1560,8 +1579,12 @@ export default function App() {
       summary: post.summary,
       images: {
         ...prev.images,
-        main: safeTargetImage,
+        main: primaryPhoto,
+        second: secondPhoto,
+        third: thirdPhoto,
+        fourth: fourthPhoto,
       },
+      extractedArticlePhotos: articlePhotos,
     }));
 
     setAutoFillNews({

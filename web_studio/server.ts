@@ -5497,7 +5497,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     let effectiveArticleTitle = "";
     let effectiveArticleDesc = "";
     let articleBodySnippets = "";
-    const pickedImages: { main?: string; second?: string } = {};
+    const pickedImages: { main?: string; second?: string; third?: string; fourth?: string } = {};
     let extractedArticleMeta: ArticleExtractedMetadata | undefined = undefined;
 
     let effectiveInput = (rawInputText || "").trim();
@@ -5517,6 +5517,12 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
               pickedImages.main = `/api/proxy-image?url=${encodeURIComponent(extracted.images[0])}`;
               if (extracted.images[1]) {
                 pickedImages.second = `/api/proxy-image?url=${encodeURIComponent(extracted.images[1])}`;
+              }
+              if (extracted.images[2]) {
+                pickedImages.third = `/api/proxy-image?url=${encodeURIComponent(extracted.images[2])}`;
+              }
+              if (extracted.images[3]) {
+                pickedImages.fourth = `/api/proxy-image?url=${encodeURIComponent(extracted.images[3])}`;
               }
             }
 
@@ -5775,6 +5781,14 @@ JSON Schema:
       if (pickedImages.second && (!parsedData.pickedImages || !parsedData.pickedImages.second)) {
         if (!parsedData.pickedImages) parsedData.pickedImages = {};
         parsedData.pickedImages.second = pickedImages.second;
+      }
+      if (pickedImages.third && (!parsedData.pickedImages || !parsedData.pickedImages.third)) {
+        if (!parsedData.pickedImages) parsedData.pickedImages = {};
+        parsedData.pickedImages.third = pickedImages.third;
+      }
+      if (pickedImages.fourth && (!parsedData.pickedImages || !parsedData.pickedImages.fourth)) {
+        if (!parsedData.pickedImages) parsedData.pickedImages = {};
+        parsedData.pickedImages.fourth = pickedImages.fourth;
       }
 
       if (!parsedData.headline || isInvalidUrlHeadline(parsedData.headline)) {

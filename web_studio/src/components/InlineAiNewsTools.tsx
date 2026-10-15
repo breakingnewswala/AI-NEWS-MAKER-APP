@@ -223,17 +223,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     // Apply news photo and additional photos if provided
     if (autoFillNews.imageUrl || (autoFillNews.additionalPhotos && autoFillNews.additionalPhotos.length > 0)) {
+      const photos = autoFillNews.additionalPhotos || [];
+      const primaryPhoto = autoFillNews.imageUrl || photos[0] || card.images.main;
+      const secondPhoto = photos[1] || photos[0] || card.images.second || primaryPhoto;
+      const thirdPhoto = photos[2] || photos[0] || card.images.third || primaryPhoto;
+      const fourthPhoto = photos[3] || photos[1] || photos[0] || card.images.fourth || primaryPhoto;
+
       onChange({
         images: {
           ...card.images,
-          main: autoFillNews.imageUrl || card.images.main,
-          ...(autoFillNews.additionalPhotos && autoFillNews.additionalPhotos.length > 0 ? {
-            second: autoFillNews.additionalPhotos[0] || card.images.second,
-            third: autoFillNews.additionalPhotos[1] || card.images.third,
-            fourth: autoFillNews.additionalPhotos[2] || card.images.fourth,
-          } : {})
+          main: primaryPhoto,
+          second: secondPhoto,
+          third: thirdPhoto,
+          fourth: fourthPhoto,
         },
-        layout: 'single',
+        extractedArticlePhotos: photos.length > 0 ? photos : (primaryPhoto ? [primaryPhoto] : card.extractedArticlePhotos),
       });
     }
 
@@ -315,6 +319,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const immediateLocation = extraData.location || card.location || 'विशेष कवरेज';
       const immediateImage = extraData.imageUrl || card.images.main;
       const immediateSummary = extraData.summary || card.summary;
+      const extraPhotos = extraData.additionalPhotos || [];
 
       onChange({
         headline: immediateHeadline,
@@ -324,7 +329,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         images: {
           ...card.images,
           main: immediateImage,
+          second: extraPhotos[1] || extraPhotos[0] || card.images.second || immediateImage,
+          third: extraPhotos[2] || extraPhotos[0] || card.images.third || immediateImage,
+          fourth: extraPhotos[3] || extraPhotos[1] || extraPhotos[0] || card.images.fourth || immediateImage,
         },
+        extractedArticlePhotos: extraPhotos.length > 0 ? extraPhotos : card.extractedArticlePhotos,
       });
 
       setHeadlineOptions([
@@ -405,11 +414,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const safeProxy = (u?: string) => {
         if (!u || !u.trim()) return '';
         const trimmed = u.trim();
-        if ((trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
-            typeof window !== 'undefined' &&
-            !trimmed.startsWith(window.location.origin) &&
-            !trimmed.startsWith('/api/proxy-image')) {
-          return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+        if (trimmed.startsWith('/api/proxy-image')) {
+          return getApiUrl(trimmed);
+        }
+        if (
+          (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+          typeof window !== 'undefined' &&
+          !trimmed.startsWith(window.location.origin) &&
+          !trimmed.includes('/api/proxy-image')
+        ) {
+          return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
         }
         return trimmed;
       };
@@ -418,6 +432,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         (res.pickedImages?.main && !res.pickedImages.main.includes('placeholder'))
           ? res.pickedImages.main
           : (extraData?.imageUrl || card.images.main)
+      );
+      const extraPhotos = extraData?.additionalPhotos || [];
+      const finalSecond = safeProxy(
+        res.pickedImages?.second ||
+        extraPhotos[1] ||
+        extraPhotos[0] ||
+        card.images.second ||
+        finalImage
+      );
+      const finalThird = safeProxy(
+        res.pickedImages?.third ||
+        extraPhotos[2] ||
+        extraPhotos[0] ||
+        card.images.third ||
+        finalImage
+      );
+      const finalFourth = safeProxy(
+        res.pickedImages?.fourth ||
+        extraPhotos[3] ||
+        extraPhotos[1] ||
+        extraPhotos[0] ||
+        card.images.fourth ||
+        finalImage
       );
 
       const effectiveCaption = formatCaptionByStyle(
@@ -438,8 +475,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         images: {
           ...card.images,
           main: finalImage,
-          second: safeProxy(res.pickedImages?.second || card.images.second),
+          second: finalSecond,
+          third: finalThird,
+          fourth: finalFourth,
         },
+        extractedArticlePhotos: extraPhotos.length > 0 ? extraPhotos : card.extractedArticlePhotos,
       });
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -494,6 +534,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         effectiveLink || url
       );
 
+      const extraPhotos = extraData?.additionalPhotos || [];
+      const finalSecond = extraPhotos[1] || extraPhotos[0] || card.images.second || finalImage;
+      const finalThird = extraPhotos[2] || extraPhotos[0] || card.images.third || finalImage;
+      const finalFourth = extraPhotos[3] || extraPhotos[1] || extraPhotos[0] || card.images.fourth || finalImage;
+
       onChange({
         headline: finalHeadline,
         formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
@@ -503,7 +548,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         images: {
           ...card.images,
           main: finalImage,
+          second: finalSecond,
+          third: finalThird,
+          fourth: finalFourth,
         },
+        extractedArticlePhotos: extraPhotos.length > 0 ? extraPhotos : card.extractedArticlePhotos,
       });
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -628,7 +677,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           ...card.images,
           main: finalImage,
           second: res.pickedImages?.second || card.images.second,
+          third: res.pickedImages?.third || card.images.third,
+          fourth: res.pickedImages?.fourth || card.images.fourth,
         },
+        extractedArticlePhotos: card.extractedArticlePhotos,
       });
 
       if (navigator.clipboard && navigator.clipboard.writeText) {

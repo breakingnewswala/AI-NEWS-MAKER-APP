@@ -152,6 +152,23 @@ interface CardEditorProps {
   autoFillNews?: AutoFillNewsData | null;
 }
 
+const handleThumbnailImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+  const target = e.currentTarget;
+  const currentSrc = target.src;
+  if (currentSrc.includes('/api/proxy-image') && currentSrc.includes('url=')) {
+    try {
+      const u = new URL(currentSrc, window.location.href);
+      const originalUrl = u.searchParams.get('url');
+      if (originalUrl && originalUrl !== currentSrc) {
+        target.src = originalUrl;
+        return;
+      }
+    } catch {}
+  }
+  target.onerror = null;
+  target.src = '/assets/preview_placeholder.jpg';
+};
+
 export const CardEditor: React.FC<CardEditorProps> = ({
   card,
   onChange,
@@ -215,7 +232,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   // Per-template footer selection state
   const [selectedFooterDesignTab, setSelectedFooterDesignTab] = React.useState<FrameDesign>(
-    card.frameDesign || 'jacket-original'
+    card.frameDesign || 'graphic_001'
   );
 
   React.useEffect(() => {
@@ -524,7 +541,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const handleResetHeaderForDesign = (targetDesign: FrameDesign) => {
     const updatedHeaders = { ...(card.headersByDesign || {}) };
     delete updatedHeaders[targetDesign];
-    const currentActiveDesign = card.frameDesign || 'jacket-original';
+    const currentActiveDesign = card.frameDesign || 'graphic_001';
     onChange({
       customHeaderPng: updatedHeaders[currentActiveDesign] || undefined,
       headersByDesign: updatedHeaders,
@@ -534,12 +551,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   // Apply a header to all templates
   const handleApplyHeaderToAll = (url: string) => {
     const allDesigns: FrameDesign[] = [
-      'jacket-original',
-      'jacket-breaking-red',
-      'jacket-text-breaking',
-      'jacket-investigation',
-      'jacket-quote',
-      'jacket-morning',
+      'graphic_001',
+      'graphic_002',
+      'graphic_003',
+      'graphic_004',
       'custom-png',
     ];
     const updatedHeaders: Record<string, string> = {};
@@ -554,7 +569,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   // Legacy/Default Header PNG upload
   const handleHeaderUpload = (file: File) => {
-    const currentDesign = card.frameDesign || 'jacket-original';
+    const currentDesign = card.frameDesign || 'graphic_001';
     handleHeaderUploadForDesign(file, currentDesign);
   };
 
@@ -638,7 +653,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     reader.onload = (e) => {
       if (e.target?.result) {
         const url = e.target.result as string;
-        const designToUpdate = targetDesign || selectedFooterDesignTab || card.frameDesign || 'jacket-original';
+        const designToUpdate = targetDesign || selectedFooterDesignTab || card.frameDesign || 'graphic_001';
         const updatedFooters = { ...(card.footersByDesign || {}) };
         updatedFooters[designToUpdate] = url;
         onChange({
@@ -654,10 +669,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   // Reset footer for a specific design
   const handleFooterReset = (targetDesign?: FrameDesign) => {
-    const designToReset = targetDesign || selectedFooterDesignTab || card.frameDesign || 'jacket-original';
+    const designToReset = targetDesign || selectedFooterDesignTab || card.frameDesign || 'graphic_001';
     const updatedFooters = { ...(card.footersByDesign || {}) };
     delete updatedFooters[designToReset];
-    const currentActiveDesign = card.frameDesign || 'jacket-original';
+    const currentActiveDesign = card.frameDesign || 'graphic_001';
     onChange({
       customFooterPng: updatedFooters[currentActiveDesign] || undefined,
       footersByDesign: updatedFooters,
@@ -669,12 +684,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   // Apply a footer to all templates
   const handleApplyFooterToAll = (url: string) => {
     const allDesigns: FrameDesign[] = [
-      'jacket-original',
-      'jacket-breaking-red',
-      'jacket-text-breaking',
-      'jacket-investigation',
-      'jacket-quote',
-      'jacket-morning',
+      'graphic_001',
+      'graphic_002',
+      'graphic_003',
+      'graphic_004',
       'custom-png',
     ];
     const updatedFooters: Record<string, string> = {};
@@ -1030,7 +1043,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             स्टेप 1: टेम्पलेट्स (Templates)
           </span>
           <span className="text-xs text-neutral-400 font-medium">
-            {currentFrameOptions.find((f) => (card.frameDesign || 'jacket-original') === f.id)?.name || 'फ्रेम स्टाइल'}
+            {currentFrameOptions.find((f) => (card.frameDesign || 'graphic_001') === f.id)?.name || 'फ्रेम स्टाइल'}
           </span>
         </div>
 
@@ -2520,7 +2533,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                               : 'border-neutral-800 opacity-60 hover:opacity-100'
                           }`}
                         >
-                          <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" />
+                          <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
                           <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
                             फोटो {pIdx + 1}
                           </span>
@@ -2550,6 +2563,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         src={card.images.main}
                         alt="Photo 1 preview"
                         className="w-16 h-16 object-cover rounded-md border border-neutral-700 shadow-sm shrink-0"
+                        onError={handleThumbnailImgError}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-green-400 font-bold flex items-center gap-1">
@@ -2648,6 +2662,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           src={card.images.second}
                           alt="Photo 2 preview"
                           className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
+                          onError={handleThumbnailImgError}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
@@ -2690,7 +2705,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     {card.images.main && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                        <img src={card.images.main} alt="Photo 1" className="w-10 h-10 object-cover rounded" />
+                        <img src={card.images.main} alt="Photo 1" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
                       </div>
                     )}
@@ -2709,7 +2724,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     {card.images.second && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                        <img src={card.images.second} alt="Photo 2" className="w-10 h-10 object-cover rounded" />
+                        <img src={card.images.second} alt="Photo 2" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
                       </div>
                     )}
@@ -2728,7 +2743,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     {card.images.third && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                        <img src={card.images.third} alt="Photo 3" className="w-10 h-10 object-cover rounded" />
+                        <img src={card.images.third} alt="Photo 3" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
                       </div>
                     )}
@@ -2748,7 +2763,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       </div>
                       {card.images.fourth && (
                         <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
-                          <img src={card.images.fourth} alt="Photo 4" className="w-10 h-10 object-cover rounded" />
+                          <img src={card.images.fourth} alt="Photo 4" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                           <span className="text-[10px] text-green-400">सक्रिय</span>
                         </div>
                       )}
@@ -3467,7 +3482,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       {activeHeaderPng && (
                         <button
                           type="button"
-                          onClick={() => handleResetHeaderForDesign(card.frameDesign || 'jacket-original')}
+                          onClick={() => handleResetHeaderForDesign(card.frameDesign || 'graphic_001')}
                           className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
                         >
                           हटाएं

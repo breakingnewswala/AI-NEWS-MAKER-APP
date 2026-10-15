@@ -9,6 +9,7 @@ import { getActiveHeaderPng } from '../lib/headerUtils';
 import { getEffectiveSpeaker, cleanHeadlineText } from '../lib/speakerUtils';
 import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
+import { getApiUrl } from '../lib/apiConfig';
 
 interface CardPreviewProps {
   card: NewsCardData;
@@ -23,6 +24,18 @@ const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
 
 const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const target = e.currentTarget;
+  const currentSrc = target.src;
+  // If proxied image failed, try loading original raw image directly
+  if (currentSrc.includes('/api/proxy-image')) {
+    try {
+      const u = new URL(currentSrc, window.location.href);
+      const originalUrl = u.searchParams.get('url');
+      if (originalUrl && originalUrl !== currentSrc) {
+        target.src = originalUrl;
+        return;
+      }
+    } catch {}
+  }
   target.onerror = null;
   target.src = FALLBACK_NEWS_BG;
 };
@@ -44,12 +57,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   }, [rawCard]);
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
   const hasUploadedPhoto = Boolean(
-    card.images?.main &&
-    card.images.main.trim().length > 0 &&
-    card.images.main !== FALLBACK_NEWS_BG &&
-    !card.images.main.includes('placeholder_news_photo') &&
-    !card.images.main.includes('placeholder_news_search') &&
-    !card.images.main.includes('preview_placeholder')
+    (card.images?.main &&
+      card.images.main.trim().length > 0 &&
+      card.images.main !== FALLBACK_NEWS_BG &&
+      !card.images.main.includes('placeholder_news_photo') &&
+      !card.images.main.includes('placeholder_news_search') &&
+      !card.images.main.includes('preview_placeholder')) ||
+    (card.images?.second && card.images.second.trim().length > 0)
   );
   const getProxiedImageUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return '';
@@ -63,8 +77,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         !trimmed.startsWith(window.location.origin) &&
         !trimmed.startsWith('/api/proxy-image')
       ) {
-        return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+        return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
       }
+    }
+    if (trimmed.startsWith('/api/proxy-image')) {
+      return getApiUrl(trimmed);
     }
     return trimmed;
   };
@@ -72,6 +89,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
     ? getProxiedImageUrl(card.images.main)
     : FALLBACK_NEWS_BG;
+  const secondPhotoSrc = (card.images?.second && card.images.second.trim().length > 0)
+    ? getProxiedImageUrl(card.images.second)
+    : mainPhotoSrc;
+  const thirdPhotoSrc = (card.images?.third && card.images.third.trim().length > 0)
+    ? getProxiedImageUrl(card.images.third)
+    : mainPhotoSrc;
+  const fourthPhotoSrc = (card.images?.fourth && card.images.fourth.trim().length > 0)
+    ? getProxiedImageUrl(card.images.fourth)
+    : secondPhotoSrc;
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomPlateRef = useRef<HTMLDivElement>(null);
   const contentAreaRef = useRef<HTMLDivElement>(null);
@@ -501,7 +527,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         </div>
       ) : (
       <div
-        className={`absolute inset-x-0 z-1 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
+        className={`absolute inset-x-0 z-10 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
         style={{
           top: card.frameDesign === 'graphic_004' ? '33.2%' : '0px',
           bottom: card.frameDesign === 'graphic_003'
@@ -534,7 +560,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </div>
               <div className="w-1/2 h-full overflow-hidden relative">
                 <img
-                  src={card.secondaryPhoto || card.images?.second}
+                  src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   onError={handleImgError}
@@ -615,7 +641,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Bottom Frame: 65% Remaining Height with custom crop support */}
             <div className="w-full h-[65%] overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
@@ -631,7 +657,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Top Frame: 50% Height */}
             <div className="w-full h-[50%] overflow-hidden relative border-b-2 border-white/40">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
@@ -641,7 +667,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Bottom Frame: 50% Height */}
             <div className="w-full h-[50%] overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
@@ -656,7 +682,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           <div className="w-full h-full grid grid-cols-2 gap-0.5">
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
@@ -665,7 +691,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
@@ -681,7 +707,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div className="w-full h-[52%] grid grid-cols-2 gap-0.5">
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.main}
+                  src={mainPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={mainStyle}
@@ -690,7 +716,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </div>
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.second || card.images.main}
+                  src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={secondStyle}
@@ -700,7 +726,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
             <div className="w-full h-[48%] overflow-hidden relative">
               <img
-                src={card.images.third || card.images.main}
+                src={thirdPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={thirdStyle}
@@ -715,7 +741,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           <div className="w-full h-full flex flex-col gap-0.5">
             <div className="w-full h-[48%] overflow-hidden relative">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
@@ -725,7 +751,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div className="w-full h-[52%] grid grid-cols-2 gap-0.5">
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.second || card.images.main}
+                  src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={secondStyle}
@@ -734,7 +760,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </div>
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.third || card.images.main}
+                  src={thirdPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={thirdStyle}
@@ -751,7 +777,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Top Left */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
@@ -761,7 +787,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Top Right */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
@@ -771,7 +797,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Bottom Left */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.third || card.images.main}
+                src={thirdPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={thirdStyle}
@@ -781,7 +807,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {/* Bottom Right */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.fourth || card.images.second || card.images.main}
+                src={fourthPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={fourthStyle}
