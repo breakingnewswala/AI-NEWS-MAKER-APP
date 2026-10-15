@@ -110,6 +110,34 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const [isResizingAd, setIsResizingAd] = useState(false);
   const dragStartRef = useRef<{ target: 'ad1' | 'ad2'; startX: number; startY: number; initX: number; initY: number; initW: number; initH: number } | null>(null);
 
+  // Interactive Logo Safe-Zone Dragging State (Part A)
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  const logoDragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+
+  const handleLogoMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onChange) return;
+    setIsDraggingLogo(true);
+    logoDragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: card.logoX !== undefined ? card.logoX : 10,
+      initY: card.logoY !== undefined ? card.logoY : 10,
+    };
+  };
+
+  const handleLogoTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    if (!onChange || e.touches.length === 0) return;
+    setIsDraggingLogo(true);
+    logoDragStartRef.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      initX: card.logoX !== undefined ? card.logoX : 10,
+      initY: card.logoY !== undefined ? card.logoY : 10,
+    };
+  };
+
   const handleAdMouseDown = (e: React.MouseEvent, target: 'ad1' | 'ad2' = 'ad1') => {
     e.stopPropagation();
     if (!onChange) return;
@@ -144,6 +172,35 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingLogo && logoDragStartRef.current && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const deltaXPercent = ((e.clientX - logoDragStartRef.current.startX) / rect.width) * 100;
+        const deltaYPercent = ((e.clientY - logoDragStartRef.current.startY) / rect.height) * 100;
+
+        const SAFE_MIN_X = 10;
+        const SAFE_MIN_Y = 10;
+        const SAFE_MAX_X = 90;
+        const SAFE_MAX_Y = 90;
+        const baseW = 18;
+        const baseH = 11.5;
+        const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
+        const lW = baseW * scale;
+        const lH = baseH * scale;
+
+        const maxPosX = Math.max(SAFE_MIN_X, SAFE_MAX_X - lW);
+        const maxPosY = Math.max(SAFE_MIN_Y, SAFE_MAX_Y - lH);
+
+        const newX = Math.max(SAFE_MIN_X, Math.min(maxPosX, Math.round(logoDragStartRef.current.initX + deltaXPercent)));
+        const newY = Math.max(SAFE_MIN_Y, Math.min(maxPosY, Math.round(logoDragStartRef.current.initY + deltaYPercent)));
+
+        onChange?.({
+          logoX: newX,
+          logoY: newY,
+        });
+        return;
+      }
+
       const container = bodyAreaRef.current || contentAreaRef.current;
       if (!dragStartRef.current || !container) return;
       const rect = container.getBoundingClientRect();
@@ -204,18 +261,24 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const handleMouseUp = () => {
       setIsDraggingAd(false);
       setIsResizingAd(false);
+      setIsDraggingLogo(false);
       dragStartRef.current = null;
+      logoDragStartRef.current = null;
     };
 
-    if (isDraggingAd || isResizingAd) {
+    if (isDraggingAd || isResizingAd || isDraggingLogo) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleMouseMove as any);
+      window.addEventListener('touchend', handleMouseUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleMouseMove as any);
+      window.removeEventListener('touchend', handleMouseUp);
     };
-  }, [isDraggingAd, isResizingAd, card.epaperAd, onChange]);
+  }, [isDraggingAd, isResizingAd, isDraggingLogo, card.epaperAd, card.logoScale, onChange]);
 
   // Synchronize container width with ResizeObserver for 100% exact 1080px canvas font matching
   useEffect(() => {
@@ -1014,32 +1077,56 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           )}
 
           {/* Top-Left Channel Logo Area: Displays login user's transparent PNG logo in designated logo area */}
-          {card.showMasterBranding !== false && (
-            <div
-              className="absolute z-30 flex items-center justify-center pointer-events-auto"
-              style={{
-                left: '6%',
-                top: '4%',
-                width: '18%',
-                height: '11.5%',
-                transform: `scale(${card.logoScale ?? 1.0})`,
-                transformOrigin: 'center center',
-              }}
-            >
-              {card.customLogoUrl ? (
-                <img
-                  src={card.customLogoUrl}
-                  alt="Channel Logo"
-                  className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
-                  crossOrigin="anonymous"
-                />
-              ) : (
-                <span className="text-white font-black text-lg sm:text-xl md:text-2xl tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-['Poppins']">
-                  Your Logo
-                </span>
-              )}
-            </div>
-          )}
+          {/* Top-Left Channel Logo Area: Clamped strictly to Inner Safe Zone (10% to 90%) and grows inward */}
+          {card.showMasterBranding !== false && (() => {
+            const SAFE_MIN_X = 10;
+            const SAFE_MIN_Y = 10;
+            const SAFE_MAX_X = 90;
+            const SAFE_MAX_Y = 90;
+
+            const baseW = 18;
+            const baseH = 11.5;
+            const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
+            const lW = baseW * scale;
+            const lH = baseH * scale;
+
+            let posX = card.logoX !== undefined ? card.logoX : SAFE_MIN_X;
+            let posY = card.logoY !== undefined ? card.logoY : SAFE_MIN_Y;
+
+            // Inward clamping: ensure logo never crosses any edge of the inner safe zone
+            if (posX + lW > SAFE_MAX_X) posX = Math.max(SAFE_MIN_X, SAFE_MAX_X - lW);
+            if (posY + lH > SAFE_MAX_Y) posY = Math.max(SAFE_MIN_Y, SAFE_MAX_Y - lH);
+            if (posX < SAFE_MIN_X) posX = SAFE_MIN_X;
+            if (posY < SAFE_MIN_Y) posY = SAFE_MIN_Y;
+
+            return (
+              <div
+                className="absolute z-30 flex items-center justify-center select-none cursor-move pointer-events-auto"
+                style={{
+                  left: `${posX}%`,
+                  top: `${posY}%`,
+                  width: `${lW}%`,
+                  height: `${lH}%`,
+                }}
+                onMouseDown={handleLogoMouseDown}
+                onTouchStart={handleLogoTouchStart}
+                title="लोगो (सेफ ज़ोन के भीतर खींचें या आकार बदलें)"
+              >
+                {card.customLogoUrl ? (
+                  <img
+                    src={card.customLogoUrl}
+                    alt="Channel Logo"
+                    className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] pointer-events-none"
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <span className="text-white font-black text-lg sm:text-xl md:text-2xl tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-['Poppins'] pointer-events-none">
+                    Your Logo
+                  </span>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Top-Right Location Box: Displays user's actual location in the authentic pill area */}
           {card.showLocation !== false && (
@@ -1090,29 +1177,60 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
               }}
             >
-              {/* Subtle top & bottom banner highlight bevels */}
-              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-80 pointer-events-none" />
-              <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-80 pointer-events-none" />
-
-              <h1
-                className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] px-2"
+              {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
+              <div
+                className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
                 style={{
-                  fontFamily: card.headlineFontFamily || 'Baloo 2',
-                  fontSize: `${effectivePreviewFontSize}px`,
-                  textAlign: 'center',
+                  background: 'linear-gradient(90deg, rgba(255,26,26,0) 0%, rgba(255,77,0,0.85) 35%, #FFE600 50%, rgba(255,77,0,0.85) 65%, rgba(255,26,26,0) 100%)',
+                  boxShadow: '0 0 10px #FFE600',
                 }}
-              >
-                {renderFormattedHeadline()}
-              </h1>
+              />
+              {/* Subtle top & bottom banner highlight bevels */}
+              <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-85 pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-75 pointer-events-none" />
+
+              {/* Left & Right Dark Red Chevron Accent Stripes matching exported graphic */}
+              <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                <g fill="#7A0005" opacity="0.6">
+                  <polygon points="0,20 60,20 30,80 0,80" />
+                  <polygon points="0,100 75,100 35,180 0,180" />
+                  <polygon points="0,200 90,200 40,300 0,300" />
+                  <polygon points="0,320 80,320 30,420 0,420" />
+                </g>
+              </svg>
+              <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                <g fill="#7A0005" opacity="0.6">
+                  <polygon points="100,20 40,20 70,80 100,80" />
+                  <polygon points="100,100 25,100 65,180 100,180" />
+                  <polygon points="100,200 10,200 60,300 100,300" />
+                  <polygon points="100,320 20,320 70,420 100,420" />
+                </g>
+              </svg>
+
+              {/* Headline Text: Center vertically & horizontally with balanced padding */}
+              <div className="relative z-10 w-full flex items-center justify-center pt-1.5 sm:pt-2 px-2">
+                <h1
+                  className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center px-2"
+                  style={{
+                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontSize: `${effectivePreviewFontSize}px`,
+                    textAlign: 'center',
+                    textShadow: '0 2px 6px rgba(0, 0, 0, 0.75)',
+                  }}
+                >
+                  {renderFormattedHeadline()}
+                </h1>
+              </div>
             </div>
           )}
 
           {/* Bottom Master Branding Footer (Bottom 0 to 7.2%):
               Renders user's actual saved Footer with correct social media icons */}
           <div
-            className="absolute inset-x-0 bottom-0 z-30 flex items-center bg-white pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
+            className="absolute inset-x-0 bottom-0 z-30 flex items-center pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
             style={{
               height: '7.2%',
+              backgroundColor: card.footerBgColor || '#FFFFFF',
             }}
           >
             <FooterGraphic

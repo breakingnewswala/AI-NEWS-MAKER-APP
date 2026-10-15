@@ -108,6 +108,7 @@ export interface NewsCardData {
   testLogoUrl?: string;
   testSamplePhotoUrl?: string;
   id?: string;
+  sourceNewsId?: string; // Tracks the news ID from which graphic was initiated
   title?: string;
   date?: string;
   photoUrl?: string;
@@ -128,6 +129,8 @@ export interface NewsCardData {
   customLogoPngUrl?: string; // Dedicated PNG logo
   customLogoGifUrl?: string; // Dedicated GIF animated logo
   logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.0)
+  logoX?: number; // Logo X position percentage within safe zone (10% to 90%, default 10)
+  logoY?: number; // Logo Y position percentage within safe zone (10% to 90%, default 10)
   customHeaderPng?: string; // Uploaded header PNG (IMAGE NEWS.png)
   headersByDesign?: Partial<Record<FrameDesign, string>>; // Separate header graphic per frame template
   customFooterPng?: string; // Uploaded footer PNG (Footer.png)
@@ -386,7 +389,6 @@ export interface NewsDraft {
   id: string;
   title: string;
   headline: string;
-  timestamp?: number;
   category: string;
   location: string;
   summary: string;
@@ -396,6 +398,7 @@ export interface NewsDraft {
   thumbnailUrl?: string;
   createdAt: number;
   updatedAt: number;
+  timestamp?: number;
 }
 
 export interface ChannelProfile {

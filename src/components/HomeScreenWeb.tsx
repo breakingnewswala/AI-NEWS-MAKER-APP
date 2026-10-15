@@ -36,10 +36,14 @@ import {
   ArrowUp,
   Smartphone,
   Download,
+  Flag,
+  ExternalLink,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
+import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
+import { getApiUrl } from '../lib/apiConfig';
 import {
   getActiveRssNewsPosts,
   getSavedNewsChannels,
@@ -141,6 +145,14 @@ export function formatDynamicTime(timestamp?: number, fallback?: string): string
   return `${days} दिन पहले`;
 }
 
+export function cleanUserFacingFullContent(text?: string): string {
+  if (!text) return '';
+  return text
+    .replace(/(?:^|\n)\s*(?:स्रोतः?|स्रोत|Source\s*:?|Courtesy\s*:?|साभार\s*:?)[^\n]*/gi, '')
+    .replace(/https?:\/\/[^\s]+/gi, '')
+    .trim();
+}
+
 interface HomeScreenWebProps {
   posts: NewsFeedPost[];
   currentUser?: ReporterUser | null;
@@ -171,6 +183,50 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [speakingPostId, setSpeakingPostId] = useState<string | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
+  // User Report Modal State (Part M)
+  const [reportingPost, setReportingPost] = useState<NewsFeedPost | null>(null);
+  const [reportReason, setReportReason] = useState<string>('गलत / भ्रामक खबर (Fake / Misleading News)');
+  const [reportDetails, setReportDetails] = useState<string>('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+  const [reportFeedback, setReportFeedback] = useState<string>('');
+
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportingPost || isSubmittingReport) return;
+    setIsSubmittingReport(true);
+    try {
+      const payload = {
+        reportType: 'news',
+        targetId: reportingPost.id,
+        targetTitle: reportingPost.title,
+        reportReason,
+        message: reportDetails ? `${reportReason}: ${reportDetails}` : reportReason,
+        userId: currentUser?.email || 'guest',
+        userName: currentUser?.name || 'न्यूज़ पाठक',
+        userEmail: currentUser?.email || '',
+      };
+      const res = await fetch(getApiUrl('/api/support/requests'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setReportFeedback('✅ आपकी रिपोर्ट दर्ज हो गई है। धन्यवाद!');
+        setTimeout(() => {
+          setReportingPost(null);
+          setReportFeedback('');
+          setReportDetails('');
+        }, 1800);
+      } else {
+        setReportFeedback('❌ रिपोर्ट सबमिट करने में विफल। पुनः प्रयास करें।');
+      }
+    } catch {
+      setReportFeedback('❌ नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
 
   // Admin moderation states (Active only when authenticated Admin is in Continue as Admin mode)
   const canModerate = isEffectiveAdmin(currentUser);
@@ -935,6 +991,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span className="text-slate-400 font-medium truncate max-w-[35%]">
                             [चैनल: {cleanViewerChannel(post.sourceChannel)}]
                           </span>
+                          {post.sourceUrl && (
+                            <a
+                              href={post.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-blue-300 text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 border border-slate-700"
+                              title="मूल वेबसाइट पर खबर देखें"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" />
+                              <span>वेबसाइट पर जाएँ</span>
+                            </a>
+                          )}
                           {post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
                             <button
                               type="button"
@@ -971,40 +1040,60 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     {/* Inline Full Content Reader (toggled by 'विवरण पढ़ें / पूरी खबर पढ़ें') */}
                     {expandedCardId === `highlight-${post.id}` && (
                       <div className="mb-2.5 p-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 leading-relaxed whitespace-pre-line animate-in fade-in duration-200">
-                        {post.fullContent || post.summary}
+                        {cleanUserFacingFullContent(post.fullContent || post.summary)}
                       </div>
                     )}
                   </div>
 
-                  {/* ONLY 2 Action Buttons (Share and Sound/TTS deleted as requested) */}
-                  <div className="flex items-center gap-2 pt-2.5 border-t border-slate-800/80 mt-auto">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedCardId(
-                          expandedCardId === `highlight-${post.id}`
-                            ? null
-                            : `highlight-${post.id}`
-                        )
-                      }
-                      className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                      <span className="truncate">
-                        {expandedCardId === `highlight-${post.id}`
-                          ? 'संक्षिप्त करें'
-                          : 'पूरी खबर पढ़ें'}
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-1.5 pt-2.5 border-t border-slate-800/80 mt-auto">
+                    {isNewsGraphicCreated(currentUser?.email, post.id) && (
+                      <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
+                        ✓ इस खबर का ग्राफिक बनाया जा चुका है
                       </span>
-                    </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedCardId(
+                            expandedCardId === `highlight-${post.id}`
+                              ? null
+                              : `highlight-${post.id}`
+                          )
+                        }
+                        className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        <span className="truncate">
+                          {expandedCardId === `highlight-${post.id}`
+                            ? 'संक्षिप्त करें'
+                            : 'पूरी खबर पढ़ें'}
+                        </span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => onOpenStudioWithNews(post)}
-                      className="flex-1 py-1.5 px-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-                      <span>खबर से ग्राफिक बनाएं</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => onOpenStudioWithNews(post)}
+                        className={`flex-1 py-1.5 px-2 ${
+                          isNewsGraphicCreated(currentUser?.email, post.id)
+                            ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500'
+                            : 'bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500'
+                        } text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer whitespace-nowrap`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                        <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setReportingPost(post)}
+                        className="p-1.5 bg-slate-800/80 hover:bg-rose-950/50 hover:text-rose-400 text-slate-400 rounded-xl border border-slate-700/60 transition-colors cursor-pointer"
+                        title="इस खबर की रिपोर्ट करें"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1283,54 +1372,88 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       {/* Inline Content Expansion (No popup!) */}
                       {expandedCardId === post.id && (
                         <div className="pt-2 text-xs text-slate-300 leading-relaxed border-t border-slate-800/80 whitespace-pre-line animate-in fade-in duration-200">
-                          {post.fullContent || post.summary}
+                          {cleanUserFacingFullContent(post.fullContent || post.summary)}
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Dedicated Action Button for Pending RSS in Admin View */}
-                  {canModerate && post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
-                    <div className="px-4 pb-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          approveRssPost(post.id);
-                          setApprovedRssIds(getApprovedRssIds());
-                        }}
-                        className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
-                        title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
-                      >
-                        <Check className="w-4 h-4 text-white" />
-                        <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
-                      </button>
+                  {canModerate && post.id.startsWith('rss-') && (
+                    <div className="px-4 pb-2 flex items-center gap-2">
+                      {post.sourceUrl && (
+                        <a
+                          href={post.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                          title="मूल वेबसाइट पर खबर देखें"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                          <span>वेबसाइट पर जाएँ</span>
+                        </a>
+                      )}
+                      {!isRssPostApproved(post, approvedRssIds) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            approveRssPost(post.id);
+                            setApprovedRssIds(getApprovedRssIds());
+                          }}
+                          className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
+                          title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
+                        >
+                          <Check className="w-4 h-4 text-white" />
+                          <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
+                        </button>
+                      )}
                     </div>
                   )}
 
-                  <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => onOpenStudioWithNews(post)}
-                      className="flex-1 py-2 px-3 bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>खबर से ग्राफिक बनाएं</span>
-                    </button>
+                  <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex flex-col gap-2">
+                    {isNewsGraphicCreated(currentUser?.email, post.id) && (
+                      <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
+                        ✓ इस खबर का ग्राफिक बनाया जा चुका है
+                      </span>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => onOpenStudioWithNews(post)}
+                        className={`flex-1 py-2 px-3 ${
+                          isNewsGraphicCreated(currentUser?.email, post.id)
+                            ? 'bg-gradient-to-r from-emerald-600/30 to-teal-600/30 border-emerald-500/40 text-emerald-300 hover:text-white'
+                            : 'bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white'
+                        } border font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
+                      </button>
 
-                    <button
-                      onClick={() =>
-                        setExpandedCardId(expandedCardId === post.id ? null : post.id)
-                      }
-                      className={`py-2 px-3 rounded-xl transition-colors font-bold text-xs flex items-center justify-center gap-1.5 border ${
-                        expandedCardId === post.id
-                          ? 'bg-amber-500 text-slate-950 border-amber-400'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
-                      }`}
-                      title="पूरी खबर पढ़ें"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>{expandedCardId === post.id ? 'बंद करें' : 'पूरी खबर पढ़ें'}</span>
-                    </button>
+                      <button
+                        onClick={() =>
+                          setExpandedCardId(expandedCardId === post.id ? null : post.id)
+                        }
+                        className={`py-2 px-3 rounded-xl transition-colors font-bold text-xs flex items-center justify-center gap-1.5 border ${
+                          expandedCardId === post.id
+                            ? 'bg-amber-500 text-slate-950 border-amber-400'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
+                        }`}
+                        title="पूरी खबर पढ़ें"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>{expandedCardId === post.id ? 'बंद करें' : 'पूरी खबर पढ़ें'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setReportingPost(post)}
+                        className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700/60 transition-colors cursor-pointer"
+                        title="इस खबर की रिपोर्ट करें"
+                      >
+                        <Flag className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -1874,6 +1997,107 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Report News Modal (Part M) */}
+      {reportingPost && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Flag className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-black text-white">खबर की रिपोर्ट करें</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportingPost(null);
+                  setReportFeedback('');
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+              <span className="font-bold text-amber-300">शीर्षक: </span>
+              {reportingPost.title}
+            </div>
+
+            <form onSubmit={handleSubmitReport} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  रिपोर्ट का कारण चुनें:
+                </label>
+                <div className="space-y-1.5 text-xs">
+                  {[
+                    'गलत / भ्रामक खबर (Fake / Misleading News)',
+                    'आपत्तिजनक भाषा / सामग्री (Offensive Language / Content)',
+                    'कॉपीराइट या अन्य समस्या (Copyright / Other Issue)',
+                  ].map((option) => (
+                    <label
+                      key={option}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 cursor-pointer text-slate-200 border border-slate-700/60"
+                    >
+                      <input
+                        type="radio"
+                        name="reportReason"
+                        value={option}
+                        checked={reportReason === option}
+                        onChange={(e) => setReportReason(e.target.value)}
+                        className="accent-rose-500"
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  अतिरिक्त विवरण (वैकल्पिक):
+                </label>
+                <textarea
+                  value={reportDetails}
+                  onChange={(e) => setReportDetails(e.target.value)}
+                  placeholder="कृपया समस्या का संक्षेप में विवरण दें..."
+                  rows={3}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              {reportFeedback && (
+                <div className={`p-2.5 rounded-xl text-xs font-bold text-center ${
+                  reportFeedback.startsWith('✅') ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/50' : 'bg-rose-950/80 text-rose-300 border border-rose-500/50'
+                }`}>
+                  {reportFeedback}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportingPost(null);
+                    setReportFeedback('');
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReport}
+                  className="px-5 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>{isSubmittingReport ? 'सबमिट हो रहा है...' : 'रिपोर्ट भेजें'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

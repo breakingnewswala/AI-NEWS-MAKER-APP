@@ -11,6 +11,10 @@ import {
   drawInvestigationHeader,
   drawQuoteHeader,
 } from './HeaderDesigns';
+import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
+import { getApiUrl } from './apiConfig';
+
+const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
 
 // Polyfill CanvasRenderingContext2D.prototype.roundRect for all browsers and Android WebViews
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
@@ -64,6 +68,11 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
 
   let effectiveSrc = src.trim();
 
+  // If effectiveSrc starts with /api/proxy-image, resolve absolute API url
+  if (effectiveSrc.startsWith('/api/proxy-image')) {
+    effectiveSrc = getApiUrl(effectiveSrc);
+  }
+
   // If source is a remote HTTP/HTTPS URL, convert it to a same-origin Blob URL or proxy to guarantee the canvas is NEVER tainted
   if (
     typeof window !== 'undefined' &&
@@ -79,7 +88,7 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
         effectiveSrc = URL.createObjectURL(b);
       } else {
         // 2. Fall back to backend image proxy
-        const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(effectiveSrc)}`;
+        const proxiedUrl = getApiUrl(`/api/proxy-image?url=${encodeURIComponent(effectiveSrc)}`);
         const proxyRes = await fetch(proxiedUrl).catch(() => null);
         if (proxyRes && proxyRes.ok) {
           const b = await proxyRes.blob();
@@ -109,13 +118,38 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
       fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
       fallback.onload = () => finish(fallback);
       fallback.onerror = () => finish(fallback);
-    }, 4500);
+    }, 6000);
 
     img.onload = () => {
       clearTimeout(timeout);
       finish(img);
     };
     img.onerror = () => {
+      // If the proxied image failed, retry once with the raw target URL if present in query param
+      if (effectiveSrc.includes('/api/proxy-image') && effectiveSrc.includes('url=')) {
+        try {
+          const urlMatch = effectiveSrc.match(/[?&]url=([^&]+)/);
+          if (urlMatch && urlMatch[1]) {
+            const rawUrl = decodeURIComponent(urlMatch[1]);
+            const retryImg = new Image();
+            retryImg.crossOrigin = 'anonymous';
+            retryImg.onload = () => {
+              clearTimeout(timeout);
+              finish(retryImg);
+            };
+            retryImg.onerror = () => {
+              clearTimeout(timeout);
+              const fallback = new Image();
+              fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+              fallback.onload = () => finish(fallback);
+              fallback.onerror = () => finish(fallback);
+            };
+            retryImg.src = rawUrl;
+            return;
+          }
+        } catch {}
+      }
+
       clearTimeout(timeout);
       const fallback = new Image();
       fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
@@ -393,7 +427,6 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     } else if (
       card.layout === 'single' ||
       !card.layout ||
-      card.layout === 'inset-circle' ||
       (card.layout === 'full' && isSuperBreaking)
     ) {
       // Single Image / Constrained photo: stops at photoBottomY
@@ -528,46 +561,6 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, topH - 2, width, 4); // Horizontal line
       ctx.fillRect(halfW - 2, 0, 4, photoBottomY); // Vertical line
-    }
-
-    // Draw Inset Circle if layout is inset-circle (Round Circle Image)
-    if (card.layout === 'inset-circle' && card.images.insetCircle) {
-      const insetImg = await loadImage(card.images.insetCircle);
-      const cx = (card.insetPosition.x / 100) * width;
-      const cy = (card.insetPosition.y / 100) * photoBottomY;
-      const radius = width * 0.155; // ~168px radius
-
-      // Inset photo crop & zoom settings
-      const icPos = card.imagePositions?.insetCircle;
-      const icCropX = (icPos?.x ?? 50) / 100;
-      const icCropY = (icPos?.y ?? 50) / 100;
-      const icZoom = icPos?.zoom ?? 1.0;
-
-      // Circular shadow background
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-      ctx.shadowBlur = 32;
-      ctx.shadowOffsetY = 16;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-
-      // Circular clipped photo with custom crop & zoom
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius - 4, 0, Math.PI * 2);
-      ctx.clip();
-      drawImageCover(ctx, insetImg, cx - radius, cy - radius, radius * 2, radius * 2, icCropX, icCropY, icZoom);
-      ctx.restore();
-
-      // White circular stroke border
-      ctx.save();
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
     }
   } catch (imgErr) {
     console.warn('Canvas image load warning:', imgErr);
@@ -1014,8 +1007,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
 
   // 7C. Date Stamp: Vertical along Right Wall, Rotated 270° in Hindi
   if (card.showDate !== false && card.frameDesign !== 'jacket-default' && card.frameDesign !== 'jacket-text-breaking' && card.frameDesign !== 'jacket-morning' && card.frameDesign !== 'jacket-epaper') {
-    const dateText = card.dateStr || getFormattedHindiDate();
-    drawDateStamp(ctx, width, height, dateText);
+    drawDateStamp(ctx, width, height, card);
   }
 
   // 8. Permanent Theme Footer Bar (Exact reproduction of Footer.png)
@@ -1039,7 +1031,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       card.showMobileNumber,
       card.footerBgColor || '#FFFFFF',
       card.footerTextColor,
-      card.footerIconStyle || 'color'
+      card.footerIconStyle || 'color',
+      card.showWebsite
     );
   }
 
@@ -1081,6 +1074,10 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       ctx.restore();
     }
   }
+
+  // 10. Always render Watermark and Date Stamp on the TOPMOST visual layer of the canvas
+  drawPhotoDisclaimerWatermark(ctx, width, height, card);
+  drawDateStamp(ctx, width, height, card);
 
   return canvas;
 }
@@ -1474,9 +1471,14 @@ async function drawMorningJacketBackground(
 // GRAPHIC 1 — NEWS GRAPHIC TEMPLATE (graphic_001)
 // Aspect Ratio: STRICT 4:5 (1080 x 1350)
 // Plan: BASIC
-// Top Photo (53%), Location Box (top-left), Logo Box (top-right),
-// 270° Rotated Date (left), 3-Line Headline on Polygon White,
-// "पूरी खबर डिस्क्रिप्शन में" Single Line CTA, Fixed Yellow Footer
+// ============================================================================
+// GRAPHIC 001: AUTHENTIC 4:5 DEFAULT PRIMARY NEWS GRAPHIC
+// Loads real background image (/assets/primary_news_graphic_bg.jpg),
+// Top-Left user logo badge, Top-Right user location pill,
+// Top Photo Area (0 to 61.33% height; shows default camera/step 4 instructions when no photo is uploaded),
+// Red Headline Area (61.33% to 89.85% height; shows default Step 3 instructions when no headline is entered,
+// replaces with real-time white/yellow headline on red gradient when headline is entered),
+// Bottom Footer Area (89.85% to 100% height; draws user's saved FooterGraphic)
 // ============================================================================
 async function drawGraphic001Canvas(
   ctx: CanvasRenderingContext2D,
@@ -1487,303 +1489,390 @@ async function drawGraphic001Canvas(
 ) {
   ctx.save();
 
-  // 1. BACKGROUND: Deep Dark Charcoal / Black Linear Gradient
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-  bgGrad.addColorStop(0, '#090A0D');
-  bgGrad.addColorStop(0.5, '#12151B');
-  bgGrad.addColorStop(1, '#090A0D');
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, width, height);
+  // 1. Load and Draw Authentic Primary Graphic Background Image
+  let bgImg: HTMLImageElement | null = null;
+  try {
+    bgImg = await loadImage('/assets/primary_news_graphic_bg.jpg');
+  } catch (err) {
+    console.warn('Failed to load primary_news_graphic_bg.jpg with leading slash, trying relative path:', err);
+    try {
+      bgImg = await loadImage('assets/primary_news_graphic_bg.jpg');
+    } catch {}
+  }
 
-  // 2. FOUR GOLD GEOMETRIC CORNER ACCENTS
-  const drawGoldCorner = (x: number, y: number, angleDeg: number) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((angleDeg * Math.PI) / 180);
+  if (bgImg && bgImg.width > 0) {
+    ctx.drawImage(bgImg, 0, 0, width, height);
+  } else {
+    // Graceful fallback to dark gradient if image fails to load
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+    bgGrad.addColorStop(0, '#090A0E');
+    bgGrad.addColorStop(0.5, '#0E1118');
+    bgGrad.addColorStop(1, '#090A0E');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+  }
 
-    // Outer gold polygon
-    const g1 = ctx.createLinearGradient(0, 0, 160, 160);
-    g1.addColorStop(0, '#FFE600');
-    g1.addColorStop(0.5, '#D4AF37');
-    g1.addColorStop(1, '#AA771C');
-    ctx.fillStyle = g1;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(160, 0);
-    ctx.lineTo(0, 160);
-    ctx.closePath();
-    ctx.fill();
+  // 2. TOP PHOTO AREA (Y = 0 to 61.33% Height, ~828px on 1080x1350)
+  const photoH = Math.round(height * 0.6133);
+  const hasValidMainPhoto = Boolean(
+    card.images?.main &&
+    card.images.main.trim().length > 0 &&
+    card.images.main !== FALLBACK_NEWS_BG &&
+    !card.images.main.includes('placeholder_news_photo') &&
+    !card.images.main.includes('placeholder_news_search') &&
+    !card.images.main.includes('preview_placeholder')
+  );
 
-    // Mid gold polygon
-    const g2 = ctx.createLinearGradient(120, 0, 0, 120);
-    g2.addColorStop(0, '#FFF275');
-    g2.addColorStop(0.6, '#E5B80B');
-    g2.addColorStop(1, '#553B08');
-    ctx.fillStyle = g2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(110, 0);
-    ctx.lineTo(0, 110);
-    ctx.closePath();
-    ctx.fill();
+  const mCrop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
+  const sCrop = card.imagePositions?.second || { x: 50, y: 50, zoom: 1 };
+  const tCrop = card.imagePositions?.third || { x: 50, y: 50, zoom: 1 };
+  const foCrop = card.imagePositions?.fourth || { x: 50, y: 50, zoom: 1 };
 
-    // Inner bright gold polygon
-    ctx.fillStyle = '#FFE600';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(60, 0);
-    ctx.lineTo(0, 60);
-    ctx.closePath();
-    ctx.fill();
+  const mCropX = (mCrop.x ?? 50) / 100;
+  const mCropY = (mCrop.y ?? 50) / 100;
+  const mZoom = Math.max(1, mCrop.zoom || 1);
 
-    // Sharp gold diagonal lines
-    ctx.strokeStyle = '#FFE600';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(0, 185);
-    ctx.lineTo(185, 0);
-    ctx.stroke();
+  const sCropX = (sCrop.x ?? 50) / 100;
+  const sCropY = (sCrop.y ?? 50) / 100;
+  const sZoom = Math.max(1, sCrop.zoom || 1);
 
-    ctx.strokeStyle = '#D4AF37';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(0, 215);
-    ctx.lineTo(215, 0);
-    ctx.stroke();
+  const tCropX = (tCrop.x ?? 50) / 100;
+  const tCropY = (tCrop.y ?? 50) / 100;
+  const tZoom = Math.max(1, tCrop.zoom || 1);
 
-    ctx.restore();
+  const foCropX = (foCrop.x ?? 50) / 100;
+  const foCropY = (foCrop.y ?? 50) / 100;
+  const foZoom = Math.max(1, foCrop.zoom || 1);
+
+  const canvasFilterStr = getCanvasFilterString(card.imageFilters);
+
+  const getSafeCanvasPhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('/api/proxy-image')) {
+      return getApiUrl(trimmed);
+    }
+    if (
+      (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+      typeof window !== 'undefined' &&
+      !trimmed.startsWith(window.location.origin) &&
+      !trimmed.includes('/api/proxy-image')
+    ) {
+      return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
+    }
+    return trimmed;
   };
 
-  drawGoldCorner(0, 0, 0); // Top-Left
-  drawGoldCorner(width, 0, 90); // Top-Right
-  drawGoldCorner(0, 1274, -90); // Bottom-Left (above footer)
-  drawGoldCorner(width, 1274, 180); // Bottom-Right (above footer)
-
-  // Note: Logo and top corners are rendered after photo so they remain the TOP layer
-
-  // 4. TOP PHOTO AREA (Y = 0 to 680)
-  const photoH = 680;
-  let hasValidPhoto = false;
-  if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg' && card.images.main !== '/assets/placeholder_news_photo.png') {
+  if (hasValidMainPhoto) {
     try {
-      const img = await loadImage(card.images.main);
-      const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
-      const cropX = (crop.x ?? 50) / 100;
-      const cropY = (crop.y ?? 50) / 100;
-      const zoom = Math.max(1, crop.zoom || 1);
-      drawImageCover(ctx, img, 0, 0, width, photoH, cropX, cropY, zoom);
-      hasValidPhoto = true;
+      const mainImg = await loadImage(getSafeCanvasPhotoUrl(card.images.main));
+      const layout = card.layout || 'single';
+
+      if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
+        drawImageCover(ctx, mainImg, 0, 0, width, photoH, mCropX, mCropY, mZoom, canvasFilterStr);
+      } else if (layout === 'split-v') {
+        const topH = Math.round(photoH * 0.35);
+        const bottomH = photoH - topH;
+        drawImageCover(ctx, mainImg, 0, 0, width, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, topH - 2, width, 4);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+      } else if (layout === 'double') {
+        const halfH = Math.round(photoH * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, width, halfH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, halfH - 2, width, 4);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+      } else if (layout === 'double-h' || layout === 'split-h') {
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, halfW - 2, photoH, mCropX, mCropY, mZoom, canvasFilterStr);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(halfW - 2, 0, 4, photoH);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+      } else if (layout === 'grid-3') {
+        const topH = Math.round(photoH * 0.52);
+        const bottomH = photoH - topH;
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, halfW - 2, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+
+        if (card.images?.third) {
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
+          drawImageCover(ctx, thirdImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        }
+      } else if (layout === 'grid-3-bottom') {
+        const topH = Math.round(photoH * 0.48);
+        const bottomH = photoH - topH;
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, width, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+
+        if (card.images?.third) {
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
+          drawImageCover(ctx, thirdImg, halfW + 2, topH + 2, halfW - 2, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, topH + 2, halfW - 2, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        }
+      } else if (layout === 'grid-4') {
+        const halfH = Math.round(photoH * 0.5);
+        const halfW = Math.round(width * 0.5);
+        drawImageCover(ctx, mainImg, 0, 0, halfW - 2, halfH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
+
+        if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        }
+
+        if (card.images?.third) {
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
+          drawImageCover(ctx, thirdImg, 0, halfH + 2, halfW - 2, halfH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, 0, halfH + 2, halfW - 2, halfH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
+        }
+
+        if (card.images?.fourth) {
+          const fourthImg = await loadImage(getSafeCanvasPhotoUrl(card.images.fourth));
+          drawImageCover(ctx, fourthImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
+        } else if (card.images?.second) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+          drawImageCover(ctx, secondImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
+        } else {
+          drawImageCover(ctx, mainImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
+        }
+      }
     } catch (e) {
-      console.warn('Failed to load main image for graphic_001', e);
+      console.warn('Failed to draw photos for graphic_001:', e);
     }
   }
+  // NOTE: If !hasValidMainPhoto, nothing is drawn over the photo area,
+  // allowing the authentic background image's camera icon and Step 4 instructions to show through!
 
-  if (!hasValidPhoto) {
-    // Default Photo Placeholder Layers
+  // 3. TOP-LEFT LOGO AREA (Clean transparent PNG or 'Your Logo' placeholder)
+  if (card.showMasterBranding !== false) {
     ctx.save();
+    const minSafeX = Math.round(width * 0.055);
+    const minSafeY = Math.round(height * 0.055);
+    const baseW = Math.round(width * 0.18);
+    const baseH = Math.round(height * 0.115);
 
-    // Gold circular camera icon badge (center at x=540, y=240)
-    const camX = width / 2;
-    const camY = 240;
+    if (customLogoImg && customLogoImg.width > 0) {
+      const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.0));
+      const lRatio = customLogoImg.width / customLogoImg.height;
+      let lW = baseW * scale;
+      let lH = lW / lRatio;
+      if (lH > baseH * scale) {
+        lH = baseH * scale;
+        lW = lH * lRatio;
+      }
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      ctx.drawImage(customLogoImg, minSafeX, minSafeY, lW, lH);
+    } else {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 36px "Poppins", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Your Logo', minSafeX + baseW / 2, minSafeY + baseH / 2);
+    }
+    ctx.restore();
+  }
+
+  // 4. TOP-RIGHT LOCATION PILL (Single dynamic location pill)
+  if (card.showLocation !== false) {
+    const rawLoc = card.location || '';
+    const cleanLoc = rawLoc
+      .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
+      .replace(/[:\-–—]+$/, '')
+      .trim() || 'लोकेशन';
+
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.strokeStyle = '#FFE600';
-    ctx.lineWidth = 3.5;
-    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-    ctx.shadowBlur = 20;
+    ctx.font = '800 26px "Noto Sans Devanagari", sans-serif';
+    const locTextW = ctx.measureText(cleanLoc).width;
+    const locW = Math.min(Math.round(width * 0.46), locTextW + 80);
+    const locH = Math.round(height * 0.045);
+    const locX = width - locW - Math.round(width * 0.048);
+    const locY = Math.round(height * 0.066);
+
+    // White Pill
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 3;
+    ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(camX, camY, 68, 0, Math.PI * 2);
+    ctx.roundRect(locX, locY, locW, locH, locH / 2);
     ctx.fill();
+
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.shadowColor = 'transparent';
 
-    ctx.fillStyle = '#FFE600';
-    ctx.beginPath();
-    ctx.arc(camX, camY, 44, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Camera icon drawing
-    ctx.fillStyle = '#090A0D';
-    ctx.beginPath();
-    ctx.roundRect(camX - 22, camY - 14, 44, 30, 6);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.roundRect(camX - 10, camY - 20, 20, 8, 3);
-    ctx.fill();
-    ctx.fillStyle = '#FFE600';
-    ctx.beginPath();
-    ctx.arc(camX, camY + 1, 9, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Red pill badge: [🖼️ स्टेप 4 : फोटो जोड़ें]
-    const rPillW = 380;
-    const rPillH = 56;
-    const rPillX = (width - rPillW) / 2;
-    const rPillY = 345;
-    ctx.save();
-    ctx.shadowColor = 'rgba(220, 38, 38, 0.4)';
-    ctx.shadowBlur = 14;
+    // Red Circle for Pin Icon
+    const pinR = Math.round(locH * 0.38);
+    const pinCenterX = locX + Math.round(locH * 0.5);
+    const pinCenterY = locY + locH / 2;
     ctx.fillStyle = '#DC2626';
     ctx.beginPath();
-    ctx.roundRect(rPillX, rPillY, rPillW, rPillH, rPillH / 2);
+    ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowColor = 'transparent';
 
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🖼️ स्टेप 4 : फोटो जोड़ें', width / 2, rPillY + rPillH / 2);
-    ctx.restore();
+    // Part F: Original White Location Icon Asset
+    let locIconLoaded = false;
+    try {
+      const locIconImg = await loadImage('/assets/location_white_icon.png');
+      if (locIconImg && locIconImg.width > 0) {
+        const iconSize = Math.round(pinR * 1.35);
+        ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
+        locIconLoaded = true;
+      }
+    } catch {}
 
-    // White Heading
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 44px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('कृपया अपनी न्यूज़ फोटो अपलोड करें', width / 2, 445);
-
-    // Gold Subtitle
-    ctx.fillStyle = '#FFE600';
-    ctx.font = '800 32px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं', width / 2, 505);
-
-    // Gray Note
-    ctx.fillStyle = '#94A3B8';
-    ctx.font = '600 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)', width / 2, 555);
-
-    ctx.restore();
-  }
-
-  // 4B. TOP-LEFT LOGO AREA (TOP Layer — Rendered over photo)
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const logoMaxW = 260;
-    const logoMaxH = 110;
-    const lRatio = customLogoImg.width / customLogoImg.height;
-    let lW = logoMaxW;
-    let lH = lW / lRatio;
-    if (lH > logoMaxH) {
-      lH = logoMaxH;
-      lW = lH * lRatio;
+    if (!locIconLoaded) {
+      try {
+        const locIconImg = await loadImage('assets/location_white_icon.png');
+        if (locIconImg && locIconImg.width > 0) {
+          const iconSize = Math.round(pinR * 1.35);
+          ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
+          locIconLoaded = true;
+        }
+      } catch {}
     }
-    lW = Math.round(lW * scale);
-    lH = Math.round(lH * scale);
 
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 4;
-    ctx.drawImage(customLogoImg, 42, 38, lW, lH);
-    ctx.restore();
-  } else {
-    // Default "YOUR LOGO" gold outline box
-    ctx.save();
-    const boxX = 42;
-    const boxY = 38;
-    const boxW = 220;
-    const boxH = 68;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxW, boxH, 12);
-    ctx.fill();
+    if (!locIconLoaded) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 20px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('📍', pinCenterX, pinCenterY);
+    }
 
-    ctx.strokeStyle = '#FFE600';
-    ctx.lineWidth = 3.5;
-    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-    ctx.shadowBlur = 12;
-    ctx.stroke();
-
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#FFE600';
-    ctx.font = '900 28px "Poppins", sans-serif';
-    ctx.textAlign = 'center';
+    // Location Text (Bold Dark Black)
+    ctx.fillStyle = '#090A0E';
+    ctx.font = '800 24px "Noto Sans Devanagari", sans-serif';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('YOUR LOGO', boxX + boxW / 2, boxY + boxH / 2);
+    ctx.fillText(cleanLoc, pinCenterX + pinR + 10, locY + locH / 2);
     ctx.restore();
   }
 
-  // 5. RADIANT GLOWING GOLDEN DIVIDER LINE
-  ctx.save();
-  const divGrad = ctx.createLinearGradient(60, 685, width - 60, 685);
-  divGrad.addColorStop(0, 'rgba(255, 230, 0, 0)');
-  divGrad.addColorStop(0.5, '#FFE600');
-  divGrad.addColorStop(1, 'rgba(255, 230, 0, 0)');
-  ctx.strokeStyle = divGrad;
-  ctx.lineWidth = 4;
-  ctx.shadowColor = 'rgba(255, 230, 0, 0.85)';
-  ctx.shadowBlur = 18;
-  ctx.beginPath();
-  ctx.moveTo(60, 685);
-  ctx.lineTo(width - 60, 685);
-  ctx.stroke();
-  ctx.restore();
+  // 5. RED HEADLINE AREA (Part D & E: Expanded to 31.47% height, 4-line support, centered)
+  const bannerY = Math.round(height * 0.6133);
+  const bannerH = Math.round(height * 0.3147);
 
-  // 6. LOWER HEADLINE SECTION (Y = 705 to 1250)
-  const hasUserHeadline = card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां');
+  const hasUserHeadline = Boolean(
+    card.headline &&
+    card.headline.trim().length > 0 &&
+    card.headline.trim() !== 'ताज़ा समाचार' &&
+    !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
+    !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
+    !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
+    !card.headline.includes('स्टेप 3 में जाकर अपनी मुख्य खबर') &&
+    card.headline.trim() !== 'आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं' &&
+    !card.headline.includes('आप स्टेप 3')
+  );
 
-  if (!hasUserHeadline) {
-    // Default Headline Placeholder Layers
+  if (hasUserHeadline) {
     ctx.save();
+    // Red Gradient Overlay covering instructions printed on background image
+    const redGrad = ctx.createLinearGradient(0, bannerY, 0, bannerY + bannerH);
+    redGrad.addColorStop(0, '#E20000');
+    redGrad.addColorStop(0.5, '#BA0000');
+    redGrad.addColorStop(1, '#900000');
+    ctx.fillStyle = redGrad;
+    ctx.fillRect(0, bannerY, width, bannerH);
 
-    // Yellow pill badge: [📄 स्टेप 3 : हेडलाइन लिखें]
-    const yPillW = 390;
-    const yPillH = 58;
-    const yPillX = (width - yPillW) / 2;
-    const yPillY = 770;
+    // Left & Right Dark Red Chevron Accent Stripes (matching original SVG and preview)
     ctx.save();
-    ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#FFE600';
-    ctx.beginPath();
-    ctx.roundRect(yPillX, yPillY, yPillW, yPillH, yPillH / 2);
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#7A0005';
+    ctx.globalAlpha = 0.6;
+    const scaleX = width / 1080;
+    const scaleY = height / 1350;
 
-    ctx.fillStyle = '#090A0D';
-    ctx.font = '900 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('📄 स्टेप 3 : हेडलाइन लिखें', width / 2, yPillY + yPillH / 2);
+    const drawChevron = (pts: [number, number][]) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0] * scaleX, pts[0][1] * scaleY);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i][0] * scaleX, pts[i][1] * scaleY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    // Left chevrons
+    drawChevron([[0, 800], [60, 800], [30, 860], [0, 860]]);
+    drawChevron([[0, 880], [75, 880], [35, 960], [0, 960]]);
+    drawChevron([[0, 980], [90, 980], [40, 1080], [0, 1080]]);
+    drawChevron([[0, 1100], [80, 1100], [30, 1200], [0, 1200]]);
+
+    // Right chevrons
+    drawChevron([[1080, 800], [1020, 800], [1050, 860], [1080, 860]]);
+    drawChevron([[1080, 880], [1005, 880], [1045, 960], [1080, 960]]);
+    drawChevron([[1080, 980], [990, 980], [1040, 1080], [1080, 1080]]);
+    drawChevron([[1080, 1100], [1000, 1100], [1050, 1200], [1080, 1200]]);
     ctx.restore();
 
-    // White subtitle
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '800 40px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('स्टेप 3 में जाकर अपनी मुख्य खबर की', width / 2, 875);
+    // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
+    const streakGrad = ctx.createLinearGradient(0, bannerY, width, bannerY);
+    streakGrad.addColorStop(0, 'rgba(255, 26, 26, 0)');
+    streakGrad.addColorStop(0.35, 'rgba(255, 77, 0, 0.85)');
+    streakGrad.addColorStop(0.5, '#FFE600');
+    streakGrad.addColorStop(0.65, 'rgba(255, 77, 0, 0.85)');
+    streakGrad.addColorStop(1, 'rgba(255, 26, 26, 0)');
+    ctx.fillStyle = streakGrad;
+    ctx.fillRect(0, bannerY - 3, width, 6);
 
-    // Big Gold Headline
-    ctx.save();
-    ctx.fillStyle = '#FFE600';
-    ctx.font = '900 70px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-    ctx.fillText('हेडलाइन दर्ज करें', width / 2, 965);
-    ctx.restore();
+    // Bevel highlight lines matching banner edges
+    ctx.fillStyle = 'rgba(255, 230, 160, 0.85)';
+    ctx.fillRect(0, bannerY, width, 3);
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
+    ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
 
-    // Gray Note
-    ctx.fillStyle = '#CBD5E1';
-    ctx.font = '600 28px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('आवश्यकता अनुसार दो या तीन लाइन में', width / 2, 1045);
-
-    ctx.restore();
-  } else {
-    // Render actual headline with Baloo 2 font and word highlights
-    ctx.save();
+    // Render headline text in bold white with yellow highlights - Part E: Up to 4 lines support
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor || '#FFE600';
+    const highlightColor = (card.highlightColor && card.highlightColor !== '#DC2626') ? card.highlightColor : '#FFE600';
     const maxHeadlineW = width - 140;
 
     let testFontSize = 64;
-    for (let s = 68; s >= 38; s -= 2) {
+    for (let s = 70; s >= 36; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
       if (testLines.length <= 4) {
         testFontSize = s;
@@ -1791,107 +1880,133 @@ async function drawGraphic001Canvas(
       }
     }
 
-    const headlineLineH = Math.round(testFontSize * 1.34);
+    const headlineLineH = Math.round(testFontSize * 1.32);
     const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
     const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = 960 - totalHeadH / 2 + Math.round(headlineLineH * 0.45);
+    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2 + Math.round(headlineLineH * 0.08);
 
     ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-    ctx.shadowBlur = 12;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 14;
     ctx.shadowOffsetY = 4;
 
     for (const line of headlineLines) {
       let lineWidth = 0;
-      for (const token of line) {
-        lineWidth += ctx.measureText(token.text + ' ').width;
+      const tokenSpacings: string[] = [];
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const nextToken = line[i + 1];
+        const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
+        const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
+        tokenSpacings.push(spacing);
+        lineWidth += ctx.measureText(token.text + spacing).width;
       }
 
       let curX = width / 2 - lineWidth / 2;
-      for (const token of line) {
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const spacing = tokenSpacings[i];
         ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
         ctx.fillText(token.text, curX, startY);
-        curX += ctx.measureText(token.text + ' ').width;
+        curX += ctx.measureText(token.text + spacing).width;
       }
       startY += headlineLineH;
     }
     ctx.restore();
   }
+  // NOTE: If !hasUserHeadline, nothing is drawn over the red banner,
+  // allowing the authentic background image's Step 3 instructions to show through!
 
-  // 7. BOTTOM WHITE DYNAMIC BRANDING FOOTER (Y = 1274 to 1350)
-  const footerY = 1274;
-  const footerH = 76;
-  ctx.save();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, footerY, width, footerH);
+  // 6. BOTTOM FOOTER AREA (Part D: Reduced height = ~7.2% vs ~10.15%, Part I: default #000000 Black)
+  const footerH = height - (bannerY + bannerH);
+  const activeFooter = getActiveFooterPng(card);
+  if (card.showMasterBranding !== false || Boolean(activeFooter)) {
+    await drawThemeFooterBar(
+      ctx,
+      width,
+      height,
+      footerH,
+      card.socialHandle,
+      card.whatsappNumber,
+      activeFooter,
+      card.websiteUrl,
+      card.activeSocialIcons,
+      card.showMobileNumber,
+      card.footerBgColor || '#FFFFFF',
+      card.footerTextColor || '#000000',
+      card.footerIconStyle || 'color',
+      card.showWebsite
+    );
+  }
 
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2;
-  const drawCircleIcon = (cx: number, cy: number, r: number, bg: string, text: string, txtColor = '#FFFFFF', isBold = true) => {
-    ctx.save();
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = txtColor;
-    ctx.font = `${isBold ? '900' : '700'} ${Math.round(r * 1.1)}px "Poppins", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, cx, cy);
-    ctx.restore();
-  };
+  // 7. Custom Header PNG if assigned
+  const activeHeader = getActiveHeaderPng(card);
+  if (activeHeader) {
+    try {
+      const hImg = await loadImage(activeHeader);
+      const hAspect = hImg.width / hImg.height;
+      const drawH = width / hAspect;
+      ctx.drawImage(hImg, 0, 0, width, drawH);
+    } catch {}
+  }
 
-  // 6 Social circles
-  drawCircleIcon(36, iconY, 15, '#E1306C', '📷', '#FFFFFF');
-  drawCircleIcon(72, iconY, 15, '#1877F2', 'f', '#FFFFFF');
-  drawCircleIcon(108, iconY, 15, '#000000', '𝕏', '#FFFFFF');
-  drawCircleIcon(144, iconY, 15, '#111827', '@', '#FFFFFF');
-  drawCircleIcon(180, iconY, 15, '#DC2626', '▶', '#FFFFFF');
-  drawCircleIcon(216, iconY, 15, '#0A66C2', 'in', '#FFFFFF');
+  // 8. Custom 4:5 Master Frame Overlay
+  if (card.customFrameOverlayPng) {
+    try {
+      const overlayImg = await loadImage(card.customFrameOverlayPng);
+      ctx.drawImage(overlayImg, 0, 0, width, height);
+    } catch {}
+  }
 
-  // Handle text
-  const handleText = card.socialHandle || '/@UserName';
-  ctx.fillStyle = '#0F172A';
-  ctx.font = '800 22px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(handleText, 246, iconY);
+  // 9. Part C: Universal Text Watermark across photo area (0 to photoH)
+  if (card.showTextWatermark || card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) {
+    await drawUniversalWatermark(ctx, width, photoH, card);
+  }
 
-  // Divider 1
-  const div1X = 490;
-  ctx.strokeStyle = '#CBD5E1';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(div1X, footerY + 16);
-  ctx.lineTo(div1X, footerY + footerH - 16);
-  ctx.stroke();
+  // 10. Part J: Custom Text Overlays (Single-line horizontal nowrap, safe-zone clamped, custom bg color)
+  if (card.customTextOverlays && card.customTextOverlays.length > 0) {
+    for (const item of card.customTextOverlays) {
+      ctx.save();
+      const clampedX = Math.max(8, Math.min(92, item.x));
+      const clampedY = Math.max(8, Math.min(92, item.y));
+      const posX = (clampedX / 100) * width;
+      const posY = (clampedY / 100) * height;
+      const fSize = Math.max(16, Math.round(item.fontSize * (width / 420) * 0.9));
+      ctx.font = `${item.isBold !== false ? '800' : '500'} ${fSize}px "${item.fontFamily || 'Arial'}", sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
 
-  // Website Center
-  const siteText = card.websiteUrl ? card.websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '') : 'yourwebsite.com';
-  ctx.fillStyle = '#0F172A';
-  ctx.font = '800 22px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`🌐  ${siteText}`, div1X + 22, iconY);
+      const textMetrics = ctx.measureText(item.text);
+      const textW = textMetrics.width;
+      const padX = (item.backgroundColor && item.backgroundColor !== 'transparent') ? 22 : 8;
+      const padY = (item.backgroundColor && item.backgroundColor !== 'transparent') ? 10 : 4;
+      const boxW = textW + padX * 2;
+      const boxH = fSize + padY * 2;
 
-  // Divider 2
-  const div2X = 800;
-  ctx.beginPath();
-  ctx.moveTo(div2X, footerY + 16);
-  ctx.lineTo(div2X, footerY + footerH - 16);
-  ctx.stroke();
+      if (item.backgroundColor && item.backgroundColor !== 'transparent') {
+        ctx.fillStyle = item.backgroundColor;
+        ctx.beginPath();
+        ctx.roundRect(posX - boxW / 2, posY - boxH / 2, boxW, boxH, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
+      }
 
-  // WhatsApp Right
-  drawCircleIcon(div2X + 30, iconY, 15, '#25D366', '📞', '#FFFFFF');
-  const phoneText = card.whatsappNumber || '+91 98765 43210';
-  ctx.fillStyle = '#0F172A';
-  ctx.font = '800 22px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(phoneText, div2X + 54, iconY);
+      ctx.fillStyle = item.color || '#FFFFFF';
+      ctx.fillText(item.text, posX, posY);
+      ctx.restore();
+    }
+  }
 
-  ctx.restore();
+  // 11. TOPMOST VISUAL LAYERS: WATERMARK & DATE STAMP
+  drawPhotoDisclaimerWatermark(ctx, width, height, card);
+  drawDateStamp(ctx, width, height, card);
 
   ctx.restore();
 }
@@ -1910,14 +2025,68 @@ async function drawGraphic002Canvas(
 
   // 1. TOP PHOTO AREA (12 to photoH, with outer orange border)
   let hasValidPhoto = false;
+  const pBoxX = orangeBorderW;
+  const pBoxY = orangeBorderW;
+  const pBoxW = width - orangeBorderW * 2;
+  const pBoxH = photoH - orangeBorderW;
+
+  const mCrop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
+  const mCropX = (mCrop.x ?? 50) / 100;
+  const mCropY = (mCrop.y ?? 50) / 100;
+  const mZoom = Math.max(1, mCrop.zoom || 1);
+
+  const sCrop = card.imagePositions?.second || { x: 50, y: 50, zoom: 1 };
+  const sCropX = (sCrop.x ?? 50) / 100;
+  const sCropY = (sCrop.y ?? 50) / 100;
+  const sZoom = Math.max(1, sCrop.zoom || 1);
+
+  const layout = card.layout || 'single';
+
   if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg') {
     try {
-      const img = await loadImage(card.images.main);
-      const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
-      const cropX = (crop.x ?? 50) / 100;
-      const cropY = (crop.y ?? 50) / 100;
-      const zoom = Math.max(1, crop.zoom || 1);
-      drawImageCover(ctx, img, orangeBorderW, orangeBorderW, width - orangeBorderW * 2, photoH - orangeBorderW, cropX, cropY, zoom);
+      const mainImg = await loadImage(card.images.main);
+      if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      } else if (layout === 'split-v') {
+        // 35% Top, 65% Bottom
+        const topH = Math.round(pBoxH * 0.35);
+        const bottomH = pBoxH - topH;
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, topH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + topH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double') {
+        // 50% Top, 50% Bottom
+        const halfH = Math.round(pBoxH * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, halfH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + halfH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double-h' || layout === 'split-h') {
+        // 50% Left, 50% Right
+        const halfW = Math.round(pBoxW * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, halfW - 2, pBoxH, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX + halfW - 2, pBoxY, 4, pBoxH);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        }
+      } else {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      }
       hasValidPhoto = true;
     } catch (e) {
       console.warn('Failed to load main image for graphic_002', e);
@@ -2019,74 +2188,76 @@ async function drawGraphic002Canvas(
 
   // 3. LOGO BOX (Top-Right of photo)
   // Warm ivory/white rounded box with orange/red border #EA580C
-  const logoBoxW = 290;
-  const logoBoxH = 82;
-  const logoBoxX = width - logoBoxW - 36;
-  const logoBoxY = 32;
-  const logoRadius = 14;
+  if (card.showMasterBranding !== false) {
+    const logoBoxW = 290;
+    const logoBoxH = 82;
+    const logoBoxX = width - logoBoxW - 36;
+    const logoBoxY = 32;
+    const logoRadius = 14;
 
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  ctx.shadowBlur = 14;
-  ctx.shadowOffsetY = 4;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
 
-  ctx.fillStyle = '#FFFBEB';
-  ctx.beginPath();
-  ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-  ctx.fill();
+    ctx.fillStyle = '#FFFBEB';
+    ctx.beginPath();
+    ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
+    ctx.fill();
 
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#EA580C';
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#EA580C';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
 
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const maxLogoW = (logoBoxW - 24) * scale;
-    const maxLogoH = (logoBoxH - 18) * scale;
-    const logoRatio = customLogoImg.width / customLogoImg.height;
-    let renderW = maxLogoW;
-    let renderH = maxLogoW / logoRatio;
-    if (renderH > maxLogoH) {
-      renderH = maxLogoH;
-      renderW = maxLogoH * logoRatio;
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const maxLogoW = (logoBoxW - 24) * scale;
+      const maxLogoH = (logoBoxH - 18) * scale;
+      const logoRatio = customLogoImg.width / customLogoImg.height;
+      let renderW = maxLogoW;
+      let renderH = maxLogoW / logoRatio;
+      if (renderH > maxLogoH) {
+        renderH = maxLogoH;
+        renderW = maxLogoH * logoRatio;
+      }
+      const renderX = logoBoxX + (logoBoxW - renderW) / 2;
+      const renderY = logoBoxY + (logoBoxH - renderH) / 2;
+      ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
+    } else {
+      // Globe / Icon circle on left
+      const globeCenterX = logoBoxX + 36;
+      const globeCenterY = logoBoxY + logoBoxH / 2;
+
+      const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
+      gGrad.addColorStop(0, '#2563EB');
+      gGrad.addColorStop(0.5, '#0284C7');
+      gGrad.addColorStop(1, '#F59E0B');
+      ctx.fillStyle = gGrad;
+      ctx.beginPath();
+      ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Continent silhouettes inside globe
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
+      ctx.fill();
+
+      // Logo text (Line 1: YOUR LOGO in orange-red, Line 2: Hindi subtext)
+      const logoTextX = logoBoxX + 66;
+      ctx.fillStyle = '#DC2626';
+      ctx.font = '900 23px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
     }
-    const renderX = logoBoxX + (logoBoxW - renderW) / 2;
-    const renderY = logoBoxY + (logoBoxH - renderH) / 2;
-    ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
-  } else {
-    // Globe / Icon circle on left
-    const globeCenterX = logoBoxX + 36;
-    const globeCenterY = logoBoxY + logoBoxH / 2;
-
-    const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
-    gGrad.addColorStop(0, '#2563EB');
-    gGrad.addColorStop(0.5, '#0284C7');
-    gGrad.addColorStop(1, '#F59E0B');
-    ctx.fillStyle = gGrad;
-    ctx.beginPath();
-    ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Continent silhouettes inside globe
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
-    ctx.fill();
-
-    // Logo text (Line 1: YOUR LOGO in orange-red, Line 2: Hindi subtext)
-    const logoTextX = logoBoxX + 66;
-    ctx.fillStyle = '#DC2626';
-    ctx.font = '900 23px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
-
-    ctx.fillStyle = '#111827';
-    ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
+    ctx.restore();
   }
-  ctx.restore();
 
   // 4. BOTTOM AREA (Headline + CTA + Footer)
   // Background: Warm off-white subtle paper tone (#FAF8F5)
@@ -2108,133 +2279,46 @@ async function drawGraphic002Canvas(
   ctx.restore();
 
   // 5. FIXED FOOTER (110px at bottom: Y = 1240 to 1350)
-  const footerH = 110;
-  const footerY = height - footerH;
-  ctx.save();
-  ctx.fillStyle = '#FFE600';
-  ctx.fillRect(orangeBorderW, footerY, width - orangeBorderW * 2, footerH - orangeBorderW);
-
-  // Top border line of footer
-  ctx.strokeStyle = '#EAB308';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(orangeBorderW, footerY);
-  ctx.lineTo(width - orangeBorderW, footerY);
-  ctx.stroke();
-
-  // Social Icons
-  const iconY = footerY + footerH / 2 - 4;
-  const iconRadius = 18;
-  let curIconX = orangeBorderW + 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = '#CA8A04';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 26);
-  ctx.lineTo(curIconX, footerY + footerH - 30);
-  ctx.stroke();
-
-  // Handle
-  curIconX += 16;
-  ctx.fillStyle = '#000000';
-  ctx.font = '900 25px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = '#CA8A04';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 26);
-  ctx.lineTo(curIconX, footerY + footerH - 30);
-  ctx.stroke();
-
-  // Website
-  curIconX += 16;
-  ctx.fillStyle = '#0284C7';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#000000';
-  ctx.font = '700 24px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Contact Number (if enabled by admin/profile)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const badgeX = width - orangeBorderW - 220;
-    ctx.fillStyle = '#000000';
-    ctx.font = '700 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`📞 ${card.whatsappNumber}`, badgeX, iconY);
+  const activeFooter = getActiveFooterPng(card);
+  if (card.showMasterBranding !== false || Boolean(activeFooter)) {
+    await drawThemeFooterBar(
+      ctx,
+      width,
+      height,
+      110,
+      card.socialHandle,
+      card.whatsappNumber,
+      activeFooter,
+      card.websiteUrl,
+      card.activeSocialIcons,
+      card.showMobileNumber,
+      '#FFE600',
+      '#000000',
+      'color',
+      card.showWebsite
+    );
   }
-  ctx.restore();
+
+  // Custom Header PNG or Custom Full Frame Overlay PNG
+  if (card.showMasterBranding === false) {
+    const activeHeader = getActiveHeaderPng(card);
+    if (activeHeader) {
+      try {
+        const headerImg = await loadImage(activeHeader);
+        const headerH = Math.min(180, Math.round(width * (headerImg.height / headerImg.width)));
+        ctx.drawImage(headerImg, 0, 0, width, headerH);
+      } catch (err) {
+        console.warn('Failed to draw custom header PNG in graphic_002', err);
+      }
+    }
+  }
+
+  if (card.customFrameOverlayPng && (card.frameDesign === 'custom-png' || card.showMasterBranding === false)) {
+    try {
+      const frameImg = await loadImage(card.customFrameOverlayPng);
+      ctx.drawImage(frameImg, 0, 0, width, height);
+    } catch {}
+  }
 
   // 6. DESCRIPTION CTA (Y = 1172)
   // Horizontal Red Line across with centered pill: [📄 पूरी खबर कमेंट बॉक्स में]
@@ -2403,14 +2487,68 @@ async function drawGraphic003Canvas(
 
   // 1. FULL-BLEED PHOTO (Full Canvas 1080 x 1350)
   let hasValidPhoto = false;
+  const pBoxX = 0;
+  const pBoxY = 0;
+  const pBoxW = width;
+  const pBoxH = height;
+
+  const mCrop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
+  const mCropX = (mCrop.x ?? 50) / 100;
+  const mCropY = (mCrop.y ?? 50) / 100;
+  const mZoom = Math.max(1, mCrop.zoom || 1);
+
+  const sCrop = card.imagePositions?.second || { x: 50, y: 50, zoom: 1 };
+  const sCropX = (sCrop.x ?? 50) / 100;
+  const sCropY = (sCrop.y ?? 50) / 100;
+  const sZoom = Math.max(1, sCrop.zoom || 1);
+
+  const layout = card.layout || 'single';
+
   if (card.images?.main && card.images.main.trim().length > 0 && card.images.main !== '/assets/placeholder_news_photo.svg') {
     try {
-      const img = await loadImage(card.images.main);
-      const crop = card.imagePositions?.main || { x: 50, y: 50, zoom: 1 };
-      const cropX = (crop.x ?? 50) / 100;
-      const cropY = (crop.y ?? 50) / 100;
-      const zoom = Math.max(1, crop.zoom || 1);
-      drawImageCover(ctx, img, 0, 0, width, height, cropX, cropY, zoom);
+      const mainImg = await loadImage(card.images.main);
+      if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      } else if (layout === 'split-v') {
+        // 35% Top, 65% Bottom
+        const topH = Math.round(pBoxH * 0.35);
+        const bottomH = pBoxH - topH;
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, topH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + topH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + topH + 2, pBoxW, bottomH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double') {
+        // 50% Top, 50% Bottom
+        const halfH = Math.round(pBoxH * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, halfH - 2, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX, pBoxY + halfH - 2, pBoxW, 4);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX, pBoxY + halfH + 2, pBoxW, halfH - 2, sCropX, sCropY, sZoom);
+        }
+      } else if (layout === 'double-h' || layout === 'split-h') {
+        // 50% Left, 50% Right
+        const halfW = Math.round(pBoxW * 0.5);
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, halfW - 2, pBoxH, mCropX, mCropY, mZoom);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(pBoxX + halfW - 2, pBoxY, 4, pBoxH);
+        if (card.images?.second) {
+          const secondImg = await loadImage(card.images.second);
+          drawImageCover(ctx, secondImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        } else {
+          drawImageCover(ctx, mainImg, pBoxX + halfW + 2, pBoxY, halfW - 2, pBoxH, sCropX, sCropY, sZoom);
+        }
+      } else {
+        drawImageCover(ctx, mainImg, pBoxX, pBoxY, pBoxW, pBoxH, mCropX, mCropY, mZoom);
+      }
       hasValidPhoto = true;
     } catch (e) {
       console.warn('Failed to load main image for graphic_003', e);
@@ -2531,203 +2669,97 @@ async function drawGraphic003Canvas(
   }
 
   // 4. TOP-RIGHT LOGO BOX
-  const logoBoxW = 290;
-  const logoBoxH = 84;
-  const logoBoxX = width - logoBoxW - 36;
-  const logoBoxY = 36;
-  const logoRadius = 14;
+  if (card.showMasterBranding !== false) {
+    const logoBoxW = 290;
+    const logoBoxH = 84;
+    const logoBoxX = width - logoBoxW - 36;
+    const logoBoxY = 36;
+    const logoRadius = 14;
 
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 4;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
-  ctx.beginPath();
-  ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-  ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    ctx.beginPath();
+    ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
+    ctx.fill();
 
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#F59E0B';
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const maxLogoW = (logoBoxW - 24) * scale;
-    const maxLogoH = (logoBoxH - 18) * scale;
-    const logoRatio = customLogoImg.width / customLogoImg.height;
-    let renderW = maxLogoW;
-    let renderH = maxLogoW / logoRatio;
-    if (renderH > maxLogoH) {
-      renderH = maxLogoH;
-      renderW = maxLogoH * logoRatio;
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const maxLogoW = (logoBoxW - 24) * scale;
+      const maxLogoH = (logoBoxH - 18) * scale;
+      const logoRatio = customLogoImg.width / customLogoImg.height;
+      let renderW = maxLogoW;
+      let renderH = maxLogoW / logoRatio;
+      if (renderH > maxLogoH) {
+        renderH = maxLogoH;
+        renderW = maxLogoH * logoRatio;
+      }
+      const renderX = logoBoxX + (logoBoxW - renderW) / 2;
+      const renderY = logoBoxY + (logoBoxH - renderH) / 2;
+      ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
+    } else {
+      // Globe / Icon circle on left
+      const globeCenterX = logoBoxX + 36;
+      const globeCenterY = logoBoxY + logoBoxH / 2;
+
+      const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
+      gGrad.addColorStop(0, '#2563EB');
+      gGrad.addColorStop(0.5, '#0284C7');
+      gGrad.addColorStop(1, '#F59E0B');
+      ctx.fillStyle = gGrad;
+      ctx.beginPath();
+      ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
+      ctx.fill();
+
+      const logoTextX = logoBoxX + 66;
+      ctx.fillStyle = '#DC2626';
+      ctx.font = '900 23px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
     }
-    const renderX = logoBoxX + (logoBoxW - renderW) / 2;
-    const renderY = logoBoxY + (logoBoxH - renderH) / 2;
-    ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
-  } else {
-    // Globe / Icon circle on left
-    const globeCenterX = logoBoxX + 36;
-    const globeCenterY = logoBoxY + logoBoxH / 2;
-
-    const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
-    gGrad.addColorStop(0, '#2563EB');
-    gGrad.addColorStop(0.5, '#0284C7');
-    gGrad.addColorStop(1, '#F59E0B');
-    ctx.fillStyle = gGrad;
-    ctx.beginPath();
-    ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
-    ctx.fill();
-
-    const logoTextX = logoBoxX + 66;
-    ctx.fillStyle = '#DC2626';
-    ctx.font = '900 23px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 38);
-
-    ctx.fillStyle = '#111827';
-    ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 65);
+    ctx.restore();
   }
-  ctx.restore();
 
   // 5. FIXED FOOTER (100px at bottom: Y = 1250 to 1350)
   const footerH = 100;
   const footerY = height - footerH;
-
-  ctx.save();
-  // Semi-transparent deep dark background with backdrop feel
-  ctx.fillStyle = 'rgba(10, 15, 29, 0.95)';
-  ctx.fillRect(0, footerY, width, footerH);
-
-  // Top Accent Gold/Amber Line
-  ctx.strokeStyle = '#F59E0B';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, footerY);
-  ctx.lineTo(width, footerY);
-  ctx.stroke();
-
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2;
-  const iconRadius = 18;
-  let curIconX = 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 24);
-  ctx.stroke();
-
-  // Handle
-  curIconX += 16;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 24px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 24);
-  ctx.stroke();
-
-  // Website
-  curIconX += 16;
-  ctx.fillStyle = '#38BDF8';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#E2E8F0';
-  ctx.font = '700 23px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Contact Number (if enabled by admin/profile)
-  if (card.showMobileNumber !== false && card.whatsappNumber) {
-    const badgeX = width - 240;
-    ctx.fillStyle = '#F59E0B';
-    ctx.font = '700 22px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`📞 ${card.whatsappNumber}`, badgeX, iconY);
+  const activeFooter = getActiveFooterPng(card);
+  if (card.showMasterBranding !== false || Boolean(activeFooter)) {
+    await drawThemeFooterBar(
+      ctx,
+      width,
+      height,
+      footerH,
+      card.socialHandle,
+      card.whatsappNumber,
+      activeFooter,
+      card.websiteUrl,
+      card.activeSocialIcons,
+      card.showMobileNumber,
+      '#020617',
+      '#FFFFFF',
+      'color',
+      card.showWebsite
+    );
   }
-  ctx.restore();
 
   // 6. LARGE BOLD HEADLINE DIRECT OVERLAY ON PHOTO (Y = 820 to 1220)
   // Directly on dark gradient overlay, Max 3 Lines, Crisp White with Golden-Yellow Highlight
@@ -2818,6 +2850,27 @@ async function drawGraphic003Canvas(
   }
   ctx.restore();
 
+  // Custom Header PNG or Custom Full Frame Overlay PNG
+  if (card.showMasterBranding === false) {
+    const activeHeader = getActiveHeaderPng(card);
+    if (activeHeader) {
+      try {
+        const headerImg = await loadImage(activeHeader);
+        const headerH = Math.min(180, Math.round(width * (headerImg.height / headerImg.width)));
+        ctx.drawImage(headerImg, 0, 0, width, headerH);
+      } catch (err) {
+        console.warn('Failed to draw custom header PNG in graphic_003', err);
+      }
+    }
+  }
+
+  if (card.customFrameOverlayPng && (card.frameDesign === 'custom-png' || card.showMasterBranding === false)) {
+    try {
+      const frameImg = await loadImage(card.customFrameOverlayPng);
+      ctx.drawImage(frameImg, 0, 0, width, height);
+    } catch {}
+  }
+
   ctx.restore();
 }
 
@@ -2847,87 +2900,89 @@ async function drawGraphic004Canvas(
   ctx.fillRect(0, 0, width, height);
 
   // 2. TOP CENTER LOGO WITH FLANKING ACCENT LINES (Y: ~16 to ~96)
-  const logoBoxW = 310;
-  const logoBoxH = 78;
-  const logoBoxX = (width - logoBoxW) / 2;
-  const logoBoxY = 18;
-  const logoRadius = 14;
-  const lineY = logoBoxY + logoBoxH / 2;
+  if (card.showMasterBranding !== false) {
+    const logoBoxW = 310;
+    const logoBoxH = 78;
+    const logoBoxX = (width - logoBoxW) / 2;
+    const logoBoxY = 18;
+    const logoRadius = 14;
+    const lineY = logoBoxY + logoBoxH / 2;
 
-  // Left & Right Horizontal Black Rules
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(24, lineY);
-  ctx.lineTo(logoBoxX - 14, lineY);
-  ctx.stroke();
+    // Left & Right Horizontal Black Rules
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(24, lineY);
+    ctx.lineTo(logoBoxX - 14, lineY);
+    ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(logoBoxX + logoBoxW + 14, lineY);
-  ctx.lineTo(width - 24, lineY);
-  ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(logoBoxX + logoBoxW + 14, lineY);
+    ctx.lineTo(width - 24, lineY);
+    ctx.stroke();
 
-  // Centered Logo Container
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetY = 3;
+    // Centered Logo Container
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
 
-  ctx.fillStyle = '#FFFBEB';
-  ctx.beginPath();
-  ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
-  ctx.fill();
+    ctx.fillStyle = '#FFFBEB';
+    ctx.beginPath();
+    ctx.roundRect(logoBoxX, logoBoxY, logoBoxW, logoBoxH, logoRadius);
+    ctx.fill();
 
-  ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = '#EA580C';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#EA580C';
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-  if (customLogoImg) {
-    const scale = card.logoScale ?? 1.25;
-    const maxLogoW = (logoBoxW - 24) * scale;
-    const maxLogoH = (logoBoxH - 16) * scale;
-    const logoRatio = customLogoImg.width / customLogoImg.height;
-    let renderW = maxLogoW;
-    let renderH = maxLogoW / logoRatio;
-    if (renderH > maxLogoH) {
-      renderH = maxLogoH;
-      renderW = maxLogoH * logoRatio;
+    if (customLogoImg) {
+      const scale = card.logoScale ?? 1.25;
+      const maxLogoW = (logoBoxW - 24) * scale;
+      const maxLogoH = (logoBoxH - 16) * scale;
+      const logoRatio = customLogoImg.width / customLogoImg.height;
+      let renderW = maxLogoW;
+      let renderH = maxLogoW / logoRatio;
+      if (renderH > maxLogoH) {
+        renderH = maxLogoH;
+        renderW = maxLogoH * logoRatio;
+      }
+      const renderX = logoBoxX + (logoBoxW - renderW) / 2;
+      const renderY = logoBoxY + (logoBoxH - renderH) / 2;
+      ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
+    } else {
+      // Globe / Icon circle on left
+      const globeCenterX = logoBoxX + 42;
+      const globeCenterY = logoBoxY + logoBoxH / 2;
+
+      const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
+      gGrad.addColorStop(0, '#2563EB');
+      gGrad.addColorStop(0.5, '#0284C7');
+      gGrad.addColorStop(1, '#F59E0B');
+      ctx.fillStyle = gGrad;
+      ctx.beginPath();
+      ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
+      ctx.fill();
+
+      const logoTextX = logoBoxX + 74;
+      ctx.fillStyle = '#DC2626';
+      ctx.font = '900 23px "Poppins", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 36);
+
+      ctx.fillStyle = '#111827';
+      ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
+      ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 63);
     }
-    const renderX = logoBoxX + (logoBoxW - renderW) / 2;
-    const renderY = logoBoxY + (logoBoxH - renderH) / 2;
-    ctx.drawImage(customLogoImg, renderX, renderY, renderW, renderH);
-  } else {
-    // Globe / Icon circle on left
-    const globeCenterX = logoBoxX + 42;
-    const globeCenterY = logoBoxY + logoBoxH / 2;
-
-    const gGrad = ctx.createLinearGradient(globeCenterX - 18, globeCenterY - 18, globeCenterX + 18, globeCenterY + 18);
-    gGrad.addColorStop(0, '#2563EB');
-    gGrad.addColorStop(0.5, '#0284C7');
-    gGrad.addColorStop(1, '#F59E0B');
-    ctx.fillStyle = gGrad;
-    ctx.beginPath();
-    ctx.arc(globeCenterX, globeCenterY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(globeCenterX - 4, globeCenterY - 4, 8, 0, Math.PI * 1.5);
-    ctx.fill();
-
-    const logoTextX = logoBoxX + 74;
-    ctx.fillStyle = '#DC2626';
-    ctx.font = '900 23px "Poppins", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('YOUR LOGO', logoTextX, logoBoxY + 36);
-
-    ctx.fillStyle = '#111827';
-    ctx.font = '700 16px "Noto Sans Devanagari", sans-serif';
-    ctx.fillText('यहाँ आपका लोगो रहेगा', logoTextX, logoBoxY + 63);
+    ctx.restore();
   }
-  ctx.restore();
 
   // 3. MAIN HEADLINE SECTION (Y: 106 to 340)
   // Very Bold, Dominant Centered Typography (Line 1 Black, Line 2 Bright Red #DC2626)
@@ -3245,147 +3300,25 @@ async function drawGraphic004Canvas(
   }
 
   // 8. FIXED SOLID BLACK FOOTER (Y: 1240 to 1350, Height: 110px)
-  const footerH = 110;
-  const footerY = height - footerH;
-
-  ctx.save();
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, footerY, width, footerH);
-
-  // Top white border
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(0, footerY);
-  ctx.lineTo(width, footerY);
-  ctx.stroke();
-
-  // Social Icons on Left
-  const iconY = footerY + footerH / 2 - 2;
-  const iconRadius = 18;
-  let curIconX = 40;
-
-  // YouTube Red
-  ctx.fillStyle = '#DC2626';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX - 4, iconY - 7);
-  ctx.lineTo(curIconX + 7, iconY);
-  ctx.lineTo(curIconX - 4, iconY + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Facebook Blue
-  curIconX += 44;
-  ctx.fillStyle = '#1877F2';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 22px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('f', curIconX, iconY + 2);
-
-  // Instagram Gradient
-  curIconX += 44;
-  const igGrad = ctx.createLinearGradient(curIconX - iconRadius, iconY + iconRadius, curIconX + iconRadius, iconY - iconRadius);
-  igGrad.addColorStop(0, '#FFDC80');
-  igGrad.addColorStop(0.3, '#F77737');
-  igGrad.addColorStop(0.6, '#F56040');
-  igGrad.addColorStop(0.8, '#FD1D1D');
-  igGrad.addColorStop(1, '#833AB4');
-  ctx.fillStyle = igGrad;
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(curIconX - 9, iconY - 9, 18, 18, 4);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, 4.5, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // WhatsApp Green
-  curIconX += 44;
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY, iconRadius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#25D366';
-  ctx.beginPath();
-  ctx.arc(curIconX, iconY - 1, 6.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical Separator
-  curIconX += 34;
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 26);
-  ctx.stroke();
-
-  // Handle (in Yellow #FFE600)
-  curIconX += 16;
-  ctx.fillStyle = '#FFE600';
-  ctx.font = '900 25px "Poppins", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const handleText = card.socialHandle || '@YourChannel';
-  ctx.fillText(handleText, curIconX, iconY);
-  curIconX += ctx.measureText(handleText).width + 16;
-
-  // Vertical Separator
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.moveTo(curIconX, footerY + 24);
-  ctx.lineTo(curIconX, footerY + footerH - 26);
-  ctx.stroke();
-
-  // Website (in Yellow #FFE600 with Blue Globe)
-  curIconX += 16;
-  ctx.fillStyle = '#0284C7';
-  ctx.font = '24px "Noto Color Emoji", sans-serif';
-  ctx.fillText('🌐', curIconX, iconY);
-  curIconX += 32;
-  ctx.fillStyle = '#FFE600';
-  ctx.font = '700 24px "Poppins", sans-serif';
-  const siteText = card.websiteUrl || 'yourwebsite.com';
-  ctx.fillText(siteText, curIconX, iconY);
-
-  // Right Date Badge: DATE / यहाँ तारीख आएगी (White Rounded Box on Black)
-  const badgeW = 160;
-  const badgeH = 74;
-  const badgeX = width - badgeW - 24;
-  const badgeY = footerY + (footerH - badgeH) / 2;
-
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 10);
-  ctx.stroke();
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 18px "Poppins", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('DATE', badgeX + badgeW / 2, badgeY + 34);
-
-  ctx.fillStyle = '#E5E7EB';
-  ctx.font = '700 13px "Noto Sans Devanagari", sans-serif';
-  const dateStr = card.date && card.date.trim().length > 0 ? card.date.trim() : 'यहाँ तारीख आएगी';
-  ctx.fillText(dateStr, badgeX + badgeW / 2, badgeY + 58);
-  ctx.restore();
+  const activeFooter = getActiveFooterPng(card);
+  if (card.showMasterBranding !== false || Boolean(activeFooter)) {
+    await drawThemeFooterBar(
+      ctx,
+      width,
+      height,
+      110,
+      card.socialHandle,
+      card.whatsappNumber,
+      activeFooter,
+      card.websiteUrl,
+      card.activeSocialIcons,
+      card.showMobileNumber,
+      '#000000',
+      '#FFE600',
+      'color',
+      card.showWebsite
+    );
+  }
 
   // 9. CRISP OUTER BLACK FRAME BORDER (8px)
   ctx.save();
@@ -3509,7 +3442,8 @@ async function drawDefaultJacketContent(
       card.showMobileNumber,
       card.footerBgColor || '#FFFFFF',
       card.footerTextColor,
-      card.footerIconStyle || 'color'
+      card.footerIconStyle || 'color',
+      card.showWebsite
     );
   }
 
@@ -5682,7 +5616,7 @@ function drawSpeakerAttribution(
   ctx.restore();
 }
 
-// Vertical Photo Disclaimer Watermark along Left Edge/Wall, Rotated 90° (AI GENERATED or प्रतीकात्मक फोटो)
+// Vertical Photo Disclaimer Watermark along Left Edge/Wall, Rotated 90° (AI GENERATED (प्रतीकात्मक फोटो))
 function drawPhotoDisclaimerWatermark(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -5692,6 +5626,7 @@ function drawPhotoDisclaimerWatermark(
   const isDisclaimerActive =
     card.photoDisclaimerType === 'ai' ||
     card.photoDisclaimerType === 'representative' ||
+    card.showWatermark ||
     (card.showAiGenerated && card.photoDisclaimerType !== 'none');
 
   if (!isDisclaimerActive) return;
@@ -5699,40 +5634,68 @@ function drawPhotoDisclaimerWatermark(
   const disclaimerText =
     card.photoDisclaimerType === 'representative'
       ? card.representativePhotoText || 'प्रतीकात्मक फोटो'
-      : card.aiGeneratedText || 'AI GENERATED';
+      : card.aiGeneratedText || 'AI GENERATED (प्रतीकात्मक फोटो)';
 
   ctx.save();
   // Placed right along the left wall of the photo area
-  const x = 22;
+  const x = Math.max(34, Math.round(width * 0.038));
   const y = height * 0.44;
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
 
-  ctx.font = '800 14px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-  if ('letterSpacing' in ctx) {
-    (ctx as any).letterSpacing = '2px';
-  }
+  ctx.font = '800 16px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   // Generous horizontal space (44px padding) before and after text
   const textWidth = ctx.measureText(disclaimerText).width + 44;
-  const pillH = 26;
+  const pillH = 32;
 
   // Translucent dark backdrop
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.80)';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 10;
   ctx.beginPath();
-  ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 4);
+  ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 6);
   ctx.fill();
 
   // Subtle border
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Low opacity white text
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
-  ctx.fillText(disclaimerText, 0, 1);
+  // High contrast crisp white text
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(disclaimerText, 0, 0);
+
+  ctx.restore();
+}
+
+// Vertical Date Stamp along Right Edge/Wall, Rotated 90°
+function drawDateStamp(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  card: NewsCardData
+) {
+  if (card.showDate === false) return;
+  const dateText = card.dateStr || getFormattedHindiDate();
+  if (!dateText || !dateText.trim()) return;
+
+  ctx.save();
+  const x = width - Math.max(34, Math.round(width * 0.038));
+  const y = Math.round(height * 0.22);
+  ctx.translate(x, y);
+  ctx.rotate(Math.PI / 2);
+
+  ctx.font = '700 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(dateText, 0, 0);
 
   ctx.restore();
 }
@@ -5772,36 +5735,6 @@ function drawAiGeneratedWatermark(
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
   ctx.fillText(text, 0, 1);
-
-  ctx.restore();
-}
-
-// Vertical Date Stamp along Right Edge, Rotated 90°, Positioned near header without box
-function drawDateStamp(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  dateText: string
-) {
-  ctx.save();
-  // Safe Zone enforced position along the right wall near header area
-  const safeRight = Math.max(36, Math.round(width * 0.038));
-  const x = width - safeRight;
-  const y = Math.round(height * 0.22);
-  ctx.translate(x, y);
-  ctx.rotate((90 * Math.PI) / 180); // 90° clockwise
-
-  ctx.font = '700 20px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Subtle shadow for readability without any background box
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-  ctx.shadowBlur = 5;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 1;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.fillText(dateText, 0, 0);
 
   ctx.restore();
 }
@@ -5853,7 +5786,7 @@ function getHeadlineLines(
 
   const parseTokensFromChunk = (chunk: string): WordToken[] => {
     const tokens: WordToken[] = [];
-    const yellowRegex = /\[yellow\](.*?)\[\/yellow\]/g;
+    const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/g;
     let lastIndex = 0;
     let match;
 
@@ -6086,8 +6019,8 @@ async function drawUniversalWatermark(
   card: NewsCardData
 ) {
   const isImageWatermark = card.watermarkType === 'image' && !!card.watermarkImage;
-  const opacity = card.watermarkOpacity ?? (card.breakingWatermarkOpacity ?? 0.12);
-  const color = card.watermarkColor || (card.breakingWatermarkColor ?? 'white');
+  const opacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? (card.breakingWatermarkOpacity ?? 0.15);
+  const color = card.textWatermarkColor || card.watermarkColor || (card.breakingWatermarkColor ?? 'white');
 
   ctx.save();
   ctx.beginPath();
@@ -6137,6 +6070,8 @@ async function drawUniversalWatermark(
     ctx.textBaseline = 'middle';
 
     const textToDraw = (
+      card.textWatermarkContent ||
+      card.channelNameEn ||
       card.watermarkText ||
       card.breakingWatermarkText ||
       (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')
@@ -6258,23 +6193,31 @@ async function drawThemeFooterBar(
   width: number,
   height: number,
   barH: number,
-  socialHandle: string = '/BreakingNewsWala',
+  socialHandle: string = '/AINewsMaker',
   whatsappNumber: string = '+91 96698 02408',
   customFooterPng?: string,
   websiteUrl?: string,
-  activeSocialIcons?: ('youtube' | 'facebook' | 'instagram' | 'twitter' | 'telegram' | 'whatsapp')[],
+  activeSocialIcons?: string[],
   showMobileNumber?: boolean,
   footerBgColor: string = '#FFFFFF',
   footerTextColor?: string,
-  footerIconStyle: 'color' | 'dark' | 'neutral' = 'color'
+  footerIconStyle: 'color' | 'dark' | 'neutral' = 'color',
+  showWebsite?: boolean
 ) {
-  // If user uploaded custom Footer.png, draw it directly
+  const barY = height - barH;
+  const bgColor = footerBgColor || '#FFFFFF';
+
+  // If user uploaded custom Footer.png, draw it directly over the footer background
   if (customFooterPng) {
     try {
       const footerImg = await loadImage(customFooterPng);
       const footerAspect = footerImg.width / footerImg.height;
       const drawH = width / footerAspect;
+      ctx.save();
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, barY, width, barH);
       ctx.drawImage(footerImg, 0, height - drawH, width, drawH);
+      ctx.restore();
       return;
     } catch (err) {
       console.warn('Custom footer load error:', err);
@@ -6282,10 +6225,8 @@ async function drawThemeFooterBar(
   }
 
   ctx.save();
-  const barY = height - barH;
 
   // Background color
-  const bgColor = footerBgColor || '#FFFFFF';
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, barY, width, barH);
 
@@ -6307,7 +6248,7 @@ async function drawThemeFooterBar(
   const textColor = (footerTextColor && footerTextColor.trim())
     ? footerTextColor
     : (isLightBg ? '#0F172A' : '#FFFFFF');
-  const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.25)' : 'rgba(255, 255, 255, 0.35)';
+  const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
 
   // Top subtle border line
   ctx.strokeStyle = isLightBg ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.18)';
@@ -6319,63 +6260,74 @@ async function drawThemeFooterBar(
 
   const iconY = barY + barH / 2;
 
-  // Clean social handle
+  // Clean social handle (only from user profile, no '@AINewsMaker' default)
   let displayHandle = (socialHandle || '').trim();
   if (displayHandle && !displayHandle.startsWith('@') && !displayHandle.startsWith('/')) {
     displayHandle = `@${displayHandle}`;
   }
 
-  // Clean website
-  const cleanWebsite = (websiteUrl || '')
+  // Clean website (only if provided and enabled)
+  const rawWebsite = (websiteUrl || '')
     .trim()
     .replace(/^https?:\/\//i, '')
     .replace(/^www\./i, '')
     .replace(/\/$/, '');
+  const cleanWebsite = showWebsite !== false ? rawWebsite : '';
 
-  // Clean phone number
+  // Clean phone number (only if provided and enabled)
   const shouldShowPhone = showMobileNumber !== false && Boolean(whatsappNumber && whatsappNumber.trim());
   const cleanPhone = shouldShowPhone
     ? whatsappNumber.replace(/^\/+/, '').trim()
     : '';
+  const displayPhone = cleanPhone
+    ? (cleanPhone.startsWith('+') ? cleanPhone : `+91 ${cleanPhone}`)
+    : '';
 
-  // Active social icons to display
-  const icons: ('youtube' | 'facebook' | 'instagram' | 'twitter' | 'telegram' | 'whatsapp')[] =
-    Array.isArray(activeSocialIcons)
-      ? (activeSocialIcons.filter((i) => ['youtube', 'facebook', 'instagram', 'twitter', 'telegram'].includes(i)) as any)
-      : ['youtube', 'facebook', 'instagram', 'twitter'];
+  // Active social icons: Facebook & Instagram are MANDATORY (always locked/included)
+  const icons: string[] = [];
+  const rawIcons = Array.isArray(activeSocialIcons) ? activeSocialIcons : [];
+  if (rawIcons.includes('youtube')) icons.push('youtube');
+  icons.push('facebook');
+  icons.push('instagram');
+  if (rawIcons.includes('twitter') || rawIcons.includes('x')) icons.push(rawIcons.includes('x') ? 'x' : 'twitter');
+  if (rawIcons.includes('linkedin')) icons.push('linkedin');
 
-  // Base typography & sizing strictly in Arial
-  let baseFontSize = 19;
-  let iconRadius = 11;
+  // Base typography & sizing - Noticeably larger text (Task 2 & User Request)
+  let baseFontSize = 28;
+  let iconRadius = 16;
   const iconDiameter = iconRadius * 2;
-  const iconSpacing = 5;
+  const iconSpacing = 8;
   const iconsGroupWidth = icons.length * iconDiameter + Math.max(0, icons.length - 1) * iconSpacing;
 
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  const handleWidth = ctx.measureText(displayHandle).width;
-
+  const handleWidth = displayHandle ? ctx.measureText(displayHandle).width : 0;
   const separatorWidth = ctx.measureText('|').width;
 
-  const webIconWidth = cleanWebsite ? 18 : 0;
+  const webIconWidth = cleanWebsite ? 30 : 0;
   const webTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
-  const webGroupWidth = cleanWebsite ? webIconWidth + 4 + webTextWidth : 0;
+  const webGroupWidth = cleanWebsite ? webIconWidth + 8 + webTextWidth : 0;
 
-  const phoneIconWidth = cleanPhone ? 18 : 0;
-  const phoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
-  const phoneGroupWidth = cleanPhone ? phoneIconWidth + 4 + phoneTextWidth : 0;
+  const phoneIconWidth = cleanPhone ? 30 : 0;
+  const phoneTextWidth = cleanPhone ? ctx.measureText(displayPhone).width : 0;
+  const phoneGroupWidth = cleanPhone ? phoneIconWidth + 8 + phoneTextWidth : 0;
+
+  const hasSocial = icons.length > 0 || Boolean(displayHandle);
+  const socialGroupWidth = iconsGroupWidth + (displayHandle ? 8 + handleWidth : 0);
 
   // Total raw width
-  let totalWidth = iconsGroupWidth + 8 + handleWidth;
-  if (webGroupWidth > 0) totalWidth += 14 + separatorWidth + 14 + webGroupWidth;
-  if (phoneGroupWidth > 0) totalWidth += 14 + separatorWidth + 14 + phoneGroupWidth;
+  let totalWidth = socialGroupWidth;
+  if (hasSocial && webGroupWidth > 0) totalWidth += 18 + separatorWidth + 18;
+  totalWidth += webGroupWidth;
+  if ((hasSocial || webGroupWidth > 0) && phoneGroupWidth > 0) totalWidth += 18 + separatorWidth + 18;
+  totalWidth += phoneGroupWidth;
 
   // Adaptive scale to strictly fit in one line
   const maxAllowedWidth = width - 48;
   const scale = totalWidth > maxAllowedWidth ? maxAllowedWidth / totalWidth : 1;
 
   if (scale < 1) {
-    baseFontSize = Math.max(13, Math.round(baseFontSize * scale));
-    iconRadius = Math.max(8, Math.round(iconRadius * scale));
+    baseFontSize = Math.max(15, Math.round(baseFontSize * scale));
+    iconRadius = Math.max(10, Math.round(iconRadius * scale));
   }
 
   // Recalculate with scaled values
@@ -6384,109 +6336,108 @@ async function drawThemeFooterBar(
   const finalIconsGroupWidth = icons.length * finalIconDiam + Math.max(0, icons.length - 1) * finalIconSpacing;
 
   ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  const finalHandleWidth = ctx.measureText(displayHandle).width;
+  const finalHandleWidth = displayHandle ? ctx.measureText(displayHandle).width : 0;
   const finalSepWidth = ctx.measureText('|').width;
   const finalWebTextWidth = cleanWebsite ? ctx.measureText(cleanWebsite).width : 0;
-  const finalPhoneTextWidth = cleanPhone ? ctx.measureText(cleanPhone).width : 0;
-  const finalWebIconWidth = cleanWebsite ? Math.round(18 * scale) : 0;
-  const finalPhoneIconWidth = cleanPhone ? Math.round(18 * scale) : 0;
-  const finalSepMargin = Math.round(12 * scale);
+  const finalPhoneTextWidth = cleanPhone ? ctx.measureText(displayPhone).width : 0;
+  const finalWebIconWidth = cleanWebsite ? Math.round(24 * scale) : 0;
+  const finalPhoneIconWidth = cleanPhone ? Math.round(24 * scale) : 0;
+  const finalSepMargin = Math.round(16 * scale);
 
-  let finalTotalWidth = finalIconsGroupWidth + Math.round(8 * scale) + finalHandleWidth;
-  if (cleanWebsite) finalTotalWidth += finalSepMargin * 2 + finalSepWidth + finalWebIconWidth + 4 + finalWebTextWidth;
-  if (cleanPhone) finalTotalWidth += finalSepMargin * 2 + finalSepWidth + finalPhoneIconWidth + 4 + finalPhoneTextWidth;
+  let finalTotalWidth = finalIconsGroupWidth + (displayHandle ? Math.round(8 * scale) + finalHandleWidth : 0);
+  if (cleanWebsite) {
+    if (hasSocial) finalTotalWidth += finalSepMargin * 2 + finalSepWidth;
+    finalTotalWidth += finalWebIconWidth + 6 + finalWebTextWidth;
+  }
+  if (cleanPhone) {
+    if (hasSocial || cleanWebsite) finalTotalWidth += finalSepMargin * 2 + finalSepWidth;
+    finalTotalWidth += finalPhoneIconWidth + 6 + finalPhoneTextWidth;
+  }
 
   let curX = Math.max(20, Math.round((width - finalTotalWidth) / 2));
 
-  // Helper to draw circular icon with appropriate style
-  const drawCircleIcon = (x: number, type: string) => {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x + iconRadius, iconY, iconRadius, 0, Math.PI * 2);
+  const iconCache: Record<string, HTMLImageElement> = {};
+  await Promise.all(
+    ['facebook', 'instagram', 'twitter', 'x', 'youtube', 'linkedin', 'whatsapp', 'website'].map(async (key) => {
+      try {
+        const src = getSocialIconSrc(key);
+        iconCache[key] = await loadImage(src);
+      } catch (err) {
+        console.warn(`Failed to preload icon ${key}:`, err);
+      }
+    })
+  );
 
-    if (footerIconStyle === 'dark') {
-      ctx.fillStyle = '#000000';
-    } else if (footerIconStyle === 'neutral') {
-      ctx.fillStyle = isLightBg ? '#E2E8F0' : 'rgba(255, 255, 255, 0.2)';
-    } else {
-      // 'color'
-      if (type === 'youtube') ctx.fillStyle = '#FF0000';
-      else if (type === 'facebook') ctx.fillStyle = '#1877F2';
-      else if (type === 'instagram') ctx.fillStyle = '#E1306C';
-      else if (type === 'twitter') ctx.fillStyle = '#000000';
-      else if (type === 'telegram') ctx.fillStyle = '#24A1DE';
-      else if (type === 'whatsapp') ctx.fillStyle = '#25D366';
-      else ctx.fillStyle = '#000000';
+  // Helper to draw authentic original icon without circular clipping or distortion
+  const drawOriginalIcon = (x: number, type: string) => {
+    const directKey = (type === 'twitter' || type === 'x') ? (iconCache['x'] ? 'x' : 'twitter') : type;
+    const img = iconCache[directKey] || iconCache[type];
+    if (img && img.naturalWidth > 0) {
+      ctx.save();
+      // Draw authentic 512x512 icon preserving natural shape and transparency
+      ctx.drawImage(img, x, iconY - iconRadius, finalIconDiam, finalIconDiam);
+      ctx.restore();
+      return;
     }
-    ctx.fill();
 
-    const glyphColor = footerIconStyle === 'neutral'
-      ? (isLightBg ? '#334155' : '#FFFFFF')
-      : '#FFFFFF';
-
-    ctx.fillStyle = glyphColor;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const sz = iconRadius;
-    if (type === 'instagram') {
-      ctx.strokeStyle = glyphColor;
-      ctx.lineWidth = Math.max(1, sz * 0.14);
-      ctx.strokeRect(x + iconRadius - sz * 0.5, iconY - sz * 0.5, sz, sz);
-      ctx.beginPath();
-      ctx.arc(x + iconRadius, iconY, sz * 0.25, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (type === 'facebook') {
-      ctx.font = `bold ${Math.round(sz * 1.3)}px Arial, sans-serif`;
-      ctx.fillText('f', x + iconRadius, iconY + 1);
-    } else if (type === 'twitter') {
-      ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
-      ctx.fillText('𝕏', x + iconRadius, iconY);
-    } else if (type === 'youtube') {
-      ctx.beginPath();
-      ctx.moveTo(x + iconRadius - sz * 0.35, iconY - sz * 0.4);
-      ctx.lineTo(x + iconRadius + sz * 0.45, iconY);
-      ctx.lineTo(x + iconRadius - sz * 0.35, iconY + sz * 0.4);
-      ctx.closePath();
-      ctx.fill();
-    } else if (type === 'telegram') {
-      ctx.font = `bold ${Math.round(sz * 1.1)}px Arial, sans-serif`;
-      ctx.fillText('✈', x + iconRadius, iconY - 1);
-    } else if (type === 'whatsapp') {
-      ctx.font = `bold ${Math.round(sz * 1.05)}px Arial, sans-serif`;
-      ctx.fillText('📞', x + iconRadius, iconY);
+    const dataUri = SOCIAL_ICONS_DATA[type] || (type === 'twitter' ? SOCIAL_ICONS_DATA.x : undefined);
+    if (dataUri) {
+      const syncImg = new Image();
+      syncImg.src = dataUri;
+      if (syncImg.complete && syncImg.naturalWidth > 0) {
+        ctx.save();
+        ctx.drawImage(syncImg, x, iconY - iconRadius, finalIconDiam, finalIconDiam);
+        ctx.restore();
+        return;
+      }
     }
-    ctx.restore();
   };
 
   // 1. Draw Social Icons
   for (const iconType of icons) {
-    drawCircleIcon(curX, iconType);
+    drawOriginalIcon(curX, iconType);
     curX += finalIconDiam + finalIconSpacing;
   }
-  curX += Math.round(6 * scale);
+  if (icons.length > 0) {
+    curX += Math.round(6 * scale);
+  }
 
-  // 2. Draw Social Handle
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = textColor;
-  ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-  ctx.fillText(displayHandle, curX, iconY);
-  curX += finalHandleWidth;
+  // 2. Draw Social Handle (if present in user profile)
+  if (displayHandle) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = textColor;
+    ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
+    ctx.fillText(displayHandle, curX, iconY);
+    curX += finalHandleWidth;
+  }
 
   // 3. Draw Separator and Website
   if (cleanWebsite) {
-    curX += finalSepMargin;
-    ctx.fillStyle = separatorColor;
-    ctx.font = `500 ${baseFontSize}px Arial, sans-serif`;
-    ctx.fillText('|', curX, iconY);
-    curX += finalSepWidth + finalSepMargin;
+    if (hasSocial) {
+      curX += finalSepMargin;
+      ctx.fillStyle = separatorColor;
+      ctx.font = `500 ${baseFontSize}px Arial, sans-serif`;
+      ctx.fillText('|', curX, iconY);
+      curX += finalSepWidth + finalSepMargin;
+    }
 
-    // Globe icon
-    ctx.fillStyle = isLightBg ? '#2563EB' : '#60A5FA';
-    ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
-    ctx.fillText('🌐', curX, iconY);
-    curX += finalWebIconWidth + 4;
+    // Website icon (authentic uncropped)
+    const webImg = iconCache['website'];
+    if (webImg && webImg.naturalWidth > 0) {
+      ctx.drawImage(webImg, curX, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
+    } else {
+      const syncImg = new Image();
+      syncImg.src = SOCIAL_ICONS_DATA.website;
+      if (syncImg.complete && syncImg.naturalWidth > 0) {
+        ctx.drawImage(syncImg, curX, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
+      } else {
+        ctx.fillStyle = isLightBg ? '#2563EB' : '#60A5FA';
+        ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
+        ctx.fillText('🌐', curX, iconY);
+      }
+    }
+    curX += finalWebIconWidth + 6;
 
     // Website text
     ctx.fillStyle = textColor;
@@ -6497,22 +6448,35 @@ async function drawThemeFooterBar(
 
   // 4. Draw Separator and Phone Number
   if (cleanPhone) {
-    curX += finalSepMargin;
-    ctx.fillStyle = separatorColor;
-    ctx.font = `500 ${baseFontSize}px Arial, sans-serif`;
-    ctx.fillText('|', curX, iconY);
-    curX += finalSepWidth + finalSepMargin;
+    if (hasSocial || cleanWebsite) {
+      curX += finalSepMargin;
+      ctx.fillStyle = separatorColor;
+      ctx.font = `500 ${baseFontSize}px Arial, sans-serif`;
+      ctx.fillText('|', curX, iconY);
+      curX += finalSepWidth + finalSepMargin;
+    }
 
-    // Phone / WhatsApp icon
-    ctx.fillStyle = isLightBg ? '#059669' : '#34D399';
-    ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
-    ctx.fillText('📞', curX, iconY);
-    curX += finalPhoneIconWidth + 4;
+    // Phone / WhatsApp icon (authentic uncropped, NO circular clip)
+    const phoneImg = iconCache['whatsapp'];
+    if (phoneImg && phoneImg.naturalWidth > 0) {
+      ctx.drawImage(phoneImg, curX, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
+    } else {
+      const syncImg = new Image();
+      syncImg.src = SOCIAL_ICONS_DATA.whatsapp;
+      if (syncImg.complete && syncImg.naturalWidth > 0) {
+        ctx.drawImage(syncImg, curX, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
+      } else {
+        ctx.fillStyle = isLightBg ? '#059669' : '#34D399';
+        ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
+        ctx.fillText('📞', curX, iconY);
+      }
+    }
+    curX += finalPhoneIconWidth + 6;
 
     // Phone text
     ctx.fillStyle = textColor;
     ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
-    ctx.fillText(cleanPhone, curX, iconY);
+    ctx.fillText(displayPhone, curX, iconY);
     curX += finalPhoneTextWidth;
   }
 
@@ -6570,7 +6534,7 @@ export async function generateCardCanvas(
     const rawCanvas = await html2canvas(htmlElement, {
       scale: dynamicScale,
       useCORS: true,
-      allowTaint: true,
+      allowTaint: false,
       backgroundColor: '#0a0a0a',
       logging: false,
       imageTimeout: 15000,
@@ -6611,15 +6575,30 @@ export function downloadCanvas(
         cleanFilename = cleanFilename.replace(/\.[^/.]+$/, '') + finalExt;
       }
 
+      // For JPEG export: JPEG doesn't support alpha transparency.
+      // Render onto an opaque solid white canvas to prevent black background or corrupt export
+      let exportCanvas = canvas;
+      if (format === 'jpeg') {
+        const jpgCanvas = document.createElement('canvas');
+        jpgCanvas.width = canvas.width;
+        jpgCanvas.height = canvas.height;
+        const jctx = jpgCanvas.getContext('2d');
+        if (jctx) {
+          jctx.fillStyle = '#FFFFFF';
+          jctx.fillRect(0, 0, jpgCanvas.width, jpgCanvas.height);
+          jctx.drawImage(canvas, 0, 0);
+          exportCanvas = jpgCanvas;
+        }
+      }
+
       // Safe Data URL generator with fallback
       const getSafeDataUrl = (): string | null => {
         try {
-          return canvas.toDataURL(mime, quality);
+          return exportCanvas.toDataURL(mime, quality);
         } catch (e) {
           console.warn('Canvas toDataURL direct call warning:', e);
           try {
-            // If direct call fails, try PNG format as fallback
-            return canvas.toDataURL('image/png');
+            return exportCanvas.toDataURL('image/png');
           } catch (e2) {
             console.warn('Canvas toDataURL fallback failed:', e2);
             return null;
@@ -6647,9 +6626,9 @@ export function downloadCanvas(
 
       // 2. Blob-based object URL download (Primary Web strategy)
       let downloadTriggered = false;
-      if (typeof canvas.toBlob === 'function') {
+      if (typeof exportCanvas.toBlob === 'function') {
         try {
-          canvas.toBlob(
+          exportCanvas.toBlob(
             (blob) => {
               if (blob) {
                 downloadTriggered = true;

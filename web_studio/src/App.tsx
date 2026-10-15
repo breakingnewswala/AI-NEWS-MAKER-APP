@@ -83,6 +83,7 @@ import {
   fetchAuthoritativeSubscription,
   isUserActionAllowed,
 } from './lib/userPlanManager';
+import { markNewsGraphicCreated } from './lib/newsGraphicTracker';
 import {
   NewsFeedPost,
   VideoFeedItem,
@@ -1200,16 +1201,16 @@ export default function App() {
     setCard((prev) => ({
       ...prev,
       frameDesign: 'graphic_001',
-      headline: '',
-      formattedHeadline: '',
-      highlightWords: [],
+      headline: prev.headline || '',
+      formattedHeadline: prev.formattedHeadline || '',
+      highlightWords: prev.highlightWords || [],
       headlineAlign: 'center',
-      location: savedProfile?.district || '',
-      summary: '',
-      category: 'ताज़ा खबर',
+      location: savedProfile?.district || prev.location || '',
+      summary: prev.summary || '',
+      category: prev.category || 'ताज़ा खबर',
       images: {
-        main: '',
-        second: '',
+        main: prev.images?.main || '',
+        second: prev.images?.second || '',
       },
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
@@ -1230,9 +1231,9 @@ export default function App() {
       customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : prev.customFooterPng,
       speakerName: '',
       speakerTitle: '',
-      dateStr: '',
-      showDate: false,
-      showWatermark: false,
+      dateStr: prev.dateStr || '',
+      showDate: prev.showDate ?? false,
+      showWatermark: prev.showWatermark ?? false,
       showLocation: true,
       showCallout: false,
       calloutTag: '',
@@ -1249,8 +1250,6 @@ export default function App() {
       // ignore
     }
 
-    // Fully reset AI Prompt & Link inputs
-    setAiResetKey((prev) => prev + 1);
     setActiveStep(1);
 
     showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
@@ -1468,6 +1467,10 @@ export default function App() {
 
       await downloadCanvas(canvas, filename, fmt);
 
+      if (card.sourceNewsId) {
+        markNewsGraphicCreated(currentUser?.email, card.sourceNewsId);
+      }
+
       showToast(`✅ ${fmt === 'jpeg' ? 'JPG' : 'PNG'} 1080x1350 न्यूज़ कार्ड सफलतापूर्वक डाउनलोड हो गया!`);
     } catch (err: any) {
       console.error('Download error:', err);
@@ -1639,6 +1642,7 @@ export default function App() {
 
     setCard((prev) => ({
       ...prev,
+      sourceNewsId: post.id,
       frameDesign: 'graphic_001',
       layout: 'single',
       showDate: false,
@@ -2073,7 +2077,7 @@ export default function App() {
 
                       {/* FULL-WIDTH CONTROL BAR (100% Viewport Width Container, Edge-to-Edge) */}
                       <div className="w-[100vw] relative left-[calc(-50vw+50%)] my-2 bg-white border-y border-slate-200/90 py-1.5 shadow-md">
-                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-4 gap-1.5">
+                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-3 gap-2">
                           {/* 1. JPG (Download) */}
                           <button
                             type="button"
@@ -2123,18 +2127,6 @@ export default function App() {
                           >
                             <Bookmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             <span className="truncate">Draft</span>
-                          </button>
-
-                          {/* 4. Refresh */}
-                          <button
-                            type="button"
-                            onClick={handleResetCard}
-                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                            title="कार्ड को डिफ़ॉल्ट टेम्पलेट में रीसेट करें"
-                            aria-label="कार्ड रीसेट करें"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                            <span className="truncate">Refresh</span>
                           </button>
                         </div>
                       </div>
@@ -2236,14 +2228,14 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 4 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
+                    {/* Action Bar below Preview: 3 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट) */}
                     <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
                       {/* 1. JPG डाउनलोड - Priority Action */}
                       <button
                         type="button"
                         onClick={() => handleDownload('jpeg')}
                         disabled={downloading || isActionLocked}
-                        className={`flex-[1.4] min-w-[110px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                        className={`flex-[1.5] min-w-[120px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
                           isActionLocked
                             ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
                             : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
@@ -2266,7 +2258,7 @@ export default function App() {
                           }
                         }}
                         disabled={isActionLocked}
-                        className={`flex-1 min-w-[70px] py-2 sm:py-2.5 px-1.5 sm:px-2 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1 transition-all active:scale-95 whitespace-nowrap ${
+                        className={`flex-1 min-w-[80px] py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
                           isActionLocked
                             ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
                             : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
@@ -2281,22 +2273,11 @@ export default function App() {
                       <button
                         type="button"
                         onClick={handleSaveCurrentCardAsDraft}
-                        className="flex-1 min-w-[65px] py-2 sm:py-2.5 px-1.5 sm:px-2 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                        className="flex-1 min-w-[75px] py-2 sm:py-2.5 px-2 sm:px-3 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
                         title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
                       >
                         <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
                         <span className="whitespace-nowrap">ड्राफ्ट</span>
-                      </button>
-
-                      {/* 4. रिफ्रेश */}
-                      <button
-                        type="button"
-                        onClick={handleResetCard}
-                        className="flex-1 min-w-[65px] py-2 sm:py-2.5 px-1.5 sm:px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                        title="कार्ड रीसेट करें"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                        <span className="whitespace-nowrap">रिफ्रेश</span>
                       </button>
                     </div>
 

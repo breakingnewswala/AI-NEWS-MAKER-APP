@@ -68,21 +68,21 @@
     <circle cx="540" cy="324" r="9" fill="#FFE600"/>
 
     <!-- Red Step 4 Pill Badge -->
-    <rect x="330" y="440" width="420" height="58" rx="29" fill="#DC2626" stroke="#FFFFFF" stroke-width="1.5"/>
+    <rect x="280" y="430" width="520" height="74" rx="37" fill="#DC2626" stroke="#FFFFFF" stroke-width="3"/>
     <!-- Photo icon inside pill -->
-    <rect x="365" y="456" width="28" height="24" rx="4" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
-    <circle cx="374" cy="465" r="3" fill="#FFFFFF"/>
-    <path d="M367 476 L376 468 L384 476" stroke="#FFFFFF" stroke-width="2.5" fill="none"/>
-    <text x="555" y="479" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">स्टेप 4 : फोटो जोड़ें</text>
+    <rect x="320" y="450" width="38" height="32" rx="6" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+    <circle cx="332" cy="462" r="4.5" fill="#FFFFFF"/>
+    <path d="M322 476 L334 466 L346 476" stroke="#FFFFFF" stroke-width="3" fill="none"/>
+    <text x="565" y="484" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="42" font-weight="900" fill="#FFFFFF" letter-spacing="1">स्टेप 4 : फोटो जोड़ें</text>
 
     <!-- Main Instruction -->
-    <text x="540" y="555" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="44" font-weight="900" fill="#FFFFFF" filter="url(#softShadow)">कृपया अपनी न्यूज़ फोटो अपलोड करें</text>
+    <text x="540" y="560" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="54" font-weight="900" fill="#FFFFFF" filter="url(#softShadow)">कृपया अपनी न्यूज़ फोटो अपलोड करें</text>
 
     <!-- Secondary Golden Text -->
-    <text x="540" y="612" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="34" font-weight="800" fill="#FFE600" filter="url(#softShadow)">गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं</text>
+    <text x="540" y="622" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="42" font-weight="900" fill="#FFE600" filter="url(#softShadow)">गैलरी या कैमरे से मुख्य खबर की तस्वीर लगाएं</text>
 
     <!-- Tertiary Gray Hint Text -->
-    <text x="540" y="662" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="24" font-weight="600" fill="#CBD5E1">(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)</text>
+    <text x="540" y="675" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="32" font-weight="800" fill="#F8FAFC">(1, 2, 3 या 4 फोटो लेआउट का चयन भी कर सकते हैं)</text>
   </g>
 
   <!-- 3. GLOWING DIVIDER BEAM (Y: 775) -->
@@ -108,9 +108,9 @@
 
     <!-- Default Step 3 Instruction Headlines -->
     <g id="defaultHeadlineText" filter="url(#softShadow)">
-      <text x="540" y="890" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">आप स्टेप 3 (हेडलाइन) में जाकर</text>
-      <text x="540" y="975" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">अपनी मुख्य खबर के शीर्षक को</text>
-      <text x="540" y="1060" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">2-3 लाइन में दर्ज कर सकते हैं</text>
+      <text x="540" y="910" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="68" font-weight="900" fill="#FFFFFF">आप स्टेप 3 (हेडलाइन) में जाकर</text>
+      <text x="540" y="1002" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="68" font-weight="900" fill="#FFFFFF">अपनी मुख्य खबर के शीर्षक को</text>
+      <text x="540" y="1094" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="68" font-weight="900" fill="#FFFFFF">2-3 लाइन में दर्ज कर सकते हैं</text>
     </g>
   </g>
 

@@ -1684,13 +1684,13 @@ async function drawGraphic001Canvas(
   // 3. TOP-LEFT LOGO AREA (Clean transparent PNG or 'Your Logo' placeholder)
   if (card.showMasterBranding !== false) {
     ctx.save();
-    const centerX = Math.round(width * 0.15);
-    const centerY = Math.round(height * 0.0975);
+    const minSafeX = Math.round(width * 0.055);
+    const minSafeY = Math.round(height * 0.055);
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
 
     if (customLogoImg && customLogoImg.width > 0) {
-      const scale = card.logoScale ?? 1.0;
+      const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.0));
       const lRatio = customLogoImg.width / customLogoImg.height;
       let lW = baseW * scale;
       let lH = lW / lRatio;
@@ -1701,7 +1701,7 @@ async function drawGraphic001Canvas(
       ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 2;
-      ctx.drawImage(customLogoImg, centerX - lW / 2, centerY - lH / 2, lW, lH);
+      ctx.drawImage(customLogoImg, minSafeX, minSafeY, lW, lH);
     } else {
       ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
       ctx.shadowBlur = 6;
@@ -1710,7 +1710,7 @@ async function drawGraphic001Canvas(
       ctx.font = '900 36px "Poppins", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Your Logo', centerX, centerY);
+      ctx.fillText('Your Logo', minSafeX + baseW / 2, minSafeY + baseH / 2);
     }
     ctx.restore();
   }
@@ -1883,7 +1883,7 @@ async function drawGraphic001Canvas(
     const headlineLineH = Math.round(testFontSize * 1.32);
     const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
     const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = bannerY + bannerH / 2 - totalHeadH / 2 + Math.round(headlineLineH * 0.42);
+    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2 + Math.round(headlineLineH * 0.08);
 
     ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
@@ -6204,13 +6204,20 @@ async function drawThemeFooterBar(
   footerIconStyle: 'color' | 'dark' | 'neutral' = 'color',
   showWebsite?: boolean
 ) {
-  // If user uploaded custom Footer.png, draw it directly
+  const barY = height - barH;
+  const bgColor = footerBgColor || '#FFFFFF';
+
+  // If user uploaded custom Footer.png, draw it directly over the footer background
   if (customFooterPng) {
     try {
       const footerImg = await loadImage(customFooterPng);
       const footerAspect = footerImg.width / footerImg.height;
       const drawH = width / footerAspect;
+      ctx.save();
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, barY, width, barH);
       ctx.drawImage(footerImg, 0, height - drawH, width, drawH);
+      ctx.restore();
       return;
     } catch (err) {
       console.warn('Custom footer load error:', err);
@@ -6218,10 +6225,8 @@ async function drawThemeFooterBar(
   }
 
   ctx.save();
-  const barY = height - barH;
 
   // Background color
-  const bgColor = footerBgColor || '#FFFFFF';
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, barY, width, barH);
 

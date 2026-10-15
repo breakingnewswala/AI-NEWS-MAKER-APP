@@ -9,28 +9,95 @@ import { getActiveHeaderPng } from '../lib/headerUtils';
 import { getEffectiveSpeaker, cleanHeadlineText } from '../lib/speakerUtils';
 import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
+import { getApiUrl } from '../lib/apiConfig';
 
 interface CardPreviewProps {
   card: NewsCardData;
   scale?: number;
   className?: string;
+  containerClassName?: string;
   showSafeZone?: boolean;
   onChange?: (updates: Partial<NewsCardData>) => void;
 }
 
-const FALLBACK_NEWS_BG = '/assets/placeholder_news_search_square.jpg';
+const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
 
 const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   const target = e.currentTarget;
+  const currentSrc = target.src;
+  // If proxied image failed, try loading original raw image directly
+  if (currentSrc.includes('/api/proxy-image')) {
+    try {
+      const u = new URL(currentSrc, window.location.href);
+      const originalUrl = u.searchParams.get('url');
+      if (originalUrl && originalUrl !== currentSrc) {
+        target.src = originalUrl;
+        return;
+      }
+    } catch {}
+  }
   target.onerror = null;
   target.src = FALLBACK_NEWS_BG;
 };
 
-export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, className, showSafeZone = false, onChange }) => {
+export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale = 1, className, showSafeZone = false, onChange }) => {
+  // If Admin Test Mode is active, override preview identity cleanly without modifying real admin profile
+  const card = React.useMemo(() => {
+    if (!rawCard.isTestMode) return rawCard;
+    return {
+      ...rawCard,
+      brandName: rawCard.testChannelName || rawCard.brandName,
+      channelNameHi: rawCard.testChannelName || rawCard.channelNameHi,
+      socialHandle: rawCard.testSocialHandle || rawCard.socialHandle,
+      customLogoUrl: rawCard.testLogoUrl || rawCard.customLogoUrl,
+      images: rawCard.testSamplePhotoUrl
+        ? { ...rawCard.images, main: rawCard.testSamplePhotoUrl }
+        : rawCard.images,
+    };
+  }, [rawCard]);
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
+  const hasUploadedPhoto = Boolean(
+    (card.images?.main &&
+      card.images.main.trim().length > 0 &&
+      card.images.main !== FALLBACK_NEWS_BG &&
+      !card.images.main.includes('placeholder_news_photo') &&
+      !card.images.main.includes('placeholder_news_search') &&
+      !card.images.main.includes('preview_placeholder')) ||
+    (card.images?.second && card.images.second.trim().length > 0)
+  );
+  const getProxiedImageUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (trimmed.includes('/api/proxy-image')) {
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+      return getApiUrl(trimmed);
+    }
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://')
+    ) {
+      if (
+        typeof window !== 'undefined' &&
+        !trimmed.startsWith(window.location.origin)
+      ) {
+        return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
+      }
+    }
+    return trimmed;
+  };
+
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
-    ? card.images.main
+    ? getProxiedImageUrl(card.images.main)
     : FALLBACK_NEWS_BG;
+  const secondPhotoSrc = (card.images?.second && card.images.second.trim().length > 0)
+    ? getProxiedImageUrl(card.images.second)
+    : mainPhotoSrc;
+  const thirdPhotoSrc = (card.images?.third && card.images.third.trim().length > 0)
+    ? getProxiedImageUrl(card.images.third)
+    : mainPhotoSrc;
+  const fourthPhotoSrc = (card.images?.fourth && card.images.fourth.trim().length > 0)
+    ? getProxiedImageUrl(card.images.fourth)
+    : secondPhotoSrc;
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomPlateRef = useRef<HTMLDivElement>(null);
   const contentAreaRef = useRef<HTMLDivElement>(null);
@@ -211,7 +278,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
     const raw = cleanHeadlineText(rawUncleaned);
 
     const parseLineParts = (textChunk: string) => {
-      const yellowRegex = /\[yellow\](.*?)\[\/yellow\]/g;
+      const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/g;
       const parts: { text: string; isYellow: boolean }[] = [];
       let lastIndex = 0;
       let match;
@@ -259,21 +326,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
       const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
       const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
 
-      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses crisp WHITE text on dark canvas)
-      const baseTextColor = (isGraphic1 || isGraphic3)
-        ? '#FFFFFF'
-        : (isGraphic2 || isGraphic4 || isIvory || isDefault)
+      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses white text and yellow highlight on red banner)
+      const baseTextColor = (isGraphic2 || isGraphic4 || isIvory || isDefault)
         ? '#000000'
-        : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'));
+        : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')));
 
-      const highlightColor = (isGraphic1 || isGraphic3)
+      const highlightColor = isGraphic1
+        ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
+        : isGraphic3
         ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
         : isGraphic4
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
         : isGraphic2
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C')
-        : isGraphic1
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#FFE600')
         : isIvory
         ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#B45309')
         : isEmerald
@@ -384,6 +449,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         aspectRatio: '4 / 5',
       }}
     >
+      {/* 0. BASE BACKGROUND FOR GRAPHIC_001 */}
+      {card.frameDesign === 'graphic_001' && (
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+          <img
+            src="/assets/primary_news_graphic_bg.jpg"
+            alt="Primary Graphic Background"
+            className="w-full h-full object-cover"
+            crossOrigin="anonymous"
+          />
+        </div>
+      )}
+
       {/* 1. BACKGROUND PHOTOS ACCORDING TO USER'S SELECTED LAYOUT */}
       {card.frameDesign === 'jacket-morning' ? (
         <div className="absolute inset-0 z-0 bg-neutral-950 overflow-hidden">
@@ -454,12 +531,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         </div>
       ) : (
       <div
-        className="absolute inset-x-0 z-0 overflow-hidden bg-neutral-950 transition-all duration-150"
+        className={`absolute inset-x-0 z-10 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
         style={{
           top: card.frameDesign === 'graphic_004' ? '33.2%' : '0px',
           bottom: card.frameDesign === 'graphic_003'
             ? '0px'
-            : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002')
+            : card.frameDesign === 'graphic_001'
+            ? '38.67%'
+            : card.frameDesign === 'graphic_002'
             ? '47%'
             : card.frameDesign === 'graphic_004'
             ? '58px'
@@ -472,7 +551,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
       >
         {/* Graphic 4 Special Photo Treatment: Supports Dual Photo Collage or Single Photo */}
         {card.frameDesign === 'graphic_004' ? (
-          (card.secondaryPhoto || card.images?.secondary || card.images?.second) ? (
+          (card.secondaryPhoto || card.images?.second) ? (
             <div className="w-full h-full flex overflow-hidden">
               <div className="w-1/2 h-full overflow-hidden relative border-r-2 border-white">
                 <img
@@ -480,14 +559,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={mainStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
               <div className="w-1/2 h-full overflow-hidden relative">
                 <img
-                  src={card.secondaryPhoto || card.images?.secondary || card.images?.second}
+                  src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -499,6 +580,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -521,14 +603,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         {card.frameDesign === 'jacket-quote' && (
           <div className="absolute inset-x-0 bottom-0 h-36 sm:h-44 bg-gradient-to-b from-transparent via-black/75 to-black pointer-events-none z-10" />
         )}
-        {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
-        {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
-          <div className="w-full h-full overflow-hidden relative">
+        {/* Render photo layouts only when applicable (for graphic_001, when user has uploaded a photo) */}
+        {!(card.frameDesign === 'graphic_001' && !hasUploadedPhoto) && (
+          <>
+            {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
+            {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
+              <div className="w-full h-full overflow-hidden relative">
             <img
               src={mainPhotoSrc}
               alt="News Photo"
               className="w-full h-full object-cover transition-all duration-150"
               style={mainStyle}
+              crossOrigin="anonymous"
               onError={handleImgError}
             />
           </div>
@@ -542,6 +628,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               alt=""
               className="w-full h-full object-cover transition-all duration-150"
               style={mainStyle}
+              crossOrigin="anonymous"
               onError={handleImgError}
             />
           </div>
@@ -557,16 +644,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             {/* Bottom Frame: 65% Remaining Height with custom crop support */}
             <div className="w-full h-[65%] overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -579,20 +668,22 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             {/* Top Frame: 50% Height */}
             <div className="w-full h-[50%] overflow-hidden relative border-b-2 border-white/40">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             {/* Bottom Frame: 50% Height */}
             <div className="w-full h-[50%] overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -604,19 +695,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           <div className="w-full h-full grid grid-cols-2 gap-0.5">
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -629,29 +722,32 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             <div className="w-full h-[52%] grid grid-cols-2 gap-0.5">
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.main}
+                  src={mainPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={mainStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.second || card.images.main}
+                  src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={secondStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
             </div>
             <div className="w-full h-[48%] overflow-hidden relative">
               <img
-                src={card.images.third || card.images.main}
+                src={thirdPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={thirdStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -663,29 +759,32 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           <div className="w-full h-full flex flex-col gap-0.5">
             <div className="w-full h-[48%] overflow-hidden relative">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             <div className="w-full h-[52%] grid grid-cols-2 gap-0.5">
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.second || card.images.main}
+                  src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={secondStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
               <div className="w-full h-full overflow-hidden relative">
                 <img
-                  src={card.images.third || card.images.main}
+                  src={thirdPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={thirdStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -699,85 +798,50 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             {/* Top Left */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.main}
+                src={mainPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             {/* Top Right */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.second || card.images.main}
+                src={secondPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             {/* Bottom Left */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.third || card.images.main}
+                src={thirdPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={thirdStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
             {/* Bottom Right */}
             <div className="w-full h-full overflow-hidden relative">
               <img
-                src={card.images.fourth || card.images.second || card.images.main}
+                src={fourthPhotoSrc}
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={fourthStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
           </div>
         )}
-
-        {/* Layout 5: Round Circle Image (Background + Inset circular portrait + Red 3D Curved Arrow) */}
-        {card.layout === 'inset-circle' && (
-          <div className="relative w-full h-full overflow-hidden">
-            <img
-              src={card.images.main}
-              alt=""
-              className="w-full h-full object-cover transition-all duration-150"
-              style={mainStyle}
-              onError={handleImgError}
-            />
-
-            {/* Inset Circle Photo with Red Curved Pointer Arrow */}
-            {card.images.insetCircle && (
-              <div
-                className="absolute z-15 pointer-events-none"
-                style={{
-                  left: `${card.insetPosition.x}%`,
-                  top: `${card.insetPosition.y}%`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-              >
-                {/* Circular cutout with proportional sizing matching CanvasExporter (31% width) */}
-                <div
-                  className="relative rounded-full border-[4px] sm:border-[5px] border-white shadow-[0_16px_40px_rgba(0,0,0,0.95)] overflow-hidden bg-neutral-800 shrink-0 ring-2 ring-black/40"
-                  style={{
-                    width: `${Math.round(containerWidth * 0.31)}px`,
-                    height: `${Math.round(containerWidth * 0.31)}px`,
-                  }}
-                >
-                  <img
-                    src={card.images.insetCircle}
-                    alt="Inset portrait"
-                    className="w-full h-full object-cover transition-all duration-150"
-                    style={insetCircleStyle}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          </>
         )}
 
         {/* Optional user-controlled dark overlay */}
@@ -789,7 +853,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         )}
 
         {/* Universal subtle watermark across photo area */}
-        {(card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
+        {(card.showTextWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
           <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden flex flex-col justify-around select-none">
             <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
               {[...Array(6)].map((_, rIdx) => (
@@ -803,7 +867,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                         className="object-contain"
                         style={{
                           width: `${Math.round((card.watermarkScale || 90) * 0.45)}px`,
-                          opacity: card.watermarkOpacity ?? 0.15,
+                          opacity: card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.15,
                         }}
                       />
                     ) : (
@@ -814,19 +878,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                           fontFamily: 'Arial, Helvetica, sans-serif',
                           fontWeight: 900,
                           color:
-                            (card.watermarkColor || card.breakingWatermarkColor) === 'black'
-                              ? `rgba(0, 0, 0, ${card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
-                              : (card.watermarkColor || card.breakingWatermarkColor) === 'red'
-                              ? `rgba(220, 38, 38, ${card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
-                              : `rgba(255, 255, 255, ${card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
+                            (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                              ? `rgba(0, 0, 0, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                              : (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'red'
+                              ? `rgba(220, 38, 38, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                              : `rgba(255, 255, 255, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
                           textShadow:
-                            (card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                            (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
                               ? '0 1px 2px rgba(255,255,255,0.15)'
                               : '0 1px 2px rgba(0,0,0,0.45)',
                           fontSize: '15px',
                         }}
                       >
-                        {card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
+                        {card.textWatermarkContent || card.channelNameEn || card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
                       </span>
                     )
                   ))}
@@ -854,13 +918,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               EXCLUSIVE
             </span>
           </div>
-        ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
-          /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
-          null
         ) : card.showMasterBranding === false ? (
           getActiveHeaderPng(card) ? (
             <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
           ) : null
+        ) : getActiveHeaderPng(card) ? (
+          <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
+        ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
+          /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
+          null
         ) : card.frameDesign === 'custom-png' ? (
           !card.hideDefaultHeaderInCustomFrame && (
             <HeaderGraphic
@@ -883,8 +949,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         )}
       </div>
 
-      {/* Optional Full Frame Overlay PNG - active when custom-png frame is selected OR when master branding is OFF */}
-      {(card.frameDesign === 'custom-png' || card.showMasterBranding === false) && card.customFrameOverlayPng && (
+      {/* Optional Full Frame Overlay PNG - active when customFrameOverlayPng is present */}
+      {card.customFrameOverlayPng && (
         <img
           src={card.customFrameOverlayPng}
           alt="Frame Overlay"
@@ -892,28 +958,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
         />
       )}
 
-      {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED or प्रतीकात्मक फोटो): Vertical along Left Wall, Rotated 90° - Inside Safe Zone */}
+      {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED (प्रतीकात्मक फोटो)): Vertical along Left Wall, Rotated 90° - Topmost Visual Layer */}
       {(card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
         (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (
         <div
-          className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
-          style={{ width: '28px', height: '140px' }}
+          className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
+          style={{ width: '28px', height: '160px' }}
         >
-          <div className="absolute -rotate-90 whitespace-nowrap bg-black/65 backdrop-blur-[2px] border border-white/25 px-3 py-0.5 sm:py-1 rounded-sm shadow-md flex items-center justify-center">
-            <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] text-white/90 px-1 inline-block font-['Baloo_2',sans-serif]">
+          <div className="absolute -rotate-90 whitespace-nowrap bg-black/80 backdrop-blur-md border border-white/30 px-3 py-1 rounded-md shadow-xl flex items-center justify-center">
+            <span className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-[0.16em] text-white px-1 inline-block font-['Baloo_2',sans-serif] drop-shadow">
               {card.photoDisclaimerType === 'representative'
                 ? card.representativePhotoText || 'प्रतीकात्मक फोटो'
-                : card.aiGeneratedText || 'AI GENERATED'}
+                : card.aiGeneratedText || 'AI GENERATED (प्रतीकात्मक फोटो)'}
             </span>
           </div>
         </div>
       )}
 
-      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Inside Safe Zone */}
-      {card.showDate !== false && card.frameDesign !== 'graphic_001' && card.frameDesign !== 'graphic_002' && card.frameDesign !== 'graphic_003' && card.frameDesign !== 'graphic_004' && card.frameDesign !== 'jacket-default' && card.frameDesign !== 'jacket-text-breaking' && card.frameDesign !== 'jacket-morning' && card.frameDesign !== 'jacket-epaper' && (
+      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Topmost Visual Layer */}
+      {card.showDate !== false && (
         <div
-          className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-25 flex items-center justify-center select-none"
+          className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
           style={{ width: '24px', height: '180px' }}
         >
           <div
@@ -921,7 +987,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             style={{ transform: 'rotate(90deg)' }}
           >
             <span
-              className="font-bold tracking-wider text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] font-['Baloo_2',sans-serif]"
+              className="font-bold tracking-wider text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] font-['Baloo_2',sans-serif]"
               style={{
                 fontSize: `${Math.max(10, Math.min(13, Math.round(20 * previewScale)))}px`,
               }}
@@ -934,144 +1000,163 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
       {/* 3. BOTTOM SECTION: GRAPHIC 1 vs DEFAULT FRAME vs MORNING JACKET vs TEXT BREAKING vs SUPER BREAKING vs QUOTE vs STANDARD ORIGINAL */}
       {card.frameDesign === 'graphic_001' ? (
-        /* ================= GRAPHIC 1 (DEFAULT 4:5 PHOTO NEWS TEMPLATE — SAMPLE EXACT MATCH) ================= */
-        <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none bg-gradient-to-b from-[#090a0d] via-[#12151b] to-[#090a0d] overflow-hidden">
-          {/* SVG Definitions for Golden Metallic Gradients */}
-          <svg className="absolute w-0 h-0" aria-hidden="true">
-            <defs>
-              <linearGradient id="goldGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#FFE600" />
-                <stop offset="50%" stopColor="#D4AF37" />
-                <stop offset="100%" stopColor="#AA771C" />
-              </linearGradient>
-              <linearGradient id="goldGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#FFF275" />
-                <stop offset="60%" stopColor="#E5B80B" />
-                <stop offset="100%" stopColor="#553B08" />
-              </linearGradient>
-            </defs>
-          </svg>
-
-          {/* 4 Gold Geometric Corner Ribbons */}
-          <svg className="absolute top-0 left-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          <svg className="absolute top-0 right-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 rotate-90" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          <svg className="absolute bottom-12 left-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 -rotate-90" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          <svg className="absolute bottom-12 right-0 w-28 h-28 sm:w-36 sm:h-36 pointer-events-none z-10 rotate-180" viewBox="0 0 120 120" fill="none">
-            <polygon points="0,0 65,0 0,65" fill="url(#goldGrad1)" opacity="0.85" />
-            <polygon points="0,0 45,0 0,45" fill="url(#goldGrad2)" opacity="0.95" />
-            <polygon points="0,0 25,0 0,25" fill="#FFE600" opacity="0.9" />
-            <line x1="0" y1="75" x2="75" y2="0" stroke="#FFE600" strokeWidth="2.5" />
-            <line x1="0" y1="90" x2="90" y2="0" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-
-          {/* Top-Left Channel Logo Area */}
-          <div
-            className="absolute top-3 left-3 sm:top-5 sm:left-5 z-30 pointer-events-auto max-w-[45%]"
-            style={{
-              transform: `scale(${card.logoScale ?? 1.25})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            {card.customLogoUrl ? (
+        /* ================= GRAPHIC 1 (AUTHENTIC DEFAULT 4:5 PRIMARY NEWS GRAPHIC) ================= */
+        <div className="absolute inset-0 z-20 pointer-events-none select-none overflow-hidden">
+          {/* Custom Header PNG if user assigned custom header */}
+          {getActiveHeaderPng(card) && (
+            <div className="absolute top-0 inset-x-0 z-35 pointer-events-none">
               <img
-                src={card.customLogoUrl}
-                alt="Channel Logo"
-                className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]"
-              />
-            ) : (
-              <div className="border-2 border-[#FFE600] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/60 shadow-[0_0_12px_rgba(255,230,0,0.4)] flex items-center justify-center">
-                <span className="font-black text-xs sm:text-sm text-[#FFE600] font-['Poppins'] tracking-wider">
-                  YOUR LOGO
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Top Area: Photo Section (Height ~50%) */}
-          <div className="relative w-full h-[50%] flex items-center justify-center overflow-hidden z-20 pt-6">
-            <div className="w-full h-full relative overflow-hidden">
-              <img
-                src={mainPhotoSrc}
-                alt="News Photo"
-                onError={handleImgError}
-                className="w-full h-full object-cover"
-                style={{
-                  objectPosition: `${card.imagePositions?.main?.x ?? 50}% ${card.imagePositions?.main?.y ?? 50}%`,
-                  transform: `scale(${card.imagePositions?.main?.zoom ?? 1})`,
-                }}
+                src={getActiveHeaderPng(card)}
+                alt="Custom Header"
+                className="w-full h-auto object-contain block"
               />
             </div>
-          </div>
+          )}
 
-          {/* Middle Radiant Glowing Golden Divider */}
-          <div className="relative w-full py-0.5 flex items-center justify-center z-20">
-            <div className="w-[92%] h-[2.5px] bg-gradient-to-r from-transparent via-[#FFE600] to-transparent shadow-[0_0_12px_rgba(255,230,0,0.85)]" />
-          </div>
-
-          {/* Lower Area: Headline Section (Height ~36%) */}
-          <div className="relative w-full flex-1 flex flex-col items-center justify-center text-center px-4 sm:px-6 py-2 z-20 overflow-hidden">
-            {card.headline && card.headline.trim().length > 0 && card.headline.trim() !== 'ताज़ा समाचार' && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') && !card.headline.includes('आपकी चुनी गयी खबर को यहां') ? (
-              <h1
-                className="font-black leading-snug tracking-tight text-white transition-all line-clamp-4 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]"
-                style={{
-                  fontFamily: card.headlineFontFamily || 'Baloo 2',
-                  fontSize: `${effectivePreviewFontSize}px`,
-                }}
-              >
-                {renderFormattedHeadline()}
-              </h1>
-            ) : (
-              /* Default Headline Placeholder Layers */
-              <div className="flex flex-col items-center justify-center text-center max-w-[92%]">
-                <div className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-0.5 sm:py-1 rounded-full bg-[#FFE600] text-neutral-950 font-black text-[11px] sm:text-xs shadow-md mb-2">
-                  <FileText className="w-3.5 h-3.5 text-neutral-950" />
-                  <span>स्टेप 3 : हेडलाइन लिखें</span>
-                </div>
-                <p className="font-bold text-xs sm:text-base text-white font-['Baloo_2'] leading-snug">
-                  स्टेप 3 में जाकर अपनी मुख्य खबर की
-                </p>
-                <h1 className="font-black text-lg sm:text-3xl text-[#FFE600] font-['Baloo_2'] leading-tight mt-0.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-                  हेडलाइन दर्ज करें
-                </h1>
-                <span className="font-medium text-[10px] sm:text-xs text-neutral-300 font-['Baloo_2'] mt-1">
-                  आवश्यकता अनुसार दो या तीन लाइन में
+          {/* Top-Left Channel Logo Area: Displays login user's transparent PNG logo in designated logo area */}
+          {card.showMasterBranding !== false && (
+            <div
+              className="absolute z-30 flex items-center justify-center pointer-events-auto"
+              style={{
+                left: '5.5%',
+                top: '5.5%',
+                width: '18%',
+                height: '11.5%',
+                transform: `scale(${Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.0))})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              {card.customLogoUrl ? (
+                <img
+                  src={card.customLogoUrl}
+                  alt="Channel Logo"
+                  className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
+                  crossOrigin="anonymous"
+                />
+              ) : (
+                <span className="text-white font-black text-lg sm:text-xl md:text-2xl tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-['Poppins']">
+                  Your Logo
                 </span>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Bottom Dynamic Branding Footer */}
-          <div className="relative z-30 w-full pointer-events-auto">
+          {/* Top-Right Location Box: Displays user's actual location in the authentic pill area */}
+          {card.showLocation !== false && (
+            <div
+              className="absolute z-30 flex items-center gap-1.5 bg-white rounded-full px-2.5 py-0.5 sm:px-3.5 sm:py-1 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto"
+              style={{
+                right: '4.8%',
+                top: '6.6%',
+                height: '4.5%',
+                maxWidth: '46%',
+              }}
+            >
+              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
+                <img
+                  src="/assets/location_white_icon.png"
+                  alt="Location"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain"
+                />
+              </div>
+              <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                {card.location && card.location.trim() && card.location.trim() !== 'लोकेशन'
+                  ? card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()
+                  : 'लोकेशन'}
+              </span>
+            </div>
+          )}
+
+          {/* Red Headline Area (Top: 61.33%, Height: 31.47% - Expanded to utilize reclaimed vertical space):
+              - When no headline is entered, the authentic background image's Step 3 instructions show.
+              - When user writes a headline, this red banner overlay replaces instructions with their headline in real time. */}
+          {Boolean(
+            card.headline &&
+            card.headline.trim().length > 0 &&
+            card.headline.trim() !== 'ताज़ा समाचार' &&
+            !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
+            !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
+            !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
+            !card.headline.includes('स्टेप 3 में जाकर अपनी मुख्य खबर') &&
+            card.headline.trim() !== 'आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं' &&
+            !card.headline.includes('आप स्टेप 3')
+          ) && (
+            <div
+              className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
+              style={{
+                top: '61.33%',
+                height: '31.47%',
+                background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
+                boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
+              }}
+            >
+              {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
+              <div
+                className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
+                style={{
+                  background: 'linear-gradient(90deg, rgba(255,26,26,0) 0%, rgba(255,77,0,0.85) 35%, #FFE600 50%, rgba(255,77,0,0.85) 65%, rgba(255,26,26,0) 100%)',
+                  boxShadow: '0 0 10px #FFE600',
+                }}
+              />
+              {/* Subtle top & bottom banner highlight bevels */}
+              <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-85 pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-75 pointer-events-none" />
+
+              {/* Left & Right Dark Red Chevron Accent Stripes matching exported graphic */}
+              <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                <g fill="#7A0005" opacity="0.6">
+                  <polygon points="0,20 60,20 30,80 0,80" />
+                  <polygon points="0,100 75,100 35,180 0,180" />
+                  <polygon points="0,200 90,200 40,300 0,300" />
+                  <polygon points="0,320 80,320 30,420 0,420" />
+                </g>
+              </svg>
+              <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                <g fill="#7A0005" opacity="0.6">
+                  <polygon points="100,20 40,20 70,80 100,80" />
+                  <polygon points="100,100 25,100 65,180 100,180" />
+                  <polygon points="100,200 10,200 60,300 100,300" />
+                  <polygon points="100,320 20,320 70,420 100,420" />
+                </g>
+              </svg>
+
+              {/* Headline Text: Center vertically & horizontally with balanced padding */}
+              <div className="relative z-10 w-full flex items-center justify-center pt-1.5 sm:pt-2 px-2">
+                <h1
+                  className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center px-2"
+                  style={{
+                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontSize: `${effectivePreviewFontSize}px`,
+                    textAlign: 'center',
+                    textShadow: '0 2px 6px rgba(0, 0, 0, 0.75)',
+                  }}
+                >
+                  {renderFormattedHeadline()}
+                </h1>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Master Branding Footer (Bottom 0 to 7.2%):
+              Renders user's actual saved Footer with correct social media icons */}
+          <div
+            className="absolute inset-x-0 bottom-0 z-30 flex items-center pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
+            style={{
+              height: '7.2%',
+              backgroundColor: card.footerBgColor || '#FFFFFF',
+            }}
+          >
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
+              showWebsite={card.showWebsite}
               showMobileNumber={card.showMobileNumber}
               activeSocialIcons={card.activeSocialIcons}
               footerBgColor={card.footerBgColor || '#FFFFFF'}
-              footerTextColor={card.footerTextColor || '#111827'}
+              footerTextColor={card.footerTextColor || '#000000'}
               footerIconStyle={card.footerIconStyle || 'color'}
               showMasterBranding={card.showMasterBranding}
             />
@@ -1081,50 +1166,42 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           {/* Top Overlay: Location Box (Left), Logo Box (Right) */}
           <div className="relative w-full h-[53%] p-3 sm:p-5 flex flex-col justify-between">
             <div className="flex items-start justify-between w-full pointer-events-auto">
-              {/* Location Box (Top Left): White Rounded Box with Red Border */}
+              {/* Location Box (Top Left): Sleek glassmorphic badge with orange border & pin */}
               {card.showLocation !== false && card.location && card.location.trim() && (
-                <div className="bg-white border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 shadow-lg max-w-[48%]">
-                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                    <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white" />
+                <div className="bg-black/60 backdrop-blur-md border border-[#EA580C]/80 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-lg max-w-[48%]">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#EA580C] to-amber-500 flex items-center justify-center shrink-0 shadow-xs">
+                    <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                   </div>
-                  <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                  <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
                     {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                   </span>
                 </div>
               )}
 
-              {/* Logo Box (Top Right): Clean Transparent Logo or Placeholder Box */}
-              <div
-                className={`ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%] ${
-                  card.customLogoUrl ? '' : 'bg-[#FFFBEB] border-2 border-[#EA580C] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 gap-2 shadow-lg min-w-[130px] sm:min-w-[160px]'
-                }`}
-                style={{
-                  transform: `scale(${card.logoScale ?? 1.25})`,
-                  transformOrigin: 'top right',
-                }}
-              >
-                {card.customLogoUrl ? (
-                  <img
-                    src={card.customLogoUrl}
-                    alt="Channel Logo"
-                    className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]"
-                  />
-                ) : (
-                  <>
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-amber-400 flex items-center justify-center text-white text-xs sm:text-sm font-bold shadow-xs shrink-0">
-                      🌍
-                    </div>
-                    <div className="flex flex-col leading-tight">
-                      <span className="font-black text-xs sm:text-sm text-[#DC2626] font-['Poppins'] tracking-wider">
+              {/* Logo Box (Top Right): Clean Transparent Logo (Hidden when Master Branding is OFF) */}
+              {card.showMasterBranding !== false && (
+                <div
+                  className="ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%]"
+                  style={{
+                    transform: `scale(${card.logoScale ?? 1.25})`,
+                    transformOrigin: 'top right',
+                  }}
+                >
+                  {card.customLogoUrl ? (
+                    <img
+                      src={card.customLogoUrl}
+                      alt="Channel Logo"
+                      className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] bg-transparent"
+                    />
+                  ) : (
+                    <div className="border border-[#EA580C] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs flex items-center justify-center shadow-md">
+                      <span className="font-black text-xs sm:text-sm text-[#EA580C] font-['Poppins'] tracking-wider">
                         YOUR LOGO
                       </span>
-                      <span className="font-bold text-[9px] sm:text-[11px] text-neutral-900 font-['Noto_Sans_Devanagari']">
-                        यहाँ आपका लोगो रहेगा
-                      </span>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1186,54 +1263,22 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             </div>
 
-            {/* Fixed Footer: Yellow Bar (#FFE600) with Social Icons, Handle, Website and Fixed Footer Badge */}
-            <div className="relative z-10 w-full bg-[#FFE600] border-t-2 border-[#EAB308] px-3 sm:px-5 py-2 flex items-center justify-between pointer-events-auto">
-              {/* Left Social Icons */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  ▶
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                  f
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  📷
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  💬
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04]" />
-
-              {/* Handle */}
-              <span className="font-black text-xs sm:text-sm text-black font-['Poppins'] truncate">
-                {card.socialHandle || '@YourChannel'}
-              </span>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04] hidden sm:block" />
-
-              {/* Website */}
-              <div className="hidden sm:flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] truncate">
-                <span className="text-sky-600 font-bold">🌐</span>
-                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-[#CA8A04]" />
-
-              {/* Contact Number (if enabled by admin/profile) */}
-              {card.showMobileNumber !== false && card.whatsappNumber && (
-                <>
-                  <div className="h-5 w-px bg-[#CA8A04]" />
-                  <div className="flex items-center gap-1 text-black font-bold text-xs font-['Poppins'] shrink-0">
-                    <span className="text-green-600 font-bold">📞</span>
-                    <span>{card.whatsappNumber}</span>
-                  </div>
-                </>
-              )}
+            {/* Fixed Footer: Yellow Bar (#FFE600) with Master Branding */}
+            <div className="relative z-10 w-full pointer-events-auto">
+              <FooterGraphic
+                socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
+                whatsappNumber={card.whatsappNumber}
+                customFooterPng={getActiveFooterPng(card)}
+                websiteUrl={card.websiteUrl}
+                showWebsite={card.showWebsite}
+                showMobileNumber={card.showMobileNumber}
+                activeSocialIcons={card.activeSocialIcons}
+                footerBgColor="#FFE600"
+                footerTextColor="#000000"
+                footerIconStyle="color"
+                showMasterBranding={card.showMasterBranding}
+              />
             </div>
           </div>
         </div>
@@ -1245,50 +1290,42 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
 
           {/* Top Row: Location & Date Pill (Top-Left) & Channel Logo (Top-Right) */}
           <div className="relative z-20 w-full p-3 sm:p-5 flex items-start justify-between pointer-events-auto">
-            {/* Top-Left: Location & Date Pill */}
+            {/* Top-Left: Location & Date Pill: Sleek glassmorphic badge with golden pin */}
             {card.showLocation !== false && card.location && card.location.trim() && (
-              <div className="bg-white/95 backdrop-blur-md border-[2.5px] border-[#DC2626] rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 shadow-xl max-w-[48%]">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                  <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white" />
+              <div className="bg-black/60 backdrop-blur-md border border-amber-500/70 rounded-full px-3 py-1 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 shadow-xl max-w-[48%]">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center shrink-0 shadow-xs">
+                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-950 stroke-[2.5]" />
                 </div>
-                <span className="font-black text-xs sm:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
                   {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                 </span>
               </div>
             )}
 
-            {/* Top-Right: Logo Box (Clean Transparent Logo or Placeholder Box) */}
-            <div
-              className={`ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%] ${
-                card.customLogoUrl ? '' : 'bg-white/95 backdrop-blur-md border-2 border-amber-500 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 gap-2 shadow-xl min-w-[130px] sm:min-w-[160px]'
-              }`}
-              style={{
-                transform: `scale(${card.logoScale ?? 1.25})`,
-                transformOrigin: 'top right',
-              }}
-            >
-              {card.customLogoUrl ? (
-                <img
-                  src={card.customLogoUrl}
-                  alt="Channel Logo"
-                  className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]"
-                />
-              ) : (
-                <>
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-amber-400 flex items-center justify-center text-white text-xs sm:text-sm font-bold shadow-xs shrink-0">
-                    🌍
-                  </div>
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-black text-xs sm:text-sm text-[#DC2626] font-['Poppins'] tracking-wider">
+            {/* Top-Right: Logo Box (Hidden when Master Branding is OFF) */}
+            {card.showMasterBranding !== false && (
+              <div
+                className="ml-auto flex items-center justify-end transition-transform pointer-events-auto max-w-[48%]"
+                style={{
+                  transform: `scale(${card.logoScale ?? 1.25})`,
+                  transformOrigin: 'top right',
+                }}
+              >
+                {card.customLogoUrl ? (
+                  <img
+                    src={card.customLogoUrl}
+                    alt="Channel Logo"
+                    className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] bg-transparent"
+                  />
+                ) : (
+                  <div className="border border-amber-400 rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs flex items-center justify-center shadow-lg">
+                    <span className="font-black text-xs sm:text-sm text-amber-400 font-['Poppins'] tracking-wider">
                       YOUR LOGO
                     </span>
-                    <span className="font-bold text-[9px] sm:text-[11px] text-neutral-900 font-['Noto_Sans_Devanagari']">
-                      यहाँ आपका लोगो रहेगा
-                    </span>
                   </div>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Lower Readability Gradient & Direct Headline Overlay + Bottom Footer */}
@@ -1327,50 +1364,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             </div>
 
             {/* Sleek Dark Fixed Social Footer Bar */}
-            <div className="w-full bg-slate-950/95 backdrop-blur-md border-t-2 border-amber-500 px-3 sm:px-5 py-2.5 flex items-center justify-between pointer-events-auto">
-              {/* Left Social Icons */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-600 flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  ▶
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-xs font-black shadow-xs">
-                  f
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  📷
-                </div>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[10px] font-bold shadow-xs">
-                  💬
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-white/20" />
-
-              {/* Handle */}
-              <span className="font-black text-xs sm:text-sm text-white font-['Poppins'] truncate">
-                {card.socialHandle || '@YourChannel'}
-              </span>
-
-              {/* Divider */}
-              <div className="h-5 w-px bg-white/20 hidden sm:block" />
-
-              {/* Website */}
-              <div className="hidden sm:flex items-center gap-1 text-slate-200 font-bold text-xs font-['Poppins'] truncate">
-                <span className="text-sky-400 font-bold">🌐</span>
-                <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-              </div>
-
-              {/* Contact Number (if enabled by admin/profile) */}
-              {card.showMobileNumber !== false && card.whatsappNumber && (
-                <>
-                  <div className="h-5 w-px bg-white/20" />
-                  <div className="flex items-center gap-1 text-slate-200 font-bold text-xs font-['Poppins'] shrink-0">
-                    <span className="text-green-400 font-bold">📞</span>
-                    <span>{card.whatsappNumber}</span>
-                  </div>
-                </>
-              )}
+            <div className="w-full pointer-events-auto">
+              <FooterGraphic
+                socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
+                whatsappNumber={card.whatsappNumber}
+                customFooterPng={getActiveFooterPng(card)}
+                websiteUrl={card.websiteUrl}
+                showWebsite={card.showWebsite}
+                showMobileNumber={card.showMobileNumber}
+                activeSocialIcons={card.activeSocialIcons}
+                footerBgColor="#020617"
+                footerTextColor="#FFFFFF"
+                footerIconStyle="color"
+                showMasterBranding={card.showMasterBranding}
+              />
             </div>
           </div>
         </div>
@@ -1384,34 +1392,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t-[1.5px] sm:border-t-2 border-black" />
               </div>
-              <div
-                className="relative bg-[#FFFBEB] border-2 border-[#EA580C] rounded-xl px-2.5 py-0.5 sm:px-3.5 sm:py-1 flex items-center gap-1.5 shadow-xs transition-transform max-w-[65%]"
-                style={{
-                  transform: `scale(${card.logoScale ?? 1.25})`,
-                }}
-              >
-                {card.customLogoUrl ? (
-                  <img
-                    src={card.customLogoUrl}
-                    alt="Channel Logo"
-                    className="max-h-6 sm:max-h-8 w-auto object-contain drop-shadow-xs"
-                  />
-                ) : (
-                  <>
-                    <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-blue-600 via-blue-500 to-amber-400 flex items-center justify-center text-white text-[9px] sm:text-[10px] font-bold shadow-xs shrink-0">
-                      🌍
-                    </div>
-                    <div className="flex flex-col leading-tight">
-                      <span className="font-black text-[10px] sm:text-[11px] text-[#DC2626] font-['Poppins'] tracking-wider">
+              {card.showMasterBranding !== false && (
+                <div
+                  className="relative px-2.5 py-0.5 sm:px-3.5 sm:py-1 flex items-center gap-1.5 transition-transform max-w-[65%]"
+                  style={{
+                    transform: `scale(${card.logoScale ?? 1.25})`,
+                  }}
+                >
+                  {card.customLogoUrl ? (
+                    <img
+                      src={card.customLogoUrl}
+                      alt="Channel Logo"
+                      className="max-h-6 sm:max-h-8 w-auto object-contain drop-shadow-xs bg-transparent"
+                    />
+                  ) : (
+                    <div className="border border-neutral-900 rounded-md px-2 py-0.5 bg-white/80">
+                      <span className="font-black text-[10px] sm:text-[11px] text-neutral-950 font-['Poppins'] tracking-wider">
                         YOUR LOGO
                       </span>
-                      <span className="font-bold text-[7.5px] sm:text-[8.5px] text-neutral-900 font-['Noto_Sans_Devanagari']">
-                        यहाँ आपका लोगो रहेगा
-                      </span>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Row 2: Main Headline (Centered, High Impact, Line 1 Black, Line 2 Red) */}
@@ -1483,52 +1485,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           </div>
 
           {/* Bottom Fixed Black Footer with Yellow Details & Date Badge */}
-          <div className="relative z-20 w-full bg-black border-t-2 border-white px-2 sm:px-3 py-1.5 flex items-center justify-between pointer-events-auto">
-            {/* Left Social Icons */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-red-600 flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
-                ▶
-              </div>
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[10px] font-black shadow-xs">
-                f
-              </div>
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#FD1D1D] via-[#FD1D1D] to-[#833AB4] flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
-                📷
-              </div>
-              <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#25D366] flex items-center justify-center text-white text-[8px] font-bold shadow-xs">
-                💬
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40" />
-
-            {/* Handle in Yellow */}
-            <span className="font-black text-[11px] sm:text-xs text-[#FFE600] font-['Poppins'] truncate">
-              {card.socialHandle || '@YourChannel'}
-            </span>
-
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40 hidden sm:block" />
-
-            {/* Website in Yellow */}
-            <div className="hidden sm:flex items-center gap-1 text-[#FFE600] font-bold text-[10px] sm:text-[11px] font-['Poppins'] truncate">
-              <span className="text-sky-400 font-bold">🌐</span>
-              <span>{card.websiteUrl || 'yourwebsite.com'}</span>
-            </div>
-
-            {/* Divider */}
-            <div className="h-4 w-px bg-white/40" />
-
-            {/* Right Date Badge: DATE / यहाँ तारीख आएगी */}
-            <div className="bg-black border border-white text-white px-2 py-0.5 rounded-lg flex flex-col items-center justify-center text-center shrink-0 leading-none">
-              <span className="font-black text-[8px] sm:text-[9.5px] font-['Poppins'] tracking-wider">
-                DATE
-              </span>
-              <span className="text-[6.5px] sm:text-[8px] text-neutral-300 font-['Noto_Sans_Devanagari'] mt-0.5">
-                {card.date && card.date.trim().length > 0 ? card.date : 'यहाँ तारीख आएगी'}
-              </span>
-            </div>
+          <div className="relative z-20 w-full pointer-events-auto">
+            <FooterGraphic
+              socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
+              whatsappNumber={card.whatsappNumber}
+              customFooterPng={getActiveFooterPng(card)}
+              websiteUrl={card.websiteUrl}
+              showWebsite={card.showWebsite}
+              showMobileNumber={card.showMobileNumber}
+              activeSocialIcons={card.activeSocialIcons}
+              footerBgColor="#000000"
+              footerTextColor="#FFE600"
+              footerIconStyle="color"
+              showMasterBranding={card.showMasterBranding}
+            />
           </div>
         </div>
       ) : card.frameDesign === 'jacket-default' ? (
@@ -1546,31 +1517,33 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               </div>
             )}
 
-            {/* Top Right: Custom Logo or Crisp Bold 'YOUR LOGO' with dynamic logo scaling */}
-            <div
-              className="ml-auto flex flex-col items-end pointer-events-auto transition-transform"
-              style={{
-                transform: `scale(${card.logoScale ?? 1.25})`,
-                transformOrigin: 'top right',
-              }}
-            >
-              {card.customLogoUrl ? (
-                <img
-                  src={card.customLogoUrl}
-                  alt="Logo"
-                  className="h-12 sm:h-16 w-auto object-contain max-w-[150px]"
-                />
-              ) : (
-                <div className="flex flex-col text-right leading-[0.88] select-none">
-                  <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
-                    YOUR
-                  </span>
-                  <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
-                    LOGO
-                  </span>
-                </div>
-              )}
-            </div>
+            {/* Top Right: Custom Logo or Crisp Bold 'YOUR LOGO' with dynamic logo scaling (Hidden when Master Branding is OFF) */}
+            {card.showMasterBranding !== false && (
+              <div
+                className="ml-auto flex flex-col items-end pointer-events-auto transition-transform"
+                style={{
+                  transform: `scale(${card.logoScale ?? 1.25})`,
+                  transformOrigin: 'top right',
+                }}
+              >
+                {card.customLogoUrl ? (
+                  <img
+                    src={card.customLogoUrl}
+                    alt="Logo"
+                    className="h-12 sm:h-16 w-auto object-contain max-w-[150px] bg-transparent"
+                  />
+                ) : (
+                  <div className="flex flex-col text-right leading-[0.88] select-none">
+                    <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
+                      YOUR
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black text-black tracking-wider font-['Mukta',sans-serif]">
+                      LOGO
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Optional Middle Photo if user uploaded an image */}
@@ -1610,9 +1583,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             <div className="w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 pointer-events-auto">
               <FooterGraphic
                 socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
                 whatsappNumber={card.whatsappNumber}
                 customFooterPng={getActiveFooterPng(card)}
                 websiteUrl={card.websiteUrl}
+                showWebsite={card.showWebsite}
                 showMobileNumber={card.showMobileNumber}
                 activeSocialIcons={card.activeSocialIcons}
                 footerBgColor={card.footerBgColor}
@@ -1817,6 +1792,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             whatsappNumber={card.whatsappNumber}
             customFooterPng={getActiveFooterPng(card)}
             websiteUrl={card.websiteUrl}
+            showWebsite={card.showWebsite}
             showMobileNumber={card.showMobileNumber}
             activeSocialIcons={card.activeSocialIcons}
             footerBgColor={card.footerBgColor}
@@ -2803,6 +2779,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             whatsappNumber={card.whatsappNumber}
             customFooterPng={getActiveFooterPng(card)}
             websiteUrl={card.websiteUrl}
+            showWebsite={card.showWebsite}
             showMobileNumber={card.showMobileNumber}
             activeSocialIcons={card.activeSocialIcons}
             footerBgColor={card.footerBgColor}
@@ -2887,9 +2864,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             {/* Yellow Footer Graphic */}
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
+              showWebsite={card.showWebsite}
               showMobileNumber={card.showMobileNumber}
               activeSocialIcons={card.activeSocialIcons}
               footerBgColor={card.footerBgColor}
@@ -2985,9 +2964,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
             {/* D. Yellow Footer Graphic */}
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
+              showWebsite={card.showWebsite}
               showMobileNumber={card.showMobileNumber}
               activeSocialIcons={card.activeSocialIcons}
               footerBgColor={card.footerBgColor}
@@ -3110,9 +3091,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               {/* E. Yellow Footer Graphic (Same as all other templates) */}
               <FooterGraphic
                 socialHandle={card.socialHandle}
+                channelName={card.channelNameEn || card.channelNameHi || card.brandName}
                 whatsappNumber={card.whatsappNumber}
                 customFooterPng={getActiveFooterPng(card)}
                 websiteUrl={card.websiteUrl}
+                showWebsite={card.showWebsite}
                 showMobileNumber={card.showMobileNumber}
                 activeSocialIcons={card.activeSocialIcons}
                 footerBgColor={card.footerBgColor}
@@ -3199,9 +3182,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
           {!(card.frameDesign === 'custom-png' && card.hideDefaultFooterInCustomFrame) && (
             <FooterGraphic
               socialHandle={card.socialHandle}
+              channelName={card.channelNameEn || card.channelNameHi || card.brandName}
               whatsappNumber={card.whatsappNumber}
               customFooterPng={getActiveFooterPng(card)}
               websiteUrl={card.websiteUrl}
+              showWebsite={card.showWebsite}
               showMobileNumber={card.showMobileNumber}
               activeSocialIcons={card.activeSocialIcons}
               footerBgColor={card.footerBgColor}
@@ -3221,8 +3206,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
               key={item.id}
               className="absolute select-none pointer-events-auto shadow-md transition-transform"
               style={{
-                left: `${item.x}%`,
-                top: `${item.y}%`,
+                left: `${Math.max(8, Math.min(92, item.x))}%`,
+                top: `${Math.max(8, Math.min(92, item.y))}%`,
                 transform: 'translate(-50%, -50%)',
                 fontFamily: item.fontFamily ? `"${item.fontFamily}", sans-serif` : 'inherit',
                 fontSize: `${Math.max(11, Math.round(item.fontSize * previewScale * 1.6))}px`,
@@ -3233,8 +3218,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card, scale = 1, class
                 borderRadius: '8px',
                 border: item.backgroundColor && item.backgroundColor !== 'transparent' ? '1px solid rgba(255,255,255,0.2)' : 'none',
                 textShadow: item.backgroundColor && item.backgroundColor !== 'transparent' ? 'none' : '0 2px 4px rgba(0,0,0,0.9), 0 0 3px #000',
-                whiteSpace: 'pre-wrap',
+                whiteSpace: 'nowrap',
                 maxWidth: '85%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
               {item.text}

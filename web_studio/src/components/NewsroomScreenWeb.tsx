@@ -720,16 +720,6 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                   className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
                 />
               </div>
-
-              <button
-                type="button"
-                onClick={handleRefreshInquiries}
-                disabled={isRefreshingInquiries}
-                className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 transition cursor-pointer"
-                title="क्लाउड से रिफ्रेश करें"
-              >
-                <RefreshCw className={`w-4 h-4 ${isRefreshingInquiries ? 'animate-spin text-amber-400' : ''}`} />
-              </button>
             </div>
           </div>
 

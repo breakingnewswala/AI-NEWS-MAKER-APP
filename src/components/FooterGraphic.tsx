@@ -61,7 +61,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   // If user provided custom Footer.png file, render it directly
   if (customFooterPng) {
     return (
-      <div className="h-full w-full bg-white select-none overflow-hidden flex items-center justify-center">
+      <div
+        className="h-full w-full select-none overflow-hidden flex items-center justify-center"
+        style={{ backgroundColor: footerBgColor || '#FFFFFF' }}
+      >
         <img
           src={customFooterPng}
           alt="News Card Footer"

@@ -40,6 +40,7 @@ import {
   Mail,
   MapPin,
   Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
@@ -47,9 +48,11 @@ import { getApiUrl } from '../lib/apiConfig';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import {
   getUserSubscription,
+  fetchAuthoritativeSubscription,
   setUserPlanTier,
   savePrimaryMobileNumber,
   isUserAdmin,
+  isEffectiveAdmin,
   isUserSuperAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
@@ -71,12 +74,51 @@ import {
   submitLogoChangeRequest,
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
+  fetchLogoChangeRequests,
   checkAccountUniqueness,
+  canAccessTemplateManager,
 } from '../lib/userPlanManager';
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
+import { UserTemplateManager } from './UserTemplateManager';
 import { AdminPlansAndPackagesManager } from './AdminPlansAndPackagesManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
+import {
+  getCustomFrames,
+  saveCustomFrame,
+  deleteCustomFrame,
+  setActiveCustomFrameId,
+  getActiveCustomFrameId,
+  CustomFrameItem,
+} from '../lib/customFramesManager';
+import {
+  getAdminRssSources,
+  addAdminRssSource,
+  toggleAdminRssSource,
+  deleteAdminRssSource,
+  syncAllSourcesLive,
+} from '../lib/rssSourceManager';
+
+export const DEFAULT_SOCIAL_ICONS = {
+  youtube: true,
+  facebook: true,
+  instagram: true,
+  twitter: false,
+  linkedin: false,
+};
+
+export const DEFAULT_PROFILE: ChannelProfile = {
+  fullName: '',
+  channelNameHi: '',
+  channelNameEn: '',
+  channelLogoUrl: '',
+  channelLogoType: 'png',
+  socialIcons: DEFAULT_SOCIAL_ICONS,
+  username: '',
+  mobileNumber: '',
+  showMobileNumber: true,
+  websiteUrl: '',
+};
 
 interface ProfileScreenWebProps {
   currentUser: ReporterUser | null;
@@ -111,47 +153,106 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       district: 'डिजिटल डेस्क'
     };
   })();
-  const isAdmin = isUserAdmin(effectiveUser);
+  const isRealAdmin = isUserAdmin(effectiveUser);
+  const isAdmin = isEffectiveAdmin(effectiveUser);
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
       const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
       if (cleanEmail) {
         const specific = localStorage.getItem(`user_profile_${cleanEmail}`);
-        if (specific) return JSON.parse(specific);
+        if (specific) {
+          const parsed = JSON.parse(specific);
+          return {
+            ...DEFAULT_PROFILE,
+            ...parsed,
+            socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+          };
+        }
       }
       const saved = localStorage.getItem('user_channel_profile');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_PROFILE,
+          ...parsed,
+          socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+        };
+      }
     } catch {}
     return {
-      fullName: currentUser?.name || 'यूज़र',
-      channelNameHi: localStorage.getItem('app_channel_name') || 'AI News Maker App',
-      channelNameEn: localStorage.getItem('app_channel_name_en') || 'AI News Maker',
-      channelLogoUrl: '/assets/ai_news_maker_logo.png',
-      channelLogoType: 'png',
-      socialIcons: {
-        youtube: true,
-        facebook: true,
-        instagram: true,
-        twitter: false,
-        telegram: false,
-        whatsapp: true,
-      },
+      ...DEFAULT_PROFILE,
+      fullName: currentUser?.name || '',
+      channelNameHi: localStorage.getItem('app_channel_name') || '',
+      channelNameEn: localStorage.getItem('app_channel_name_en') || '',
       username: currentUser?.username || '',
-      mobileNumber: '96698-02408',
-      showMobileNumber: true,
-      websiteUrl: 'ainewsmaker.online',
     };
   });
 
+  // Fetch Cloud Saved User Profile on Mount or User Change
+  useEffect(() => {
+    const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
+    if (!cleanEmail) return;
+    fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`))
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && data.profile) {
+          const cloudP = data.profile;
+          setChannelProfile((prev) => {
+            const merged = {
+              ...prev,
+              fullName: cloudP.fullName || cloudP.name || prev.fullName,
+              channelNameHi: cloudP.channelNameHi || cloudP.channelName || prev.channelNameHi,
+              channelNameEn: cloudP.channelNameEn || prev.channelNameEn,
+              channelLogoUrl: cloudP.channelLogoUrl || prev.channelLogoUrl,
+              username: cloudP.username || prev.username,
+              mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
+              whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
+              websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
+              socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(cloudP.socialIcons || prev.socialIcons || {}) },
+            };
+            try {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(merged));
+              localStorage.setItem('user_channel_profile', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      })
+      .catch(() => {});
+
+    // Authoritative Cloud Subscription Fetch
+    fetchAuthoritativeSubscription(cleanEmail).then((sub) => {
+      setSubscription(sub);
+    });
+
+    const handlePlanUpdate = () => {
+      setSubscription(getUserSubscription());
+    };
+    window.addEventListener('ai_news_user_plan_updated', handlePlanUpdate);
+    return () => window.removeEventListener('ai_news_user_plan_updated', handlePlanUpdate);
+  }, [currentUser?.email]);
+
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const [isLockedForUserState, setIsLockedForUserState] = useState(() => !isAdmin && isChannelProfileLocked(currentUser));
-  const isLockedForUser = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoGifUrl));
+  const isLockedForUser = isLockedForUserState;
+  const isLogoLocked = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl));
+  const isGifLocked = !isAdmin && Boolean(channelProfile.channelLogoGifUrl);
   const [isLogoReqModalOpen, setIsLogoReqModalOpen] = useState(false);
+  const [logoReqType, setLogoReqType] = useState<'logo' | 'gif'>('logo');
+  const [isSubmittingLogoReq, setIsSubmittingLogoReq] = useState(false);
   const [logoReqReason, setLogoReqReason] = useState("नया आधिकारिक चैनल लोगो अपडेट करना है");
   const [newRequestedLogoUrl, setNewRequestedLogoUrl] = useState<string>('');
   const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
-    getUserLogoChangeRequestStatus(currentUser?.email || '')
+    getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo')
+  );
+  const [gifReqStatus, setGifReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
+    getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif')
   );
 
   // Manual Username Creation state & handler (Google Email != Username)
@@ -183,17 +284,65 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     }
 
     const formattedUsername = `@${clean}`;
-    setChannelProfile(prev => ({ ...prev, username: formattedUsername }));
+    const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
 
-    if (currentUser?.email) {
-      const emailKey = `user_profile_${currentUser.email.toLowerCase().trim()}`;
+    setChannelProfile(prev => {
+      const updated = { ...prev, username: formattedUsername };
       try {
-        const saved = localStorage.getItem(emailKey);
-        const obj = saved ? JSON.parse(saved) : {};
-        obj.username = formattedUsername;
-        localStorage.setItem(emailKey, JSON.stringify(obj));
+        localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+        localStorage.setItem('user_profile_data', JSON.stringify(updated));
+        if (cleanEmail) {
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+        }
       } catch {}
-    }
+
+      // Immediate server persistence across page refresh
+      try {
+        fetch(getApiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...updated,
+            email: cleanEmail,
+            username: clean,
+          }),
+        }).catch(() => {});
+
+        if (cleanEmail) {
+          fetch(getApiUrl('/api/admin/update-user'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: cleanEmail,
+              updates: {
+                username: clean,
+              },
+            }),
+          }).catch(() => {});
+        }
+      } catch {}
+
+      try {
+        registerOrUpdateUser({
+          email: cleanEmail || 'admin.ainewsmaker@gmail.com',
+          name: updated.fullName || 'मुख्य संपादक',
+          username: clean,
+          isLocked: !isAdmin,
+        });
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('channel_profile_updated', {
+            detail: {
+              ...updated,
+              username: clean,
+            },
+          })
+        );
+      }
+      return updated;
+    });
 
     try {
       const sessStr = localStorage.getItem('reporter_auth_session');
@@ -212,6 +361,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleNewRequestedLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (logoReqType === 'gif') {
+      if (!file.type.includes('gif') && !file.name.toLowerCase().endsWith('.gif')) {
+        alert('कृपया केवल मान्य एनिमेटेड GIF फ़ाइल (.gif) चुनें।');
+        return;
+      }
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      alert('फ़ाइल का आकार 15MB से अधिक नहीं होना चाहिए।');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const res = ev.target?.result as string;
@@ -223,8 +385,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   useEffect(() => {
     const handleLogoUpdates = () => {
       setIsLockedForUserState(!isAdmin && isChannelProfileLocked(currentUser));
-      setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || ''));
+      setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo'));
+      setGifReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif'));
     };
+
+    if (currentUser?.email) {
+      fetchLogoChangeRequests(currentUser.email).then(() => handleLogoUpdates()).catch(() => {});
+    }
+
     window.addEventListener('ai_news_logo_requests_updated', handleLogoUpdates);
     window.addEventListener('ai_news_channel_profile_unlocked', handleLogoUpdates);
     window.addEventListener('ai_news_plan_users_changed', handleLogoUpdates);
@@ -235,8 +403,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     };
   }, [currentUser?.email, isAdmin]);
 
-  // Tabs: 'profile', 'plans_packages', 'templates', 'dashboard' (Admin only gets multi-tab access)
-  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'policies' | ''>('profile');
+  // Tabs: 'profile', 'membership', 'templates_manager', 'policies' - initially closed per requirement
+  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'templates_manager' | 'policies' | ''>('');
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
     if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
@@ -261,15 +429,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const handleOpenRss = () => setActiveTab('dashboard');
     const handleOpenTemplates = () => setActiveTab('templates');
     const handleOpenPlans = () => setActiveTab('plans_packages');
+    const handleOpenTemplateManagerCustom = () => setNormalUserTab('templates_manager');
+
     window.addEventListener('open_rss_dashboard', handleOpenRss);
     window.addEventListener('open_template_manager', handleOpenTemplates);
     window.addEventListener('open_plans_packages', handleOpenPlans);
+    window.addEventListener('ai_news_open_template_manager', handleOpenTemplateManagerCustom);
     const handleHash = () => {
       const h = window.location.hash.toLowerCase();
       if (h.includes('plan') || h.includes('package') || h.includes('promo')) {
         setActiveTab('plans_packages');
       } else if (h.includes('template')) {
         setActiveTab('templates');
+        setNormalUserTab('templates_manager');
       } else if (h.includes('dashboard') || h.includes('rss') || h.includes('feed')) {
         setActiveTab('dashboard');
       }
@@ -279,6 +451,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       window.removeEventListener('open_rss_dashboard', handleOpenRss);
       window.removeEventListener('open_template_manager', handleOpenTemplates);
       window.removeEventListener('open_plans_packages', handleOpenPlans);
+      window.removeEventListener('ai_news_open_template_manager', handleOpenTemplateManagerCustom);
       window.removeEventListener('hashchange', handleHash);
     };
   }, [isAdmin]);
@@ -364,48 +537,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   }
 
   const [rssSources, setRssSources] = useState<RssFeedSource[]>(() => {
-    try {
-      const saved = localStorage.getItem('admin_rss_sources');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: 'rss-1',
-        channelName: 'आज तक (Aaj Tak)',
-        category: 'breaking',
-        categoryName: 'ब्रेकिंग न्यूज़',
-        url: 'https://aajtak.in/rssfeeds/?id=home',
-        isActive: true,
-        lastSync: 'अभी सक्रिय',
-      },
-      {
-        id: 'rss-2',
-        channelName: 'दैनिक भास्कर (Dainik Bhaskar)',
-        category: 'national',
-        categoryName: 'देश-प्रदेश',
-        url: 'https://bhaskar.com/rss-v1--all.xml',
-        isActive: true,
-        lastSync: '10 मिनट पूर्व',
-      },
-      {
-        id: 'rss-3',
-        channelName: 'एनडीटीवी इंडिया (NDTV India)',
-        category: 'politics',
-        categoryName: 'राजनीति',
-        url: 'https://feeds.feedburner.com/ndtvkhabar',
-        isActive: true,
-        lastSync: '30 मिनट पूर्व',
-      },
-      {
-        id: 'rss-4',
-        channelName: 'द लल्लनटॉप (The Lallantop)',
-        category: 'tech',
-        categoryName: 'टेक्नोलॉजी',
-        url: 'https://thelallantop.com/feed',
-        isActive: true,
-        lastSync: '1 घंटा पूर्व',
-      },
-    ];
+    const sources = getAdminRssSources();
+    return sources.map((s) => ({
+      id: s.id,
+      channelName: s.name,
+      category: s.category || 'breaking',
+      categoryName: s.category || 'ब्रेकिंग न्यूज़',
+      url: s.url,
+      isActive: s.isActive,
+      lastSync: s.lastFetchedAt ? `${Math.round((Date.now() - s.lastFetchedAt) / 60000)} मिनट पूर्व` : 'सक्रिय',
+    }));
   });
 
   const [rssChannelInput, setRssChannelInput] = useState<string>('');
@@ -418,71 +559,44 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     if (!rssChannelInput.trim() || !rssUrlInput.trim()) return;
 
     const catObj = (categories || []).find((c) => c.id === rssCategoryInput);
-    const newSource: RssFeedSource = {
-      id: `rss-${Date.now()}`,
-      channelName: rssChannelInput.trim(),
-      category: rssCategoryInput,
-      categoryName: catObj?.name || 'ताज़ा खबर',
-      url: rssUrlInput.trim(),
-      isActive: true,
-      lastSync: 'अभी जोड़ा गया',
-    };
+    const urlLower = rssUrlInput.trim().toLowerCase();
+    const isWebType = !urlLower.includes('.xml') && !urlLower.includes('rss') && !urlLower.includes('feed');
 
-    const updated = [newSource, ...rssSources];
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+    // Add source to system manager & trigger backend live sync
+    addAdminRssSource(
+      rssChannelInput.trim(),
+      rssUrlInput.trim(),
+      isWebType ? 'web' : 'rss',
+      catObj?.name || 'देश'
+    );
 
-    // Automatically make available in Home Feed
-    onAddNewPost({
-      title: `🔴 [${newSource.channelName}] लाइव अपडेट: ${newSource.categoryName} पर बड़ी खबर`,
-      summary: `यह समाचार ${newSource.channelName} के वेब/RSS स्रोत (${newSource.url}) से होम फ़ीड में स्वचालित रूप से सक्रिय किया गया है।`,
-      sourceChannel: newSource.channelName,
-      sourceUrl: newSource.url,
-      category: newSource.category,
-      categoryName: newSource.categoryName,
-      publishedTime: 'अभी-अभी (Admin Source)',
-      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
-      breaking: true,
-      isExclusive: false,
+    syncAllSourcesLive().then(() => {
+      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
     });
 
     setRssChannelInput('');
     setRssUrlInput('');
-    setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव हो गया!');
-    setTimeout(() => setRssSuccessMsg(''), 2000);
+    setRssSuccessMsg('नया RSS / वेब लिंक स्रोत सफलतापूर्वक जोड़ा गया और होम फ़ीड में लाइव सिंक हो गया!');
+    setTimeout(() => setRssSuccessMsg(''), 4000);
   };
 
   const handleToggleRssSource = (id: string) => {
-    const updated = rssSources.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s));
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+    toggleAdminRssSource(id);
+    syncAllSourcesLive();
   };
 
   const handleDeleteRssSource = (id: string) => {
-    const updated = rssSources.filter((s) => s.id !== id);
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
+    deleteAdminRssSource(id);
+    syncAllSourcesLive();
   };
 
-  const handleSyncRssSource = (source: RssFeedSource) => {
-    onAddNewPost({
-      title: `🔴 [${source.channelName}] लाइव अपडेट: ${source.categoryName} पर बड़ी खबर`,
-      summary: `यह समाचार ${source.channelName} के लाइव फीड ${source.url} से स्वचालित रूप से आयात किया गया है।`,
-      sourceChannel: source.channelName,
-      sourceUrl: source.url,
-      category: source.category,
-      categoryName: source.categoryName,
-      publishedTime: 'अभी-अभी (RSS सिंक)',
-      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop',
-      breaking: true,
-      isExclusive: false,
+  const handleSyncRssSource = (source: any) => {
+    setRssSuccessMsg(`${source.channelName || source.name || 'स्रोत'} का लाइव सिंक प्रारंभ हो रहा है...`);
+    syncAllSourcesLive().then((res) => {
+      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      setRssSuccessMsg(`✅ ${source.channelName || source.name || 'स्रोत'} का लाइव सिंक पूर्ण हो गया! (${res.totalNewItems || 0} ताज़ा समाचार फ़ीड में जुड़े)`);
+      setTimeout(() => setRssSuccessMsg(''), 4000);
     });
-
-    const updated = rssSources.map((s) => (s.id === source.id ? { ...s, lastSync: 'अभी सिंक हुआ' } : s));
-    setRssSources(updated);
-    localStorage.setItem('admin_rss_sources', JSON.stringify(updated));
-    setRssSuccessMsg(`${source.channelName} का RSS सिंक हो गया और ताज़ा खबर लाइव फ़ीड में पोस्ट हो गई!`);
-    setTimeout(() => setRssSuccessMsg(''), 4000);
   };
 
   const [reporterDistrict, setReporterDistrict] = useState<string>(() => currentUser?.district || 'भोपाल / सेंट्रल डेस्क');
@@ -495,7 +609,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setChannelProfile(parsed);
+          const normalized: ChannelProfile = {
+            ...DEFAULT_PROFILE,
+            ...parsed,
+            socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+          };
+          setChannelProfile(normalized);
           if (parsed.customHeaderPng !== undefined) setCustomHeaderPng(parsed.customHeaderPng);
           if (parsed.customFooterPng !== undefined) setCustomFooterPng(parsed.customFooterPng);
         } catch {}
@@ -508,6 +627,83 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       window.removeEventListener('storage', handleProfileSync);
     };
   }, []);
+
+  // Sync RSS sources list in real time when updated by admin
+  useEffect(() => {
+    const syncRss = () => {
+      const sources = getAdminRssSources();
+      const mapped = sources.map((s) => ({
+        id: s.id,
+        channelName: s.name,
+        category: s.category || 'breaking',
+        categoryName: s.category || 'ब्रेकिंग न्यूज़',
+        url: s.url,
+        isActive: s.isActive,
+        lastSync: s.lastFetchedAt ? `${Math.round((Date.now() - s.lastFetchedAt) / 60000)} मिनट पूर्व` : 'सक्रिय',
+      }));
+      setRssSources(mapped);
+    };
+    syncRss();
+    window.addEventListener('ai_news_admin_rss_sources_updated', syncRss);
+    return () => window.removeEventListener('ai_news_admin_rss_sources_updated', syncRss);
+  }, []);
+
+  // 4:5 Custom Frames State for PRO & VIP DESK
+  const [customFramesList, setCustomFramesList] = useState<CustomFrameItem[]>(() =>
+    getCustomFrames(currentUser?.email)
+  );
+  const [activeFrameId, setActiveFrameId] = useState<string | null>(() => getActiveCustomFrameId());
+  const [newFrameName, setNewFrameName] = useState<string>('');
+  const [newFrameAsset, setNewFrameAsset] = useState<string>('');
+  const [frameUploadError, setFrameUploadError] = useState<string>('');
+
+  useEffect(() => {
+    const handleFramesUpdate = () => {
+      setCustomFramesList(getCustomFrames(currentUser?.email));
+      setActiveFrameId(getActiveCustomFrameId());
+    };
+    window.addEventListener('ai_news_custom_frames_updated', handleFramesUpdate);
+    return () => window.removeEventListener('ai_news_custom_frames_updated', handleFramesUpdate);
+  }, [currentUser?.email]);
+
+  const handleCustomFrameFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setFrameUploadError('कृपया वैध इमेज (PNG/JPG) फ़ाइल चुनें');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setNewFrameAsset(reader.result);
+          setFrameUploadError('');
+          if (!newFrameName) {
+            setNewFrameName(file.name.replace(/\.[^/.]+$/, ''));
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveCustomFrameItem = () => {
+    if (!newFrameAsset) {
+      setFrameUploadError('कृपया 4:5 कस्टम फ्रेम फ़ाइल चुनें');
+      return;
+    }
+    const saved = saveCustomFrame({
+      userId: currentUser?.email || 'user',
+      name: newFrameName.trim() || 'कस्टम 4:5 फ्रेम',
+      assetUrl: newFrameAsset,
+    });
+    setCustomFramesList(getCustomFrames(currentUser?.email));
+    setActiveFrameId(saved.id);
+    setNewFrameName('');
+    setNewFrameAsset('');
+    setFrameUploadError('');
+    showToast('✨ 4:5 कस्टम फ्रेम सफलतापूर्वक सहेजा गया!');
+  };
 
   // Custom Header & Custom Footer PNG states (PRO & VIP DESK exclusive)
   const [customHeaderPng, setCustomHeaderPng] = useState<string>(() => {
@@ -562,55 +758,258 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [jpgConvertedPng, setJpgConvertedPng] = useState('');
   const [jpgProcessing, setJpgProcessing] = useState(false);
   const [logoResetSuccess, setLogoResetSuccess] = useState('');
+  const [gifUploadLoading, setGifUploadLoading] = useState(false);
+  const [gifUploadError, setGifUploadError] = useState('');
+  const [pngUploadLoading, setPngUploadLoading] = useState(false);
 
-  // 1. PNG Channel Logo Upload Handler
-  const handlePngLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 1. PNG Primary Channel Logo Upload Handler
+  const handlePngLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPngUploadLoading(true);
     const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      const result = uploadEvent.target?.result as string;
-      if (result) {
-        setChannelProfile((prev) => ({
-          ...prev,
-          channelLogoPngUrl: result,
-          channelLogoUrl: result,
-          channelLogoType: 'png',
-        }));
+    reader.onload = async (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      if (dataUrl) {
+        let finalUrl = dataUrl;
+        try {
+          const res = await fetch(getApiUrl('/api/upload-logo'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dataUrl,
+              logoType: 'png',
+              username: channelProfile.username || currentUser?.username || 'admin',
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.logoUrl) {
+            finalUrl = data.logoUrl;
+          }
+        } catch (err) {
+          console.warn('PNG upload sync warning:', err);
+        }
+        const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+        setChannelProfile((prev) => {
+          const updated = {
+            ...prev,
+            channelLogoPngUrl: finalUrl,
+            channelLogoUrl: finalUrl,
+            channelLogoType: 'png' as const,
+          };
+          try {
+            localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+            localStorage.setItem('user_profile_data', JSON.stringify(updated));
+            if (cleanEmail) {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+            }
+          } catch {}
+
+          // Immediate server persistence across page refresh
+          try {
+            fetch(getApiUrl('/api/user-profile'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...updated,
+                email: cleanEmail,
+                channelLogoUrl: finalUrl,
+                channelLogoPngUrl: finalUrl,
+              }),
+            }).catch(() => {});
+
+            if (cleanEmail) {
+              fetch(getApiUrl('/api/admin/update-user'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: cleanEmail,
+                  updates: {
+                    channelLogoUrl: finalUrl,
+                    channelLogoPngUrl: finalUrl,
+                  },
+                }),
+              }).catch(() => {});
+            }
+          } catch {}
+
+          try {
+            registerOrUpdateUser({
+              email: cleanEmail || 'admin.ainewsmaker@gmail.com',
+              name: updated.fullName || 'मुख्य संपादक',
+              channelName: updated.channelNameHi,
+              channelLogoUrl: finalUrl,
+              username: updated.username,
+              isLocked: !isAdmin,
+            });
+          } catch {}
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('channel_profile_updated', {
+                detail: {
+                  ...updated,
+                  channelLogoUrl: finalUrl,
+                  channelLogoPngUrl: finalUrl,
+                },
+              })
+            );
+          }
+          return updated;
+        });
+        setPngUploadLoading(false);
       }
     };
     reader.readAsDataURL(file);
   };
 
-  // 2. GIF Channel Logo Upload Handler (Preserves existing PNG!)
-  const handleGifLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 2. GIF Channel Logo Upload Handler (Only for Video Feed! Preserves existing PNG Primary Logo)
+  const handleGifLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setGifUploadError('');
+    if (!file.type.includes('gif') && !file.name.toLowerCase().endsWith('.gif')) {
+      setGifUploadError('कृपया केवल मान्य GIF फाइल (.gif) अपलोड करें');
+      return;
+    }
+    setGifUploadLoading(true);
     const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      const result = uploadEvent.target?.result as string;
-      if (result) {
-        setChannelProfile((prev) => ({
-          ...prev,
-          channelLogoGifUrl: result,
-          channelLogoUrl: result,
-          channelLogoType: 'gif',
-        }));
+    reader.onload = async (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      if (dataUrl) {
+        let finalUrl = dataUrl;
+        try {
+          const res = await fetch(getApiUrl('/api/upload-logo'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dataUrl,
+              logoType: 'gif',
+              username: channelProfile.username || currentUser?.username || 'admin',
+            }),
+          });
+          const data = await res.json();
+          if (data.success && data.logoUrl) {
+            finalUrl = data.logoUrl;
+          }
+        } catch (err) {
+          console.warn('GIF upload server sync warning:', err);
+        }
+        const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+        setChannelProfile((prev) => {
+          const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
+          const updated = {
+            ...prev,
+            channelLogoGifUrl: finalUrl,
+            // Crucial: Primary Logo stays PNG for all graphics!
+            channelLogoUrl: existingPng,
+            channelLogoPngUrl: existingPng,
+          };
+          try {
+            localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+            localStorage.setItem('user_profile_data', JSON.stringify(updated));
+            if (cleanEmail) {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+            }
+          } catch {}
+
+          // Immediate server persistence across page refresh
+          try {
+            fetch(getApiUrl('/api/user-profile'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...updated,
+                email: cleanEmail,
+                channelLogoGifUrl: finalUrl,
+              }),
+            }).catch(() => {});
+
+            if (cleanEmail) {
+              fetch(getApiUrl('/api/admin/update-user'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: cleanEmail,
+                  updates: {
+                    channelLogoGifUrl: finalUrl,
+                  },
+                }),
+              }).catch(() => {});
+            }
+          } catch {}
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('channel_profile_updated', {
+                detail: {
+                  ...updated,
+                  channelLogoGifUrl: finalUrl,
+                },
+              })
+            );
+          }
+          return updated;
+        });
+        setGifUploadLoading(false);
       }
     };
     reader.readAsDataURL(file);
   };
 
-  // Switch between PNG and GIF logo
-  const handleSwitchLogoType = (type: 'png' | 'gif') => {
+  // 2b. Remove GIF Logo (Immediately fallbacks Video Feed to PNG Primary Logo)
+  const handleRemoveGifLogo = async () => {
+    const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
     setChannelProfile((prev) => {
-      const targetUrl = type === 'gif' ? (prev.channelLogoGifUrl || prev.channelLogoUrl) : (prev.channelLogoPngUrl || prev.channelLogoUrl);
-      return {
+      const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
+      const updated = {
         ...prev,
-        channelLogoType: type,
-        channelLogoUrl: targetUrl,
+        channelLogoGifUrl: undefined,
+        channelLogoType: 'png' as const,
+        channelLogoUrl: existingPng,
+        channelLogoPngUrl: existingPng,
       };
+      try {
+        localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+        localStorage.setItem('user_profile_data', JSON.stringify(updated));
+        if (cleanEmail) {
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updated));
+        }
+      } catch {}
+
+      try {
+        fetch(getApiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...updated,
+            email: cleanEmail,
+            channelLogoGifUrl: '',
+          }),
+        }).catch(() => {});
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('channel_profile_updated', {
+            detail: {
+              ...updated,
+              channelLogoGifUrl: undefined,
+            },
+          })
+        );
+      }
+      return updated;
     });
+    try {
+      await fetch(getApiUrl('/api/remove-gif-logo'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: channelProfile.username || currentUser?.username || 'admin',
+        }),
+      });
+    } catch {}
   };
 
   // 3. Admin: JPG to Transparent PNG Converter
@@ -743,8 +1142,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
     const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
 
+    const primaryPngLogo = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
+    const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
+
     const updatedProfile = {
       ...channelProfile,
+      whatsappNumber: finalPhone,
+      mobileNumber: finalPhone || channelProfile.mobileNumber,
+      showWebsite: channelProfile.showWebsite !== false,
+      showMobileNumber: channelProfile.showMobileNumber !== false,
+      channelLogoUrl: primaryPngLogo,
+      channelLogoPngUrl: primaryPngLogo,
+      channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
+      channelLogoType: 'png' as const,
       customHeaderPng: effectiveHeaderPng,
       customFooterPng: effectiveFooterPng,
     };
@@ -759,7 +1169,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
     }
 
-    // Save into centralized profile_header_footer_json
+    // Save into centralized profile_header_footer_json (Always PNG Primary Logo for Graphics)
     const headerFooterConfig = {
       applyToAll: true,
       customHeaderPng: effectiveHeaderPng,
@@ -769,11 +1179,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           templateId: 'graphic_001',
           brandName: channelProfile.channelNameHi,
           brandTagline: channelProfile.channelNameEn,
-          customLogoUrl: channelProfile.channelLogoUrl,
+          customLogoUrl: primaryPngLogo,
           customHeaderPng: effectiveHeaderPng,
           customFooterPng: effectiveFooterPng,
           socialHandle: channelProfile.username ? (channelProfile.username.startsWith('@') ? channelProfile.username : `@${channelProfile.username}`) : '',
-          whatsappNumber: channelProfile.mobileNumber,
+          whatsappNumber: finalPhone,
+          showWebsite: channelProfile.showWebsite !== false,
+          showMobileNumber: channelProfile.showMobileNumber !== false,
           isConfigured: true,
         },
       },
@@ -788,10 +1200,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     // Register or sync user profile record in system database
     registerOrUpdateUser({
       name: channelProfile.fullName || currentUser?.name || 'संपादक',
-      email: cleanEmail || 'user@breakingnewswala.com',
+      email: cleanEmail || 'user@ainewsmaker.online',
       channelName: channelProfile.channelNameHi,
-      channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
-      mobile: channelProfile.mobileNumber,
+      channelLogoUrl: primaryPngLogo,
+      mobile: finalPhone || channelProfile.mobileNumber,
       username: channelProfile.username,
       isLocked: !isAdmin,
     });
@@ -804,9 +1216,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         fullName: channelProfile.fullName || currentUser?.name || 'संपादक',
         username: channelProfile.username,
         websiteUrl: channelProfile.websiteUrl,
+        whatsappNumber: finalPhone,
+        mobileNumber: finalPhone || channelProfile.mobileNumber,
+        showWebsite: channelProfile.showWebsite !== false,
+        showMobileNumber: channelProfile.showMobileNumber !== false,
         channelNameHi: channelProfile.channelNameHi,
         channelNameEn: channelProfile.channelNameEn,
-        channelLogoUrl: channelProfile.channelLogoUrl,
+        channelLogoUrl: primaryPngLogo,
+        channelLogoPngUrl: primaryPngLogo,
+        channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
       };
       fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
@@ -823,7 +1241,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             updates: {
               name: channelProfile.fullName || currentUser?.name,
               channelName: channelProfile.channelNameHi,
-              channelLogoUrl: channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl,
+              channelLogoUrl: primaryPngLogo,
+              channelLogoPngUrl: primaryPngLogo,
+              channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
               mobile: channelProfile.mobileNumber,
               websiteUrl: channelProfile.websiteUrl,
               username: channelProfile.username,
@@ -841,6 +1261,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         new CustomEvent('channel_profile_updated', {
           detail: {
             ...updatedProfile,
+            channelLogoUrl: primaryPngLogo,
+            channelLogoPngUrl: primaryPngLogo,
+            channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
             customHeaderPng: effectiveHeaderPng,
             customFooterPng: effectiveFooterPng,
           },
@@ -1201,189 +1624,183 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )}
 
                 {/* If user profile is locked, show locked display card. Otherwise, show upload options */}
-                {isLockedForUser ? (
-                  <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border-2 border-amber-500/50 rounded-xl p-4 space-y-3 shadow-lg">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-500 flex items-center justify-center text-emerald-400 shrink-0">
-                          <Lock className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-black text-white flex items-center gap-1.5">
-                            <span>चैनल लोगो (स्थायी रूप से सुरक्षित)</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 font-bold border border-emerald-700">
-                              One-Time Set ✓
-                            </span>
-                          </h4>
-                          <p className="text-[11px] text-slate-400">
-                            सुरक्षा व कॉपीराइट नियमों के तहत चैनल लोगो केवल एक बार सेट किया जा सकता है।
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-slate-800 text-amber-300 font-mono border border-slate-700">
-                        🔒 One-Time Locked
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3.5 p-3 bg-slate-950 rounded-xl border border-slate-800">
-                      <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                        <img
-                          src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
-                          alt="Channel Logo"
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-xs font-bold text-white flex items-center gap-2">
-                          <span>{channelProfile.channelNameHi || 'आपका चैनल'}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono">
-                            {channelProfile.channelLogoType === 'gif' ? '🎬 GIF' : '📦 PNG'}
+                {/* PNG & GIF Logo Management Cards */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* CARD 1: PNG CHANNEL LOGO (प्राइमरी लोगो) */}
+                    <div className="p-3.5 rounded-xl border transition-all bg-amber-500/10 border-amber-400/80 shadow-md ring-1 ring-amber-400/40">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                          <span>📦</span>
+                          <span>PNG CHANNEL LOGO (प्राइमरी लोगो)</span>
+                        </span>
+                        {isLogoLocked ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-bold border border-emerald-700">
+                            🔒 One-Time Locked
                           </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          {channelProfile.channelNameEn || 'AI News Maker'}
-                        </div>
-                        <p className="text-[10px] text-amber-200/80">
-                          लोगो में बदलाव कराने हेतु एडमिन से अनुरोध करें।
-                        </p>
+                        ) : (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-400 text-black font-extrabold">
+                            सभी ग्राफिक्स में
+                          </span>
+                        )}
+                      </div>
 
-                        <div className="pt-2 flex items-center gap-2 flex-wrap">
-                          {logoReqStatus === 'pending' ? (
-                            <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
-                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                              <span>लोगो बदलने का अनुरोध एडमिन के पास लंबित है</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                          <img
+                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
+                            alt="PNG Logo"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {isLogoLocked ? (
+                            <div>
+                              <p className="text-[10px] text-slate-300 font-semibold mb-1">
+                                {channelProfile.channelNameHi || 'आपका चैनल'}
+                              </p>
+                              {logoReqStatus === 'pending' ? (
+                                <div className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-[11px] font-bold flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                                  <span>अनुरोध एडमिन के पास लंबित है</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLogoReqType('logo');
+                                    setLogoReqReason('नया आधिकारिक चैनल लोगो अपडेट करना है');
+                                    setNewRequestedLogoUrl('');
+                                    setIsLogoReqModalOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-[11px] rounded-lg shadow cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                                  <span>लोगो बदलने हेतु अनुरोध</span>
+                                </button>
+                              )}
                             </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => setIsLogoReqModalOpen(true)}
-                              className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition flex items-center gap-2 active:scale-95 border border-amber-300 ring-2 ring-amber-400/30"
-                            >
-                              <ShieldCheck className="w-4 h-4 text-slate-950 shrink-0" />
-                              <span>लोगो बदलने हेतु अनुरोध</span>
-                            </button>
+                            <>
+                              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>{pngUploadLoading ? 'अपलोड हो रहा है...' : 'PNG लोगो अपलोड'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                                  onChange={handlePngLogoUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              <p className="text-[10px] text-slate-400">
+                                सामान्य ग्राफिक्स, ई-पेपर व पोस्टर्स का प्राइमरी लोगो
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 2: GIF CHANNEL LOGO (केवल वीडियो फीड - प्रथम बार सीधा अपलोड, बाद में अनुरोध) */}
+                    <div className={`p-3.5 rounded-xl border transition-all ${
+                      channelProfile.channelLogoGifUrl
+                        ? 'bg-red-500/10 border-red-500/80 shadow-md ring-1 ring-red-500/40'
+                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-red-300 flex items-center gap-1">
+                          <span>🎬</span>
+                          <span>GIF CHANNEL LOGO (केवल वीडियो फीड)</span>
+                        </span>
+                        {channelProfile.channelLogoGifUrl ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">
+                            सक्रिय GIF ✓
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                            PNG फॉलबैक
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                          {channelProfile.channelLogoGifUrl ? (
+                            <img
+                              src={channelProfile.channelLogoGifUrl}
+                              alt="GIF Logo"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <Film className="w-6 h-6 text-slate-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {/* Part B: First-time direct upload without admin request; subsequent replacements require admin change request */}
+                          {!channelProfile.channelLogoGifUrl ? (
+                            <>
+                              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>{gifUploadLoading ? 'अपलोड हो रहा है...' : 'GIF लोगो अपलोड (प्रथम बार सीधा अपलोड)'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/gif,.gif"
+                                  onChange={handleGifLogoUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              <p className="text-[10px] text-slate-400">
+                                नए यूज़र पहली बार सीधे एनिमेटेड GIF अपलोड कर सकते हैं
+                              </p>
+                            </>
+                          ) : (
+                            <div>
+                              <p className="text-[10px] text-emerald-400 font-medium mb-1">
+                                ✅ वीडियो फीड में एनिमेटेड GIF सक्रिय
+                              </p>
+                              {gifReqStatus === 'pending' ? (
+                                <div className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-[11px] font-bold flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                                  <span>GIF बदलने का अनुरोध लंबित है</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLogoReqType('gif');
+                                    setLogoReqReason('नया आधिकारिक चैनल GIF अपडेट करना है');
+                                    setNewRequestedLogoUrl('');
+                                    setIsLogoReqModalOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 text-white font-black text-[11px] rounded-lg shadow cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                                >
+                                  <Film className="w-3.5 h-3.5 shrink-0" />
+                                  <span>GIF बदलने के लिए अनुरोध करें</span>
+                                </button>
+                              )}
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                स्वीकृति तक वर्तमान GIF सक्रिय रहेगा
+                              </p>
+                            </div>
+                          )}
+
+                          {gifUploadError && (
+                            <p className="text-[10px] text-red-400 font-bold">{gifUploadError}</p>
                           )}
                         </div>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    {/* 2 Distinct Upload Options: PNG CHANNEL LOGO & GIF CHANNEL LOGO */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                      {/* OPTION 1: PNG CHANNEL LOGO */}
-                      <div className={`p-3.5 rounded-xl border transition-all ${
-                        channelProfile.channelLogoType === 'png'
-                          ? 'bg-amber-500/10 border-amber-400/80 shadow-md ring-1 ring-amber-400/40'
-                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                      }`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                            <span>📦</span>
-                            <span>PNG CHANNEL LOGO</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSwitchLogoType('png')}
-                            className={`text-[10px] font-black px-2 py-0.5 rounded transition ${
-                              channelProfile.channelLogoType === 'png'
-                                ? 'bg-amber-400 text-black font-extrabold'
-                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                            }`}
-                          >
-                            {channelProfile.channelLogoType === 'png' ? '✓ सक्रिय' : 'चुनें'}
-                          </button>
-                        </div>
 
-                        <div className="flex items-center gap-3">
-                          <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                            <img
-                              src={channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
-                              alt="PNG Logo"
-                              className="w-full h-full object-contain"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>PNG लोगो अपलोड</span>
-                              <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/jpg,image/webp"
-                                onChange={handlePngLogoUpload}
-                                className="hidden"
-                              />
-                            </label>
-                            <p className="text-[10px] text-slate-400">
-                              पारदर्शी / स्टैंडर्ड चैनल लोगो
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* OPTION 2: GIF CHANNEL LOGO */}
-                      <div className={`p-3.5 rounded-xl border transition-all ${
-                        channelProfile.channelLogoType === 'gif'
-                          ? 'bg-red-500/10 border-red-500/80 shadow-md ring-1 ring-red-500/40'
-                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                      }`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-red-300 flex items-center gap-1">
-                            <span>🎬</span>
-                            <span>GIF CHANNEL LOGO</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleSwitchLogoType('gif')}
-                            className={`text-[10px] font-black px-2 py-0.5 rounded transition ${
-                              channelProfile.channelLogoType === 'gif'
-                                ? 'bg-red-500 text-white font-extrabold'
-                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                            }`}
-                          >
-                            {channelProfile.channelLogoType === 'gif' ? '✓ सक्रिय' : 'चुनें'}
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                            {channelProfile.channelLogoGifUrl ? (
-                              <img
-                                src={channelProfile.channelLogoGifUrl}
-                                alt="GIF Logo"
-                                className="w-full h-full object-contain"
-                              />
-                            ) : (
-                              <Film className="w-6 h-6 text-slate-600" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>GIF लोगो अपलोड</span>
-                              <input
-                                type="file"
-                                accept="image/gif"
-                                onChange={handleGifLogoUpload}
-                                className="hidden"
-                              />
-                            </label>
-                            <p className="text-[10px] text-slate-400">
-                              एनिमेटेड घूमने वाला लाइव लोगो
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Dedicated Save Logo Button for Admin */}
+                  {/* Channel Branding Action Bar */}
+                  {(!isLogoLocked || isAdmin) && (
                     <div className="pt-3 pb-1 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
                       <div className="text-xs text-slate-300 flex items-center gap-2 font-medium">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                         <span>
-                          {channelProfile.channelLogoType === 'gif'
-                            ? (channelProfile.channelLogoGifUrl ? '✅ सक्रिय: 🎬 GIF लोगो चयनित' : '⚠️ कृपया 🎬 GIF लोगो चुनें')
-                            : (channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl ? '✅ सक्रिय: 📦 PNG लोगो चयनित' : '⚠️ कृपया 📦 PNG लोगो चुनें')}
+                          {channelProfile.channelLogoGifUrl
+                            ? '📦 सामान्य ग्राफिक्स: PNG लोगो | 🎬 वीडियो फीड: GIF लोगो'
+                            : '📦 सभी ग्राफिक्स व वीडियो फीड: PNG प्राइमरी लोगो'}
                         </span>
                       </div>
                       <button
@@ -1399,40 +1816,41 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         </span>
                       </button>
                     </div>
+                  )}
 
-                    {/* Admin Logo Management Tools */}
+                  {/* Admin / Utility Tools */}
+                  {(!isLogoLocked || isAdmin) && (
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsJpgModalOpen(true)}
-                          className="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                          title="JPG लोगो से बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                          <span>JPG को PNG में बदलें</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsJpgModalOpen(true)}
+                        className="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+                        title="JPG लोगो से बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        <span>JPG को PNG में बदलें</span>
+                      </button>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* लोगो बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
+              {/* लोगो / GIF बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
               {isLogoReqModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
                   <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
-                          <ShieldCheck className="w-5 h-5" />
+                        <div className={`p-2 rounded-xl ${logoReqType === 'gif' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                          {logoReqType === 'gif' ? <Film className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />}
                         </div>
                         <div>
                           <h3 className="text-white font-bold text-base">
-                            लोगो बदलने हेतु एडमिन से अनुरोध
+                            {logoReqType === 'gif' ? 'GIF बदलने हेतु एडमिन से अनुरोध' : 'लोगो बदलने हेतु एडमिन से अनुरोध'}
                           </h3>
                           <p className="text-[11px] text-slate-400">
-                            नया लोगो अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें
+                            {logoReqType === 'gif'
+                              ? 'नया एनिमेटेड GIF (.gif) अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें'
+                              : 'नया लोगो अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें'}
                           </p>
                         </div>
                       </div>
@@ -1446,17 +1864,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
 
                     <div className="space-y-4">
-                      {/* Current & New Logo Preview Side-by-Side */}
+                      {/* Current & New Asset Preview Side-by-Side */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* 1. Current Logo */}
+                        {/* 1. Current Asset */}
                         <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                           <span className="text-[11px] font-bold text-slate-400 block">
-                            1. वर्तमान चैनल लोगो (Current Logo):
+                            {logoReqType === 'gif' ? '1. वर्तमान चैनल GIF:' : '1. वर्तमान चैनल लोगो:'}
                           </span>
                           <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
                             <img
-                              src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl || '/assets/ai_news_maker_logo.png'}
-                              alt="Current Logo"
+                              src={
+                                logoReqType === 'gif'
+                                  ? (channelProfile.channelLogoGifUrl || '/assets/ai_news_maker_logo.png')
+                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png')
+                              }
+                              alt="Current Asset"
                               className="max-h-20 w-auto object-contain"
                             />
                           </div>
@@ -1465,10 +1887,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           </div>
                         </div>
 
-                        {/* 2. New Logo Upload & Preview */}
-                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2">
-                          <span className="text-[11px] font-bold text-amber-300 block flex items-center justify-between">
-                            <span>2. नया लोगो (New Logo Upload):</span>
+                        {/* 2. New Asset Upload & Preview */}
+                        <div className={`p-3 bg-slate-950 rounded-xl border space-y-2 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
+                          <span className={`text-[11px] font-bold block flex items-center justify-between ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
+                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload):'}</span>
                             {newRequestedLogoUrl && (
                               <button
                                 type="button"
@@ -1483,22 +1905,26 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             {newRequestedLogoUrl ? (
                               <img
                                 src={newRequestedLogoUrl}
-                                alt="New Logo Preview"
+                                alt="New Asset Preview"
                                 className="max-h-20 w-auto object-contain"
                               />
                             ) : (
                               <div className="text-center text-slate-500 space-y-1">
-                                <ImageIcon className="w-6 h-6 mx-auto opacity-60" />
-                                <span className="text-[10px] block">लोगो फ़ाइल चुनें</span>
+                                {logoReqType === 'gif' ? <Film className="w-6 h-6 mx-auto opacity-60" /> : <ImageIcon className="w-6 h-6 mx-auto opacity-60" />}
+                                <span className="text-[10px] block">{logoReqType === 'gif' ? 'GIF फ़ाइल चुनें' : 'लोगो फ़ाइल चुनें'}</span>
                               </div>
                             )}
                           </div>
-                          <label className="w-full py-1.5 px-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition">
-                            <Upload className="w-3.5 h-3.5 text-amber-400" />
-                            <span>{newRequestedLogoUrl ? 'लोगो बदलें' : '📁 नया लोगो चुनें'}</span>
+                          <label className={`w-full py-1.5 px-2.5 border text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition ${
+                            logoReqType === 'gif'
+                              ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300'
+                              : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
+                          }`}>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>{newRequestedLogoUrl ? (logoReqType === 'gif' ? 'GIF बदलें' : 'लोगो बदलें') : (logoReqType === 'gif' ? '📁 नया GIF चुनें' : '📁 नया लोगो चुनें')}</span>
                             <input
                               type="file"
-                              accept="image/png,image/jpeg,image/gif,image/*"
+                              accept={logoReqType === 'gif' ? 'image/gif,.gif' : 'image/png,image/jpeg,image/webp,image/*'}
                               onChange={handleNewRequestedLogoUpload}
                               className="hidden"
                             />
@@ -1507,19 +1933,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       </div>
 
                       {/* Request Status Info if active */}
-                      {logoReqStatus !== 'none' && (
+                      {((logoReqType === 'gif' ? gifReqStatus : logoReqStatus) !== 'none') && (
                         <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs font-bold ${
-                          logoReqStatus === 'pending'
+                          (logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'pending'
                             ? 'bg-amber-950/70 border-amber-500/50 text-amber-300'
-                            : logoReqStatus === 'approved'
+                            : (logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'approved'
                             ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
                             : 'bg-rose-950/70 border-rose-500/50 text-rose-300'
                         }`}>
                           <span>वर्तमान स्थिति (Request Status):</span>
                           <span>
-                            {logoReqStatus === 'pending'
+                            {(logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'pending'
                               ? '⏳ लंबित (Admin Review Underway)'
-                              : logoReqStatus === 'approved'
+                              : (logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'approved'
                               ? '✅ स्वीकृत (Approved)'
                               : '❌ अस्वीकृत (Rejected)'}
                           </span>
@@ -1529,13 +1955,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       {/* Reason Textarea */}
                       <div>
                         <label className="block text-xs font-bold text-slate-300 mb-1">
-                          लोगो बदलने का कारण (Reason for Logo Change) *
+                          {logoReqType === 'gif' ? 'GIF बदलने का कारण (Reason for GIF Change) *' : 'लोगो बदलने का कारण (Reason for Logo Change) *'}
                         </label>
                         <textarea
                           rows={2}
                           value={logoReqReason}
                           onChange={(e) => setLogoReqReason(e.target.value)}
-                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें..."
+                          placeholder={logoReqType === 'gif' ? 'यहाँ GIF बदलने का आधिकारिक कारण लिखें...' : 'यहाँ लोगो बदलने का आधिकारिक कारण लिखें...'}
                           className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500"
                         />
                       </div>
@@ -1573,33 +1999,70 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsLogoReqModalOpen(false)}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition"
+                        disabled={isSubmittingLogoReq}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition disabled:opacity-50"
                       >
                         रद्द करें
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
+                        disabled={isSubmittingLogoReq || !newRequestedLogoUrl || !logoReqReason.trim()}
+                        onClick={async () => {
+                          if (!newRequestedLogoUrl) {
+                            alert(logoReqType === 'gif' ? 'कृपया नया GIF अपलोड करें।' : 'कृपया नया लोगो अपलोड करें।');
+                            return;
+                          }
                           if (!logoReqReason.trim()) {
                             alert('कृपया कारण दर्ज करें।');
                             return;
                           }
-                          submitLogoChangeRequest(
-                            currentUser?.email || '',
-                            channelProfile.channelNameHi || '',
-                            channelProfile.channelLogoUrl,
-                            logoReqReason.trim(),
-                            newRequestedLogoUrl || undefined,
-                            currentUser?.name || channelProfile.fullName || 'यूज़र',
-                            channelProfile.username || currentUser?.username || ''
-                          );
-                          setLogoReqStatus('pending');
-                          setIsLogoReqModalOpen(false);
-                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।');
+                          try {
+                            setIsSubmittingLogoReq(true);
+                            const currentUrl = logoReqType === 'gif'
+                              ? channelProfile.channelLogoGifUrl
+                              : (channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl);
+                            await submitLogoChangeRequest(
+                              currentUser?.email || '',
+                              channelProfile.channelNameHi || '',
+                              currentUrl,
+                              logoReqReason.trim(),
+                              newRequestedLogoUrl,
+                              currentUser?.name || channelProfile.fullName || 'यूज़र',
+                              channelProfile.username || currentUser?.username || '',
+                              logoReqType
+                            );
+                            if (logoReqType === 'gif') {
+                              setGifReqStatus('pending');
+                            } else {
+                              setLogoReqStatus('pending');
+                            }
+                            setIsLogoReqModalOpen(false);
+                            alert(
+                              logoReqType === 'gif'
+                                ? '✅ आपका GIF बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया GIF स्वतः सक्रिय हो जाएगा। तब तक आपका वर्तमान GIF चालू रहेगा।'
+                                : '✅ आपका लोगो बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।'
+                            );
+                          } catch (err: any) {
+                            console.error('Logo request error:', err);
+                            alert('अनुरोध सबमिट करने में त्रुटि: ' + (err?.message || 'कृपया पुनः प्रयास करें।'));
+                          } finally {
+                            setIsSubmittingLogoReq(false);
+                          }
                         }}
-                        className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
+                        className={`px-5 py-2.5 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          logoReqType === 'gif'
+                            ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 text-white'
+                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950'
+                        }`}
                       >
-                        अनुरोध सबमिट करें (Submit Request)
+                        {isSubmittingLogoReq ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                            <span>सबमिट हो रहा है...</span>
+                          </>
+                        ) : (
+                          <span>अनुरोध सबमिट करें (Submit Request)</span>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -1812,12 +2275,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Contact Number & Website */}
+              {/* Social Details: WhatsApp Number & Website (Primary Mobile is locked exclusively at the top of the profile) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-300">
-                      संपर्क नंबर (फुटर में प्रदर्शन हेतु)
+                    <label className="block text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <span className="text-emerald-400 font-bold">📱 WhatsApp नंबर (Social Usernames / फुटर)</span>
                     </label>
                     <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
                       <input
@@ -1829,26 +2292,45 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             showMobileNumber: e.target.checked,
                           }))
                         }
-                        className="rounded accent-amber-500"
+                        className="rounded accent-emerald-500"
                       />
-                      <span>ग्राफ़िक में नंबर दिखाएं</span>
+                      <span>फुटर में दिखाएं</span>
                     </label>
                   </div>
                   <input
                     type="text"
-                    value={channelProfile.mobileNumber}
+                    value={channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || ''}
                     onChange={(e) =>
-                      setChannelProfile((p) => ({ ...p, mobileNumber: e.target.value }))
+                      setChannelProfile((p) => ({ ...p, whatsappNumber: e.target.value }))
                     }
-                    placeholder="96698-02408"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
+                    placeholder="+91 98765 43210"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-emerald-400 focus:outline-hidden font-mono"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    * साइनअप के समय लिया गया WhatsApp नंबर यहाँ स्वतः उपलब्ध है। आप इसे कभी भी एडिट कर सकते हैं।
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    वेबसाइट का पता (Website Address)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-300">
+                      🌐 वेबसाइट का पता (Website Address)
+                    </label>
+                    <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={channelProfile.showWebsite !== false}
+                        onChange={(e) =>
+                          setChannelProfile((p) => ({
+                            ...p,
+                            showWebsite: e.target.checked,
+                          }))
+                        }
+                        className="rounded accent-sky-500"
+                      />
+                      <span>फुटर में दिखाएं</span>
+                    </label>
+                  </div>
                   <input
                     type="text"
                     value={channelProfile.websiteUrl}
@@ -1863,37 +2345,47 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
               {/* Social Media Icons Toggles */}
               <div className="pt-2">
-                <label className="block text-xs font-bold text-slate-300 mb-2">
-                  फुटर में प्रदर्शित सोशल मीडिया आइकन्स
-                </label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-300">
+                    फुटर में प्रदर्शित सोशल मीडिया आइकन्स
+                  </label>
+                  <span className="text-[10px] text-amber-300/80 font-medium">
+                    * Facebook व Instagram अनिवार्य हैं
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {[
                     { id: 'youtube', label: 'YouTube' },
-                    { id: 'facebook', label: 'Facebook' },
-                    { id: 'instagram', label: 'Instagram' },
-                    { id: 'whatsapp', label: 'WhatsApp' },
-                    { id: 'telegram', label: 'Telegram' },
-                    { id: 'twitter', label: 'X / Twitter' },
+                    { id: 'facebook', label: 'Facebook (Locked)', locked: true },
+                    { id: 'instagram', label: 'Instagram (Locked)', locked: true },
+                    { id: 'twitter', label: 'X (Twitter)' },
+                    { id: 'linkedin', label: 'LinkedIn' },
                   ].map((soc) => {
-                    const isChecked = Boolean((channelProfile.socialIcons as any)[soc.id]);
+                    const isMandatory = soc.id === 'facebook' || soc.id === 'instagram';
+                    const isChecked = isMandatory || Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
                     return (
                       <button
                         key={soc.id}
                         type="button"
-                        onClick={() =>
+                        disabled={isMandatory}
+                        onClick={() => {
+                          if (isMandatory) return;
                           setChannelProfile((p) => ({
                             ...p,
                             socialIcons: {
-                              ...p.socialIcons,
+                              ...(p.socialIcons || DEFAULT_SOCIAL_ICONS),
                               [soc.id]: !isChecked,
                             },
-                          }))
-                        }
-                        className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                          isChecked
-                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                            : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                          }));
+                        }}
+                        className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition ${
+                          isMandatory
+                            ? 'bg-amber-500/25 border-amber-400 text-amber-300 cursor-not-allowed opacity-90'
+                            : isChecked
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300 cursor-pointer'
+                            : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300 cursor-pointer'
                         }`}
+                        title={isMandatory ? 'यह आइकन फुटर में अनिवार्य रूप से शामिल रहेगा' : undefined}
                       >
                         {isChecked && <Check className="w-3 h-3" />}
                         <span>{soc.label}</span>
@@ -1918,240 +2410,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </button>
               </div>
             </div>
-
-            {/* SECTION 4: HEADER & FOOTER SETTINGS (PRO & VIP DESK ONLY GATING) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-slate-800 rounded-lg text-amber-400">
-                    <Layers className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2">
-                      <span>कस्टम हेडर व फुटर सेटिंग्स</span>
-                      <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase">
-                        PRO & VIP DESK ONLY
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      अपना कस्टम हेडर बैनर PNG व फुटर स्ट्रिप PNG अपलोड करें
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {subscription.tier === 'professional' || subscription.tier === 'ultra' || isAdmin ? (
-                /* Unlocked for PRO & VIP DESK */
-                <div className="space-y-4">
-                  {/* Custom Header PNG */}
-                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="block text-xs font-bold text-white">
-                          1. कस्टम हेडर बैनर PNG (Custom Header PNG)
-                        </label>
-                        <p className="text-[11px] text-slate-400">
-                          अपलोड होने पर डिफ़ॉल्ट लोकेशन व लोगो बॉक्स स्वतः हाइड हो जाएंगे।
-                        </p>
-                      </div>
-                      {customHeaderPng && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomHeaderPng('')}
-                          className="text-xs text-red-400 hover:text-red-300 font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>हटाएं</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {customHeaderPng && (
-                      <div className="w-full max-h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={customHeaderPng}
-                          alt="Custom Header Preview"
-                          className="max-h-20 w-auto object-contain"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label className="px-3.5 py-2 bg-purple-950 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>{customHeaderPng ? 'हेडर बदलें' : '📁 हेडर PNG अपलोड करें'}</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/*"
-                          onChange={handleCustomHeaderUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <input
-                        type="text"
-                        value={customHeaderPng}
-                        onChange={(e) => setCustomHeaderPng(e.target.value)}
-                        placeholder="या हेडर PNG इमेज URL पेस्ट करें (https://...)"
-                        className="flex-1 min-w-[200px] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Custom Footer PNG */}
-                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="block text-xs font-bold text-white">
-                          2. कस्टम फुटर स्ट्रिप PNG (Custom Footer PNG)
-                        </label>
-                        <p className="text-[11px] text-slate-400">
-                          अपलोड होने पर डिफ़ॉल्ट फिक्स्ड फुटर स्वतः हाइड हो जाएगा।
-                        </p>
-                      </div>
-                      {customFooterPng && (
-                        <button
-                          type="button"
-                          onClick={() => setCustomFooterPng('')}
-                          className="text-xs text-red-400 hover:text-red-300 font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>हटाएं</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {customFooterPng && (
-                      <div className="w-full max-h-24 bg-slate-900 border border-slate-700 rounded-lg p-2 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={customFooterPng}
-                          alt="Custom Footer Preview"
-                          className="max-h-20 w-auto object-contain"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label className="px-3.5 py-2 bg-purple-950 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>{customFooterPng ? 'फुटर बदलें' : '📁 फुटर PNG अपलोड करें'}</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/*"
-                          onChange={handleCustomFooterUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <input
-                        type="text"
-                        value={customFooterPng}
-                        onChange={(e) => setCustomFooterPng(e.target.value)}
-                        placeholder="या फुटर PNG इमेज URL पेस्ट करें (https://...)"
-                        className="flex-1 min-w-[200px] px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSaveChannelBranding}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-amber-500 hover:from-purple-500 hover:to-amber-400 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>कस्टम हेडर व फुटर सेव करें</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Locked for BASIC and ADVANCE - Informational Section (View benefits only, no edit/upload/activate) */
-                <div className="p-5 bg-gradient-to-br from-slate-900 via-slate-900/95 to-purple-950/40 border-2 border-purple-500/40 rounded-2xl space-y-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="p-2.5 bg-purple-500/20 text-purple-300 rounded-xl shrink-0">
-                      <Lock className="w-6 h-6" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-black text-purple-300">
-                          Custom Header/Footer क्या है?
-                        </h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/80 text-purple-200 border border-purple-600 font-bold">
-                          PRO व VIP DESK हेतु विशेष सुविधा
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        कस्टम हेडर व फुटर आपके न्यूज़ चैनल की एक मुकम्मल, प्रीमियम विजुअल पहचान है जो आपके हर ग्राफिक और वीडियो कार्ड पर डिफ़ॉल्ट ब्रांडिंग की जगह स्वतः लग जाती है।
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Benefits of Custom Header / Footer */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-slate-300 pt-1">
-                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
-                      <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                        <span>✨</span>
-                        <span>कस्टम हेडर (Header PNG):</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        कार्ड के शीर्ष पर आपका कस्टमाइज़्ड लोगो, चैनल का आधिकारिक नाम और स्पेशल ग्राफिक स्ट्रिप बिना किसी डिफ़ॉल्ट टेक्स्ट के प्रदर्शित होती है।
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
-                      <div className="font-bold text-emerald-300 flex items-center gap-1.5">
-                        <span>🏷️</span>
-                        <span>कस्टम फुटर (Footer PNG):</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        निचली पट्टी में आपके सोशल मीडिया हैंडल्स, वेबसाइट व कॉन्टैक्ट का मुकम्मल डिज़ाइन किया हुआ आर्टवर्क स्वतः लग जाता है।
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
-                      <div className="font-bold text-sky-300 flex items-center gap-1.5">
-                        <span>⚡</span>
-                        <span>ऑटोमैटिक 1-क्लिक एप्लीकेशन:</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        एक बार सेट या असाइन होने पर स्टूडियो के सभी उपलब्ध पैकेज फ्रेम्स में यह स्वतः लागू रहता है।
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
-                      <div className="font-bold text-red-400 flex items-center gap-1.5">
-                        <span>🔒</span>
-                        <span>सेटिंग लॉक्ड (Locked Access):</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        वर्तमान में आपके {PLAN_KEY_MAP[subscription.tier]} प्लान में यह लॉक है। इसे सक्रिय करने हेतु कृपया PRO या VIP DESK में अपग्रेड करें।
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between flex-wrap gap-2 border-t border-slate-800/80">
-                    <span className="text-[11px] text-slate-400">
-                      * बेसिक व एडवांस यूज़र्स इसे एडिट, अपलोड या एक्टिवेट नहीं कर सकते।
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const plansSec = document.getElementById('plans-upgrade-grid');
-                        if (plansSec) {
-                          plansSec.scrollIntoView({ behavior: 'smooth' });
-                        }
-                      }}
-                      className="px-4 py-2 bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>PRO / VIP DESK में अपग्रेड करें</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
+        </div>
   );
 
-return (
+  return (
     <div className="min-h-screen bg-slate-950 text-white pb-28">
       {/* Top Header */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 shadow-md">
@@ -2191,6 +2454,26 @@ return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
         {/* User Identity & Active Plan Header Card */}
         {(() => {
+          const formatTrialExpiryDate = (timestamp?: number): string => {
+            if (!timestamp || isNaN(timestamp)) return '7 दिन बाद';
+            try {
+              const d = new Date(timestamp);
+              return (
+                d.toLocaleDateString('hi-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                }) +
+                ' ' +
+                d.toLocaleTimeString('hi-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              );
+            } catch {
+              return 'सत्यापित';
+            }
+          };
           const displayUserName = currentUser?.name || channelProfile.fullName || 'यूज़र';
           const rawUsername = channelProfile.username || currentUser?.username || '';
           const displayUsername = rawUsername ? (rawUsername.startsWith('@') ? rawUsername : `@${rawUsername}`) : '';
@@ -2204,7 +2487,7 @@ return (
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
                   {channelProfile.channelLogoUrl ? (
                     <img
-                      src={channelProfile.channelLogoGifUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl}
+                      src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
                       alt={displayUserName}
                       className="w-full h-full object-contain rounded-xl"
                     />
@@ -2235,6 +2518,16 @@ return (
                       <Crown className="w-3 h-3" />
                       <span>{activePlanDetail.nameHi}</span>
                     </span>
+
+                    {/* Requirement 20: 7-Day Free Trial Active & Days Remaining */}
+                    {!isAdmin && subscription.isTrialActive && (
+                      <span className="px-2.5 py-0.5 bg-emerald-950/90 border border-emerald-500/70 text-emerald-300 text-[10px] font-black rounded-full flex items-center gap-1.5 shadow-xs">
+                        <Sparkles className="w-3 h-3 text-emerald-400" />
+                        <span>7-Day Free Trial Active</span>
+                        <span>•</span>
+                        <span>{subscription.daysRemaining} Days Remaining</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Username & Location - Clean & Real Data + Manual Username Creation */}
@@ -2329,37 +2622,87 @@ return (
                     </div>
                   )}
 
-                  {/* Primary Mobile Status */}
-                  <div className="flex items-center justify-center sm:justify-start gap-2 text-xs text-slate-400 pt-0.5">
-                    {subscription.isMobileLocked ? (
-                      <span className="flex items-center gap-1 text-emerald-300 font-mono text-xs">
-                        <Lock className="w-3 h-3" />
-                        <span>प्राइमरी नंबर: +91 {subscription.primaryMobile}</span>
-                      </span>
-                    ) : (
-                      <span className="text-amber-400 text-xs flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        <span>प्राइमरी मोबाइल नंबर अभी दर्ज नहीं है</span>
-                      </span>
-                    )}
+                  {/* Primary Mobile Status - Strictly Locked & Top Only */}
+                  <div className="pt-1.5 flex flex-col items-center sm:items-start text-xs">
+                    <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
+                      <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>प्राइमरी नंबर: +91 {subscription.primaryMobile || channelProfile.mobileNumber || '9876543210'}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold mt-0.5 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                      <Lock className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                      <span>स्थायी लॉक</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-center sm:justify-end gap-2.5 flex-wrap">
-                {/* Primary Mobile Number Badge - Shown when locked via OTP */}
-                {subscription.isMobileLocked && (
-                  <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2 text-xs">
-                    <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <div className="flex items-center gap-1.5 font-mono text-emerald-300 font-bold">
-                      <span>+91 {subscription.primaryMobile}</span>
-                      <span className="text-[10px] text-emerald-400 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800 flex items-center gap-0.5">
-                        <Lock className="w-2.5 h-2.5" />
-                        <span>स्थायी लॉक</span>
+              {/* 7-DAY FREE TRIAL / ACTIVE PLAN BOX (Replaced Right Side Mobile Badge) */}
+              <div className="flex items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto mt-2 sm:mt-0">
+                <div className="w-full sm:w-72 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 border-slate-700/80 rounded-2xl p-3.5 sm:p-4 shadow-2xl flex flex-col gap-2.5 relative overflow-hidden">
+                  <div className="absolute -right-6 -top-6 w-20 h-20 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
+
+                  {/* Header & Status Badge */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-white">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>
+                        {subscription.hasActivePaidPlan
+                          ? `${subscription.planName} प्लान`
+                          : '7-Day Free Trial'}
                       </span>
                     </div>
+                    {subscription.hasActivePaidPlan ? (
+                      <span className="px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-xs">
+                        सक्रिय पेड प्लान
+                      </span>
+                    ) : subscription.isTrialExpired ? (
+                      <span className="px-2 py-0.5 bg-red-950/90 border border-red-700 text-red-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>समाप्त (Expired)</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-emerald-950/90 border border-emerald-700 text-emerald-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>सक्रिय (Active)</span>
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  {/* Expiry Date */}
+                  <div className="text-xs flex items-center justify-between gap-2">
+                    <span className="text-slate-400">समाप्ति तिथि:</span>
+                    <span className="font-mono font-bold text-white text-right">
+                      {formatTrialExpiryDate(subscription.trialEndsAt || subscription.expiresAt)}
+                    </span>
+                  </div>
+
+                  {/* Remaining Time */}
+                  <div className="text-xs flex items-center justify-between gap-2">
+                    <span className="text-slate-400">बचा हुआ समय:</span>
+                    <span
+                      className={`font-mono font-black text-right ${
+                        subscription.hasActivePaidPlan
+                          ? 'text-amber-300'
+                          : subscription.isTrialExpired
+                          ? 'text-red-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {subscription.hasActivePaidPlan
+                        ? `${subscription.daysRemaining} दिन शेष`
+                        : subscription.isTrialExpired
+                        ? 'ट्रायल समाप्त (लॉक)'
+                        : `${subscription.daysRemaining} दिन ${subscription.hoursRemaining ?? 0} घंटे ${subscription.minutesRemaining ?? 0} मिनट`}
+                    </span>
+                  </div>
+
+                  {/* Warning if expired without paid plan */}
+                  {!subscription.hasActivePaidPlan && subscription.isTrialExpired && (
+                    <div className="text-[10px] text-red-400/90 bg-red-950/40 border border-red-800/60 rounded-lg px-2 py-1 leading-tight">
+                      ⚠️ डाउनलोड व कैप्शन सुविधा लॉक है। जारी रखने के लिए प्लान अपग्रेड करें।
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -2377,7 +2720,7 @@ return (
         {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
         {/* Modes != Plans != Promo Codes                                            */}
         {/* ========================================================================= */}
-        {isAdmin && (
+        {isRealAdmin && (
           <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 border-2 border-purple-500/80 rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -2587,7 +2930,47 @@ return (
               )}
             </div>
 
-            {/* OPTION 3: सहायता एवं नीतियाँ */}
+            {/* OPTION FOR PRO / VIP / ADMIN: टेम्प्लेट व कस्टम फ्रेम्स मैनेजर */}
+            {canAccessTemplateManager(currentUser) && (
+              <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'templates_manager' ? 'border-purple-400 bg-slate-900/95 ring-2 ring-purple-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+                <button
+                  type="button"
+                  onClick={() => setNormalUserTab(normalUserTab === 'templates_manager' ? '' : 'templates_manager')}
+                  className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'templates_manager' ? 'bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border-b border-purple-800/80' : 'hover:bg-slate-850'}`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                      <span>🎨</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm sm:text-base font-black text-white block truncate">
+                          टेम्प्लेट व कस्टम फ्रेम्स मैनेजर
+                        </span>
+                        <span className="px-2 py-0.5 bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                          PRO & VIP DESK
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        कस्टम 4:5 फ्रेम्स व टेम्प्लेट्स देखें, नए बनाएं या डिलीट करें
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'templates_manager' ? 'rotate-180 text-purple-400' : ''}`} />
+                </button>
+                {normalUserTab === 'templates_manager' && (
+                  <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <UserTemplateManager
+                      currentUser={currentUser}
+                      isAdmin={isAdmin}
+                      onOpenStudioWithTemplate={onOpenStudio}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* OPTION: सहायता एवं नीतियाँ */}
             <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
@@ -2647,6 +3030,13 @@ return (
           </div>
         )}
       </div>
+
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
+          {toastMsg}
+        </div>
+      )}
     </div>
   );
 };
+

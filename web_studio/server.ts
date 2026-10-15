@@ -974,19 +974,16 @@ interface StoredNotification {
 
 function cleanGenerateUsername(requestedUsername?: string, fullName?: string, existingUsername?: string): string {
   const users = loadUsersMasterDatabase();
-  const taken = new Set(users.map(u => (u.username || '').toLowerCase().trim().replace(/^@/, '')));
+  const taken = new Set(users.map(u => (u.username || '').toLowerCase().trim().replace(/^@+/, '')));
 
   if (requestedUsername && typeof requestedUsername === 'string') {
-    const clean = requestedUsername.trim().replace(/^@/, '');
+    const clean = requestedUsername.trim().replace(/^@+/, '');
     if (clean && !clean.includes('@') && !clean.includes('.')) {
-      const lower = clean.toLowerCase();
-      if (!taken.has(lower) || (existingUsername && existingUsername.toLowerCase().trim().replace(/^@/, '') === lower)) {
-        return clean;
-      }
+      return clean;
     }
   }
   if (existingUsername && typeof existingUsername === 'string') {
-    const clean = existingUsername.trim().replace(/^@/, '');
+    const clean = existingUsername.trim().replace(/^@+/, '');
     if (clean && !clean.includes('@') && !clean.includes('.')) {
       return clean;
     }
@@ -1207,18 +1204,21 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
   }
   const emailRaw = (userPayload.email || '').toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
+  const cleanUserId = (userPayload.userId || userPayload.uid || '').toString().toLowerCase().trim();
   const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com';
   const isBreakingNewsWala = cleanEmail === 'breakingnewswala.com@gmail.com';
 
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex(u =>
-    (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
-    (u.email && u.email.toLowerCase().replace(/\s+/g, '') === cleanEmail.replace(/\s+/g, '')) ||
-    (userPayload.userId && u.userId && u.userId.toLowerCase().trim() === userPayload.userId.toLowerCase().trim())
+    (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+    (cleanEmail && u.email && u.email.toLowerCase().replace(/\s+/g, '') === cleanEmail.replace(/\s+/g, '')) ||
+    (cleanUserId && u.userId && u.userId.toLowerCase().trim() === cleanUserId) ||
+    (cleanUserId && u.email && u.email.toLowerCase().trim() === cleanUserId)
   );
 
   const now = Date.now();
   let updatedRecord: AuthoritativeUser;
+  const rawReqUser = (userPayload.username || '').toString().trim().replace(/^@+/, '');
 
   if (idx >= 0) {
     const existing = users[idx];
@@ -1228,8 +1228,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
       : (isBreakingNewsWala
-          ? (userPayload.username && !userPayload.username.includes('@') ? userPayload.username.replace(/^@/, '') : (existing.username || 'breakingnewswala'))
-          : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username));
+          ? (rawReqUser || existing.username || 'breakingnewswala')
+          : (rawReqUser || existing.username || cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
 
     updatedRecord = {
       ...existing,
@@ -1272,8 +1272,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
       : (isBreakingNewsWala
-          ? 'breakingnewswala'
-          : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name));
+          ? (rawReqUser || 'breakingnewswala')
+          : (rawReqUser || cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
 
     updatedRecord = {
       userId: userPayload.userId || userPayload.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -1311,7 +1311,22 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     users.unshift(updatedRecord);
   }
 
-  saveUsersMasterDatabase(users);
+  // Deduplicate users array by clean email, preserving order and records
+  const seenEmails = new Set<string>();
+  const deduplicatedUsers: AuthoritativeUser[] = [];
+  for (const u of users) {
+    const em = (u.email || '').toLowerCase().trim();
+    if (em) {
+      if (!seenEmails.has(em)) {
+        seenEmails.add(em);
+        deduplicatedUsers.push(u);
+      }
+    } else {
+      deduplicatedUsers.push(u);
+    }
+  }
+
+  saveUsersMasterDatabase(deduplicatedUsers);
   syncUserToProfiles(updatedRecord);
   return updatedRecord;
 }
@@ -3309,6 +3324,10 @@ interface StoredSupportRequest {
   createdAt: number;
   adminResponse?: string;
   updatedAt?: number;
+  reportType?: 'news' | 'video' | 'general';
+  targetId?: string;
+  targetTitle?: string;
+  reportReason?: string;
 }
 
 function loadSupportRequestsDatabase(): StoredSupportRequest[] {
@@ -3338,16 +3357,24 @@ app.get("/api/support/requests", (req, res) => {
   const { userId, role } = req.query;
   const all = loadSupportRequestsDatabase();
   const isAdmin = role === "admin" || role === "superadmin";
-  if (isAdmin || !userId) {
+  const now = Date.now();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  if (isAdmin) {
     return res.json({ success: true, requests: all });
   }
-  const cleanId = String(userId).toLowerCase().trim();
-  const filtered = all.filter(
+
+  const cleanId = String(userId || '').toLowerCase().trim();
+  const userRequests = all.filter(
     (r) =>
-      (r.userId && r.userId.toLowerCase().trim() === cleanId) ||
-      (r.userEmail && r.userEmail.toLowerCase().trim() === cleanId)
+      (!cleanId ||
+        (r.userId && r.userId.toLowerCase().trim() === cleanId) ||
+        (r.userEmail && r.userEmail.toLowerCase().trim() === cleanId)) &&
+      // 30-day retention filter for regular users
+      (now - (Number(r.createdAt) || now) <= THIRTY_DAYS_MS)
   );
-  return res.json({ success: true, requests: filtered });
+
+  return res.json({ success: true, requests: userRequests });
 });
 
 app.post("/api/support/requests", (req, res) => {
@@ -3381,6 +3408,10 @@ app.post("/api/support/requests", (req, res) => {
       createdAt: data.createdAt || Date.now(),
       adminResponse: data.adminResponse || "",
       updatedAt: Date.now(),
+      reportType: data.reportType || "general",
+      targetId: data.targetId || "",
+      targetTitle: data.targetTitle || "",
+      reportReason: data.reportReason || "",
     };
 
     const all = loadSupportRequestsDatabase();

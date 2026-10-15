@@ -1018,12 +1018,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div
               className="absolute z-30 flex items-center justify-center pointer-events-auto"
               style={{
-                left: '6%',
-                top: '4%',
+                left: '5.5%',
+                top: '5.5%',
                 width: '18%',
                 height: '11.5%',
-                transform: `scale(${card.logoScale ?? 1.0})`,
-                transformOrigin: 'center center',
+                transform: `scale(${Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.0))})`,
+                transformOrigin: 'top left',
               }}
             >
               {card.customLogoUrl ? (
@@ -1090,29 +1090,60 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
               }}
             >
-              {/* Subtle top & bottom banner highlight bevels */}
-              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-80 pointer-events-none" />
-              <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-80 pointer-events-none" />
-
-              <h1
-                className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] px-2"
+              {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
+              <div
+                className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
                 style={{
-                  fontFamily: card.headlineFontFamily || 'Baloo 2',
-                  fontSize: `${effectivePreviewFontSize}px`,
-                  textAlign: 'center',
+                  background: 'linear-gradient(90deg, rgba(255,26,26,0) 0%, rgba(255,77,0,0.85) 35%, #FFE600 50%, rgba(255,77,0,0.85) 65%, rgba(255,26,26,0) 100%)',
+                  boxShadow: '0 0 10px #FFE600',
                 }}
-              >
-                {renderFormattedHeadline()}
-              </h1>
+              />
+              {/* Subtle top & bottom banner highlight bevels */}
+              <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-85 pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-75 pointer-events-none" />
+
+              {/* Left & Right Dark Red Chevron Accent Stripes matching exported graphic */}
+              <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                <g fill="#7A0005" opacity="0.6">
+                  <polygon points="0,20 60,20 30,80 0,80" />
+                  <polygon points="0,100 75,100 35,180 0,180" />
+                  <polygon points="0,200 90,200 40,300 0,300" />
+                  <polygon points="0,320 80,320 30,420 0,420" />
+                </g>
+              </svg>
+              <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                <g fill="#7A0005" opacity="0.6">
+                  <polygon points="100,20 40,20 70,80 100,80" />
+                  <polygon points="100,100 25,100 65,180 100,180" />
+                  <polygon points="100,200 10,200 60,300 100,300" />
+                  <polygon points="100,320 20,320 70,420 100,420" />
+                </g>
+              </svg>
+
+              {/* Headline Text: Center vertically & horizontally with balanced padding */}
+              <div className="relative z-10 w-full flex items-center justify-center pt-1.5 sm:pt-2 px-2">
+                <h1
+                  className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center px-2"
+                  style={{
+                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontSize: `${effectivePreviewFontSize}px`,
+                    textAlign: 'center',
+                    textShadow: '0 2px 6px rgba(0, 0, 0, 0.75)',
+                  }}
+                >
+                  {renderFormattedHeadline()}
+                </h1>
+              </div>
             </div>
           )}
 
           {/* Bottom Master Branding Footer (Bottom 0 to 7.2%):
               Renders user's actual saved Footer with correct social media icons */}
           <div
-            className="absolute inset-x-0 bottom-0 z-30 flex items-center bg-white pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
+            className="absolute inset-x-0 bottom-0 z-30 flex items-center pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
             style={{
               height: '7.2%',
+              backgroundColor: card.footerBgColor || '#FFFFFF',
             }}
           >
             <FooterGraphic

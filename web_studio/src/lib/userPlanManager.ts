@@ -1080,8 +1080,9 @@ export function registerOrUpdateUser(userData: {
     const effectiveChannelName = userData.channelName || userData.channelNameHi || '';
 
     let updatedRecord: PlanUserRecord;
-    const cleanUsername = (userData.username && !userData.username.includes('@'))
-      ? userData.username
+    const rawUser = userData.username ? userData.username.replace(/^@+/, '').trim() : '';
+    const cleanUsername = rawUser
+      ? rawUser
       : (effectiveName ? effectiveName.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20) : `user_${Date.now().toString().slice(-4)}`);
 
     if (idx >= 0) {
@@ -1089,7 +1090,7 @@ export function registerOrUpdateUser(userData: {
         ...users[idx],
         email: cleanEmail,
         name: effectiveName || users[idx].name,
-        username: (userData.username && !userData.username.includes('@')) ? userData.username : (users[idx].username || cleanUsername),
+        username: rawUser || users[idx].username || cleanUsername,
         role: users[idx].role || assignedRole,
         channelName: effectiveChannelName || users[idx].channelName,
         channelLogoUrl: userData.channelLogoUrl !== undefined ? userData.channelLogoUrl : users[idx].channelLogoUrl,

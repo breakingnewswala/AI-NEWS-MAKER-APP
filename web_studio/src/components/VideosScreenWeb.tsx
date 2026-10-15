@@ -21,11 +21,12 @@ import {
   AlertTriangle,
   Loader2,
   ExternalLink,
+  Flag,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
-import { getApiBaseUrl } from '../lib/apiConfig';
+import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -57,6 +58,50 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [activeVideo, setActiveVideo] = useState<VideoFeedItem | null>(null);
   const [videoPlaybackError, setVideoPlaybackError] = useState<boolean>(false);
   const activeVideoPlayerRef = useRef<HTMLDivElement | null>(null);
+
+  // User Video Report Modal State (Part N)
+  const [reportingVideo, setReportingVideo] = useState<VideoFeedItem | null>(null);
+  const [videoReportReason, setVideoReportReason] = useState<string>('गलत / भ्रामक वीडियो (Fake / Misleading Video)');
+  const [videoReportDetails, setVideoReportDetails] = useState<string>('');
+  const [isSubmittingVideoReport, setIsSubmittingVideoReport] = useState<boolean>(false);
+  const [videoReportFeedback, setVideoReportFeedback] = useState<string>('');
+
+  const handleSubmitVideoReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportingVideo || isSubmittingVideoReport) return;
+    setIsSubmittingVideoReport(true);
+    try {
+      const payload = {
+        reportType: 'video',
+        targetId: reportingVideo.id,
+        targetTitle: reportingVideo.title,
+        reportReason: videoReportReason,
+        message: videoReportDetails ? `${videoReportReason}: ${videoReportDetails}` : videoReportReason,
+        userId: currentUser?.email || 'guest',
+        userName: currentUser?.name || 'न्यूज़ दर्शक',
+        userEmail: currentUser?.email || '',
+      };
+      const res = await fetch(getApiUrl('/api/support/requests'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setVideoReportFeedback('✅ आपकी रिपोर्ट दर्ज हो गई है। धन्यवाद!');
+        setTimeout(() => {
+          setReportingVideo(null);
+          setVideoReportFeedback('');
+          setVideoReportDetails('');
+        }, 1800);
+      } else {
+        setVideoReportFeedback('❌ रिपोर्ट सबमिट करने में विफल। पुनः प्रयास करें।');
+      }
+    } catch {
+      setVideoReportFeedback('❌ नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।');
+    } finally {
+      setIsSubmittingVideoReport(false);
+    }
+  };
 
   // Reset video playback error when active video changes
   useEffect(() => {
@@ -813,13 +858,24 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveVideo(null)}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition"
-              >
-                ✕ बंद करें
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReportingVideo(activeVideo)}
+                  className="px-3 py-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition flex items-center gap-1.5 border border-slate-700"
+                  title="इस वीडियो की रिपोर्ट करें"
+                >
+                  <Flag className="w-3.5 h-3.5 text-rose-400" />
+                  <span>रिपोर्ट करें</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveVideo(null)}
+                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg cursor-pointer transition"
+                >
+                  ✕ बंद करें
+                </button>
+              </div>
             </div>
 
             {/* Video Player or Error State */}
@@ -1026,6 +1082,15 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <Play className="w-3.5 h-3.5 fill-current text-amber-400" />
                     <span>वीडियो देखें</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReportingVideo(vid)}
+                    className="py-2.5 px-3 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700 rounded-xl transition-colors cursor-pointer active:scale-95 shrink-0"
+                    title="इस वीडियो की रिपोर्ट करें"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -1146,6 +1211,107 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <span>हाँ, डिलीट करें</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Video Report Modal (Part N) */}
+      {reportingVideo && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Flag className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-black text-white">वीडियो की रिपोर्ट करें</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportingVideo(null);
+                  setVideoReportFeedback('');
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+              <span className="font-bold text-amber-300">वीडियो शीर्षक: </span>
+              {reportingVideo.title}
+            </div>
+
+            <form onSubmit={handleSubmitVideoReport} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  रिपोर्ट का कारण चुनें:
+                </label>
+                <div className="space-y-1.5 text-xs">
+                  {[
+                    'गलत / भ्रामक वीडियो (Fake / Misleading Video)',
+                    'आपत्तिजनक दृश्य / भाषा (Offensive Visuals / Language)',
+                    'कॉपीराइट उल्लंघन (Copyright Infringement)',
+                  ].map((option) => (
+                    <label
+                      key={option}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 cursor-pointer text-slate-200 border border-slate-700/60"
+                    >
+                      <input
+                        type="radio"
+                        name="videoReportReason"
+                        value={option}
+                        checked={videoReportReason === option}
+                        onChange={(e) => setVideoReportReason(e.target.value)}
+                        className="accent-rose-500"
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  अतिरिक्त विवरण (वैकल्पिक):
+                </label>
+                <textarea
+                  value={videoReportDetails}
+                  onChange={(e) => setVideoReportDetails(e.target.value)}
+                  placeholder="कृपया समस्या का संक्षेप में विवरण दें..."
+                  rows={3}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              {videoReportFeedback && (
+                <div className={`p-2.5 rounded-xl text-xs font-bold text-center ${
+                  videoReportFeedback.startsWith('✅') ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/50' : 'bg-rose-950/80 text-rose-300 border border-rose-500/50'
+                }`}>
+                  {videoReportFeedback}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportingVideo(null);
+                    setVideoReportFeedback('');
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingVideoReport}
+                  className="px-5 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>{isSubmittingVideoReport ? 'सबमिट हो रहा है...' : 'रिपोर्ट भेजें'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

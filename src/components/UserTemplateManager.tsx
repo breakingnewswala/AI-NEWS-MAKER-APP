@@ -14,6 +14,11 @@ import {
   Upload,
   Layout,
   ExternalLink,
+  Search,
+  CheckCircle2,
+  X,
+  Power,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   getCustomFrames,
@@ -30,7 +35,14 @@ import {
   UserCustomTemplate,
 } from '../lib/userTemplatesManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
-import { getUserSubscription, isUserAdmin } from '../lib/userPlanManager';
+import {
+  getUserSubscription,
+  isUserAdmin,
+  getPlanUsers,
+  assignCustomHeaderFooterToUser,
+  getAssignedCustomHeaderFooter,
+  PlanUserRecord,
+} from '../lib/userPlanManager';
 
 interface UserTemplateManagerProps {
   currentUser?: any;
@@ -45,10 +57,25 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
   onOpenStudioWithTemplate,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'frames' | 'templates' | 'admin'>('frames');
+  const [activeTab, setActiveTab] = useState<'frames' | 'templates' | 'admin' | 'custom_hf'>('frames');
   const [frames, setFrames] = useState<CustomFrameItem[]>([]);
   const [userTemplates, setUserTemplates] = useState<UserCustomTemplate[]>([]);
   const [activeFrameId, setActiveFrameId] = useState<string | null>(null);
+
+  // Custom Header & Footer Approval State (Part L)
+  const [planUsers, setPlanUsers] = useState<PlanUserRecord[]>(() => (typeof window !== 'undefined' ? getPlanUsers() : []));
+  const [assignUserEmail, setAssignUserEmail] = useState('');
+  const [assignHeaderUrl, setAssignHeaderUrl] = useState('');
+  const [assignFooterUrl, setAssignFooterUrl] = useState('');
+  const [assignCustomActive, setAssignCustomActive] = useState(true);
+  const [assignCustomMsg, setAssignCustomMsg] = useState('');
+  const [hfSearch, setHfSearch] = useState('');
+  const [previewUserHF, setPreviewUserHF] = useState<{
+    user: PlanUserRecord;
+    headerUrl: string;
+    footerUrl: string;
+    active: boolean;
+  } | null>(null);
 
   // New Frame Creation State
   const [isAddingFrame, setIsAddingFrame] = useState(false);
@@ -171,6 +198,93 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     }
   };
 
+  const handleSelectUserForCustomHF = (email: string) => {
+    setAssignUserEmail(email);
+    if (!email) {
+      setAssignHeaderUrl('');
+      setAssignFooterUrl('');
+      setAssignCustomActive(true);
+      return;
+    }
+    const current = getAssignedCustomHeaderFooter(email);
+    if (current) {
+      setAssignHeaderUrl(current.headerUrl || '');
+      setAssignFooterUrl(current.footerUrl || '');
+      setAssignCustomActive(current.active !== false);
+    } else {
+      let profileHF: any = null;
+      try {
+        const pStr = localStorage.getItem(`user_profile_${email.toLowerCase().trim()}`);
+        if (pStr) profileHF = JSON.parse(pStr);
+      } catch {}
+      setAssignHeaderUrl(profileHF?.customHeaderPng || '');
+      setAssignFooterUrl(profileHF?.customFooterPng || '');
+      setAssignCustomActive(true);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'header' | 'footer') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (target === 'header') setAssignHeaderUrl(dataUrl);
+      else if (target === 'footer') setAssignFooterUrl(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAssignCustomHeaderFooter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignUserEmail.trim()) {
+      setAssignCustomMsg('❌ कृपया सूची से यूज़र चुनें!');
+      return;
+    }
+    const success = assignCustomHeaderFooterToUser(assignUserEmail.trim(), {
+      headerUrl: assignHeaderUrl.trim(),
+      footerUrl: assignFooterUrl.trim(),
+      active: assignCustomActive,
+    });
+    if (success) {
+      setPlanUsers(getPlanUsers());
+      setAssignCustomMsg(`✅ ${assignUserEmail.trim()} के लिए Custom Header/Footer सफलतापूर्वक असाइन व अपडेट हो गया!`);
+      setTimeout(() => setAssignCustomMsg(''), 5000);
+    } else {
+      setAssignCustomMsg('❌ यूज़र रिकॉर्ड नहीं मिला!');
+    }
+  };
+
+  const handleApproveCustomHF = (email: string, headerUrl: string, footerUrl: string) => {
+    const success = assignCustomHeaderFooterToUser(email, {
+      headerUrl,
+      footerUrl,
+      active: true,
+    });
+    if (success) {
+      setPlanUsers(getPlanUsers());
+      showToast(`✅ ${email} का कस्टम हेडर/फुटर स्वीकृत (Approved) हो गया!`);
+      if (previewUserHF && previewUserHF.user.email === email) {
+        setPreviewUserHF({ ...previewUserHF, active: true });
+      }
+    }
+  };
+
+  const handleRejectCustomHF = (email: string) => {
+    const success = assignCustomHeaderFooterToUser(email, {
+      headerUrl: '',
+      footerUrl: '',
+      active: false,
+    });
+    if (success) {
+      setPlanUsers(getPlanUsers());
+      showToast(`❌ ${email} का कस्टम हेडर/फुटर अस्वीकृत (Rejected) कर दिया गया`);
+      if (previewUserHF && previewUserHF.user.email === email) {
+        setPreviewUserHF(null);
+      }
+    }
+  };
+
   const sub = getUserSubscription();
   const isVipOrPro = isAdmin || sub.tier === 'professional' || sub.tier === 'ultra';
 
@@ -256,6 +370,24 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
           >
             <Crown className="w-3.5 h-3.5" />
             एडमिन टियर एक्सेस कंट्रोल
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('custom_hf')}
+            className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'custom_hf'
+                ? 'border-purple-400 text-purple-300 font-black'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            कस्टम हेडर व फुटर अप्रूवल ({planUsers.filter(u => {
+              const hf = getAssignedCustomHeaderFooter(u.email);
+              return !!(hf?.headerUrl || hf?.footerUrl);
+            }).length})
           </button>
         )}
       </div>
@@ -603,6 +735,495 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
         {activeTab === 'admin' && isAdmin && (
           <div className="space-y-3">
             <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: CUSTOM HEADER & FOOTER APPROVAL & ASSIGNMENT (PART L)              */}
+        {/* ========================================================================= */}
+        {activeTab === 'custom_hf' && isAdmin && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Header info card */}
+            <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/40 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
+                  <Layers className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-white">
+                    कस्टम हेडर व फुटर अप्रूवल व असाइनमेंट (Custom Header & Footer Manager)
+                  </h4>
+                  <p className="text-xs text-purple-200 mt-0.5">
+                    PRO व VIP DESK यूज़र्स के कस्टम हेडर एवं फुटर ग्राफिक्स की समीक्षा करें, लाइव 4:5 कार्ड प्रीव्यू देखें व एक क्लिक में अप्रूव/रिजेक्ट करें।
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-purple-900/80 text-purple-300 border border-purple-500/40 text-[11px] font-black rounded-lg shrink-0">
+                PRO & VIP DESK EXCLUSIVE
+              </span>
+            </div>
+
+            {/* Direct Assignment Form Card */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-amber-400" />
+                  <h5 className="text-sm font-black text-white">यूज़र को नया कस्टम हेडर / फुटर असाइन करें</h5>
+                </div>
+                <span className="text-xs text-slate-400 font-mono">कुल यूज़र्स: {planUsers.length}</span>
+              </div>
+
+              {assignCustomMsg && (
+                <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{assignCustomMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleAssignCustomHeaderFooter} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* User Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                      <span>1. यूज़र चुनें (Select User) *</span>
+                    </label>
+                    <select
+                      value={assignUserEmail}
+                      onChange={(e) => handleSelectUserForCustomHF(e.target.value)}
+                      className="w-full bg-slate-950 border border-purple-500/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400 cursor-pointer font-bold"
+                      required
+                    >
+                      <option value="">-- यूज़र चुनें --</option>
+                      <optgroup label="पात्र यूज़र्स (PRO & VIP DESK)">
+                        {planUsers
+                          .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
+                          .map((u, idx) => (
+                            <option key={`${u.email}-${idx}`} value={u.email}>
+                              ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{u.tier ? u.tier.toUpperCase() : 'PRO'}]
+                            </option>
+                          ))}
+                      </optgroup>
+                      <optgroup label="अन्य यूज़र्स">
+                        {planUsers
+                          .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
+                          .map((u, idx) => (
+                            <option key={`${u.email}-${idx}`} value={u.email}>
+                              {u.name ? `${u.name} (${u.email})` : u.email}
+                            </option>
+                          ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  {/* Header Image */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                      <span>2. Custom Header (PNG)</span>
+                      {assignHeaderUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAssignHeaderUrl('')}
+                          className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                        >
+                          हटाएँ
+                        </button>
+                      )}
+                    </label>
+                    <div className="space-y-1.5">
+                      <input
+                        type="text"
+                        value={assignHeaderUrl}
+                        onChange={(e) => setAssignHeaderUrl(e.target.value)}
+                        placeholder="Header URL या अपलोड करें..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-400"
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
+                          <Upload className="w-3.5 h-3.5 text-purple-400" />
+                          <span>हेडर अपलोड</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(e) => handleFileUpload(e, 'header')}
+                            className="hidden"
+                          />
+                        </label>
+                        {assignHeaderUrl && (
+                          <div className="w-10 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
+                            <img src={assignHeaderUrl} alt="Header" className="w-full h-full object-contain" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer Image */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                      <span>3. Custom Footer (PNG)</span>
+                      {assignFooterUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAssignFooterUrl('')}
+                          className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                        >
+                          हटाएँ
+                        </button>
+                      )}
+                    </label>
+                    <div className="space-y-1.5">
+                      <input
+                        type="text"
+                        value={assignFooterUrl}
+                        onChange={(e) => setAssignFooterUrl(e.target.value)}
+                        placeholder="Footer URL या अपलोड करें..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-400"
+                      />
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
+                          <Upload className="w-3.5 h-3.5 text-purple-400" />
+                          <span>फुटर अपलोड</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(e) => handleFileUpload(e, 'footer')}
+                            className="hidden"
+                          />
+                        </label>
+                        {assignFooterUrl && (
+                          <div className="w-10 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
+                            <img src={assignFooterUrl} alt="Footer" className="w-full h-full object-contain" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-300">स्थिति:</span>
+                    <button
+                      type="button"
+                      onClick={() => setAssignCustomActive(!assignCustomActive)}
+                      className={`px-3 py-1 rounded-xl text-xs font-black border transition flex items-center gap-1.5 cursor-pointer ${
+                        assignCustomActive
+                          ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
+                          : 'bg-slate-800 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      <Power className={`w-3 h-3 ${assignCustomActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                      <span>{assignCustomActive ? 'Active (सक्रिय)' : 'Inactive (निष्क्रिय)'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {assignHeaderUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matched = planUsers.find((u) => u.email === assignUserEmail) || { email: assignUserEmail, name: 'यूज़र' };
+                          setPreviewUserHF({
+                            user: matched as any,
+                            headerUrl: assignHeaderUrl,
+                            footerUrl: assignFooterUrl,
+                            active: assignCustomActive,
+                          });
+                        }}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        <span>लाइव प्रिव्यू देखें</span>
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>कस्टम हेडर/फुटर सेव करें</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* Review List & Approvals Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <h5 className="text-base font-black text-white">कस्टम हेडर / फुटर समीक्षा एवं अनुमोदन सूची</h5>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={hfSearch}
+                    onChange={(e) => setHfSearch(e.target.value)}
+                    placeholder="यूज़र नाम या ईमेल खोजें..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+              </div>
+
+              {/* Table of Users with Custom HF */}
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">यूज़र विवरण</th>
+                      <th className="p-3">प्लान टियर</th>
+                      <th className="p-3 text-center">हेडर इमेज</th>
+                      <th className="p-3 text-center">फुटर इमेज</th>
+                      <th className="p-3 text-center">स्थिति</th>
+                      <th className="p-3 text-right">कार्रवाई (Actions)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                    {(() => {
+                      const list = planUsers
+                        .map((u) => {
+                          const assigned = getAssignedCustomHeaderFooter(u.email);
+                          let profileHF: any = null;
+                          try {
+                            const pStr = localStorage.getItem(`user_profile_${u.email.toLowerCase().trim()}`);
+                            if (pStr) profileHF = JSON.parse(pStr);
+                          } catch {}
+                          const headerUrl = assigned?.headerUrl || profileHF?.customHeaderPng || '';
+                          const footerUrl = assigned?.footerUrl || profileHF?.customFooterPng || '';
+                          const hasHF = !!(headerUrl || footerUrl);
+                          const active = assigned ? assigned.active !== false : hasHF;
+                          const isPending = hasHF && !assigned;
+                          return {
+                            user: u,
+                            headerUrl,
+                            footerUrl,
+                            hasHF,
+                            active,
+                            isPending,
+                          };
+                        })
+                        .filter((item) => {
+                          if (!hfSearch.trim()) return item.hasHF || item.user.tier === 'ultra' || item.user.tier === 'professional';
+                          const q = hfSearch.toLowerCase();
+                          return (
+                            (item.user.name || '').toLowerCase().includes(q) ||
+                            (item.user.email || '').toLowerCase().includes(q) ||
+                            (item.user.username || '').toLowerCase().includes(q)
+                          );
+                        });
+
+                      if (list.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-slate-500 text-xs">
+                              कोई कस्टम हेडर / फुटर रिकॉर्ड नहीं मिला। ऊपर दिए गए फॉर्म से किसी भी यूज़र को असाइन करें।
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return list.map((item, idx) => (
+                        <tr key={`${item.user.email}-${idx}`} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-white text-xs">{item.user.name || 'यूज़र'}</div>
+                            {item.user.username && (
+                              <div className="text-[11px] font-mono text-amber-300">
+                                {item.user.username.startsWith('@') ? item.user.username : `@${item.user.username}`}
+                              </div>
+                            )}
+                            <div className="text-[10px] font-mono text-slate-400">{item.user.email}</div>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                              item.user.tier === 'ultra' ? 'bg-purple-950 text-purple-300 border border-purple-500' :
+                              item.user.tier === 'professional' ? 'bg-amber-950 text-amber-300 border border-amber-500' :
+                              'bg-slate-800 text-slate-300'
+                            }`}>
+                              {item.user.tier ? item.user.tier.toUpperCase() : 'BASIC'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            {item.headerUrl ? (
+                              <div
+                                onClick={() => setPreviewUserHF(item)}
+                                className="w-14 h-8 mx-auto rounded border border-purple-500/40 bg-slate-950 p-0.5 overflow-hidden cursor-pointer hover:scale-105 transition"
+                                title="क्लिक करके बड़ा प्रिव्यू देखें"
+                              >
+                                <img src={item.headerUrl} alt="Header" className="w-full h-full object-contain" />
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 italic">—</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            {item.footerUrl ? (
+                              <div
+                                onClick={() => setPreviewUserHF(item)}
+                                className="w-14 h-8 mx-auto rounded border border-purple-500/40 bg-slate-950 p-0.5 overflow-hidden cursor-pointer hover:scale-105 transition"
+                                title="क्लिक करके बड़ा प्रिव्यू देखें"
+                              >
+                                <img src={item.footerUrl} alt="Footer" className="w-full h-full object-contain" />
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-500 italic">—</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center whitespace-nowrap">
+                            {item.isPending ? (
+                              <span className="px-2 py-0.5 bg-amber-950 text-amber-300 border border-amber-500 rounded text-[10px] font-bold">
+                                ⏳ लंबित (Pending)
+                              </span>
+                            ) : item.active ? (
+                              <span className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-500 rounded text-[10px] font-bold">
+                                ✓ सक्रिय (Active)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[10px]">
+                                ✕ निष्क्रिय (Inactive)
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {item.hasHF && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewUserHF(item)}
+                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition"
+                                  title="4:5 कार्ड फ्रेम में लाइव प्रिव्यू देखें"
+                                >
+                                  <Eye className="w-3 h-3 text-blue-400" />
+                                  <span>प्रिव्यू</span>
+                                </button>
+                              )}
+                              {item.hasHF && !item.active && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveCustomHF(item.user.email, item.headerUrl, item.footerUrl)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black rounded-lg shadow flex items-center gap-1 cursor-pointer transition active:scale-95"
+                                  title="हेडर/फुटर स्वीकृत करें"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span>स्वीकृत (Approve)</span>
+                                </button>
+                              )}
+                              {item.hasHF && item.active && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectCustomHF(item.user.email)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-[11px] font-bold rounded-lg border border-slate-700 cursor-pointer transition"
+                                  title="अस्वीकृत या निष्क्रिय करें"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <span>अस्वीकृत</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleSelectUserForCustomHF(item.user.email)}
+                                className="px-2 py-1 bg-purple-950/60 hover:bg-purple-900 text-purple-300 text-[11px] font-bold rounded-lg border border-purple-500/40 cursor-pointer transition"
+                                title="एडिट फॉर्म में लोड करें"
+                              >
+                                एडिट
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Frame Live Preview Modal */}
+            {previewUserHF && (
+              <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-slate-900 border-2 border-purple-500/60 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-5 h-5 text-purple-400" />
+                      <div>
+                        <h4 className="text-sm font-black text-white">4:5 कार्ड लाइव फ्रेम प्रिव्यू</h4>
+                        <span className="text-[10px] text-slate-400 font-mono">{previewUserHF.user.email}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewUserHF(null)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* 4:5 Aspect Ratio Card Mockup */}
+                  <div className="relative aspect-[4/5] w-full max-w-[280px] mx-auto rounded-xl overflow-hidden border-2 border-amber-500/40 shadow-2xl flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900">
+                    {/* Top Custom Header */}
+                    <div className="w-full bg-slate-950/80 border-b border-slate-800 flex items-center justify-center min-h-[44px]">
+                      {previewUserHF.headerUrl ? (
+                        <img src={previewUserHF.headerUrl} alt="Header" className="w-full h-12 object-contain" />
+                      ) : (
+                        <div className="text-[10px] font-bold text-slate-500 py-2">[डिफ़ॉल्ट हेडर]</div>
+                      )}
+                    </div>
+
+                    {/* Middle Sample News Content */}
+                    <div className="p-3 space-y-2 flex-1 flex flex-col justify-center text-center">
+                      <div className="inline-block mx-auto px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
+                        ब्रेकिंग न्यूज़
+                      </div>
+                      <h4 className="text-xs font-black text-white leading-tight">
+                        {previewUserHF.user.name || 'चैनल'} का कस्टम डिज़ाइन कार्ड प्रिव्यू
+                      </h4>
+                      <p className="text-[10px] text-slate-400 line-clamp-2">
+                        कस्टम हेडर व फुटर ग्राफ़िक्स न्यूज़ कार्ड पर इस प्रकार प्रदर्शित होंगे।
+                      </p>
+                    </div>
+
+                    {/* Bottom Custom Footer */}
+                    <div className="w-full bg-slate-950/80 border-t border-slate-800 flex items-center justify-center min-h-[44px]">
+                      {previewUserHF.footerUrl ? (
+                        <img src={previewUserHF.footerUrl} alt="Footer" className="w-full h-12 object-contain" />
+                      ) : (
+                        <div className="text-[10px] font-bold text-slate-500 py-2">[डिफ़ॉल्ट फुटर]</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Modal Action Buttons */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewUserHF(null)}
+                      className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                    >
+                      बंद करें
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRejectCustomHF(previewUserHF.user.email)}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950/80 text-rose-300 border border-slate-700 text-xs font-bold rounded-xl cursor-pointer transition"
+                      >
+                        अस्वीकृत (Reject)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApproveCustomHF(previewUserHF.user.email, previewUserHF.headerUrl, previewUserHF.footerUrl)}
+                        className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-lg flex items-center gap-1 cursor-pointer transition active:scale-95"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>स्वीकृत करें (Approve)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

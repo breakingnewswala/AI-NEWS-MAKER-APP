@@ -40,6 +40,7 @@ import {
   Send,
   Hash,
   ChevronDown,
+  ChevronRight,
   FolderTree,
   PlusCircle,
   AlertTriangle,
@@ -1816,196 +1817,34 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             )}
           </div>
 
-          {/* 1. कस्टम हेडर व फुटर प्रबंधन */}
-          <div className="bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-3">
+          {/* 1. कस्टम हेडर व फुटर प्रबंधन - Moved to Step 4 (Template Manager) */}
+          <div className="bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-purple-500/30 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    CUSTOM HEADER / FOOTER
+                    CUSTOM HEADER / FOOTER APPROVAL & ASSIGNMENT
                   </h3>
                   <p className="text-xs text-purple-200">
-                    Database के यूज़र को कस्टम हेडर व फुटर असाइन करें (PRO व VIP DESK हेतु विशेष सुविधा)
+                    कस्टम हेडर व फुटर अप्रूवल व असाइनमेंट अब <strong>स्टेप 4 (टेम्पलेट मैनेजर)</strong> में स्थानांतरित कर दिया गया है।
                   </p>
                 </div>
               </div>
-              <span className="px-3 py-1 bg-purple-900/60 text-purple-300 border border-purple-500/40 text-[11px] font-black rounded-lg">
-                PRO & VIP DESK EXCLUSIVE
-              </span>
+              <button
+                type="button"
+                onClick={() => setSubTab('templates')}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95 shrink-0"
+              >
+                <span>स्टेप 4 (टेम्पलेट मैनेजर) पर जाएँ</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-
-            {assignCustomMsg && (
-              <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{assignCustomMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAssignCustomHeaderFooter} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* 1. User Selection */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
-                    <span>1. User (डेटाबेस यूज़र चुनें) *</span>
-                    <span className="text-[10px] text-amber-400 font-mono">कुल {planUsers.length}</span>
-                  </label>
-                  <select
-                    value={assignUserEmail}
-                    onChange={(e) => handleSelectUserForCustomHF(e.target.value)}
-                    className="w-full bg-slate-950 border border-purple-500/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-purple-400 cursor-pointer font-bold"
-                    required
-                  >
-                    <option value="">-- यूज़र चुनें (Select User) --</option>
-                    <optgroup label="पात्र यूज़र्स (Eligible PRO & VIP DESK Users)">
-                      {planUsers
-                        .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
-                        .map((u, idx) => {
-                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : (u.tier ? u.tier.toUpperCase() : 'BASIC');
-                          return (
-                            <option key={`${u.userId || u.email}-${idx}`} value={u.email}>
-                              ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{tierLabel}]
-                            </option>
-                          );
-                        })}
-                    </optgroup>
-                    <optgroup label="अन्य यूज़र्स (Other Users)">
-                      {planUsers
-                        .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
-                        .map((u, idx) => (
-                          <option key={`${u.userId || u.email}-${idx}`} value={u.email}>
-                            {u.name ? `${u.name} (${u.email})` : u.email} — [{(u.tier ? u.tier.toUpperCase() : 'BASIC')}]
-                          </option>
-                        ))}
-                    </optgroup>
-                  </select>
-                  {assignUserEmail && (
-                    <div className="mt-1.5 text-[11px] text-purple-300 flex items-center gap-1.5">
-                      <span>चयनित:</span>
-                      <span className="font-bold text-white truncate max-w-[200px]">{assignUserEmail}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. Header File / URL */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
-                    <span>2. Custom Header (PNG)</span>
-                    {assignHeaderUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setAssignHeaderUrl('')}
-                        className="text-[10px] text-red-400 hover:underline cursor-pointer"
-                      >
-                        हटाएँ
-                      </button>
-                    )}
-                  </label>
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      value={assignHeaderUrl}
-                      onChange={(e) => setAssignHeaderUrl(e.target.value)}
-                      placeholder="Header Image URL या फ़ाइल चुनें..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-purple-400"
-                    />
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>हेडर इमेज अपलोड करें</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          onChange={(e) => handleFileUpload(e, 'header')}
-                          className="hidden"
-                        />
-                      </label>
-                      {assignHeaderUrl && (
-                        <div className="w-9 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
-                          <img src={assignHeaderUrl} alt="Header Preview" className="w-full h-full object-contain" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Footer File / URL */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
-                    <span>3. Custom Footer (PNG)</span>
-                    {assignFooterUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setAssignFooterUrl('')}
-                        className="text-[10px] text-red-400 hover:underline cursor-pointer"
-                      >
-                        हटाएँ
-                      </button>
-                    )}
-                  </label>
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      value={assignFooterUrl}
-                      onChange={(e) => setAssignFooterUrl(e.target.value)}
-                      placeholder="Footer Image URL या फ़ाइल चुनें..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-purple-400"
-                    />
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>फुटर इमेज अपलोड करें</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          onChange={(e) => handleFileUpload(e, 'footer')}
-                          className="hidden"
-                        />
-                      </label>
-                      {assignFooterUrl && (
-                        <div className="w-9 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
-                          <img src={assignFooterUrl} alt="Footer Preview" className="w-full h-full object-contain" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Controls: Active / Inactive Switch & Assign Button */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-purple-500/20">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-300">स्थिति (Status):</span>
-                  <button
-                    type="button"
-                    onClick={() => setAssignCustomActive(!assignCustomActive)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-2 cursor-pointer ${
-                      assignCustomActive
-                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md shadow-emerald-900/30'
-                        : 'bg-slate-800 border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    <Power className={`w-3.5 h-3.5 ${assignCustomActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                    <span>{assignCustomActive ? 'Active (सक्रिय)' : 'Inactive (निष्क्रिय)'}</span>
-                  </button>
-                  <span className="text-[11px] text-slate-400">
-                    {assignCustomActive
-                      ? 'यह हेडर/फुटर केवल चयनित यूज़र के App और Web में लागू होगा।'
-                      : 'निष्क्रिय होने पर सामान्य हेडर/फुटर दिखेंगे।'}
-                  </span>
-                </div>
-
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer transition"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Assign (कस्टम हेडर/फुटर असाइन करें)</span>
-                </button>
-              </div>
-            </form>
+            <p className="text-xs text-slate-300">
+              यूज़र्स के कस्टम हेडर, फुटर इमेज, लाइव 4:5 कार्ड प्रीव्यू एवं अप्रूवल/रिजेक्शन हेतु कृपया ऊपर <strong>"4. टेम्पलेट मैनेजर"</strong> खोलें और <strong>"कस्टम हेडर व फुटर अप्रूवल"</strong> टैब पर जाएँ।
+            </p>
           </div>
 
           {/* 2. Manual Plan Assignment Form */}

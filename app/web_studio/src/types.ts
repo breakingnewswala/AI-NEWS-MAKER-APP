@@ -101,11 +101,20 @@ export interface EPaperAdSettings {
 }
 
 export interface NewsCardData {
+  // Admin Test Mode Identity
+  isTestMode?: boolean;
+  testChannelName?: string;
+  testSocialHandle?: string;
+  testLogoUrl?: string;
+  testSamplePhotoUrl?: string;
   id?: string;
+  sourceNewsId?: string; // Tracks the news ID from which graphic was initiated
   title?: string;
   date?: string;
   photoUrl?: string;
   headline: string;
+  subHeadline?: string;
+  customScript?: string;
   formattedHeadline: string;
   highlightWords: string[];
   location: string;
@@ -120,6 +129,8 @@ export interface NewsCardData {
   customLogoPngUrl?: string; // Dedicated PNG logo
   customLogoGifUrl?: string; // Dedicated GIF animated logo
   logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.0)
+  logoX?: number; // Logo X position percentage within safe zone (10% to 90%, default 10)
+  logoY?: number; // Logo Y position percentage within safe zone (10% to 90%, default 10)
   customHeaderPng?: string; // Uploaded header PNG (IMAGE NEWS.png)
   headersByDesign?: Partial<Record<FrameDesign, string>>; // Separate header graphic per frame template
   customFooterPng?: string; // Uploaded footer PNG (Footer.png)
@@ -136,6 +147,9 @@ export interface NewsCardData {
   breakingRibbonOffsetY?: number; // Vertical offset of ribbon (-60px to +60px, default 0)
   breakingRibbonScale?: number; // Scaling percentage of ribbon (55% to 95%, default 70%)
   
+  // Article Extracted Photos
+  extractedArticlePhotos?: string[];
+
   // Template specific attributes
   speakerName?: string; // For jacket-quote (बयान देने वाले का नाम)
   speakerTitle?: string; // For jacket-quote (पद / पदवी)
@@ -156,6 +170,12 @@ export interface NewsCardData {
   watermarkOpacity?: number; // 0.04 to 0.30 (default 0.10)
   watermarkColor?: 'black' | 'white' | 'red'; // Default black for white paper, white for dark themes
   watermarkScale?: number; // Size for tiled logo or font size for text
+
+  // Dedicated Text Watermark (Fully decoupled from Photo Watermark / AI label)
+  showTextWatermark?: boolean; // Default false (OFF)
+  textWatermarkContent?: string; // Default user English channel name / username
+  textWatermarkOpacity?: number; // 0.05 to 0.40 (default 0.15)
+  textWatermarkColor?: 'white' | 'black' | 'red'; // Default 'white'
   
   // Text Breaking Jacket specific attributes
   textBreakingStyle?: TextBreakingBadgeStyle; // For jacket-text-breaking (default: 'breaking-3d-en')
@@ -269,6 +289,7 @@ export interface NewsCardData {
   socialHandle: string;
   whatsappNumber: string;
   websiteUrl?: string; // Direct domain without https:// or www (e.g. ainewsmaker.online)
+  showWebsite?: boolean; // Toggle website visibility on graphics
   showMobileNumber?: boolean; // Toggle phone number visibility on graphics
   channelNameHi?: string;
   channelNameEn?: string;
@@ -340,6 +361,9 @@ export interface AIAnalysisResult {
   formattedHeadline: string;
   location: string;
   summary: string;
+  captionDetailed?: string;
+  captionBullets?: string;
+  captionShort?: string;
   anchorScript?: string; // Structured TV anchor script
   categories?: string[]; // Structured category tags
   tags?: string[]; // Social hashtags
@@ -350,6 +374,9 @@ export interface AIAnalysisResult {
   pickedImages?: {
     main?: string;
     second?: string;
+    third?: string;
+    fourth?: string;
+    gallery?: string[];
   };
   suggestedImagePrompt?: string;
   speakerName?: string;
@@ -371,11 +398,13 @@ export interface NewsDraft {
   thumbnailUrl?: string;
   createdAt: number;
   updatedAt: number;
+  timestamp?: number;
 }
 
 export interface ChannelProfile {
   fullName?: string;
   district?: string;
+  location?: string;
   isLocked?: boolean;
   tier?: string;
   email?: string;
@@ -393,11 +422,14 @@ export interface ChannelProfile {
     twitter?: boolean;
     telegram?: boolean;
     whatsapp?: boolean;
+    linkedin?: boolean;
   };
   username: string; // derived from English Channel Name
   mobileNumber: string;
+  whatsappNumber?: string;
   showMobileNumber: boolean; // visible on card or not
   websiteUrl: string; // direct without https:// or www
+  showWebsite?: boolean; // visible on card or not
   highlightColor?: string; // Default word highlight color (e.g. '#FFE600', '#EF4444', etc.)
   footerBgColor?: string; // Default footer strip background color
   footerTextColor?: string; // Default footer text color

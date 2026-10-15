@@ -1643,18 +1643,15 @@ var USERS_DB_FILE = import_path.default.join(process.cwd(), "users_accounts_db.j
 var NOTIFICATIONS_DB_FILE = import_path.default.join(process.cwd(), "notifications_database.json");
 function cleanGenerateUsername(requestedUsername, fullName, existingUsername) {
   const users = loadUsersMasterDatabase();
-  const taken = new Set(users.map((u) => (u.username || "").toLowerCase().trim().replace(/^@/, "")));
+  const taken = new Set(users.map((u) => (u.username || "").toLowerCase().trim().replace(/^@+/, "")));
   if (requestedUsername && typeof requestedUsername === "string") {
-    const clean = requestedUsername.trim().replace(/^@/, "");
+    const clean = requestedUsername.trim().replace(/^@+/, "");
     if (clean && !clean.includes("@") && !clean.includes(".")) {
-      const lower = clean.toLowerCase();
-      if (!taken.has(lower) || existingUsername && existingUsername.toLowerCase().trim().replace(/^@/, "") === lower) {
-        return clean;
-      }
+      return clean;
     }
   }
   if (existingUsername && typeof existingUsername === "string") {
-    const clean = existingUsername.trim().replace(/^@/, "");
+    const clean = existingUsername.trim().replace(/^@+/, "");
     if (clean && !clean.includes("@") && !clean.includes(".")) {
       return clean;
     }
@@ -1850,19 +1847,21 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   }
   const emailRaw = (userPayload.email || "").toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
+  const cleanUserId = (userPayload.userId || userPayload.uid || "").toString().toLowerCase().trim();
   const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com";
   const isBreakingNewsWala = cleanEmail === "breakingnewswala.com@gmail.com";
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex(
-    (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || userPayload.userId && u.userId && u.userId.toLowerCase().trim() === userPayload.userId.toLowerCase().trim()
+    (u) => cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail || cleanEmail && u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || cleanUserId && u.userId && u.userId.toLowerCase().trim() === cleanUserId || cleanUserId && u.email && u.email.toLowerCase().trim() === cleanUserId
   );
   const now = Date.now();
   let updatedRecord;
+  const rawReqUser = (userPayload.username || "").toString().trim().replace(/^@+/, "");
   if (idx >= 0) {
     const existing = users[idx];
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
-    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? userPayload.username && !userPayload.username.includes("@") ? userPayload.username.replace(/^@/, "") : existing.username || "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username);
+    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? rawReqUser || existing.username || "breakingnewswala" : rawReqUser || existing.username || cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username);
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -1900,7 +1899,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   } else {
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
-    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name);
+    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? rawReqUser || "breakingnewswala" : rawReqUser || cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name);
     updatedRecord = {
       userId: userPayload.userId || userPayload.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       email: emailRaw,
@@ -1936,7 +1935,20 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     };
     users.unshift(updatedRecord);
   }
-  saveUsersMasterDatabase(users);
+  const seenEmails = /* @__PURE__ */ new Set();
+  const deduplicatedUsers = [];
+  for (const u of users) {
+    const em = (u.email || "").toLowerCase().trim();
+    if (em) {
+      if (!seenEmails.has(em)) {
+        seenEmails.add(em);
+        deduplicatedUsers.push(u);
+      }
+    } else {
+      deduplicatedUsers.push(u);
+    }
+  }
+  saveUsersMasterDatabase(deduplicatedUsers);
   syncUserToProfiles(updatedRecord);
   return updatedRecord;
 }
@@ -3575,14 +3587,17 @@ app.get("/api/support/requests", (req, res) => {
   const { userId, role } = req.query;
   const all = loadSupportRequestsDatabase();
   const isAdmin = role === "admin" || role === "superadmin";
-  if (isAdmin || !userId) {
+  const now = Date.now();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1e3;
+  if (isAdmin) {
     return res.json({ success: true, requests: all });
   }
-  const cleanId = String(userId).toLowerCase().trim();
-  const filtered = all.filter(
-    (r) => r.userId && r.userId.toLowerCase().trim() === cleanId || r.userEmail && r.userEmail.toLowerCase().trim() === cleanId
+  const cleanId = String(userId || "").toLowerCase().trim();
+  const userRequests = all.filter(
+    (r) => (!cleanId || r.userId && r.userId.toLowerCase().trim() === cleanId || r.userEmail && r.userEmail.toLowerCase().trim() === cleanId) && // 30-day retention filter for regular users
+    now - (Number(r.createdAt) || now) <= THIRTY_DAYS_MS
   );
-  return res.json({ success: true, requests: filtered });
+  return res.json({ success: true, requests: userRequests });
 });
 app.post("/api/support/requests", (req, res) => {
   try {
@@ -3615,7 +3630,11 @@ app.post("/api/support/requests", (req, res) => {
       status: data.status || "pending",
       createdAt: data.createdAt || Date.now(),
       adminResponse: data.adminResponse || "",
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      reportType: data.reportType || "general",
+      targetId: data.targetId || "",
+      targetTitle: data.targetTitle || "",
+      reportReason: data.reportReason || ""
     };
     const all = loadSupportRequestsDatabase();
     const updated = [newRequest, ...all.filter((r) => r.id !== newRequest.id)];

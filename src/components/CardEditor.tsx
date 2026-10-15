@@ -3786,9 +3786,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onChange({ logoScale: 1.25 })}
+                      onClick={() => onChange({ logoScale: 1.25, logoX: 10, logoY: 10 })}
                       className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-[10px] border border-neutral-700 cursor-pointer"
-                      title="125% पर रीसेट करें"
+                      title="डिफ़ॉल्ट सेफ-ज़ोन (10%) पर रीसेट करें"
                     >
                       डिफ़ॉल्ट (125%)
                     </button>

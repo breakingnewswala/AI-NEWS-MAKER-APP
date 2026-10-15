@@ -18,7 +18,9 @@ import {
 } from './lib/draftManager';
 import { AppUpdateModal, AppVersionInfo, APP_CURRENT_VERSION } from './components/AppUpdateModal';
 import { CloudSettingsModal } from './components/CloudSettingsModal';
+import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModal';
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
+import { InstallPwaModal } from './components/InstallPwaModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
@@ -26,7 +28,8 @@ import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/Ste
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
 import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
-import { getProfileHeaderFooter } from './lib/profileConfig';
+import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
+import { syncAllSourcesLive, syncAndMigrateLocalApprovals } from './lib/rssSourceManager';
 import {
   FolderOpen,
   Download,
@@ -38,6 +41,7 @@ import {
   FileImage,
   Layers,
   Info,
+  Lock,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -72,8 +76,14 @@ import { NewsroomScreenWeb } from './components/NewsroomScreenWeb';
 import { DraftsScreenWeb } from './components/DraftsScreenWeb';
 import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
 import { ExportScreenWeb } from './components/ExportScreenWeb';
-import { saveDraft } from './lib/draftsManager';
-import { isUserAdmin, setAdminSystemMode } from './lib/userPlanManager';
+import {
+  isUserAdmin,
+  setAdminSystemMode,
+  getUserSubscription,
+  fetchAuthoritativeSubscription,
+  isUserActionAllowed,
+} from './lib/userPlanManager';
+import { markNewsGraphicCreated } from './lib/newsGraphicTracker';
 import {
   NewsFeedPost,
   VideoFeedItem,
@@ -82,7 +92,7 @@ import {
   INITIAL_CATEGORIES,
 } from './data/newsFeedData';
 
-type AppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'epaper' | 'profile';
+type AppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'epaper' | 'profile' | 'generator' | 'drafts' | 'export';
 
 
 const STORAGE_KEY = 'breaking_news_card_state_v3';
@@ -91,10 +101,10 @@ export const STUDIO_STEPS = [
   { step: 1, id: 'step-frame', label: '1. फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'स्टेप 1: फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
   { step: 2, id: 'step-ai', label: '2. एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'स्टेप 2: AI ऑटोमेशन टूल्स (Automated News & Photo)' },
   { step: 3, id: 'step-headline', label: '3. हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'स्टेप 3: मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: '4. फोटो', name: 'फोटो', icon: '📷', title: 'स्टेप 4: फोटो लेआउट व ग्रिड' },
-  { step: 5, id: 'step-location-date-watermark', label: '5. लोकेशन, तारीख और वॉटरमार्क', name: 'लोकेशन-तारीख', icon: '📍', title: 'स्टेप 5: स्थान, तारीख व वॉटरमार्क' },
+  { step: 4, id: 'step-photo', label: '4. फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'स्टेप 4: फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
+  { step: 5, id: 'step-location', label: '5. स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्टेप 5: स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
   { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'स्टेप 6: लोगो, हेडर व फुटर PNG' },
-  { step: 7, id: 'step-download', label: '7. डाउनलोड', name: 'डाउनलोड', icon: '⬇️', title: 'स्टेप 7: डाउनलोड व एक्सपोर्ट' },
+  { step: 7, id: 'step-download', label: '7. डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'स्टेप 7: डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
 ];
 
 const DEFAULT_REPORTER_USER: ReporterUser = {
@@ -106,47 +116,111 @@ const DEFAULT_REPORTER_USER: ReporterUser = {
 
 function getSavedChannelProfile(): ChannelProfile | null {
   try {
-    if (typeof window !== 'undefined' && (window as any).AndroidBridge?.getChannelProfile) {
-      const nativeJson = (window as any).AndroidBridge.getChannelProfile();
-      if (nativeJson && nativeJson !== '{}') {
-        const parsed = JSON.parse(nativeJson);
-        if (parsed && (parsed.channelLogoUrl || parsed.channelNameHi)) {
+    if (typeof window !== 'undefined') {
+      if ((window as any).AndroidBridge?.getChannelProfile) {
+        const nativeJson = (window as any).AndroidBridge.getChannelProfile();
+        if (nativeJson && nativeJson !== '{}') {
+          const parsed = JSON.parse(nativeJson);
+          if (parsed && (parsed.channelLogoUrl || parsed.channelNameHi)) {
+            const ph = (parsed.whatsappNumber || parsed.mobileNumber || '').trim();
+            return {
+              channelNameHi: parsed.channelNameHi || '',
+              channelNameEn: parsed.channelNameEn || '',
+              channelLogoUrl: parsed.channelLogoUrl || '',
+              channelLogoType: parsed.channelLogoType || 'png',
+              username: parsed.username || '',
+              mobileNumber: ph,
+              whatsappNumber: ph,
+              websiteUrl: (parsed.websiteUrl || '').trim(),
+              showMobileNumber: parsed.showMobileNumber !== false,
+              showWebsite: parsed.showWebsite !== false,
+              socialIcons: {
+                youtube: parsed.socialYoutube !== false,
+                facebook: true,
+                instagram: true,
+                twitter: parsed.socialTwitter === true,
+                linkedin: parsed.socialLinkedin === true,
+              },
+            };
+          }
+        }
+      }
+
+      // 1. Signed-in User Profile by UID / Email (Permanent and Per-User Data Isolation)
+      const userStr = localStorage.getItem('reporter_current_user') || localStorage.getItem('user_profile_data');
+      let userEmail = '';
+      if (userStr) {
+        try {
+          const u = JSON.parse(userStr);
+          userEmail = (u?.email || '').toLowerCase().trim();
+        } catch {}
+      }
+      if (userEmail) {
+        const specific = localStorage.getItem(`user_profile_${userEmail}`);
+        if (specific) {
+          const parsed = JSON.parse(specific);
+          if (parsed) {
+            const ph = (parsed.whatsappNumber || parsed.mobileNumber || '').trim();
+            return {
+              ...parsed,
+              whatsappNumber: ph,
+              mobileNumber: ph || parsed.mobileNumber,
+              showMobileNumber: parsed.showMobileNumber !== false,
+              showWebsite: parsed.showWebsite !== false,
+              socialIcons: {
+                youtube: parsed.socialIcons?.youtube ?? true,
+                facebook: true,
+                instagram: true,
+                twitter: parsed.socialIcons?.twitter ?? false,
+                linkedin: parsed.socialIcons?.linkedin ?? false,
+              },
+            };
+          }
+        }
+      }
+
+      // 2. Global Channel Profile
+      const saved = localStorage.getItem('user_channel_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) {
+          const ph = (parsed.whatsappNumber || parsed.mobileNumber || '').trim();
           return {
-            channelNameHi: parsed.channelNameHi || '',
-            channelNameEn: parsed.channelNameEn || '',
-            channelLogoUrl: parsed.channelLogoUrl || '',
-            channelLogoType: parsed.channelLogoType || 'png',
-            username: parsed.username || '',
-            mobileNumber: parsed.mobileNumber || '',
-            websiteUrl: parsed.websiteUrl || '',
-            showMobileNumber: true,
+            ...parsed,
+            whatsappNumber: ph,
+            mobileNumber: ph || parsed.mobileNumber,
+            showMobileNumber: parsed.showMobileNumber !== false,
+            showWebsite: parsed.showWebsite !== false,
             socialIcons: {
-              youtube: parsed.socialYoutube !== false,
-              facebook: parsed.socialFacebook !== false,
-              instagram: parsed.socialInstagram !== false,
-              whatsapp: parsed.socialWhatsapp !== false,
+              youtube: parsed.socialIcons?.youtube ?? true,
+              facebook: true,
+              instagram: true,
+              twitter: parsed.socialIcons?.twitter ?? false,
+              linkedin: parsed.socialIcons?.linkedin ?? false,
             },
           };
         }
       }
-    }
-    const saved = localStorage.getItem('user_channel_profile');
-    if (saved) return JSON.parse(saved);
-    const userStr = localStorage.getItem('reporter_current_user') || localStorage.getItem('user_profile_data');
-    if (userStr) {
-      const u = JSON.parse(userStr);
-      if (u) {
-        return {
-          channelNameHi: u.channelNameHi || u.channelName || '',
-          channelNameEn: u.channelNameEn || '',
-          channelLogoUrl: u.channelLogoUrl || u.logoUrl || '',
-          channelLogoType: u.channelLogoType || 'png',
-          username: u.username || '',
-          mobileNumber: u.mobileNumber || u.mobile || '',
-          websiteUrl: u.websiteUrl || '',
-          showMobileNumber: true,
-          socialIcons: { youtube: true, facebook: true, instagram: true, whatsapp: true },
-        };
+
+      // 3. Current User JSON object fallback
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u) {
+          const ph = (u.whatsappNumber || u.mobileNumber || u.mobile || '').trim();
+          return {
+            channelNameHi: u.channelNameHi || u.channelName || '',
+            channelNameEn: u.channelNameEn || '',
+            channelLogoUrl: u.channelLogoUrl || u.logoUrl || '',
+            channelLogoType: u.channelLogoType || 'png',
+            username: u.username || '',
+            mobileNumber: ph,
+            whatsappNumber: ph,
+            websiteUrl: (u.websiteUrl || '').trim(),
+            showMobileNumber: u.showMobileNumber !== false,
+            showWebsite: u.showWebsite !== false,
+            socialIcons: { youtube: true, facebook: true, instagram: true, twitter: false, linkedin: false },
+          };
+        }
       }
     }
     return null;
@@ -230,24 +304,35 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // News feed posts state - auto-migrates from v1 and validates live format
+  // News feed posts state - auto-migrates from v1 and validates live format (no dummy seeds)
+  // Part N: Filter deleted items on initial mount to prevent deleted news from flashing after refresh
+  // Part M: Sort newest first
   const [posts, setPosts] = useState<NewsFeedPost[]>(() => {
     try {
-      // Remove old legacy v1 cache if present
       localStorage.removeItem('app_news_posts_v1');
+      const rawDel = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
+      const deletedSet = new Set<string>(rawDel ? JSON.parse(rawDel) : []);
       const saved = localStorage.getItem('app_news_posts_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Verify it has fresh data (e.g. contains live-post-1)
-          const hasFreshPosts = parsed.some((p: any) => p.id && String(p.id).startsWith('live-post-'));
-          if (hasFreshPosts) return parsed;
+          // Strictly purge any deleted or obsolete dummy live-post seed records
+          const clean = parsed.filter((p: any) => p && p.id && !deletedSet.has(p.id) && !String(p.id).startsWith('live-post-'));
+          clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+            const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+            const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+            if ((timeB || 0) !== (timeA || 0)) {
+              return (timeB || 0) - (timeA || 0);
+            }
+            return String(b.id).localeCompare(String(a.id));
+          });
+          if (clean.length > 0) return clean;
         }
       }
     } catch {
       // ignore
     }
-    return INITIAL_NEWS_POSTS;
+    return [];
   });
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
@@ -261,6 +346,9 @@ export default function App() {
     setIsSyncingNews(true);
     let loaded = false;
 
+    // Migrate any legacy local approvals safely to the server
+    syncAndMigrateLocalApprovals().catch(() => {});
+
     const getDeletedIds = (): Set<string> => {
       try {
         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
@@ -270,56 +358,90 @@ export default function App() {
     };
     const deletedIds = getDeletedIds();
 
-    // 1. Try Firebase Storage cloud live database (works 100% on ainewsmaker.online, PWA, mobile)
+    // 1. Fetch backend API (/api/news-posts) to sync live RSS, Web Links & Raw News posts
     try {
-      const fbRes = await fetch(`${CLOUD_STORAGE_NEWS_URL}&_t=${Date.now()}`, { cache: 'no-cache' });
-      if (fbRes.ok) {
-        const data = await fbRes.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const clean = data.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
-          setPosts(clean);
+      const baseUrl = getApiBaseUrl();
+      let isAdmin = false;
+      try {
+        const rawUser = typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          isAdmin = u.role === 'admin' || u.role === 'superadmin';
+        }
+      } catch {}
+      const roleParam = isAdmin ? '&role=admin&includePending=true' : '';
+      const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}${roleParam}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
+        if (Array.isArray(apiPosts)) {
+          const cleanApi = apiPosts.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+          cleanApi.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+            const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+            const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+            if ((timeB || 0) !== (timeA || 0)) {
+              return (timeB || 0) - (timeA || 0);
+            }
+            return String(b.id).localeCompare(String(a.id));
+          });
+          setPosts(cleanApi);
           try {
-            localStorage.setItem('app_news_posts_v2', JSON.stringify(data));
+            localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
           } catch {}
           loaded = true;
         }
       }
     } catch (err) {
-      console.warn('Cloud storage news fetch failed:', err);
+      console.warn('API news fetch failed:', err);
     }
 
-    // 2. Try backend API (/api/news-posts)
+    // 2. Try Firebase Storage cloud live database fallback if API didn't load
     if (!loaded) {
       try {
-        const baseUrl = getApiBaseUrl();
-        const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}`, { cache: 'no-cache' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && Array.isArray(data.posts) && data.posts.length > 0) {
-            const clean = data.posts.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+        const fbRes = await fetch(`${CLOUD_STORAGE_NEWS_URL}&_t=${Date.now()}`, { cache: 'no-cache' });
+        if (fbRes.ok) {
+          const data = await fbRes.json();
+          if (Array.isArray(data)) {
+            const clean = data.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+            clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+              if ((timeB || 0) !== (timeA || 0)) {
+                return (timeB || 0) - (timeA || 0);
+              }
+              return String(b.id).localeCompare(String(a.id));
+            });
             setPosts(clean);
             try {
-              localStorage.setItem('app_news_posts_v2', JSON.stringify(data.posts));
+              localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));
             } catch {}
             loaded = true;
           }
         }
       } catch (err) {
-        console.warn('API news fetch failed:', err);
+        console.warn('Cloud storage news fetch failed:', err);
       }
     }
 
-    // 3. Try local static /news_database.json fallback
+    // 3. Try local static /news_database.json fallback if still not loaded
     if (!loaded) {
       try {
         const staticRes = await fetch(`/news_database.json?_t=${Date.now()}`, { cache: 'no-cache' });
         if (staticRes.ok) {
           const data = await staticRes.json();
-          if (Array.isArray(data) && data.length > 0) {
-            const clean = data.filter((p: NewsFeedPost) => !deletedIds.has(p.id));
+          if (Array.isArray(data)) {
+            const clean = data.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+            clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+              if ((timeB || 0) !== (timeA || 0)) {
+                return (timeB || 0) - (timeA || 0);
+              }
+              return String(b.id).localeCompare(String(a.id));
+            });
             setPosts(clean);
             try {
-              localStorage.setItem('app_news_posts_v2', JSON.stringify(data));
+              localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));
             } catch {}
           }
         }
@@ -359,13 +481,45 @@ export default function App() {
   const [videos, setVideos] = useState<VideoFeedItem[]>(() => {
     try {
       const saved = localStorage.getItem('app_admin_videos');
+      const deletedRaw = localStorage.getItem('app_deleted_video_ids');
+      const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((v: any) => !deletedSet.has(v.id));
+        }
       }
     } catch {}
     return INITIAL_VIDEOS;
   });
+
+  // Real-time video sync with server + 4-day auto-purge filter
+  const fetchLiveVideos = async () => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      const res = await fetch(`${baseUrl}/api/videos`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.videos)) {
+          const deletedRaw = localStorage.getItem('app_deleted_video_ids');
+          const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
+          const cleanList = data.videos.filter((v: any) => !deletedSet.has(v.id));
+          setVideos(cleanList);
+          try {
+            localStorage.setItem('app_admin_videos', JSON.stringify(cleanList));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Real-time videos sync failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveVideos();
+    const interval = setInterval(fetchLiveVideos, 15000); // 15-second real-time polling
+    return () => clearInterval(interval);
+  }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // Authentication session - loads from localStorage or Android native bridge
@@ -385,6 +539,10 @@ export default function App() {
     return null;
   });
 
+  useEffect(() => {
+    fetchLiveNews();
+  }, [currentUser?.role]);
+
   // Onboarding completion status (Login -> Details setup -> App)
   // Web visitors strictly require an active session and completed onboarding flag
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
@@ -402,6 +560,7 @@ export default function App() {
   });
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState<boolean>(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
 
   // Login modal remains closed by default
@@ -409,6 +568,40 @@ export default function App() {
   const [loginModalMode, setLoginModalMode] = useState<'user' | 'admin' | 'signup'>('user');
   const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpeg'>('jpeg');
   const [downloadProgressText, setDownloadProgressText] = useState<string>('');
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
+
+  // Trigger PWA "Add to Home Screen / Web App" popup when user is on Home screen
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isAndroidEnvironment) return;
+
+    // Check if already in standalone app
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    if (isStandalone) return;
+
+    const handleOpenModal = () => setIsInstallModalOpen(true);
+    window.addEventListener('open_pwa_install_modal', handleOpenModal);
+
+    // Only prompt when user is on Home screen
+    let timer: any = null;
+    if (currentTab === 'home') {
+      const dismissedUntil = localStorage.getItem('pwa_install_dismissed_until');
+      const alreadyInstalled = localStorage.getItem('pwa_app_installed') === 'true';
+      if (!alreadyInstalled && (!dismissedUntil || Number(dismissedUntil) <= Date.now())) {
+        timer = setTimeout(() => {
+          setIsInstallModalOpen(true);
+        }, 1800);
+      }
+    }
+
+    return () => {
+      window.removeEventListener('open_pwa_install_modal', handleOpenModal);
+      if (timer) clearTimeout(timer);
+    };
+  }, [currentTab, isAndroidEnvironment]);
+
 
   // Mobile detection & Screen Hide/Show state for Graphic Studio
   const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() =>
@@ -508,9 +701,12 @@ export default function App() {
     }
 
     if (savedProfile) {
+      const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
       const activeSocialKeys = Object.entries(savedProfile.socialIcons || {})
-        .filter(([_, active]) => active)
+        .filter(([key, active]) => active && ALLOWED_FOOTER_SOCIALS.includes(key))
         .map(([key]) => key);
+
+      const primaryPngLogo = savedProfile.channelLogoPngUrl || (savedProfile.channelLogoUrl?.endsWith('.gif') ? '' : savedProfile.channelLogoUrl) || initial.customLogoUrl;
 
       initial = {
         ...initial,
@@ -518,18 +714,17 @@ export default function App() {
         brandTagline: savedProfile.channelNameEn || initial.brandTagline,
         channelNameHi: savedProfile.channelNameHi,
         channelNameEn: savedProfile.channelNameEn,
-        customLogoUrl: savedProfile.channelLogoUrl || initial.customLogoUrl,
+        customLogoUrl: primaryPngLogo,
         customHeaderPng: (savedProfile as any).customHeaderPng || initial.customHeaderPng,
         customFooterPng: (savedProfile as any).customFooterPng || initial.customFooterPng,
-        channelLogoType: savedProfile.channelLogoType,
+        channelLogoType: 'png',
         socialHandle: savedProfile.username
-          ? savedProfile.username.startsWith('@')
-            ? savedProfile.username
-            : `@${savedProfile.username}`
-          : initial.socialHandle,
-        whatsappNumber: savedProfile.mobileNumber || initial.whatsappNumber,
-        websiteUrl: savedProfile.websiteUrl || initial.websiteUrl,
-        showMobileNumber: savedProfile.showMobileNumber,
+          ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
+          : '',
+        whatsappNumber: (savedProfile.whatsappNumber || savedProfile.mobileNumber || '').trim(),
+        websiteUrl: (savedProfile.websiteUrl || '').trim(),
+        showWebsite: savedProfile.showWebsite !== false,
+        showMobileNumber: savedProfile.showMobileNumber !== false,
         activeSocialIcons: activeSocialKeys,
         highlightColor: savedProfile.highlightColor || initial.highlightColor || '#FFE600',
         showMasterBranding: savedProfile.showMasterBranding !== false,
@@ -546,11 +741,14 @@ export default function App() {
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
+        const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
         const activeSocialKeys = e.detail.socialIcons
           ? Object.entries(e.detail.socialIcons)
-              .filter(([_, active]) => active)
+              .filter(([key, active]) => active && ALLOWED_FOOTER_SOCIALS.includes(key))
               .map(([key]) => key)
           : undefined;
+
+        const primaryPngLogo = e.detail.channelLogoPngUrl || (e.detail.channelLogoUrl?.endsWith('.gif') ? '' : e.detail.channelLogoUrl);
 
         setCard((prev) => ({
           ...prev,
@@ -558,12 +756,14 @@ export default function App() {
           brandTagline: e.detail.channelNameEn || prev.brandTagline,
           channelNameHi: e.detail.channelNameHi || prev.channelNameHi,
           channelNameEn: e.detail.channelNameEn || prev.channelNameEn,
-          customLogoUrl: e.detail.channelLogoUrl || prev.customLogoUrl,
+          customLogoUrl: primaryPngLogo || prev.customLogoUrl,
           customHeaderPng: e.detail.customHeaderPng !== undefined ? e.detail.customHeaderPng : prev.customHeaderPng,
           customFooterPng: e.detail.customFooterPng !== undefined ? e.detail.customFooterPng : prev.customFooterPng,
+          channelLogoType: 'png',
           socialHandle: e.detail.username ? (e.detail.username.startsWith('@') ? e.detail.username : `@${e.detail.username}`) : prev.socialHandle,
-          websiteUrl: e.detail.websiteUrl || prev.websiteUrl,
-          whatsappNumber: e.detail.mobileNumber || prev.whatsappNumber,
+          websiteUrl: e.detail.websiteUrl !== undefined ? (e.detail.websiteUrl || '').trim() : (prev.websiteUrl || '').trim(),
+          showWebsite: e.detail.showWebsite !== undefined ? e.detail.showWebsite : prev.showWebsite,
+          whatsappNumber: e.detail.whatsappNumber !== undefined ? (e.detail.whatsappNumber || e.detail.mobileNumber || '').trim() : (prev.whatsappNumber || '').trim(),
           showMobileNumber: e.detail.showMobileNumber !== undefined ? e.detail.showMobileNumber : prev.showMobileNumber,
           activeSocialIcons: activeSocialKeys !== undefined ? activeSocialKeys : prev.activeSocialIcons,
         }));
@@ -580,13 +780,33 @@ export default function App() {
     localStorage.setItem('is_onboarding_completed', 'true');
     setIsOnboardingCompleted(true);
 
-    if (currentUser?.email) {
-      localStorage.setItem(`user_profile_${currentUser.email.toLowerCase().trim()}`, JSON.stringify(profile));
+    const activeEmail = (currentUser?.email || profile.email || '').toLowerCase().trim();
+    if (activeEmail) {
+      localStorage.setItem(`user_profile_${activeEmail}`, JSON.stringify(profile));
+      localStorage.setItem(`onboarding_completed_${activeEmail}`, 'true');
     }
 
+    // Persist to Cloud backend /api/user-profile
+    try {
+      fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...profile,
+          email: activeEmail,
+          userId: currentUser?.username || profile.username || activeEmail,
+          uid: currentUser?.username || profile.username || activeEmail,
+          onboardingCompleted: true,
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
     const activeSocialKeys = Object.entries(profile.socialIcons || {})
-      .filter(([_, active]) => active)
+      .filter(([key, active]) => active && ALLOWED_FOOTER_SOCIALS.includes(key))
       .map(([key]) => key);
+
+    const primaryPngLogo = profile.channelLogoPngUrl || (profile.channelLogoUrl?.endsWith('.gif') ? '' : profile.channelLogoUrl);
 
     setCard((prev) => ({
       ...prev,
@@ -594,18 +814,19 @@ export default function App() {
       brandTagline: profile.channelNameEn || prev.brandTagline,
       channelNameHi: profile.channelNameHi,
       channelNameEn: profile.channelNameEn,
-      customLogoUrl: profile.channelLogoUrl || prev.customLogoUrl,
+      customLogoUrl: primaryPngLogo || prev.customLogoUrl,
       customHeaderPng: (profile as any).customHeaderPng !== undefined ? (profile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (profile as any).customFooterPng !== undefined ? (profile as any).customFooterPng : prev.customFooterPng,
-      channelLogoType: profile.channelLogoType,
+      channelLogoType: 'png',
       socialHandle: profile.username
         ? profile.username.startsWith('@')
           ? profile.username
           : `@${profile.username}`
         : prev.socialHandle,
-      whatsappNumber: profile.mobileNumber || prev.whatsappNumber,
-      websiteUrl: profile.websiteUrl || prev.websiteUrl,
-      showMobileNumber: profile.showMobileNumber,
+      whatsappNumber: (profile.whatsappNumber || profile.mobileNumber || '').trim(),
+      websiteUrl: (profile.websiteUrl || '').trim(),
+      showWebsite: profile.showWebsite !== false,
+      showMobileNumber: profile.showMobileNumber !== false,
       activeSocialIcons: activeSocialKeys,
       highlightColor: profile.highlightColor || prev.highlightColor || '#FFE600',
       showMasterBranding: profile.showMasterBranding !== false,
@@ -667,13 +888,12 @@ export default function App() {
           customLogoUrl: savedProfile.channelLogoUrl || prev.customLogoUrl,
           channelLogoType: savedProfile.channelLogoType || prev.channelLogoType,
           socialHandle: savedProfile.username
-            ? savedProfile.username.startsWith('@')
-              ? savedProfile.username
-              : `@${savedProfile.username}`
-            : prev.socialHandle,
-          whatsappNumber: savedProfile.mobileNumber || prev.whatsappNumber,
-          websiteUrl: savedProfile.websiteUrl || prev.websiteUrl,
-          showMobileNumber: savedProfile.showMobileNumber !== undefined ? savedProfile.showMobileNumber : prev.showMobileNumber,
+            ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
+            : '',
+          whatsappNumber: (savedProfile.whatsappNumber || savedProfile.mobileNumber || '').trim(),
+          websiteUrl: (savedProfile.websiteUrl !== undefined ? savedProfile.websiteUrl : prev.websiteUrl || '').trim(),
+          showWebsite: savedProfile.showWebsite !== false,
+          showMobileNumber: savedProfile.showMobileNumber !== false,
           activeSocialIcons: activeSocialKeys.length > 0 ? activeSocialKeys : prev.activeSocialIcons,
         }));
       }
@@ -700,13 +920,49 @@ export default function App() {
 
   const [isAIAnalyzeOpen, setIsAIAnalyzeOpen] = useState(false);
   const [isCommandModalOpen, setIsCommandModalOpen] = useState(false);
-  const [commandModalInitialTab, setCommandModalInitialTab] = useState<'link' | 'command'>('link');
+  const [commandModalInitialTab, setCommandModalInitialTab] = useState<'link' | 'command' | 'manual'>('link');
   const [isCaptionModalOpen, setIsCaptionModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string>(() => getActiveDraftId());
   const [downloading, setDownloading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Authoritative Subscription & Trial Lock Management
+  const [userSubscription, setUserSubscription] = useState(() => getUserSubscription(currentUser?.email));
+
+  useEffect(() => {
+    fetchAuthoritativeSubscription(currentUser?.email).then((sub) => {
+      setUserSubscription(sub);
+    });
+
+    const handleSubUpdate = () => {
+      setUserSubscription(getUserSubscription(currentUser?.email));
+    };
+    const handleBlocked = () => {
+      setUserSubscription((prev) => ({ ...prev, isBlocked: true }));
+      showToast('⚠️ आपका खाता ब्लॉक कर दिया गया है');
+    };
+    const handleExpired = () => {
+      setUserSubscription((prev) => ({ ...prev, isTrialExpired: true, daysRemaining: 0 }));
+      showToast('🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है');
+    };
+
+    window.addEventListener('ai_news_user_plan_updated', handleSubUpdate);
+    window.addEventListener('user_account_blocked', handleBlocked);
+    window.addEventListener('user_trial_expired', handleExpired);
+
+    return () => {
+      window.removeEventListener('ai_news_user_plan_updated', handleSubUpdate);
+      window.removeEventListener('user_account_blocked', handleBlocked);
+      window.removeEventListener('user_trial_expired', handleExpired);
+    };
+  }, [currentUser?.email]);
+
+  const isAdminUser = isUserAdmin(currentUser);
+  const actionAllowance = isUserActionAllowed(currentUser, userSubscription);
+  const isActionLocked = !isAdminUser && !actionAllowance.allowed;
 
   // Auto-dismiss all toast notifications after exactly 2 seconds (2000 ms)
   useEffect(() => {
@@ -831,7 +1087,8 @@ export default function App() {
           scrollToStepById('step-ai');
         }, 150);
 
-        const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+        const savedProf = getSavedChannelProfile();
+        const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
         const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
@@ -932,61 +1189,59 @@ export default function App() {
 
   // Full reset / clean card to default template matching user specification
   const handleResetCard = () => {
-    // Check if active draft or saved drafts exist
-    const drafts = getSavedDrafts();
-    const activeDraft = currentDraftId ? drafts.find((d) => d.id === currentDraftId) : drafts[0];
-    if (activeDraft && activeDraft.cardData) {
-      setCard(activeDraft.cardData);
-      showToast(`📂 ड्राफ्ट रीस्टोर हुआ: ${activeDraft.title || 'सहेजा गया ड्राफ्ट'}`);
-      return;
-    }
+    // Clear active draft ID reference
+    setCurrentDraftId(null);
 
     const savedProfile = getSavedChannelProfile();
     const activeSocialKeys = savedProfile?.socialIcons
       ? Object.entries(savedProfile.socialIcons).filter(([_, active]) => active).map(([key]) => key)
       : ['instagram', 'facebook', 'twitter', 'youtube', 'whatsapp'];
 
+
     setCard((prev) => ({
       ...prev,
       frameDesign: 'graphic_001',
-      headline: '',
-      formattedHeadline: '',
-      highlightWords: [],
+      headline: prev.headline || '',
+      formattedHeadline: prev.formattedHeadline || '',
+      highlightWords: prev.highlightWords || [],
       headlineAlign: 'center',
-      location: '',
-      summary: '',
-      category: 'ताज़ा खबर',
+      location: savedProfile?.district || prev.location || '',
+      summary: prev.summary || '',
+      category: prev.category || 'ताज़ा खबर',
       images: {
-        main: '/assets/default_refresh_thumbnail.jpg',
-        second: '',
+        main: prev.images?.main || '',
+        second: prev.images?.second || '',
       },
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
-      customLogoUrl: savedProfile?.channelLogoUrl || prev.customLogoUrl || '',
+      customLogoUrl: prev.customLogoUrl || savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
       brandName: savedProfile?.channelNameHi || prev.brandName || prev.channelNameHi || '',
       brandTagline: savedProfile?.channelNameEn || prev.brandTagline || prev.channelNameEn || '',
       channelNameHi: savedProfile?.channelNameHi || prev.channelNameHi || prev.brandName || '',
       channelNameEn: savedProfile?.channelNameEn || prev.channelNameEn || prev.brandTagline || '',
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
-        : (prev.socialHandle || '/@UserName'),
-      whatsappNumber: savedProfile?.mobileNumber || prev.whatsappNumber || '+91 98765 43210',
-      websiteUrl: savedProfile?.websiteUrl || prev.websiteUrl || 'ainewsmaker.online',
-      showMobileNumber: savedProfile?.showMobileNumber ?? prev.showMobileNumber ?? true,
+        : '',
+      whatsappNumber: (savedProfile?.whatsappNumber || savedProfile?.mobileNumber || '').trim(),
+      websiteUrl: (savedProfile?.websiteUrl || '').trim(),
+      showMobileNumber: savedProfile?.showMobileNumber !== false,
+      showWebsite: savedProfile?.showWebsite !== false,
       activeSocialIcons: activeSocialKeys,
       customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : prev.customFooterPng,
       speakerName: '',
       speakerTitle: '',
-      dateStr: '',
-      showDate: false,
-      showLocation: false,
+      dateStr: prev.dateStr || '',
+      showDate: prev.showDate ?? false,
+      showWatermark: prev.showWatermark ?? false,
+      showLocation: true,
       showCallout: false,
       calloutTag: '',
       layout: 'single',
       aspectRatio: '4:5',
       headlineFontSize: 28,
       highlightColor: '#FFE600',
+      showMasterBranding: true,
     }));
 
     try {
@@ -995,11 +1250,9 @@ export default function App() {
       // ignore
     }
 
-    // Fully reset AI Prompt & Link inputs
-    setAiResetKey((prev) => prev + 1);
     setActiveStep(1);
 
-    showToast('✨ डिफ़ॉल्ट 4:5 टेम्प्लेट रीसेट हो गया!');
+    showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
   };
 
   const handleSaveDraft = () => {
@@ -1089,6 +1342,9 @@ export default function App() {
     setCard((prev) => {
       const pickedMain = photoData || result.pickedImages?.main;
       const pickedSecond = result.pickedImages?.second;
+      const galleryList = result.pickedImages?.gallery || [];
+      const extractedList = galleryList.length > 0 ? galleryList : (pickedMain ? [pickedMain] : []);
+
       return {
         ...prev,
         headline: result.headline,
@@ -1097,6 +1353,7 @@ export default function App() {
         location: result.location || prev.location,
         summary: result.summary || prev.summary,
         category: result.category || prev.category,
+        extractedArticlePhotos: extractedList.length > 0 ? extractedList : prev.extractedArticlePhotos,
         images: pickedMain
           ? {
               ...prev.images,
@@ -1140,8 +1397,7 @@ export default function App() {
 
   // Save current card into Drafts manager
   const handleSaveCurrentCardAsDraft = () => {
-    saveDraft(card);
-    showToast('💾 न्यूज़ कार्ड ड्राफ्ट्स में सुरक्षित कर लिया गया!');
+    handleSaveDraft();
   };
 
   // Export card to High-Res PNG or JPG (with full status, progress & robust blob downloading)
@@ -1158,6 +1414,26 @@ export default function App() {
 
   const handleDownload = async (formatOverride?: 'png' | 'jpeg') => {
     if (downloading) return;
+    if (isActionLocked) {
+      showToast('⚠️ आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कार्ड डाउनलोड करने के लिए कृपया मेंबरशिप प्लान चुनें।');
+      setCurrentTab('profile');
+      return;
+    }
+    // Verify entitlement with server
+    try {
+      const verifyRes = await fetch(getApiUrl('/api/verify-download-entitlement'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: currentUser?.email }),
+      });
+      if (verifyRes.status === 403) {
+        const data = await verifyRes.json();
+        showToast(`⚠️ ${data.error || 'ट्रायल समाप्त हो चुका है। कृपया प्लान चुनें।'}`);
+        setCurrentTab('profile');
+        return;
+      }
+    } catch {}
+
     const fmt: 'png' | 'jpeg' =
       typeof formatOverride === 'string' && (formatOverride === 'png' || formatOverride === 'jpeg')
         ? formatOverride
@@ -1191,6 +1467,10 @@ export default function App() {
 
       await downloadCanvas(canvas, filename, fmt);
 
+      if (card.sourceNewsId) {
+        markNewsGraphicCreated(currentUser?.email, card.sourceNewsId);
+      }
+
       showToast(`✅ ${fmt === 'jpeg' ? 'JPG' : 'PNG'} 1080x1350 न्यूज़ कार्ड सफलतापूर्वक डाउनलोड हो गया!`);
     } catch (err: any) {
       console.error('Download error:', err);
@@ -1203,6 +1483,11 @@ export default function App() {
 
   // Copy card image to clipboard
   const handleCopyToClipboard = async () => {
+    if (isActionLocked) {
+      showToast('⚠️ आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कृपया मेंबरशिप प्लान चुनें।');
+      setCurrentTab('profile');
+      return;
+    }
     try {
       setDownloading(true);
       let canvas: HTMLCanvasElement | null = null;
@@ -1285,7 +1570,7 @@ export default function App() {
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
     const effectiveLink = post.sourceUrl || (post.id ? `https://www.ainewsmaker.online/news/${post.id}` : 'https://www.ainewsmaker.online');
-    const effectiveLoc = post.district || post.location || 'मध्य प्रदेश';
+    const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');
 
@@ -1298,19 +1583,51 @@ export default function App() {
       return new Set();
     };
 
-    const hasDefaultPhotoActive = getDefaultThumbnailIds().has(post.id);
-    let targetImageForStudio = post.imageUrl || '/assets/placeholder_news_search_square.jpg';
-    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
-      targetImageForStudio = post.manualThumbnailUrl;
-    } else if (post.imageSource === 'default' || hasDefaultPhotoActive) {
-      targetImageForStudio = '/assets/placeholder_news_search_square.jpg';
+    let targetImageForStudio = '';
+    if (post.manualThumbnailUrl && post.manualThumbnailUrl.trim()) {
+      targetImageForStudio = post.manualThumbnailUrl.trim();
+    } else if (post.imageUrl && post.imageUrl.trim() && !post.imageUrl.includes('placeholder')) {
+      targetImageForStudio = post.imageUrl.trim();
+    } else if ((post as any).thumbnailUrl && (post as any).thumbnailUrl.trim() && !(post as any).thumbnailUrl.includes('placeholder')) {
+      targetImageForStudio = (post as any).thumbnailUrl.trim();
+    } else if (post.imageUrl && post.imageUrl.trim()) {
+      targetImageForStudio = post.imageUrl.trim();
     }
 
+    const safeProxy = (u: string) => {
+      if (!u || !u.trim()) return '';
+      const trimmed = u.trim();
+      if (trimmed.startsWith('/api/proxy-image')) {
+        return getApiUrl(trimmed);
+      }
+      if (
+        (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+        typeof window !== 'undefined' &&
+        !trimmed.startsWith(window.location.origin) &&
+        !trimmed.includes('/api/proxy-image')
+      ) {
+        return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
+      }
+      return trimmed;
+    };
+
+    const safeTargetImage = safeProxy(targetImageForStudio);
+
     // Collect all available photos for this article: primary + up to 3 additional photos
-    const articlePhotos: string[] = [targetImageForStudio];
+    const articlePhotos: string[] = [];
+    if (safeTargetImage) articlePhotos.push(safeTargetImage);
+    else if (targetImageForStudio) articlePhotos.push(targetImageForStudio);
+
     if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
       post.additionalPhotos.forEach((p) => {
-        if (p && !articlePhotos.includes(p)) articlePhotos.push(p);
+        const safeP = safeProxy(p);
+        if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
+      });
+    }
+    if ((post as any).extractedArticlePhotos && Array.isArray((post as any).extractedArticlePhotos)) {
+      (post as any).extractedArticlePhotos.forEach((p: string) => {
+        const safeP = safeProxy(p);
+        if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
       });
     }
 
@@ -1318,22 +1635,38 @@ export default function App() {
       localStorage.setItem('studio_active_news_photos', JSON.stringify(articlePhotos));
     } catch {}
 
+    const primaryPhoto = articlePhotos[0] || safeTargetImage || '';
+    const secondPhoto = articlePhotos[1] || primaryPhoto;
+    const thirdPhoto = articlePhotos[2] || primaryPhoto;
+    const fourthPhoto = articlePhotos[3] || secondPhoto || primaryPhoto;
+
     setCard((prev) => ({
       ...prev,
+      sourceNewsId: post.id,
+      frameDesign: 'graphic_001',
+      layout: 'single',
+      showDate: false,
+      showWatermark: false,
+      showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
       headline: post.title,
       location: effectiveLoc,
       category: post.categoryName,
       summary: post.summary,
       images: {
         ...prev.images,
-        main: targetImageForStudio,
+        main: primaryPhoto,
+        second: secondPhoto,
+        third: thirdPhoto,
+        fourth: fourthPhoto,
       },
+      extractedArticlePhotos: articlePhotos,
     }));
 
     setAutoFillNews({
       url: effectiveLink,
       title: post.title,
       summary: post.summary,
+      fullNews: (post as any).fullContent || (post as any).fullNews || post.summary || post.title,
       imageUrl: targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,
@@ -1352,8 +1685,11 @@ export default function App() {
     }, 150);
 
     // Instantly copy social media caption to clipboard
-    const userTag = userProfile?.username ? `#${userProfile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
-    const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
+    const savedProf = getSavedChannelProfile();
+    const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '#reporter';
+    const locLine = effectiveLoc ? `\n\n📍 स्थान: ${effectiveLoc}` : '';
+    const locTag = effectiveLoc ? `#${effectiveLoc.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News ` : '';
+    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${userTag} ${locTag}#BreakingNews #HindiNews #AiNewsMaker`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }
@@ -1542,23 +1878,70 @@ export default function App() {
         </div>
       )}
 
-      {/* Top Bar Navigation - Permanent Fixed Header in Home, Video, Newsroom, Control Room. Hidden in Studio. */}
-      {!(currentTab === 'studio' || currentTab === 'generator') && (
-        <div className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md shadow-md">
-          <AppTopBarWeb
-            currentTab={currentTab}
-            currentUser={currentUser}
-            onRefresh={async () => {
-              await fetchLiveNews();
-              window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-              setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
+      {/* Top Bar Navigation - Always visible in Home, Video, Newsroom, Control Room. In Studio: visible ONLY on Desktop (hidden md:block), preserving mobile & APK layout unchanged */}
+      <div className={`sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md shadow-md ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
+        <AppTopBarWeb
+          currentTab={currentTab}
+          currentUser={currentUser}
+          onOpenGoogleSheets={() => setIsSheetsModalOpen(true)}
+          onOpenAppUpdate={() => setIsUpdateModalOpen(true)}
+          onRefresh={async () => {
+            await syncAllSourcesLive().catch(() => {});
+            await fetchLiveNews();
+            window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+            setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
+          }}
+          onNavigateToTab={(tab) => {
+            setCurrentTab(tab);
+            window.location.hash = tab;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      </div>
+
+      {/* Blocked Account Warning Banner */}
+      {userSubscription?.isBlocked && (
+        <div className="w-full bg-rose-950/95 text-white border-b-2 border-rose-500 py-3 px-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm font-bold z-40 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 max-w-4xl mx-auto sm:mx-0">
+            <span className="text-xl">🚫</span>
+            <div>
+              <span className="font-black text-rose-300">खाता ब्लॉक है: </span>
+              <span>आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। आपकी सभी सेवाएं व टूल्स अस्थाई रूप से रोक दिए गए हैं।</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentTab('profile');
+              window.location.hash = 'profile';
             }}
-            onNavigateToTab={(tab) => {
-              setCurrentTab(tab);
-              window.location.hash = tab;
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
+          >
+            सहायता / सपोर्ट डेस्क
+          </button>
+        </div>
+      )}
+
+      {/* Trial Expired Warning Banner */}
+      {!userSubscription?.isBlocked && userSubscription?.tier === 'basic' && (userSubscription?.isTrialExpired || (userSubscription?.daysRemaining !== undefined && userSubscription.daysRemaining <= 0)) && (
+        <div className="w-full bg-amber-950/95 text-white border-b-2 border-amber-400 py-2.5 px-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm font-bold z-40 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 max-w-4xl mx-auto sm:mx-0">
+            <span className="text-xl">🔒</span>
+            <div>
+              <span className="font-black text-amber-300">7-दिवसीय फ्री ट्रायल समाप्त: </span>
+              <span>आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व वीडियो टूल्स लॉक हैं। जारी रखने के लिए प्लान अपग्रेड करें।</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentTab('profile');
+              window.location.hash = 'profile';
             }}
-          />
+            className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
+          >
+            प्लान अपग्रेड करें
+          </button>
         </div>
       )}
 
@@ -1576,8 +1959,8 @@ export default function App() {
           onEditNews={handleEditNews}
           onDeleteNews={handleDeleteNews}
           onRefreshLiveNews={async () => {
+            await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
-            setToastMessage('लाइव खबरें क्लाउड से सिंक हो गईं!');
           }}
           isSyncingNews={isSyncingNews}
           onOpenAdminLogin={() => {
@@ -1589,7 +1972,8 @@ export default function App() {
 
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
-        <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
+        <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
+          <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
           {/* Studio Type Selector: Smoothly collapses on scroll to maximize vertical editing space */}
           <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible ? 'max-h-20 opacity-100 mb-3' : 'max-h-0 opacity-0 mb-0 pointer-events-none'
@@ -1637,52 +2021,17 @@ export default function App() {
               {/* ============================================================== */}
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
-              <div className="lg:hidden w-full flex flex-col md:flex-row md:items-start md:gap-4 min-h-screen">
-                {/* 🔒 Responsive Mobile Workspace: True 4:5 Live Preview + Dedicated Action Buttons */}
+              <div className="lg:hidden w-full flex flex-col min-h-screen">
+                {/* 🔒 STICKY WORKSPACE HEADER: 65% Live Preview + 35% Editor Steps Selector */}
                 <div
                   id="mobile-studio-workspace"
-                  className="w-full md:w-[350px] md:shrink-0 sticky top-0 z-20 md:top-2 bg-slate-950 border-b md:border md:rounded-2xl border-slate-800 p-2 sm:p-2.5 shadow-2xl"
+                  className="sticky top-0 z-30 w-full bg-slate-950/95 backdrop-blur-md border-b-2 border-slate-800 p-2 shadow-2xl transition-all"
                 >
-                  {/* Top Preview Status Bar & Hide/Show Control */}
-                  <div className="flex items-center justify-between gap-1.5 pb-1.5 mb-1.5 border-b border-neutral-800/80">
-                    <div className="flex items-center gap-1.5 text-xs text-amber-400 font-black">
-                      <span>✳️</span>
-                      <span>लाइव कार्ड (4:5 HD)</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {/* Screen Hide / Show Toggle Button */}
-                      <button
-                        type="button"
-                        onClick={() => setIsMobilePreviewHidden(!isMobilePreviewHidden)}
-                        className={"px-2.5 py-1 text-[11px] font-bold rounded-lg border flex items-center gap-1.5 cursor-pointer transition active:scale-95 " + (isMobilePreviewHidden ? "bg-amber-400 text-slate-950 border-amber-300 font-black" : "bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800")}
-                        title={isMobilePreviewHidden ? "स्क्रीन दिखाएँ" : "स्क्रीन छिपाएँ"}
-                      >
-                        {isMobilePreviewHidden ? (
-                          <>
-                            <Eye className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                            <span>स्क्रीन दिखाएँ</span>
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>स्क्रीन छिपाएँ</span>
-                          </>
-                        )}
-                      </button>
-
-                    </div>
-                  </div>
-
-                  {/* When Preview is visible: True 4:5 Full Preview + Action Buttons Just Below */}
-                  {!isMobilePreviewHidden ? (
-                    <div className="w-full flex flex-col items-center">
-                      {/* 1. TRUE 4:5 PROPORTIONAL LIVE PREVIEW CONTAINER (Never cropped, never distorted) */}
-                      <div className="w-full flex items-center justify-center py-1">
-                        <div
-                          className="w-full max-w-[min(100%,360px,calc((100vh-220px)*0.8))] aspect-[4/5] mx-auto rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative"
-                          style={{ aspectRatio: '4/5' }}
-                        >
+                  <div className="w-full flex flex-col items-center max-w-lg mx-auto">
+                      {/* TOP ROW: 70% Live Preview + 30% Steps Selector List */}
+                      <div className="w-full flex items-start gap-2">
+                        {/* 4:5 Proportional Live Preview (70% Width) */}
+                        <div className="w-[70%] shrink-0 aspect-[4/5] rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-xl bg-black flex items-center justify-center relative">
                           <CardPreview
                             card={card}
                             className="w-full h-full"
@@ -1690,105 +2039,110 @@ export default function App() {
                             onChange={handleUpdateCard}
                           />
                         </div>
+
+                        {/* Compact Editor Steps Selector List (30% Width) */}
+                        <div className="w-[30%] shrink-0 flex flex-col gap-1 overflow-y-auto h-[calc(70vw*1.25)] max-h-[420px] pr-0.5 scrollbar-thin">
+                          <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-0.5 flex items-center gap-1 shrink-0">
+                            <span>🛠️</span>
+                            <span>स्टेप्स</span>
+                          </div>
+
+                          {STUDIO_STEPS.map((s) => {
+                            const isActive = activeStep === s.step;
+                            return (
+                              <button
+                                key={s.step}
+                                type="button"
+                                onClick={() => {
+                                  setActiveStep(s.step);
+                                  const el = document.getElementById('mobile-active-step-commands');
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }
+                                }}
+                                className={`w-full flex-1 max-h-[36px] py-1 px-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer text-left ${
+                                  isActive
+                                    ? "bg-amber-400 text-slate-950 shadow-md ring-1 ring-amber-300 font-black"
+                                    : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800"
+                                }`}
+                                title={s.title}
+                              >
+                                <span className="text-xs shrink-0">{s.icon}</span>
+                                <span className="truncate leading-tight">{s.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
-                      {/* 2. DEDICATED ACTION AREA JUST BELOW PREVIEW (Order: 1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
-                      <div className="w-full max-w-[min(100%,360px,calc((100vh-220px)*0.8))] mx-auto mt-2 grid grid-cols-4 gap-1.5">
-                        {/* 1. JPG डाउनलोड */}
-                        <button
-                          type="button"
-                          onClick={() => handleDownload("jpeg")}
-                          disabled={downloading}
-                          className="py-2.5 px-1 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 text-[10px] sm:text-[11px] font-black rounded-xl shadow-md flex items-center justify-center gap-1 cursor-pointer transition active:scale-95 disabled:opacity-50"
-                          title="कार्ड को 1080x1350 True 4:5 JPG में डाउनलोड करें"
-                        >
-                          <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                          <span className="truncate">{downloading ? "..." : "JPG डाउनलोड"}</span>
-                        </button>
-
-                        {/* 2. कैप्शन */}
-                        <button
-                          type="button"
-                          onClick={() => setIsCaptionModalOpen(true)}
-                          className="py-2.5 px-1 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] sm:text-[11px] font-bold rounded-xl border border-slate-700/80 shadow-sm flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                          title="कैप्शन और सोशल शेयर"
-                        >
-                          <Share2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span className="truncate">कैप्शन</span>
-                        </button>
-
-                        {/* 3. ड्राफ्ट */}
-                        <button
-                          type="button"
-                          onClick={handleSaveDraft}
-                          className="py-2.5 px-1 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] sm:text-[11px] font-bold rounded-xl border border-slate-700/80 shadow-sm flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                          title="वर्तमान कार्ड को ड्राफ्ट के रूप में सुरक्षित करें"
-                        >
-                          <Bookmark className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span className="truncate">ड्राफ्ट</span>
-                        </button>
-
-                        {/* 4. रिफ्रेश */}
-                        <button
-                          type="button"
-                          onClick={handleResetCard}
-                          className="py-2.5 px-1 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] sm:text-[11px] font-bold rounded-xl border border-slate-700/80 shadow-sm flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                          title="कार्ड को डिफ़ॉल्ट टेम्पलेट में रीसेट करें"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                          <span className="truncate">रिफ्रेश</span>
-                        </button>
-                      </div>
-
-                      {/* 3. Horizontal Step Navigator Strip */}
-                      <div className="w-full flex items-center gap-1.5 overflow-x-auto pt-2 pb-1 scrollbar-none">
-                        {STUDIO_STEPS.map((s) => {
-                          const isActive = activeStep === s.step;
-                          return (
-                            <button
-                              key={s.step}
-                              type="button"
-                              onClick={() => {
-                                setActiveStep(s.step);
-                              }}
-                              className={"py-1.5 px-2.5 rounded-lg text-[10px] font-black transition-all shrink-0 flex items-center gap-1.5 cursor-pointer " + (isActive ? "bg-amber-400 text-slate-950 shadow ring-2 ring-amber-300 font-black" : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800")}
-                              title={s.title}
-                            >
-                              <span className="text-xs">{s.icon}</span>
-                              <span>{s.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    /* When Preview is Hidden: Compact Horizontal Step Strip, giving maximum room to controls below */
-                    <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
-                      {STUDIO_STEPS.map((s) => {
-                        const isActive = activeStep === s.step;
-                        return (
+                      {/* FULL-WIDTH CONTROL BAR (100% Viewport Width Container, Edge-to-Edge) */}
+                      <div className="w-[100vw] relative left-[calc(-50vw+50%)] my-2 bg-white border-y border-slate-200/90 py-1.5 shadow-md">
+                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-3 gap-2">
+                          {/* 1. JPG (Download) */}
                           <button
-                            key={s.step}
+                            type="button"
+                            onClick={() => handleDownload("jpeg")}
+                            disabled={downloading || isActionLocked}
+                            className={`py-2 px-1 font-black text-[10px] sm:text-xs rounded-lg border shadow-xs flex items-center justify-center gap-1 transition active:scale-95 ${
+                              isActionLocked
+                                ? 'bg-slate-200 text-slate-400 border-slate-300 opacity-60 cursor-not-allowed'
+                                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-500 cursor-pointer'
+                            }`}
+                            title={isActionLocked ? 'ट्रायल समाप्त — डाउनलोड लॉक' : '1080x1350 True 4:5 JPG डाउनलोड'}
+                          >
+                            {isActionLocked ? <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />}
+                            <span className="truncate">{downloading ? "..." : "JPG"}</span>
+                          </button>
+
+                          {/* 2. Caption */}
+                          <button
                             type="button"
                             onClick={() => {
-                              setActiveStep(s.step);
+                              if (isActionLocked) {
+                                showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
+                                setCurrentTab('profile');
+                              } else {
+                                setIsCaptionModalOpen(true);
+                              }
                             }}
-                            className={"py-1.5 px-2.5 rounded-lg text-[10px] font-black transition-all shrink-0 flex items-center gap-1.5 cursor-pointer " + (isActive ? "bg-amber-400 text-slate-950 shadow ring-2 ring-amber-300 font-black" : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800")}
-                            title={s.title}
+                            disabled={isActionLocked}
+                            className={`py-2 px-1 font-bold text-[10px] sm:text-xs rounded-lg border shadow-xs flex items-center justify-center gap-1 transition active:scale-95 ${
+                              isActionLocked
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-850 border-slate-300/80 cursor-pointer'
+                            }`}
+                            title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन और सोशल शेयर'}
                           >
-                            <span className="text-xs">{s.icon}</span>
-                            <span>{s.name}</span>
+                            {isActionLocked ? <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <Share2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                            <span className="truncate">कैप्शन</span>
                           </button>
-                        );
-                      })}
-                    </div>
-                  )}
+
+                          {/* 3. Draft */}
+                          <button
+                            type="button"
+                            onClick={handleSaveDraft}
+                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                            title="ड्राफ्ट सेव करें"
+                            aria-label="ड्राफ्ट सेव करें"
+                          >
+                            <Bookmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">Draft</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Distinct Horizontal Partition / Divider Line */}
+                      <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-700/80 shadow-sm" />
+                  </div>
                 </div>
 
-                {/* 🎛️ Active Step Commands: Rendered DIRECTLY below or beside the Preview Workspace */}
-                <div id="mobile-active-step-commands" className="flex-1 w-full min-w-0 bg-slate-900/95 p-3 sm:p-4 border-b md:border md:rounded-2xl border-slate-800 overflow-y-auto">
+                {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}
+                <div
+                  id="mobile-active-step-commands"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
+                >
                   {/* Step Title Header */}
-                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800/80">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm">
                         {STUDIO_STEPS.find((s) => s.step === activeStep)?.icon}
@@ -1874,51 +2228,56 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 4 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3 pt-3 border-t border-neutral-800/80 shrink-0">
-                      {/* 1. JPG डाउनलोड */}
+                    {/* Action Bar below Preview: 3 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट) */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
+                      {/* 1. JPG डाउनलोड - Priority Action */}
                       <button
                         type="button"
                         onClick={() => handleDownload('jpeg')}
-                        disabled={downloading}
-                        className="py-2.5 px-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                        title="कार्ड को HD JPG इमेज में डाउनलोड करें"
+                        disabled={downloading || isActionLocked}
+                        className={`flex-[1.5] min-w-[120px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                          isActionLocked
+                            ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
+                        }`}
+                        title={isActionLocked ? 'ट्रायल समाप्त — डाउनलोड लॉक' : 'कार्ड को HD JPG इमेज में डाउनलोड करें'}
                       >
-                        <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
-                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
+                        {isActionLocked ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />}
+                        <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
                       </button>
 
                       {/* 2. कैप्शन */}
                       <button
                         type="button"
-                        onClick={() => setIsCaptionModalOpen(true)}
-                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                        title="कैप्शन और शेयर"
+                        onClick={() => {
+                          if (isActionLocked) {
+                            showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
+                            setCurrentTab('profile');
+                          } else {
+                            setIsCaptionModalOpen(true);
+                          }
+                        }}
+                        disabled={isActionLocked}
+                        className={`flex-1 min-w-[80px] py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                          isActionLocked
+                            ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
+                            : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
+                        }`}
+                        title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन और शेयर'}
                       >
-                        <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                        <span className="truncate">कैप्शन</span>
+                        {isActionLocked ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />}
+                        <span className="whitespace-nowrap">कैप्शन</span>
                       </button>
 
                       {/* 3. ड्राफ्ट */}
                       <button
                         type="button"
                         onClick={handleSaveCurrentCardAsDraft}
-                        className="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="flex-1 min-w-[75px] py-2 sm:py-2.5 px-2 sm:px-3 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
                         title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
                       >
                         <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                        <span className="truncate">ड्राफ्ट</span>
-                      </button>
-
-                      {/* 4. रिफ्रेश */}
-                      <button
-                        type="button"
-                        onClick={handleResetCard}
-                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                        title="कार्ड रीसेट करें"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                        <span>रिफ्रेश</span>
+                        <span className="whitespace-nowrap">ड्राफ्ट</span>
                       </button>
                     </div>
 
@@ -1936,8 +2295,8 @@ export default function App() {
                     RIGHT COLUMN: TOP STEP TABS BAR + COMMANDS AREA FOR ACTIVE STEP
                     ================================================== */}
                 <div className="flex-1 w-full min-w-0 flex flex-col space-y-3">
-                  {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar */}
-                  <div className="w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
+                  {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar (Sticky on Scroll) */}
+                  <div className="sticky top-[60px] z-20 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
                     {/* Top Bar Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -1982,8 +2341,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Commands Area */}
-                  <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl">
+                  {/* Commands Area (Scrollable internally right beneath selector) */}
+                  <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl max-h-[calc(100vh-180px)] overflow-y-auto">
                     <CardEditor
                       card={card}
                       onChange={handleUpdateCard}
@@ -2011,6 +2370,7 @@ export default function App() {
             </>
           )}
         </main>
+      </ErrorBoundary>
       )}
 
       {/* 2. Videos Tab (Rich Video News Feed) */}
@@ -2026,6 +2386,43 @@ export default function App() {
           }}
           onAdminAddVideo={(newVid) => {
             setVideos((prev) => [newVid, ...prev]);
+            try {
+              const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
+              localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
+              fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newVid),
+              }).catch(() => {});
+            } catch {}
+          }}
+          onAdminUpdateVideo={(updatedVid) => {
+            setVideos((prev) => prev.map((v) => (v.id === updatedVid.id ? updatedVid : v)));
+            try {
+              fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(updatedVid.id)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedVid),
+              }).catch(() => {});
+            } catch {}
+          }}
+          onAdminDeleteVideo={(videoId) => {
+            // Permanently delete video - will NEVER reappear
+            setVideos((prev) => prev.filter((v) => v.id !== videoId));
+            try {
+              const deletedRaw = localStorage.getItem('app_deleted_video_ids');
+              const deletedList = deletedRaw ? JSON.parse(deletedRaw) : [];
+              if (!deletedList.includes(videoId)) {
+                deletedList.push(videoId);
+                localStorage.setItem('app_deleted_video_ids', JSON.stringify(deletedList));
+              }
+              const currentSaved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
+              localStorage.setItem('app_admin_videos', JSON.stringify(currentSaved.filter((v: any) => v.id !== videoId)));
+
+              fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(videoId)}`, {
+                method: 'DELETE',
+              }).catch(() => {});
+            } catch {}
           }}
         />
       )}
@@ -2033,6 +2430,7 @@ export default function App() {
       {/* 4. Newsroom Tab (Drafts & Saved Projects Workspace) */}
       {(currentTab === 'newsroom' || currentTab === 'drafts') && (
         <NewsroomScreenWeb
+          currentUser={currentUser}
           onOpenStudioWithDraft={handleOpenDraftInStudio}
           onNavigateToStudio={() => {
             setCurrentTab('studio');
@@ -2098,6 +2496,11 @@ export default function App() {
           setIsOnboardingCompleted(true);
           setIsOnboardingOpen(false);
           showToast('🎉 चैनल व प्रोफाइल सेटअप सफलतापूर्वक पूर्ण हुआ!');
+          if (!isAndroidEnvironment) {
+            setTimeout(() => {
+              setIsInstallModalOpen(true);
+            }, 1200);
+          }
         }}
         onClose={() => {
           if (localStorage.getItem('is_onboarding_completed') === 'true') {
@@ -2173,6 +2576,18 @@ export default function App() {
         onClose={() => setIsDraftsModalOpen(false)}
         onRestoreDraft={handleRestoreDraft}
         currentDraftId={currentDraftId}
+      />
+
+      {/* 10. GOOGLE SHEETS USER DATABASE AUTO-SYNC MODAL */}
+      <GoogleSheetsUserSyncModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+      />
+
+      {/* 11. PWA ADD TO HOME SCREEN / WEB APP PROMPT MODAL */}
+      <InstallPwaModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
       />
     </div>
   );

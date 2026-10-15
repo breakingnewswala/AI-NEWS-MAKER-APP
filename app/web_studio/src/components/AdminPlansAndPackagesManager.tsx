@@ -40,15 +40,23 @@ import {
   Send,
   Hash,
   ChevronDown,
+  ChevronRight,
   FolderTree,
   PlusCircle,
   AlertTriangle,
+  FileSpreadsheet,
+  Ban,
+  UserCheck,
+  Download,
 } from 'lucide-react';
 import {
   isUserSuperAdmin,
+  isEffectiveSuperAdmin,
   syncCloudUsers,
   adminUpdateCloudUser,
   adminDeleteCloudUser,
+  blockUserAuthoritative,
+  unblockUserAuthoritative,
   UserPlanTier,
   getUserSubscription,
   setUserPlanTier,
@@ -70,6 +78,7 @@ import {
   PLAN_KEY_MAP,
   LogoChangeRequest,
   getLogoChangeRequests,
+  fetchLogoChangeRequests,
   approveLogoChangeRequest,
   rejectLogoChangeRequest,
 } from '../lib/userPlanManager';
@@ -85,7 +94,9 @@ import {
   deleteSavedNewsChannel,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
+import { UserTemplateManager } from './UserTemplateManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
+import { getApiUrl } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -120,10 +131,17 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onAddCategory,
   onDeleteCategory,
 }) => {
-  // Sub-tabs: 10 main accordions in exact order
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('profile');
+  // Sub-tabs: 10 main accordions in exact order - initially closed per requirement
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
-  const isSuperAdminUser = isUserSuperAdmin(currentUser);
+  const effectiveCurrentUser = currentUser || (() => {
+    try {
+      const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+      if (sess) return JSON.parse(sess);
+    } catch {}
+    return null;
+  })();
+  const isSuperAdminUser = isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -135,14 +153,45 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Cloud user sync on mount
+  // Authoritative real-time user & logo requests sync on mount, subTab change, window focus & periodic interval
   useEffect(() => {
-    syncCloudUsers().then((synced) => {
-      if (Array.isArray(synced) && synced.length > 0) {
-        setPlanUsers(synced);
-      }
-    });
-  }, []);
+    let isMounted = true;
+    const fetchUsers = () => {
+      syncCloudUsers().then((synced) => {
+        if (isMounted && Array.isArray(synced)) {
+          setPlanUsers(synced);
+        }
+      }).catch(() => {});
+    };
+
+    const fetchLogoReqs = () => {
+      fetchLogoChangeRequests().then((reqs) => {
+        if (isMounted && Array.isArray(reqs)) {
+          setLogoRequests(reqs);
+        }
+      }).catch(() => {});
+    };
+
+    fetchUsers();
+    fetchLogoReqs();
+    const interval = setInterval(() => {
+      fetchUsers();
+      fetchLogoReqs();
+    }, 4000);
+    window.addEventListener('focus', fetchUsers);
+    window.addEventListener('focus', fetchLogoReqs);
+    window.addEventListener('ai_news_plan_users_changed', fetchUsers);
+    window.addEventListener('ai_news_logo_requests_updated', fetchLogoReqs);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', fetchUsers);
+      window.removeEventListener('focus', fetchLogoReqs);
+      window.removeEventListener('ai_news_plan_users_changed', fetchUsers);
+      window.removeEventListener('ai_news_logo_requests_updated', fetchLogoReqs);
+    };
+  }, [subTab]);
 
   // Edit User State
   const [editingUser, setEditingUser] = useState<PlanUserRecord | null>(null);
@@ -158,7 +207,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   const handleOpenEditUser = (u: PlanUserRecord) => {
     setEditingUser(u);
-    setEditUsername(u.userId || u.email.split('@')[0]);
+    setEditUsername(u.username || (u.userId && !u.userId.includes('@') ? u.userId : 'user'));
     setEditFullName(u.name || '');
     setEditMobile(u.mobile || '');
     setEditChannelName(u.channelName || '');
@@ -381,7 +430,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       customAcc[email] = {
         pass: password,
         user: {
-          username: email.split('@')[0],
+          username: name ? name.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16) || `user_${Date.now().toString().slice(-4)}` : `user_${Date.now().toString().slice(-4)}`,
           name: name,
           role: newUserRole,
           email: email,
@@ -411,6 +460,49 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [manualAssignMsg, setManualAssignMsg] = useState<string>('');
 
   const [userSearch, setUserSearch] = useState<string>('');
+  const [isSyncingUsers, setIsSyncingUsers] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'blocked' | 'trial_active' | 'trial_expired'>('all');
+
+  const handleSyncUsers = async () => {
+    setIsSyncingUsers(true);
+    try {
+      const refreshed = await syncCloudUsers();
+      if (Array.isArray(refreshed)) {
+        setPlanUsers(refreshed);
+        setLastSyncTime(new Date().toLocaleTimeString('hi-IN'));
+      }
+    } finally {
+      setIsSyncingUsers(false);
+    }
+  };
+
+  const handleToggleBlockUser = async (u: PlanUserRecord) => {
+    const isCurrentlyBlocked = Boolean(u.isBlocked);
+    const actionText = isCurrentlyBlocked ? 'अनब्लॉक (Unblock)' : 'ब्लॉक (Block)';
+    if (isUserSuperAdmin(u.email) || u.role === 'superadmin') {
+      alert('सुरक्षित सुपर एडमिन खाते को ब्लॉक नहीं किया जा सकता!');
+      return;
+    }
+    if (!window.confirm(`क्या आप यूजर "${u.name || u.email}" को ${actionText} करना चाहते हैं?\n${isCurrentlyBlocked ? 'अनब्लॉक करने पर उपयोगकर्ता की सेवाएं पुनः सक्रिय हो जाएंगी।' : 'ब्लॉक करने पर उपयोगकर्ता तुरंत किसी भी टूल व फीचर का उपयोग नहीं कर सकेगा।'}`)) {
+      return;
+    }
+    try {
+      setIsSyncingUsers(true);
+      const res = isCurrentlyBlocked
+        ? await unblockUserAuthoritative(u.userId || u.email, currentUser?.email || 'Admin')
+        : await blockUserAuthoritative(u.userId || u.email, currentUser?.email || 'Admin');
+      if (res.success) {
+        await handleSyncUsers();
+      } else {
+        alert(res.error || 'ऑपरेशन विफल रहा');
+      }
+    } catch (err: any) {
+      alert('त्रुटि: ' + err.message);
+    } finally {
+      setIsSyncingUsers(false);
+    }
+  };
 
   // Custom Header & Footer Assignment State (PRO & VIP DESK)
   const [assignUserEmail, setAssignUserEmail] = useState<string>('');
@@ -431,8 +523,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     facebook: true,
     instagram: true,
     twitter: false,
-    telegram: false,
-    whatsapp: true,
+    linkedin: false,
   });
   const [editBrandMsg, setEditBrandMsg] = useState<string>('');
 
@@ -647,22 +738,38 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         facebook: true,
         instagram: true,
         twitter: false,
-        telegram: false,
-        whatsapp: true,
+        linkedin: false,
       }
     );
     setEditBrandMsg('');
   };
 
-  const handleSaveUserBranding = () => {
+  const handleSaveUserBranding = async () => {
     if (!editingBrandingUser) return;
-    adminUpdateUserRecord(editingBrandingUser.email, {
+    const updates = {
       channelName: editBrandNameHi || editBrandNameEn,
+      channelNameHi: editBrandNameHi || editBrandNameEn,
+      channelNameEn: editBrandNameEn,
       websiteUrl: editBrandWebsite,
       mobile: editBrandMobile,
       channelLogoUrl: editBrandLogoUrl,
       socialIcons: editBrandSocials,
-    });
+    };
+    adminUpdateUserRecord(editingBrandingUser.email, updates);
+    try {
+      await adminUpdateCloudUser(editingBrandingUser.userId || editingBrandingUser.email, updates);
+      await fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: editingBrandingUser.userId || editingBrandingUser.email,
+          email: editingBrandingUser.email,
+          ...updates,
+        }),
+      });
+    } catch (e) {
+      console.warn('Error saving user branding to server:', e);
+    }
     setPlanUsers(getPlanUsers());
     setEditBrandMsg('✅ यूज़र ब्रांडिंग विवरण सफलतापूर्वक सुरक्षित हो गया!');
     setTimeout(() => {
@@ -777,7 +884,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 {plans.map((p) => {
-                  const isCurrent = userSub.tier === p.id || (p.id === 'basic' && (!userSub.tier || userSub.tier === 'trial'));
+                  const isCurrent = userSub.tier === p.id || (p.id === 'basic' && (!userSub.tier || (userSub.tier as string) === 'trial'));
                   return (
                     <div
                       key={`user-upgrade-${p.id}`}
@@ -1093,7 +1200,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'templates' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
-              <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudio} />
+              <UserTemplateManager isAdmin={true} currentUser={currentUser} onOpenStudioWithTemplate={onOpenStudio} />
             </div>
           )}
         </div>
@@ -1710,196 +1817,34 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             )}
           </div>
 
-          {/* 1. कस्टम हेडर व फुटर प्रबंधन */}
-          <div className="bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-3">
+          {/* 1. कस्टम हेडर व फुटर प्रबंधन - Moved to Step 4 (Template Manager) */}
+          <div className="bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 border-2 border-purple-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-purple-500/30 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    CUSTOM HEADER / FOOTER
+                    CUSTOM HEADER / FOOTER APPROVAL & ASSIGNMENT
                   </h3>
                   <p className="text-xs text-purple-200">
-                    Database के यूज़र को कस्टम हेडर व फुटर असाइन करें (PRO व VIP DESK हेतु विशेष सुविधा)
+                    कस्टम हेडर व फुटर अप्रूवल व असाइनमेंट अब <strong>स्टेप 4 (टेम्पलेट मैनेजर)</strong> में स्थानांतरित कर दिया गया है।
                   </p>
                 </div>
               </div>
-              <span className="px-3 py-1 bg-purple-900/60 text-purple-300 border border-purple-500/40 text-[11px] font-black rounded-lg">
-                PRO & VIP DESK EXCLUSIVE
-              </span>
+              <button
+                type="button"
+                onClick={() => setSubTab('templates')}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95 shrink-0"
+              >
+                <span>स्टेप 4 (टेम्पलेट मैनेजर) पर जाएँ</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-
-            {assignCustomMsg && (
-              <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{assignCustomMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAssignCustomHeaderFooter} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* 1. User Selection */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
-                    <span>1. User (डेटाबेस यूज़र चुनें) *</span>
-                    <span className="text-[10px] text-amber-400 font-mono">कुल {planUsers.length}</span>
-                  </label>
-                  <select
-                    value={assignUserEmail}
-                    onChange={(e) => handleSelectUserForCustomHF(e.target.value)}
-                    className="w-full bg-slate-950 border border-purple-500/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-purple-400 cursor-pointer font-bold"
-                    required
-                  >
-                    <option value="">-- यूज़र चुनें (Select User) --</option>
-                    <optgroup label="पात्र यूज़र्स (Eligible PRO & VIP DESK Users)">
-                      {planUsers
-                        .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
-                        .map((u) => {
-                          const tierLabel = u.tier === 'ultra' ? 'VIP DESK' : u.tier === 'professional' ? 'PRO' : (u.tier ? u.tier.toUpperCase() : 'BASIC');
-                          return (
-                            <option key={u.userId} value={u.email}>
-                              ⭐ {u.name ? `${u.name} (${u.email})` : u.email} — [{tierLabel}]
-                            </option>
-                          );
-                        })}
-                    </optgroup>
-                    <optgroup label="अन्य यूज़र्स (Other Users)">
-                      {planUsers
-                        .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
-                        .map((u) => (
-                          <option key={u.userId} value={u.email}>
-                            {u.name ? `${u.name} (${u.email})` : u.email} — [{(u.tier ? u.tier.toUpperCase() : 'BASIC')}]
-                          </option>
-                        ))}
-                    </optgroup>
-                  </select>
-                  {assignUserEmail && (
-                    <div className="mt-1.5 text-[11px] text-purple-300 flex items-center gap-1.5">
-                      <span>चयनित:</span>
-                      <span className="font-bold text-white truncate max-w-[200px]">{assignUserEmail}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. Header File / URL */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
-                    <span>2. Custom Header (PNG)</span>
-                    {assignHeaderUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setAssignHeaderUrl('')}
-                        className="text-[10px] text-red-400 hover:underline cursor-pointer"
-                      >
-                        हटाएँ
-                      </button>
-                    )}
-                  </label>
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      value={assignHeaderUrl}
-                      onChange={(e) => setAssignHeaderUrl(e.target.value)}
-                      placeholder="Header Image URL या फ़ाइल चुनें..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-purple-400"
-                    />
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>हेडर इमेज अपलोड करें</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          onChange={(e) => handleFileUpload(e, 'header')}
-                          className="hidden"
-                        />
-                      </label>
-                      {assignHeaderUrl && (
-                        <div className="w-9 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
-                          <img src={assignHeaderUrl} alt="Header Preview" className="w-full h-full object-contain" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Footer File / URL */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
-                    <span>3. Custom Footer (PNG)</span>
-                    {assignFooterUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setAssignFooterUrl('')}
-                        className="text-[10px] text-red-400 hover:underline cursor-pointer"
-                      >
-                        हटाएँ
-                      </button>
-                    )}
-                  </label>
-                  <div className="space-y-1.5">
-                    <input
-                      type="text"
-                      value={assignFooterUrl}
-                      onChange={(e) => setAssignFooterUrl(e.target.value)}
-                      placeholder="Footer Image URL या फ़ाइल चुनें..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-hidden focus:border-purple-400"
-                    />
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
-                        <Upload className="w-3.5 h-3.5 text-purple-400" />
-                        <span>फुटर इमेज अपलोड करें</span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          onChange={(e) => handleFileUpload(e, 'footer')}
-                          className="hidden"
-                        />
-                      </label>
-                      {assignFooterUrl && (
-                        <div className="w-9 h-7 rounded border border-purple-500/50 overflow-hidden bg-slate-950 shrink-0">
-                          <img src={assignFooterUrl} alt="Footer Preview" className="w-full h-full object-contain" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Controls: Active / Inactive Switch & Assign Button */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-purple-500/20">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-300">स्थिति (Status):</span>
-                  <button
-                    type="button"
-                    onClick={() => setAssignCustomActive(!assignCustomActive)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-2 cursor-pointer ${
-                      assignCustomActive
-                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md shadow-emerald-900/30'
-                        : 'bg-slate-800 border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    <Power className={`w-3.5 h-3.5 ${assignCustomActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                    <span>{assignCustomActive ? 'Active (सक्रिय)' : 'Inactive (निष्क्रिय)'}</span>
-                  </button>
-                  <span className="text-[11px] text-slate-400">
-                    {assignCustomActive
-                      ? 'यह हेडर/फुटर केवल चयनित यूज़र के App और Web में लागू होगा।'
-                      : 'निष्क्रिय होने पर सामान्य हेडर/फुटर दिखेंगे।'}
-                  </span>
-                </div>
-
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer transition"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Assign (कस्टम हेडर/फुटर असाइन करें)</span>
-                </button>
-              </div>
-            </form>
+            <p className="text-xs text-slate-300">
+              यूज़र्स के कस्टम हेडर, फुटर इमेज, लाइव 4:5 कार्ड प्रीव्यू एवं अप्रूवल/रिजेक्शन हेतु कृपया ऊपर <strong>"4. टेम्पलेट मैनेजर"</strong> खोलें और <strong>"कस्टम हेडर व फुटर अप्रूवल"</strong> टैब पर जाएँ।
+            </p>
           </div>
 
           {/* 2. Manual Plan Assignment Form */}
@@ -2092,35 +2037,68 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
           {/* 3. ADMIN USER CONTROL: ALL REGISTERED USERS DATABASE RECORDS */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span>पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स (लाइव डेटाबेस)</span>
+                  <span>पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स (User Manager)</span>
                   <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-xs font-black rounded-full">
                     {planUsers.length}
                   </span>
+                  {lastSyncTime && (
+                    <span className="text-[10px] text-slate-400 font-mono font-normal">
+                      (सिंक: {lastSyncTime})
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  हर यूज़र का रिकॉर्ड (User Name, Channel Name, Email, Profile/Branding, Current Plan)। Profile/Branding डिफ़ॉल्ट में LOCK रहती है, Admin यहाँ से अनलॉक कर सकता है।
+                  सभी पंजीकृत Google व रिपोर्टर खाते, 7-दिवसीय ट्रायल स्थिति, सक्रिय/ब्लॉक स्थिति व पूर्ण खाता नियंत्रण।
                 </p>
               </div>
 
-              {/* Search Box */}
-              <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="यूज़र / ईमेल / चैनल खोजें..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
-                />
+              {/* Controls: Filter, Search, Sync Button */}
+              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                {/* Status Filter */}
+                <select
+                  value={userStatusFilter}
+                  onChange={(e) => setUserStatusFilter(e.target.value as any)}
+                  className="bg-slate-950 border border-slate-700 text-amber-300 rounded-xl px-2.5 py-1.5 text-xs font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                >
+                  <option value="all">सभी यूज़र्स ({planUsers.length})</option>
+                  <option value="active">🟢 सक्रिय यूज़र्स</option>
+                  <option value="blocked">🔴 ब्लॉक किए गए</option>
+                  <option value="trial_active">⏱️ ट्रायल चालू</option>
+                  <option value="trial_expired">🔒 ट्रायल समाप्त</option>
+                </select>
+
+                {/* Search Box */}
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="यूज़र / ईमेल / चैनल खोजें..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
+                  />
+                </div>
+
+                {/* Manual Sync Button */}
+                <button
+                  type="button"
+                  onClick={handleSyncUsers}
+                  disabled={isSyncingUsers}
+                  className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition disabled:opacity-50"
+                  title="सर्वर से नवीनतम यूज़र डेटाबेस सिंक करें"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingUsers ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>{isSyncingUsers ? 'सिंक हो रहा...' : 'रीफ्रेश'}</span>
+                </button>
               </div>
             </div>
 
             {planUsers.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">
-                फिलहाल कोई यूज़र रिकॉर्ड नहीं है। यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
+                फिलहाल कोई यूज़र रिकॉर्ड नहीं है। नए यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -2128,17 +2106,29 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/50">
                       <th className="p-3">User & Account Info</th>
-                      <th className="p-3">रोल नियंत्रण (Role)</th>
-                      <th className="p-3">Channel Name & Logo</th>
-                      <th className="p-3">Profile / Branding</th>
-                      <th className="p-3">Current Plan</th>
-                      <th className="p-3">Profile Lock</th>
-                      <th className="p-3">एक्शन (Delete)</th>
+                      <th className="p-3">रोल नियंत्रण</th>
+                      <th className="p-3">चैनल व लोगो</th>
+                      <th className="p-3">वर्तमान प्लान</th>
+                      <th className="p-3">7-दिवसीय फ्री ट्रायल</th>
+                      <th className="p-3">खाता स्थिति</th>
+                      <th className="p-3">प्रोफाइल लॉक</th>
+                      <th className="p-3 text-right">नियंत्रण व एक्शन</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {planUsers
                       .filter((u) => {
+                        // Filter by status
+                        if (userStatusFilter === 'active' && u.isBlocked) return false;
+                        if (userStatusFilter === 'blocked' && !u.isBlocked) return false;
+                        if (userStatusFilter === 'trial_active') {
+                          if (u.isBlocked || u.isTrialExpired || (u.daysRemaining !== undefined && u.daysRemaining <= 0)) return false;
+                        }
+                        if (userStatusFilter === 'trial_expired') {
+                          if (!u.isTrialExpired && (u.daysRemaining === undefined || u.daysRemaining > 0)) return false;
+                        }
+
+                        // Search
                         if (!userSearch.trim()) return true;
                         const s = userSearch.toLowerCase();
                         return (
@@ -2148,132 +2138,174 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           (u.mobile && u.mobile.includes(s))
                         );
                       })
-                      .map((u) => (
-                        <tr key={u.userId} className="hover:bg-slate-800/40 transition-colors">
-                          {/* User & Account */}
-                          <td className="p-3">
-                            <div className="font-bold text-white flex items-center gap-1.5">
-                              <span>{u.name || u.email.split('@')[0]}</span>
-                              {u.role === 'superadmin' ? (
-                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
-                                  👑 Super Admin
-                                </span>
-                              ) : u.role === 'admin' ? (
-                                <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9px] font-black rounded uppercase">
-                                  🛡️ Admin
-                                </span>
-                              ) : (
-                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded uppercase">
-                                  👤 User
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">{u.email}</div>
-                            {u.mobile && (
-                              <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
-                            )}
-                          </td>
+                      .map((u) => {
+                        const isSuper = isUserSuperAdmin(u.email) || u.role === 'superadmin';
+                        const isBlocked = Boolean(u.isBlocked);
+                        const isExpired = Boolean(u.isTrialExpired || (u.tier === 'basic' && u.daysRemaining !== undefined && u.daysRemaining <= 0));
+                        const trialStart = u.trialStartedAt || u.createdAt || u.activatedAt;
+                        const trialEnds = u.trialEndsAt || (trialStart ? trialStart + 7 * 24 * 3600 * 1000 : 0);
 
-                          {/* Role Changer */}
-                          <td className="p-3">
-                            <select
-                              value={u.role || 'user'}
-                              onChange={(e) => {
-                                const newRole = e.target.value as any;
-                                adminUpdateUserRecord(u.email, { role: newRole });
-                                adminUpdateCloudUser(u.userId, { role: newRole });
-                                setPlanUsers(getPlanUsers());
-                              }}
-                              className="bg-slate-950 border border-slate-700 text-amber-300 rounded-lg px-2 py-1 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
-                            >
-                              <option value="superadmin">👑 सुपर एडमिन (Super Admin)</option>
-                              <option value="admin">🛡️ एडमिन (Admin)</option>
-                              <option value="user">👤 सामान्य यूज़र (User)</option>
-                            </select>
-                          </td>
-
-                          {/* Channel & Logo */}
-                          <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-700 p-0.5 flex items-center justify-center overflow-hidden shrink-0">
-                                {u.channelLogoUrl ? (
-                                  <img
-                                    src={u.channelLogoUrl}
-                                    alt="Logo"
-                                    className="w-full h-full object-contain"
-                                    onError={(e) => {
-                                      (e.currentTarget as HTMLElement).style.display = 'none';
-                                    }}
-                                  />
+                        return (
+                          <tr key={u.userId || u.email} className={`hover:bg-slate-800/40 transition-colors ${isBlocked ? 'bg-rose-950/15' : ''}`}>
+                            {/* User & Account */}
+                            <td className="p-3">
+                              <div className="font-bold text-white flex items-center gap-1.5">
+                                <span>{u.name || u.fullName || u.username || 'यूज़र'}</span>
+                                {isSuper ? (
+                                  <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
+                                    👑 Super Admin
+                                  </span>
+                                ) : u.role === 'admin' ? (
+                                  <span className="px-1.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9px] font-black rounded uppercase">
+                                    🛡️ Admin
+                                  </span>
                                 ) : (
-                                  <span className="text-[9px] font-mono text-slate-500 font-bold text-center leading-tight">
-                                    लोगो नहीं<br />(BLANK)
+                                  <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded uppercase">
+                                    👤 Reporter
                                   </span>
                                 )}
                               </div>
-                              <div className="min-w-0">
-                                <div className="font-bold text-slate-200 truncate max-w-[130px]">
-                                  {u.channelName || 'चैनल नाम नहीं'}
-                                </div>
-                                <div className="text-[10px] text-slate-500">
-                                  {u.channelLogoUrl ? (u.channelLogoUrl.includes('.gif') ? 'GIF Logo' : 'PNG Logo') : 'डिफ़ॉल्ट ब्लैंक'}
-                                </div>
+                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">{u.email}</div>
+                              {u.mobile && (
+                                <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
+                              )}
+                              <div className="text-[9px] text-slate-500 mt-0.5">
+                                पंजीकृत: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('hi-IN') : 'सक्रिय'}
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Profile / Branding Info */}
-                          <td className="p-3">
-                            <div className="space-y-1">
-                              <div className="text-[11px] text-slate-300 truncate max-w-[150px]">
-                                🌐 {u.websiteUrl || <span className="text-slate-500">वेबसाइट नहीं</span>}
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                📱 {u.mobile || <span className="text-slate-500">नंबर नहीं</span>}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenBrandingEditor(u)}
-                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-slate-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                                <span>ब्रांडिंग संपादित करें</span>
-                              </button>
-                            </div>
-                          </td>
-
-                          {/* Current Plan */}
-                          <td className="p-3">
-                            <div className="space-y-1.5">
-                              <div>{getTierBadge(u.tier || 'basic')}</div>
+                            {/* Role Changer */}
+                            <td className="p-3">
                               <select
-                                value={u.tier || 'basic'}
+                                value={u.role || 'user'}
+                                disabled={isSuper}
                                 onChange={(e) => {
-                                  const newTier = e.target.value as UserPlanTier;
-                                  adminUpdateUserRecord(u.email, { tier: newTier });
+                                  const newRole = e.target.value as any;
+                                  adminUpdateUserRecord(u.email, { role: newRole });
+                                  adminUpdateCloudUser(u.userId, { role: newRole });
                                   setPlanUsers(getPlanUsers());
                                 }}
-                                className="bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-0.5 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                                className="bg-slate-950 border border-slate-700 text-amber-300 disabled:opacity-50 rounded-lg px-2 py-1 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
                               >
-                                <option value="basic">BASIC</option>
-                                <option value="advanced">ADVANCE</option>
-                                <option value="professional">PRO</option>
-                                <option value="ultra">VIP DESK</option>
+                                <option value="superadmin">👑 सुपर एडमिन</option>
+                                <option value="admin">🛡️ एडमिन</option>
+                                <option value="user">👤 रिपोर्टर / यूज़र</option>
                               </select>
-                              <div className="text-[10px] text-slate-400">
-                                वैध: {new Date(u.expiresAt).toLocaleDateString('hi-IN')}
-                              </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Profile Lock Status (Admin Unlock Control) */}
-                          <td className="p-3">
-                            <div className="space-y-1">
+                            {/* Channel & Logo */}
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-700 p-0.5 flex items-center justify-center overflow-hidden shrink-0">
+                                  {u.channelLogoUrl ? (
+                                    <img
+                                      src={u.channelLogoUrl}
+                                      alt="Logo"
+                                      className="w-full h-full object-contain"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <span className="text-[9px] font-mono text-slate-500 font-bold text-center leading-tight">
+                                      लोगो नहीं
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-slate-200 truncate max-w-[120px]">
+                                    {u.channelName || 'चैनल नाम नहीं'}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 truncate max-w-[120px]">
+                                    🌐 {u.websiteUrl || 'ainewsmaker.online'}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Current Plan */}
+                            <td className="p-3">
+                              <div className="space-y-1.5">
+                                <div>{getTierBadge(u.tier || 'basic')}</div>
+                                <select
+                                  value={u.tier || 'basic'}
+                                  disabled={isSuper}
+                                  onChange={(e) => {
+                                    const newTier = e.target.value as UserPlanTier;
+                                    adminUpdateUserRecord(u.email, { tier: newTier });
+                                    adminUpdateCloudUser(u.userId, { tier: newTier });
+                                    setPlanUsers(getPlanUsers());
+                                  }}
+                                  className="bg-slate-950 border border-slate-700 text-white disabled:opacity-50 rounded-lg px-1.5 py-0.5 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                                >
+                                  <option value="basic">BASIC</option>
+                                  <option value="advanced">ADVANCE</option>
+                                  <option value="professional">PRO</option>
+                                  <option value="ultra">VIP DESK</option>
+                                </select>
+                              </div>
+                            </td>
+
+                            {/* 7-Day Trial Status */}
+                            <td className="p-3">
+                              {isSuper || (u.tier && u.tier !== 'basic') ? (
+                                <div className="space-y-0.5">
+                                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold rounded flex items-center gap-1 w-max">
+                                    ⭐ सशुल्क / पेड प्लान
+                                  </span>
+                                  <div className="text-[10px] text-slate-400 font-mono">
+                                    वैध: {u.expiresAt ? new Date(u.expiresAt).toLocaleDateString('hi-IN') : 'स्थायी'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  {isExpired ? (
+                                    <span className="px-2 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold rounded flex items-center gap-1 w-max">
+                                      🔒 7-दिन ट्रायल समाप्त
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold rounded flex items-center gap-1 w-max">
+                                      ⏱️ {u.daysRemaining ?? 7} दिन {u.hoursRemaining ?? 0} घंटे शेष
+                                    </span>
+                                  )}
+                                  <div className="text-[9px] text-slate-400 font-mono leading-tight">
+                                    प्रारंभ: {trialStart ? new Date(trialStart).toLocaleDateString('hi-IN') : '-'}<br />
+                                    समाप्ति: {trialEnds ? new Date(trialEnds).toLocaleDateString('hi-IN') : '-'}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Account Status (Active vs Blocked) */}
+                            <td className="p-3">
+                              {isBlocked ? (
+                                <div className="space-y-0.5">
+                                  <span className="px-2 py-1 bg-rose-950/80 text-rose-300 border border-rose-600 rounded-lg text-[10px] font-black flex items-center gap-1 w-max">
+                                    <Ban className="w-3 h-3 text-rose-400" />
+                                    <span>🔴 ब्लॉक किया गया</span>
+                                  </span>
+                                  {u.blockedBy && (
+                                    <div className="text-[9px] text-rose-400/80">
+                                      द्वारा: {u.blockedBy}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="px-2 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-600 rounded-lg text-[10px] font-black flex items-center gap-1 w-max">
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span>🟢 सक्रिय (Active)</span>
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Profile Lock Status */}
+                            <td className="p-3">
                               <button
                                 type="button"
                                 onClick={() => {
                                   const newLockState = !u.isLocked;
                                   adminUpdateUserRecord(u.email, { isLocked: newLockState });
+                                  adminUpdateCloudUser(u.userId, { isLocked: newLockState });
                                   setPlanUsers(getPlanUsers());
                                 }}
                                 className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
@@ -2288,34 +2320,70 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                 }
                               >
                                 {u.isLocked !== false ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                <span>{u.isLocked !== false ? '🔒 लॉक्ड (डिफ़ॉल्ट)' : '🔓 अनलॉक्ड'}</span>
+                                <span>{u.isLocked !== false ? '🔒 लॉक्ड' : '🔓 अनलॉक्ड'}</span>
                               </button>
-                              <div className="text-[9px] text-slate-400">
-                                {u.isLocked !== false ? 'एडिट प्रतिबंधित' : 'यूज़र एडिट कर सकता है'}
-                              </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Delete User & Danger Zone */}
-                          <td className="p-3">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`क्या आप यूजर "${u.name || u.email}" का प्रोफाइल व पूरा डेटाबेस हमेशा के लिए हटाना चाहते हैं?`)) {
-                                  adminDeleteUserRecord(u.email);
-                                  adminDeleteCloudUser(u.userId);
-                                  setPlanUsers(getPlanUsers());
-                                }
-                              }}
-                              className="px-2.5 py-1 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/60 text-rose-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
-                              title="यूज़र प्रोफाइल व डेटाबेस हटाएं"
-                            >
-                              <Trash2 className="w-3 h-3 text-rose-400" />
-                              <span>हटाएं</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            {/* Actions Column: Block / Unblock, Edit Branding, Delete */}
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                {/* Block / Unblock Button */}
+                                {isBlocked ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleBlockUser(u)}
+                                    className="px-2 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/80 text-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                    title="खाते को अनब्लॉक करें"
+                                  >
+                                    <UserCheck className="w-3 h-3 text-emerald-400" />
+                                    <span>अनब्लॉक</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleBlockUser(u)}
+                                    disabled={isSuper}
+                                    className="px-2 py-1 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/80 text-amber-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                    title={isSuper ? "सुपर एडमिन को ब्लॉक नहीं किया जा सकता" : "खाते को तुरंत ब्लॉक करें"}
+                                  >
+                                    <Ban className="w-3 h-3 text-amber-400" />
+                                    <span>ब्लॉक</span>
+                                  </button>
+                                )}
+
+                                {/* Branding Edit Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenBrandingEditor(u)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                                  title="ब्रांडिंग विवरण संपादित करें"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>ब्रांडिंग</span>
+                                </button>
+
+                                {/* Delete User Button */}
+                                <button
+                                  type="button"
+                                  disabled={isSuper}
+                                  onClick={() => {
+                                    if (window.confirm(`क्या आप यूजर "${u.name || u.email}" का प्रोफाइल व पूरा डेटाबेस हमेशा के लिए हटाना चाहते हैं?`)) {
+                                      adminDeleteUserRecord(u.email);
+                                      adminDeleteCloudUser(u.userId);
+                                      setPlanUsers(getPlanUsers());
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/60 text-rose-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                  title={isSuper ? "सुपर एडमिन को हटाया नहीं जा सकता" : "यूज़र प्रोफाइल व डेटाबेस हटाएं"}
+                                >
+                                  <Trash2 className="w-3 h-3 text-rose-400" />
+                                  <span>हटाएं</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -2415,8 +2483,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1.5">सोशल आइकन्स (Social Icons)</label>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-200">
-                      {['youtube', 'facebook', 'instagram', 'twitter', 'telegram', 'whatsapp'].map((s) => (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs text-slate-200">
+                      {['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'].map((s) => (
                         <label key={s} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer hover:border-slate-700">
                           <input
                             type="checkbox"
@@ -2882,8 +2950,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceName(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {savedChannels.map((ch) => (
-                      <option key={ch} value={ch}>{ch}</option>
+                    {savedChannels.map((ch, idx) => (
+                      <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
                     ))}
                   </select>
                 </div>
@@ -2905,8 +2973,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceCategory(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.filter((c) => c.isActive).map((c) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c, idx) => (
+                      <option key={`${c.id}-${idx}`} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -3182,8 +3250,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceName(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
                   >
-                    {savedChannels.map((ch) => (
-                      <option key={ch} value={ch}>{ch}</option>
+                    {savedChannels.map((ch, idx) => (
+                      <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
                     ))}
                   </select>
                 </div>
@@ -3205,8 +3273,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     onChange={(e) => setNewSourceCategory(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
                   >
-                    {feedCategories.filter((c) => c.isActive).map((c) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                    {feedCategories.filter((c) => c.isActive).map((c, idx) => (
+                      <option key={`${c.id}-${idx}`} value={c.name}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -3676,6 +3744,54 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <HelpAndPoliciesView />
             </div>
           )}
+        </div>
+
+        {/* PERMANENT ADMIN SYSTEM CONTROL & APK DOWNLOAD AT BOTTOM OF CONTROL PANEL */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-4 my-6">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold">
+                ⚙️
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  एडमिन सिस्टम टूल्स व एक्शन बटन्स (Admin Control Actions)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  गूगल शीट यूज़र्स सिंक व डेटाबेस बैकअप टूल
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 bg-amber-500 text-slate-950 text-xs font-black rounded-lg">
+              ADMIN ONLY
+            </span>
+          </div>
+
+          <div className="pt-2">
+            {/* Google Sheets Users Sync Button */}
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('ai_news_open_users_sheet_modal'));
+              }}
+              className="w-full p-4 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
+                  📊
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-black text-white group-hover:text-emerald-300 transition">
+                    "एआई न्यूज़ मेकर ऐप की गूगल शीट" ऑटो-सिंक
+                  </div>
+                  <div className="text-[11px] sm:text-xs text-emerald-200/80">
+                    यूज़र्स डेटाबेस ऑटो-सिंक व गूगल शीट सेटिंग्स
+                  </div>
+                </div>
+              </div>
+              <FileSpreadsheet className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition" />
+            </button>
+          </div>
         </div>
     </div>
   );

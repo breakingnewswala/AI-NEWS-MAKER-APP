@@ -159,6 +159,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
   // Validation Error State for Step 2 setup
   const [step2ErrorMsg, setStep2ErrorMsg] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const [socialIcons, setSocialIcons] = useState({
     youtube: initialProfile.socialIcons?.youtube ?? true,
@@ -753,11 +754,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   };
 
   // Final Step 2 Submit: Save Channel Details & Enter App
-  const handleCompleteSetupSubmit = (e: React.FormEvent) => {
+  const handleCompleteSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setStep2ErrorMsg('');
 
-    const finalUser = (username || '').replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const finalUser = (username || '').replace(/^@+/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     const finalWeb = websiteUrl.trim();
     const finalHi = detailChannelNameHi.trim();
 
@@ -793,112 +795,127 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     // Verify OTP first if not already locked
     if (!otpVerified && !subscription.isMobileLocked) {
-      setOtpError('कृपया आगे बढ़ने से पहले प्राइमरी मोबाइल नंबर का OTP सत्यापन पूरा करें।');
+      setStep2ErrorMsg('कृपया आगे बढ़ने से पहले प्राइमरी मोबाइल नंबर का OTP सत्यापन पूरा करें।');
       return;
     }
 
-    if (primaryMobileNumber.trim()) {
-      savePrimaryMobileNumber(primaryMobileNumber.trim());
+    setIsSubmitting(true);
+    try {
+      if (primaryMobileNumber.trim()) {
+        savePrimaryMobileNumber(primaryMobileNumber.trim());
+      }
+      activateFreeTrial();
+
+      const activeEmail = (currentUser?.email || tempRegisteredUser?.email || "").toLowerCase().trim();
+      const isSuper = isUserSuperAdmin(activeEmail);
+      const isAdm = isSuper || (currentUser?.role === "admin") || (tempRegisteredUser?.role === "admin");
+
+      // Lock channel details and logo for normal users (One-Time Setup Rule)
+      if (!isAdm) {
+        localStorage.setItem("is_channel_profile_locked", "true");
+      }
+
+      const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
+      const finalWhatsapp = graphicContactNumber.trim() || primaryMobileNumber.trim();
+
+      const cleanSavedUsername = (username || '').replace(/^@+/, '').trim();
+
+      const finalProfile: ChannelProfile = {
+        fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
+        channelNameHi: detailChannelNameHi.trim() || "AI News Maker App",
+        channelNameEn: detailChannelNameEn.trim() || "AI News Maker",
+        channelLogoUrl: detailChannelLogoUrl || "",
+        channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
+        channelLogoType: detailChannelLogoType,
+        socialIcons,
+        username: cleanSavedUsername,
+        mobileNumber: primaryMobileNumber.trim() || finalContact,
+        whatsappNumber: finalWhatsapp,
+        showMobileNumber,
+        websiteUrl: websiteUrl.trim() || "ainewsmaker.online",
+        isLocked: !isAdm,
+      };
+
+      const updatedUser: ReporterUser = {
+        username: finalProfile.username,
+        name: finalProfile.fullName,
+        role: isSuper ? "superadmin" : (isAdm ? "admin" : "user"),
+        district: reportingDistrict || currentUser?.district || "सेंट्रल डेस्क",
+        email: activeEmail || "user@ainewsmaker.online",
+        avatarUrl: currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl,
+      };
+
+      localStorage.setItem("user_channel_profile", JSON.stringify(finalProfile));
+      localStorage.setItem("reporter_auth_session", JSON.stringify(updatedUser));
+      localStorage.setItem("is_onboarding_completed", "true");
+      if (updatedUser.email) {
+        const cleanEmail = updatedUser.email.toLowerCase().trim();
+        localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+        localStorage.setItem(`terms_accepted_${cleanEmail}`, "true");
+        localStorage.setItem(`onboarding_completed_${cleanEmail}`, "true");
+        localStorage.removeItem(`onboarding_draft_${cleanEmail}`);
+
+        // Sync permanently to backend /api/user-profile and /api/users/sync
+        try {
+          const payload = {
+            userId: cleanEmail,
+            email: cleanEmail,
+            username: finalProfile.username,
+            fullName: finalProfile.fullName,
+            role: updatedUser.role,
+            district: updatedUser.district,
+            channelName: finalProfile.channelNameHi,
+            channelNameHi: finalProfile.channelNameHi,
+            channelNameEn: finalProfile.channelNameEn,
+            channelLogoUrl: finalProfile.channelLogoUrl,
+            channelLogoPngUrl: finalProfile.channelLogoPngUrl,
+            channelLogoGifUrl: finalProfile.channelLogoGifUrl,
+            channelLogoType: finalProfile.channelLogoType,
+            mobile: finalProfile.mobileNumber,
+            mobileNumber: finalProfile.mobileNumber,
+            whatsappNumber: finalProfile.whatsappNumber,
+            showMobileNumber: finalProfile.showMobileNumber,
+            websiteUrl: finalProfile.websiteUrl,
+            socialIcons: finalProfile.socialIcons,
+            tier: isAdm ? 'ultra' : 'basic',
+          };
+          await Promise.allSettled([
+            fetch(getApiUrl('/api/user-profile'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }),
+            fetch(getApiUrl('/api/users/sync'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }),
+          ]);
+        } catch (syncErr) {
+          console.warn('Backend sync warning:', syncErr);
+        }
+      }
+
+      // Register or update in Admin directory with username explicitly preserved
+      registerOrUpdateUser({
+        email: updatedUser.email,
+        name: updatedUser.name,
+        username: finalProfile.username,
+        mobile: finalProfile.mobileNumber,
+        channelName: finalProfile.channelNameHi,
+        channelLogoUrl: finalProfile.channelLogoUrl,
+        tier: isAdm ? "ultra" : "basic",
+        role: updatedUser.role,
+        isLocked: !isAdm,
+      });
+
+      onCompleteDetails(finalProfile, updatedUser);
+    } catch (err: any) {
+      console.error('Error completing setup:', err);
+      setStep2ErrorMsg(err?.message || 'प्रोफ़ाइल सहेजने में त्रुटि हुई। कृपया पुनः प्रयास करें।');
+    } finally {
+      setIsSubmitting(false);
     }
-    activateFreeTrial();
-
-    const activeEmail = (currentUser?.email || tempRegisteredUser?.email || "").toLowerCase().trim();
-    const isSuper = isUserSuperAdmin(activeEmail);
-    const isAdm = isSuper || (currentUser?.role === "admin") || (tempRegisteredUser?.role === "admin");
-
-    // Lock channel details and logo for normal users (One-Time Setup Rule)
-    if (!isAdm) {
-      localStorage.setItem("is_channel_profile_locked", "true");
-    }
-
-    const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
-    const finalWhatsapp = graphicContactNumber.trim() || primaryMobileNumber.trim();
-
-    const finalProfile: ChannelProfile = {
-      fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
-      channelNameHi: detailChannelNameHi.trim() || "AI News Maker App",
-      channelNameEn: detailChannelNameEn.trim() || "AI News Maker",
-      channelLogoUrl: detailChannelLogoUrl || "",
-      channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
-      channelLogoType: detailChannelLogoType,
-      socialIcons,
-      username: username.replace(/^@/, "").trim(),
-      mobileNumber: primaryMobileNumber.trim() || finalContact,
-      whatsappNumber: finalWhatsapp,
-      showMobileNumber,
-      websiteUrl: websiteUrl.trim() || "ainewsmaker.online",
-      isLocked: !isAdm,
-    };
-
-    const updatedUser: ReporterUser = {
-      username: finalProfile.username,
-      name: finalProfile.fullName,
-      role: isSuper ? "superadmin" : (isAdm ? "admin" : "user"),
-      district: reportingDistrict || currentUser?.district || "सेंट्रल डेस्क",
-      email: activeEmail || "user@ainewsmaker.online",
-      avatarUrl: currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl,
-    };
-
-    localStorage.setItem("user_channel_profile", JSON.stringify(finalProfile));
-    localStorage.setItem("reporter_auth_session", JSON.stringify(updatedUser));
-    localStorage.setItem("is_onboarding_completed", "true");
-    if (updatedUser.email) {
-      const cleanEmail = updatedUser.email.toLowerCase().trim();
-      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
-      localStorage.setItem(`terms_accepted_${cleanEmail}`, "true");
-      localStorage.setItem(`onboarding_completed_${cleanEmail}`, "true");
-      localStorage.removeItem(`onboarding_draft_${cleanEmail}`);
-
-      // Sync permanently to backend /api/user-profile and /api/users/sync
-      try {
-        const payload = {
-          userId: cleanEmail,
-          email: cleanEmail,
-          username: finalProfile.username,
-          fullName: finalProfile.fullName,
-          role: updatedUser.role,
-          district: updatedUser.district,
-          channelName: finalProfile.channelNameHi,
-          channelNameHi: finalProfile.channelNameHi,
-          channelNameEn: finalProfile.channelNameEn,
-          channelLogoUrl: finalProfile.channelLogoUrl,
-          channelLogoPngUrl: finalProfile.channelLogoPngUrl,
-          channelLogoGifUrl: finalProfile.channelLogoGifUrl,
-          channelLogoType: finalProfile.channelLogoType,
-          mobile: finalProfile.mobileNumber,
-          mobileNumber: finalProfile.mobileNumber,
-          whatsappNumber: finalProfile.whatsappNumber,
-          showMobileNumber: finalProfile.showMobileNumber,
-          websiteUrl: finalProfile.websiteUrl,
-          socialIcons: finalProfile.socialIcons,
-          tier: isAdm ? 'ultra' : 'basic',
-        };
-        fetch(getApiUrl('/api/user-profile'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch(() => {});
-        fetch(getApiUrl('/api/users/sync'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch(() => {});
-      } catch {}
-    }
-
-    // Register or update in Admin directory
-    registerOrUpdateUser({
-      email: updatedUser.email,
-      name: updatedUser.name,
-      mobile: finalProfile.mobileNumber,
-      channelName: finalProfile.channelNameHi,
-      channelLogoUrl: finalProfile.channelLogoUrl,
-      tier: isAdm ? "ultra" : "basic",
-      role: updatedUser.role,
-      isLocked: !isAdm,
-    });
-
-    onCompleteDetails(finalProfile, updatedUser);
   };
 
   return (
@@ -1780,10 +1797,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               <div className="pt-2 space-y-2">
                 <button
                   type="submit"
-                  className="w-full py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
+                  disabled={isSubmitting}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60"
                 >
-                  <Sparkles className="w-5 h-5 text-slate-950" />
-                  <span>सेव करें एवं होम फ़ीड शुरू करें →</span>
+                  <Sparkles className={`w-5 h-5 text-slate-950 ${isSubmitting ? 'animate-spin' : ''}`} />
+                  <span>{isSubmitting ? 'सहेजा जा रहा है...' : 'सेव करें एवं होम फ़ीड शुरू करें →'}</span>
                 </button>
               </div>
             </form>
