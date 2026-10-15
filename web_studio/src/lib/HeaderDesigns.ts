@@ -197,33 +197,24 @@ export function drawOriginalHeader(
 
   if (customLogoImg) {
     ctx.save();
-    // Circle shadow
     ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 3;
-    ctx.beginPath();
-    ctx.arc(iconCx, iconCy, iconRadius, 0, Math.PI * 2);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fill();
-
-    // Clip to circle and draw custom logo image
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(iconCx, iconCy, iconRadius, 0, Math.PI * 2);
-    ctx.clip();
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    const lRatio = customLogoImg.width / customLogoImg.height;
+    const maxDim = iconRadius * 2;
+    let lW = maxDim;
+    let lH = maxDim / lRatio;
+    if (lH > maxDim) {
+      lH = maxDim;
+      lW = maxDim * lRatio;
+    }
     ctx.drawImage(
       customLogoImg,
-      iconCx - iconRadius,
-      iconCy - iconRadius,
-      iconRadius * 2,
-      iconRadius * 2
+      iconCx - lW / 2,
+      iconCy - lH / 2,
+      lW,
+      lH
     );
-    ctx.restore();
-
-    // Outer border
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#FFE600';
-    ctx.stroke();
     ctx.restore();
   } else {
     // Default globe emblem

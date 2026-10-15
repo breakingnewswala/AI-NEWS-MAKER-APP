@@ -37,6 +37,7 @@ local.properties
 debug.keystore
 debug.keystore.base64
 *.log
+backups/
 
 # Keep important config templates
 !.env.example

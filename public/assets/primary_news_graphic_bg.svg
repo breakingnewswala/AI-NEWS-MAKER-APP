@@ -43,29 +43,7 @@
   <ellipse cx="155" cy="95" rx="140" ry="80" fill="#E20613" opacity="0.25" filter="url(#glowEffect)"/>
   <ellipse cx="880" cy="95" rx="140" ry="70" fill="#E20613" opacity="0.2" filter="url(#glowEffect)"/>
 
-  <!-- TOP-LEFT: CIRCULAR LOGO BADGE (X: 155, Y: 95) -->
-  <g id="logoArea">
-    <!-- Outer red aura ring -->
-    <circle cx="155" cy="95" r="76" fill="none" stroke="#E20613" stroke-width="4" filter="url(#glowEffect)"/>
-    <circle cx="155" cy="95" r="72" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="3" filter="url(#softShadow)"/>
-    <!-- Default Text inside logo circle -->
-    <text x="155" y="86" text-anchor="middle" font-family="'Arial Black', Impact, sans-serif" font-size="24" font-weight="900" fill="#0A0A0A" letter-spacing="1">YOUR</text>
-    <text x="155" y="118" text-anchor="middle" font-family="'Arial Black', Impact, sans-serif" font-size="28" font-weight="900" fill="#0A0A0A" letter-spacing="1">LOGO</text>
-  </g>
-
-  <!-- TOP-RIGHT: LOCATION BADGE CAPSULE (X: 720 to 1020, Y: 62 to 128) -->
-  <g id="locationArea" filter="url(#softShadow)">
-    <!-- Red outer capsule -->
-    <rect x="720" y="62" width="300" height="66" rx="33" fill="#DC2626"/>
-    <!-- Left white circle with location pin -->
-    <circle cx="755" cy="95" r="23" fill="#FFFFFF"/>
-    <!-- Pin icon inside circle -->
-    <path d="M755 81 C750 81 746 85 746 90 C746 96 755 106 755 106 C755 106 764 96 764 90 C764 85 760 81 755 81 Z M755 93 C753.3 93 752 91.7 752 90 C752 88.3 753.3 87 755 87 C756.7 87 758 88.3 758 90 C758 91.7 756.7 93 755 93 Z" fill="#DC2626"/>
-    <!-- Right white pill container -->
-    <rect x="790" y="68" width="222" height="54" rx="12" fill="#FFFFFF"/>
-    <text x="901" y="104" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', sans-serif" font-size="28" font-weight="800" fill="#090A0F">लोकेशन</text>
-  </g>
-
+  <!-- Dynamic overlays for Logo and Location are rendered by CardPreview and CanvasExporter -->
   <!-- Fiery divider streak below header -->
   <rect x="0" y="168" width="1080" height="4" fill="url(#streakGlow)" filter="url(#glowEffect)"/>
 

@@ -68,7 +68,7 @@ export const KNOWN_REGISTERED_USERS: Record<
     channelNameEn: 'AI News Maker',
     channelLogoUrl: '/assets/ai_news_maker_logo.png',
     channelLogoType: 'png',
-    username: 'admin.ainewsmaker',
+    username: 'AI News Maker',
     mobileNumber: '9669802408',
     websiteUrl: 'ainewsmaker.online',
     fullName: 'सुपर एडमिन (Super Admin)',

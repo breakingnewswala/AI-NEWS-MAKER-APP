@@ -51,8 +51,26 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     !card.images.main.includes('placeholder_news_search') &&
     !card.images.main.includes('preview_placeholder')
   );
+  const getProxiedImageUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://')
+    ) {
+      if (
+        typeof window !== 'undefined' &&
+        !trimmed.startsWith(window.location.origin) &&
+        !trimmed.startsWith('/api/proxy-image')
+      ) {
+        return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+      }
+    }
+    return trimmed;
+  };
+
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
-    ? card.images.main
+    ? getProxiedImageUrl(card.images.main)
     : FALLBACK_NEWS_BG;
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomPlateRef = useRef<HTMLDivElement>(null);
@@ -945,7 +963,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           )}
 
           {/* Top-Left Channel Logo Area: Displays login user's transparent PNG logo in designated logo area */}
-          {card.showMasterBranding !== false && card.customLogoUrl && (
+          {card.showMasterBranding !== false && (
             <div
               className="absolute z-30 flex items-center justify-center pointer-events-auto"
               style={{
@@ -957,11 +975,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 transformOrigin: 'center center',
               }}
             >
-              <img
-                src={card.customLogoUrl}
-                alt="Channel Logo"
-                className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
-              />
+              {card.customLogoUrl ? (
+                <img
+                  src={card.customLogoUrl}
+                  alt="Channel Logo"
+                  className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
+                />
+              ) : (
+                <span className="text-white font-black text-lg sm:text-xl md:text-2xl tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-['Poppins']">
+                  Your Logo
+                </span>
+              )}
             </div>
           )}
 

@@ -1520,11 +1520,26 @@ export default function App() {
       targetImageForStudio = post.imageUrl.trim();
     }
 
+    const safeProxy = (u: string) => {
+      if (!u || !u.trim()) return '';
+      const trimmed = u.trim();
+      if ((trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+          typeof window !== 'undefined' &&
+          !trimmed.startsWith(window.location.origin) &&
+          !trimmed.startsWith('/api/proxy-image')) {
+        return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+      }
+      return trimmed;
+    };
+
+    const safeTargetImage = safeProxy(targetImageForStudio);
+
     // Collect all available photos for this article: primary + up to 3 additional photos
-    const articlePhotos: string[] = [targetImageForStudio];
+    const articlePhotos: string[] = [safeTargetImage || targetImageForStudio];
     if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
       post.additionalPhotos.forEach((p) => {
-        if (p && !articlePhotos.includes(p)) articlePhotos.push(p);
+        const safeP = safeProxy(p);
+        if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
       });
     }
 
@@ -1545,7 +1560,7 @@ export default function App() {
       summary: post.summary,
       images: {
         ...prev.images,
-        main: targetImageForStudio,
+        main: safeTargetImage,
       },
     }));
 

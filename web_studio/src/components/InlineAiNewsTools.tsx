@@ -341,9 +341,23 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
       const finalHeadline = cleanHeadlineText(opts[0] || res.headline || extraData?.title || card.headline);
       const finalLoc = res.location || extraData?.location || card.location || 'विशेष कवरेज';
-      const finalImage = (res.pickedImages?.main && !res.pickedImages.main.includes('placeholder'))
-        ? res.pickedImages.main
-        : (extraData?.imageUrl || card.images.main);
+      const safeProxy = (u?: string) => {
+        if (!u || !u.trim()) return '';
+        const trimmed = u.trim();
+        if ((trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+            typeof window !== 'undefined' &&
+            !trimmed.startsWith(window.location.origin) &&
+            !trimmed.startsWith('/api/proxy-image')) {
+          return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+        }
+        return trimmed;
+      };
+
+      const finalImage = safeProxy(
+        (res.pickedImages?.main && !res.pickedImages.main.includes('placeholder'))
+          ? res.pickedImages.main
+          : (extraData?.imageUrl || card.images.main)
+      );
 
       onChange({
         headline: finalHeadline,
@@ -354,7 +368,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         images: {
           ...card.images,
           main: finalImage,
-          second: res.pickedImages?.second || card.images.second,
+          second: safeProxy(res.pickedImages?.second || card.images.second),
         },
       });
 

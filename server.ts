@@ -917,10 +917,16 @@ export interface StoredNotification {
 }
 
 function cleanGenerateUsername(requestedUsername?: string, fullName?: string, existingUsername?: string): string {
+  const users = loadUsersMasterDatabase();
+  const taken = new Set(users.map(u => (u.username || '').toLowerCase().trim().replace(/^@/, '')));
+
   if (requestedUsername && typeof requestedUsername === 'string') {
     const clean = requestedUsername.trim().replace(/^@/, '');
     if (clean && !clean.includes('@') && !clean.includes('.')) {
-      return clean;
+      const lower = clean.toLowerCase();
+      if (!taken.has(lower) || (existingUsername && existingUsername.toLowerCase().trim().replace(/^@/, '') === lower)) {
+        return clean;
+      }
     }
   }
   if (existingUsername && typeof existingUsername === 'string') {
@@ -929,18 +935,25 @@ function cleanGenerateUsername(requestedUsername?: string, fullName?: string, ex
       return clean;
     }
   }
+  let base = 'reporter';
   if (fullName && typeof fullName === 'string') {
     const englishName = fullName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
     if (englishName.length >= 3) {
-      return englishName.slice(0, 16);
+      base = englishName.slice(0, 16);
     }
   }
-  return `reporter_${Math.floor(1000 + Math.random() * 9000)}`;
+  let candidate = base;
+  let counter = 1;
+  while (taken.has(candidate.toLowerCase())) {
+    candidate = `${base}_${counter}`;
+    counter++;
+  }
+  return candidate;
 }
 
 function isProtectedAdminAccount(email?: string): boolean {
   if (!email) return false;
-  const clean = email.toLowerCase().trim();
+  const clean = email.toLowerCase().replace(/\s+/g, '').trim();
   return (
     clean === 'admin.ainewsmaker@gmail.com' ||
     clean === 'breakingnewswala.com@gmail.com'
@@ -1157,7 +1170,7 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const preservedTrialEnds = existing.trialEndsAt || (preservedTrialStart + SEVEN_DAYS_MS);
 
     const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
-      ? (existing.username || 'admin.ainewsmaker')
+      ? 'AI News Maker'
       : (isBreakingNewsWala
           ? (userPayload.username && !userPayload.username.includes('@') ? userPayload.username.replace(/^@/, '') : (existing.username || 'breakingnewswala'))
           : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name, existing.username));
@@ -1201,7 +1214,7 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const newTrialEnds = now + SEVEN_DAYS_MS;
 
     const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
-      ? 'admin.ainewsmaker'
+      ? 'AI News Maker'
       : (isBreakingNewsWala
           ? 'breakingnewswala'
           : cleanGenerateUsername(userPayload.username, userPayload.fullName || userPayload.name));
@@ -1657,6 +1670,46 @@ app.delete("/api/admin/videos/:id", (req, res) => {
     return res.json({ success: true, deletedId: videoId, remaining: filtered.length });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// GET /api/check-username (Backend validation of global username uniqueness)
+app.get("/api/check-username", (req, res) => {
+  try {
+    const rawUsername = (req.query.username || "").toString().trim().replace(/^@/, "");
+    const email = (req.query.email || "").toString().trim().toLowerCase();
+    if (!rawUsername) {
+      return res.status(400).json({ available: false, error: "यूज़रनेम दर्ज करना अनिवार्य है।" });
+    }
+    const lower = rawUsername.toLowerCase();
+    
+    // Check reserved names
+    const reservedSuperAdmin = ["ainewsmaker", "ai news maker", "breakingnewswala", "breaking news wala"];
+    if (reservedSuperAdmin.includes(lower)) {
+      if ((lower.includes("ainewsmaker") || lower.includes("ai news maker")) && email === "admin.ainewsmaker@gmail.com") {
+        return res.json({ available: true, reservedForYou: true });
+      }
+      if ((lower.includes("breaking") || lower.includes("breakingnewswala")) && email === "breakingnewswala.com@gmail.com") {
+        return res.json({ available: true, reservedForYou: true });
+      }
+      return res.json({ available: false, error: "यह यूज़रनेम सुपर एडमिन के लिए आरक्षित है।" });
+    }
+    
+    const users = loadUsersMasterDatabase();
+    const match = users.find(u => {
+      const uName = (u.username || "").toLowerCase().trim().replace(/^@/, "");
+      return uName === lower;
+    });
+    
+    if (match) {
+      if (email && match.email && match.email.toLowerCase().trim() === email) {
+        return res.json({ available: true, isCurrentUser: true });
+      }
+      return res.json({ available: false, error: "यह यूज़रनेम पहले से किसी अन्य सदस्य द्वारा पंजीकृत है।" });
+    }
+    return res.json({ available: true });
+  } catch (err: any) {
+    return res.status(500).json({ available: false, error: err.message });
   }
 });
 
@@ -3099,14 +3152,14 @@ app.post("/api/auth/login", (req, res) => {
       const existing = Object.values(allProfiles).find(
         (p) => (p.uid && p.uid === googleUid) || (p.userId && p.userId === googleUid) || (p.email && p.email.toLowerCase() === cleanId)
       );
-      const isSuper = cleanId === "admin.ainewsmaker@gmail.com";
-      const isAdmin = cleanId === "breakingnewswala.com@gmail.com";
+      const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
+      const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
 
       let safeUsername: string;
       if (isSuper) {
-        safeUsername = existing?.username || "admin.ainewsmaker";
+        safeUsername = "AI News Maker";
       } else if (isAdmin) {
-        safeUsername = existing?.username || "breakingnewswala";
+        safeUsername = "breakingnewswala";
       } else {
         safeUsername = cleanGenerateUsername(profileData?.username, profileData?.name || profileData?.fullName, existing?.username);
       }
@@ -3116,22 +3169,22 @@ app.post("/api/auth/login", (req, res) => {
         uid: existing?.uid || googleUid,
         email: cleanId,
         username: safeUsername,
-        fullName: profileData?.name || profileData?.fullName || existing?.fullName || "यूज़र",
-        name: profileData?.name || profileData?.fullName || existing?.fullName || "यूज़र",
-        role: isSuper ? "superadmin" : (isAdmin ? "admin" : (existing?.role || "user")),
+        fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "सुपर एडमिन (Super Admin)" : (isAdmin ? "मुख्य संपादक" : "यूज़र")),
+        name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "सुपर एडमिन (Super Admin)" : (isAdmin ? "मुख्य संपादक" : "यूज़र")),
+        role: isSuper ? "superadmin" : (isAdmin ? "superadmin" : (existing?.role || "user")),
         tier: isSuper ? "ultra" : (isAdmin ? "ultra" : (existing?.tier || "basic")),
         planName: isSuper ? "VIP DESK" : (isAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
-        channelName: profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर",
-        channelNameHi: profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर",
-        channelNameEn: existing?.channelNameEn || "AI News Maker",
-        channelLogoUrl: profileData?.channelLogoUrl || existing?.channelLogoUrl || "",
-        channelLogoPngUrl: existing?.channelLogoPngUrl || "",
+        channelName: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
+        channelNameHi: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
+        channelNameEn: isSuper ? "AI News Maker" : (isAdmin ? "Breaking News Wala" : (existing?.channelNameEn || "AI News Maker")),
+        channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (profileData?.channelLogoUrl || existing?.channelLogoUrl || "")),
+        channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || "")),
         channelLogoGifUrl: existing?.channelLogoGifUrl || "",
         channelLogoType: existing?.channelLogoType || "png",
-        mobile: profileData?.mobile || existing?.mobileNumber || "",
-        mobileNumber: profileData?.mobile || existing?.mobileNumber || "",
-        district: existing?.district || (isAdmin ? "सेंट्रल डेस्क / भोपाल" : "डिजिटल डेस्क"),
-        websiteUrl: existing?.websiteUrl || "ainewsmaker.online",
+        mobile: profileData?.mobile || existing?.mobileNumber || "9669802408",
+        mobileNumber: profileData?.mobile || existing?.mobileNumber || "9669802408",
+        district: existing?.district || (isSuper ? "हेडक्वार्टर सेंट्रल डेस्क" : (isAdmin ? "सेंट्रल डेस्क / भोपाल" : "डिजिटल डेस्क")),
+        websiteUrl: isSuper ? "ainewsmaker.online" : (isAdmin ? "breakingnewswala.com" : (existing?.websiteUrl || "ainewsmaker.online")),
         isProfileLocked: !isAdmin && !isSuper,
       };
 
@@ -3527,30 +3580,88 @@ app.post("/api/upload-logo", enforceUserAccessMiddleware, (req, res) => {
 
     const logoUrl = `/uploads/logos/${filename}`;
 
-    // If username provided, update user profile
-    if (username) {
+    // If username or email provided, update user profile
+    const userOrEmail = (username || req.body.email || "").trim().toLowerCase();
+    if (userOrEmail) {
       const allProfiles = loadProfilesDatabase();
-      const key = username.trim().toLowerCase();
-      if (allProfiles[key]) {
-        if (isGif) {
-          allProfiles[key].channelLogoGifUrl = logoUrl;
-          allProfiles[key].channelLogoType = "gif";
-          allProfiles[key].channelLogoUrl = logoUrl;
-        } else {
-          allProfiles[key].channelLogoPngUrl = logoUrl;
-          allProfiles[key].channelLogoType = "png";
-          allProfiles[key].channelLogoUrl = logoUrl;
+      let targetKey = "";
+      if (allProfiles[userOrEmail]) {
+        targetKey = userOrEmail;
+      } else {
+        const cleanE = userOrEmail.replace(/\s+/g, "");
+        for (const k of Object.keys(allProfiles)) {
+          const p = allProfiles[k];
+          const pEmail = (p.email || "").toLowerCase().replace(/\s+/g, "");
+          const pUser = (p.username || "").toLowerCase().trim();
+          if (pEmail === cleanE || pUser === userOrEmail) {
+            targetKey = k;
+            break;
+          }
         }
-        allProfiles[key].updatedAt = Date.now();
+      }
+      if (targetKey && allProfiles[targetKey]) {
+        if (isGif) {
+          allProfiles[targetKey].channelLogoGifUrl = logoUrl;
+          allProfiles[targetKey].channelLogoType = "gif";
+        } else {
+          allProfiles[targetKey].channelLogoPngUrl = logoUrl;
+          allProfiles[targetKey].channelLogoType = "png";
+          allProfiles[targetKey].channelLogoUrl = logoUrl;
+        }
+        allProfiles[targetKey].updatedAt = Date.now();
         saveProfilesDatabase(allProfiles);
         // Also update authoritative user record
         try {
-          registerOrUpdateUserAuthoritative(allProfiles[key]);
+          registerOrUpdateUserAuthoritative(allProfiles[targetKey]);
         } catch {}
       }
     }
 
     return res.json({ success: true, logoUrl, logoType: isGif ? "gif" : "png" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST Remove GIF Logo (clears animated GIF and falls back to primary PNG logo)
+app.post("/api/remove-gif-logo", enforceUserAccessMiddleware, (req, res) => {
+  try {
+    const { username, email, targetUsername } = req.body;
+    const cleanEmail = (email || "").toLowerCase().replace(/\s+/g, "").trim();
+    const cleanUser = (targetUsername || username || "").toLowerCase().trim();
+
+    const allProfiles = loadProfilesDatabase();
+    let targetKey = "";
+    if (cleanUser && allProfiles[cleanUser]) {
+      targetKey = cleanUser;
+    } else {
+      for (const k of Object.keys(allProfiles)) {
+        const prof = allProfiles[k];
+        const pEmail = (prof.email || "").toLowerCase().replace(/\s+/g, "").trim();
+        const pUser = (prof.username || "").toLowerCase().trim();
+        if ((cleanEmail && pEmail === cleanEmail) || (cleanUser && pUser === cleanUser)) {
+          targetKey = k;
+          break;
+        }
+      }
+    }
+
+    if (targetKey && allProfiles[targetKey]) {
+      delete allProfiles[targetKey].channelLogoGifUrl;
+      allProfiles[targetKey].channelLogoType = "png";
+      allProfiles[targetKey].channelLogoUrl =
+        allProfiles[targetKey].channelLogoPngUrl ||
+        (allProfiles[targetKey].channelLogoUrl?.endsWith(".gif") ? "" : allProfiles[targetKey].channelLogoUrl) ||
+        "/assets/ai_news_maker_logo.png";
+      allProfiles[targetKey].updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+      try {
+        registerOrUpdateUserAuthoritative(allProfiles[targetKey]);
+      } catch {}
+      return res.json({ success: true, message: "GIF logo removed successfully" });
+    }
+
+    return res.json({ success: true, message: "Profile already without GIF logo" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

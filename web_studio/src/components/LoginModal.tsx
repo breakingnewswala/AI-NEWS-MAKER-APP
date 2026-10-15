@@ -62,7 +62,7 @@ const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
   'admin.ainewsmaker@gmail.com': {
     pass: '',
     user: {
-      username: 'admin.ainewsmaker',
+      username: 'AI News Maker',
       name: 'मास्टर एडमिन (Master Admin)',
       role: 'superadmin' as any,
       district: 'हेडक्वार्टर सेंट्रल डेस्क',
@@ -143,7 +143,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       let safeUsername = '';
       if (isSuper) {
-        safeUsername = 'admin.ainewsmaker';
+        safeUsername = 'AI News Maker';
       } else if (isAdmin) {
         safeUsername = 'breakingnewswala';
       } else {

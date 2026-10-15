@@ -12,21 +12,23 @@
     "isProfileLocked": false,
     "activatedAt": 1791697518060,
     "expiresAt": 2107057518060,
-    "activatedVia": "Super Admin Preset"
+    "activatedVia": "Super Admin Preset",
+    "username": "AI News Maker"
   },
   {
     "userId": "usr_627265616b69",
     "email": "breakingnewswala.com@gmail.com",
     "name": "मुख्य संपादक",
-    "role": "admin",
+    "role": "superadmin",
     "tier": "ultra",
     "planName": "VIP DESK",
-    "channelName": "एआई न्यूज़ मेकर",
+    "channelName": "ब्रेकिंग न्यूज़ वाला",
     "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
     "mobile": "9669802408",
     "isProfileLocked": false,
     "activatedAt": 1791792137805,
     "expiresAt": 2107057518060,
-    "activatedVia": "Admin Preset"
+    "activatedVia": "Admin Preset",
+    "username": "breakingnewswala"
   }
 ]

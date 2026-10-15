@@ -277,11 +277,51 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const isGif = file.type.includes('gif') || file.name.toLowerCase().endsWith('.gif');
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         if (typeof reader.result === 'string') {
-          setChannelLogoUrl(reader.result);
-          showToast('✅ चैनल लोगो अपडेट हुआ!');
+          const dataUrl = reader.result;
+          setChannelLogoUrl(dataUrl);
+          showToast(isGif ? '🎬 एनिमेटेड GIF लोगो अपलोड हो रहा है...' : '📦 चैनल लोगो अपलोड हो रहा है...');
+
+          try {
+            const userIdentifier = currentUser?.username || profile?.username || currentUser?.email || profile?.email || '';
+            const res = await fetch('/api/upload-logo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                dataUrl,
+                logoType: isGif ? 'gif' : 'png',
+                username: userIdentifier,
+                email: currentUser?.email || profile?.email || '',
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.logoUrl) {
+                setChannelLogoUrl(data.logoUrl);
+                // Update local storage profile
+                try {
+                  const existingRaw = localStorage.getItem('user_channel_profile') || localStorage.getItem('user_profile_data');
+                  const existing = existingRaw ? JSON.parse(existingRaw) : {};
+                  const updated = {
+                    ...existing,
+                    ...(isGif
+                      ? { channelLogoGifUrl: data.logoUrl, channelLogoType: 'gif' }
+                      : { channelLogoPngUrl: data.logoUrl, channelLogoType: 'png', channelLogoUrl: data.logoUrl }),
+                  };
+                  localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+                  localStorage.setItem('user_profile_data', JSON.stringify(updated));
+                  window.dispatchEvent(new CustomEvent('channel_profile_updated', { detail: updated }));
+                } catch {}
+                showToast(isGif ? '✅ एनिमेटेड GIF स्थायी रूप से सेव हुआ!' : '✅ चैनल लोगो स्थायी रूप से सेव हुआ!');
+              }
+            }
+          } catch (err) {
+            console.warn('Video Studio logo upload error:', err);
+            showToast('✅ लोगो लागू किया गया (लोकल)');
+          }
         }
       };
       reader.readAsDataURL(file);

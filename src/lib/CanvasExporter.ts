@@ -1513,9 +1513,23 @@ async function drawGraphic001Canvas(
 
   const canvasFilterStr = getCanvasFilterString(card.imageFilters);
 
+  const getSafeCanvasPhotoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (
+      (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+      typeof window !== 'undefined' &&
+      !trimmed.startsWith(window.location.origin) &&
+      !trimmed.startsWith('/api/proxy-image')
+    ) {
+      return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+    }
+    return trimmed;
+  };
+
   if (hasValidMainPhoto) {
     try {
-      const mainImg = await loadImage(card.images.main);
+      const mainImg = await loadImage(getSafeCanvasPhotoUrl(card.images.main));
       const layout = card.layout || 'single';
 
       if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
@@ -1528,7 +1542,7 @@ async function drawGraphic001Canvas(
         ctx.fillRect(0, topH - 2, width, 4);
 
         if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1540,7 +1554,7 @@ async function drawGraphic001Canvas(
         ctx.fillRect(0, halfH - 2, width, 4);
 
         if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1552,7 +1566,7 @@ async function drawGraphic001Canvas(
         ctx.fillRect(halfW - 2, 0, 4, photoH);
 
         if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1564,14 +1578,14 @@ async function drawGraphic001Canvas(
         drawImageCover(ctx, mainImg, 0, 0, halfW - 2, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
 
         if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         }
 
         if (card.images?.third) {
-          const thirdImg = await loadImage(card.images.third);
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
           drawImageCover(ctx, thirdImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
@@ -1583,14 +1597,14 @@ async function drawGraphic001Canvas(
         drawImageCover(ctx, mainImg, 0, 0, width, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
 
         if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         }
 
         if (card.images?.third) {
-          const thirdImg = await loadImage(card.images.third);
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
           drawImageCover(ctx, thirdImg, halfW + 2, topH + 2, halfW - 2, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, topH + 2, halfW - 2, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
@@ -1601,24 +1615,24 @@ async function drawGraphic001Canvas(
         drawImageCover(ctx, mainImg, 0, 0, halfW - 2, halfH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
 
         if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         }
 
         if (card.images?.third) {
-          const thirdImg = await loadImage(card.images.third);
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
           drawImageCover(ctx, thirdImg, 0, halfH + 2, halfW - 2, halfH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, halfH + 2, halfW - 2, halfH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
         }
 
         if (card.images?.fourth) {
-          const fourthImg = await loadImage(card.images.fourth);
+          const fourthImg = await loadImage(getSafeCanvasPhotoUrl(card.images.fourth));
           drawImageCover(ctx, fourthImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
         } else if (card.images?.second) {
-          const secondImg = await loadImage(card.images.second);
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
           drawImageCover(ctx, secondImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
@@ -1631,83 +1645,93 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasValidMainPhoto, nothing is drawn over the photo area,
   // allowing the authentic background image's camera icon and Step 4 instructions to show through!
 
-  // 3. TOP-LEFT LOGO AREA (Clean transparent PNG in designated logo area)
-  if (card.showMasterBranding !== false && customLogoImg) {
+  // 3. TOP-LEFT LOGO AREA (Clean transparent PNG or 'Your Logo' placeholder)
+  if (card.showMasterBranding !== false) {
     ctx.save();
     const centerX = Math.round(width * 0.15);
     const centerY = Math.round(height * 0.0975);
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
 
-    const scale = card.logoScale ?? 1.0;
-    const lRatio = customLogoImg.width / customLogoImg.height;
-    let lW = baseW * scale;
-    let lH = lW / lRatio;
-    if (lH > baseH * scale) {
-      lH = baseH * scale;
-      lW = lH * lRatio;
+    if (customLogoImg && customLogoImg.width > 0) {
+      const scale = card.logoScale ?? 1.0;
+      const lRatio = customLogoImg.width / customLogoImg.height;
+      let lW = baseW * scale;
+      let lH = lW / lRatio;
+      if (lH > baseH * scale) {
+        lH = baseH * scale;
+        lW = lH * lRatio;
+      }
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      ctx.drawImage(customLogoImg, centerX - lW / 2, centerY - lH / 2, lW, lH);
+    } else {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 36px "Poppins", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Your Logo', centerX, centerY);
     }
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 2;
-    ctx.drawImage(customLogoImg, centerX - lW / 2, centerY - lH / 2, lW, lH);
     ctx.restore();
   }
 
-  // 4. TOP-RIGHT LOCATION PILL
-  if (card.showLocation !== false && card.location && card.location.trim()) {
-    const cleanLoc = card.location
+  // 4. TOP-RIGHT LOCATION PILL (Single dynamic location pill)
+  if (card.showLocation !== false) {
+    const rawLoc = card.location || '';
+    const cleanLoc = rawLoc
       .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
       .replace(/[:\-–—]+$/, '')
-      .trim();
+      .trim() || 'लोकेशन';
 
-    if (cleanLoc && cleanLoc !== 'लोकेशन') {
-      ctx.save();
-      ctx.font = '800 26px "Noto Sans Devanagari", sans-serif';
-      const locTextW = ctx.measureText(cleanLoc).width;
-      const locW = Math.min(Math.round(width * 0.46), locTextW + 80);
-      const locH = Math.round(height * 0.045);
-      const locX = width - locW - Math.round(width * 0.048);
-      const locY = Math.round(height * 0.066);
+    ctx.save();
+    ctx.font = '800 26px "Noto Sans Devanagari", sans-serif';
+    const locTextW = ctx.measureText(cleanLoc).width;
+    const locW = Math.min(Math.round(width * 0.46), locTextW + 80);
+    const locH = Math.round(height * 0.045);
+    const locX = width - locW - Math.round(width * 0.048);
+    const locY = Math.round(height * 0.066);
 
-      // White Pill
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-      ctx.shadowBlur = 14;
-      ctx.shadowOffsetY = 3;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.roundRect(locX, locY, locW, locH, locH / 2);
-      ctx.fill();
+    // White Pill
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 3;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.roundRect(locX, locY, locW, locH, locH / 2);
+    ctx.fill();
 
-      ctx.strokeStyle = '#E2E8F0';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
 
-      // Red Circle for Pin Icon
-      const pinR = Math.round(locH * 0.38);
-      const pinCenterX = locX + Math.round(locH * 0.5);
-      const pinCenterY = locY + locH / 2;
-      ctx.fillStyle = '#DC2626';
-      ctx.beginPath();
-      ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
-      ctx.fill();
+    // Red Circle for Pin Icon
+    const pinR = Math.round(locH * 0.38);
+    const pinCenterX = locX + Math.round(locH * 0.5);
+    const pinCenterY = locY + locH / 2;
+    ctx.fillStyle = '#DC2626';
+    ctx.beginPath();
+    ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
+    ctx.fill();
 
-      // Pin Glyph
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '900 20px Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('📍', pinCenterX, pinCenterY);
+    // Pin Glyph
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('📍', pinCenterX, pinCenterY);
 
-      // Location Text (Bold Dark Black)
-      ctx.fillStyle = '#090A0E';
-      ctx.font = '800 24px "Noto Sans Devanagari", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(cleanLoc, pinCenterX + pinR + 10, locY + locH / 2);
-      ctx.restore();
-    }
+    // Location Text (Bold Dark Black)
+    ctx.fillStyle = '#090A0E';
+    ctx.font = '800 24px "Noto Sans Devanagari", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cleanLoc, pinCenterX + pinR + 10, locY + locH / 2);
+    ctx.restore();
   }
 
   // 5. RED HEADLINE AREA (Y = 61.33% to 89.85%, Height = 28.52%)
