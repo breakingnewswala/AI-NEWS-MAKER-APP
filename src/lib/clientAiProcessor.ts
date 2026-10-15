@@ -108,7 +108,7 @@ export function processNewsLocally(
 
   // 3. Detect genuine location
   const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ''}`;
-  let detectedLocation = 'विशेष कवरेज';
+  let detectedLocation = '';
 
   if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
     detectedLocation = 'वाशिंगटन';
@@ -222,21 +222,21 @@ export function processNewsLocally(
   // 6. Detailed 3-Paragraph Summary / Caption based on actual story facts
   const cleanUsername = (channelUsername || '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
   const userTag = cleanUsername ? `#${cleanUsername}` : '#AINews';
-  const locTag = detectedLocation.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
+  const locTag = (detectedLocation || '').replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
   const catTag = category.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
 
   const tags = [
     userTag,
-    `#${locTag || 'Breaking'}News`,
+    ...(locTag ? [`#${locTag}News`] : []),
     '#BreakingNews',
     '#HindiNews',
-    `#${catTag}`,
-    '#AINewsMaker',
+    ...(catTag ? [`#${catTag}`] : []),
+    '#AiNewsMaker',
   ];
 
   const summaryPara1 = extractedDesc
     ? `${headline}। ${extractedDesc}`
-    : `${headline} को लेकर बड़ी और महत्वपूर्ण खबर सामने आई है। ${detectedLocation} से संबंधित इस घटनाक्रम के बाद व्यापक स्तर पर चर्चा तेज हो गई है।`;
+    : `${headline} को लेकर बड़ी और महत्वपूर्ण खबर सामने आई है। ${detectedLocation ? `${detectedLocation} से संबंधित ` : ''}इस घटनाक्रम के बाद व्यापक स्तर पर चर्चा तेज हो गई है।`;
 
   const summaryPara2 = extractedContent
     ? extractedContent.slice(0, 350).trim()
@@ -246,7 +246,7 @@ export function processNewsLocally(
 
   const summary = `${summaryPara1}\n\n${summaryPara2}\n\n${summaryPara3}\n\n${tags.join(' ')}`;
 
-  const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर ${detectedLocation} से है। ${headline}। मामले में सभी संबंधित पक्षों की प्रतिक्रिया सामने आ रही है। आइए देखते हैं इस पूरे मामले पर हमारी विस्तृत रिपोर्ट।`;
+  const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर${detectedLocation ? ` ${detectedLocation} से` : ''} है। ${headline}। मामले में सभी संबंधित पक्षों की प्रतिक्रिया सामने आ रही है। आइए देखते हैं इस पूरे मामले पर हमारी विस्तृत रिपोर्ट।`;
 
   return {
     headline: headlineOptions[0],

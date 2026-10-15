@@ -92,7 +92,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         formattedHeadline: manualHeadline,
         highlightWords: [],
         summary: manualShortDesc,
-        location: manualLocation || 'विशेष कवरेज',
+        location: manualLocation || '',
         pickedImages: {
           main: manualThumbnail || undefined,
           second: manualAdditionalPhotos[0],
@@ -146,11 +146,11 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       middleTags.push('#BreakingNews', '#HindiNews');
     }
 
-    const finalTags = [userTag, ...middleTags, '#AINewsMaker'];
+    const finalTags = [userTag, ...middleTags, '#AiNewsMaker'];
     const uniqueTags = Array.from(new Set(finalTags)).join(' ');
 
-    const effectiveUrl = sourceUrl || linkUrl || 'ainewsmaker.online';
-    return `🚨 ${headline}\n\n📍 स्थान: ${location || 'मध्य प्रदेश'}\n\n${textWithoutTags}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${uniqueTags}`;
+    const locLine = location && location !== 'विशेष कवरेज' ? `\n\n📍 स्थान: ${location}` : '';
+    return `${headline}${locLine}\n\n${textWithoutTags}\n\n${uniqueTags}`;
   };
 
   const handleCopyCaption = () => {

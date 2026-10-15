@@ -38,7 +38,13 @@ export function cleanHeadlineText(text: string): string {
   // 5. Strip trailing punctuation (. or । or ! or ? or , or - or :) repeatedly until clean
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
 
-  // 6. Clean up multiple spaces
+  // 6. Clean spaces around highlight tags and punctuation (prevent "रेस्टोरेंट , किचन" spaces before commas)
+  cleaned = cleaned
+    .replace(/\[(highlight|yellow)\]\s+/g, '[$1]')
+    .replace(/\s+\[\/(highlight|yellow)\]/g, '[/$1]')
+    .replace(/\s+([,\.!\?:;।])/g, '$1');
+
+  // 7. Clean up multiple spaces
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
 
   return cleaned;
@@ -67,6 +73,7 @@ const CATEGORY_KEYWORDS = [
 /**
  * Sanitizes Location field to ensure ONLY geographical place/city/state is kept.
  * Strictly removes category labels like "राष्ट्रीय", "अंतरराष्ट्रीय", "अपराध", etc.
+ * If no valid location exists, returns empty string per editorial guidelines.
  */
 export function cleanLocationField(loc: string): string {
   if (!loc) return '';
@@ -81,13 +88,14 @@ export function cleanLocationField(loc: string): string {
   if (locationParts.length > 0) {
     cleaned = locationParts.join(', ');
   } else {
-    // If every part was a category, try extracting known cities or default
-    cleaned = 'विशेष कवरेज';
+    // If every part was a category or unverified, return empty string (do not invent locations)
+    return '';
   }
 
   // Clean trailing punctuation and multiple spaces
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  if (cleaned === 'विशेष कवरेज') return '';
   return cleaned;
 }
 

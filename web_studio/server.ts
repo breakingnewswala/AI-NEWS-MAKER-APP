@@ -4934,7 +4934,7 @@ function formatCaptionVariants(
   captionBullets: string;
   captionShort: string;
 } {
-  const loc = (location || "मध्य प्रदेश").trim();
+  const loc = (location || "").trim();
   const cleanFacts = (factsText || "").replace(/#[\w\u0900-\u097F]+/g, "").trim();
   const sentences = cleanFacts
     .split(/[।\.\n]+/)
@@ -4942,25 +4942,25 @@ function formatCaptionVariants(
     .filter((s) => s.length > 10);
 
   // Style 1: Detailed (3 full paragraphs)
-  const p1 = `${headline}। ${loc !== "विशेष कवरेज" ? `${loc} से संबंधित` : "इस"} महत्वपूर्ण समाचार को लेकर ताजा घटनाक्रम सामने आया है।`;
+  const p1 = `${headline}। ${loc && loc !== "विशेष कवरेज" ? `${loc} से संबंधित` : "इस"} मुख्य घटनाक्रम को लेकर ताजा जानकारी सामने आई है।`;
   const p2 = sentences.slice(0, 3).join("। ") || "प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।";
-  const p3 = sentences.slice(3, 5).join("। ") || "प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। अग्रिम कार्रवाई लगातार जारी है।";
+  const p3 = sentences.slice(3, 5).join("। ") || "प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है।";
   const detailedBody = `${p1}\n\n${p2}\n\n${p3}`;
   const captionDetailed = ensureHashtagHierarchy(detailedBody, loc, username);
 
   // Style 2: Bullet Points (Intro + 3-4 bullets + status paragraph)
   const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
     `${headline} को लेकर प्राथमिक रिपोर्ट दर्ज`,
-    `${loc} में संबंधित मामले को लेकर प्रशासनिक व पुलिस जांच तेज`,
+    `${loc && loc !== "विशेष कवरेज" ? `${loc} में ` : ""}संबंधित मामले को लेकर प्रशासनिक व पुलिस जांच तेज`,
     `अधिकारियों द्वारा आवश्यक दिशा-निर्देश और दिशा-तय की गई`,
   ]).map((b) => `• ${b}`);
-  const bulletIntro = `📌 मुख्य घटनाक्रम: ${headline}\n📍 स्थान: ${loc}`;
+  const bulletIntro = `मुख्य घटनाक्रम: ${headline}${loc && loc !== "विशेष कवरेज" ? `\nस्थान: ${loc}` : ""}`;
   const bulletOutro = `प्रशासनिक अमला मौके की निगरानी कर रहा है और अग्रिम कार्रवाई की जा रही है।`;
   const bulletsBody = `${bulletIntro}\n\n${bulletItems.join("\n")}\n\n${bulletOutro}`;
   const captionBullets = ensureHashtagHierarchy(bulletsBody, loc, username);
 
   // Style 3: Short (2 concise, impactful paragraphs)
-  const shortP1 = `${headline}। ${loc} से सामने आए इस मामले में प्राथमिक ब्योरा और मुख्य तथ्य दर्ज कर लिए गए हैं।`;
+  const shortP1 = `${headline}। ${loc && loc !== "विशेष कवरेज" ? `${loc} से संबंधित` : "इस"} ताजा घटनाक्रम में प्राथमिक ब्योरा और मुख्य तथ्य दर्ज कर लिए गए हैं।`;
   const shortP2 = (sentences[0] ? `${sentences[0]}। ` : "") + "मामले में उत्तरदायी अधिकारियों द्वारा आगे की प्रक्रिया पूरी की जा रही है।";
   const shortBody = `${shortP1}\n\n${shortP2}`;
   const captionShort = ensureHashtagHierarchy(shortBody, loc, username);
@@ -5045,7 +5045,7 @@ function createLocalNewsFallback(
 
   // 3. Detect genuine location
   const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
-  let detectedLocation = "विशेष कवरेज";
+  let detectedLocation = "";
 
   if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
     detectedLocation = "वाशिंगटन";
@@ -5469,7 +5469,7 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
         headline: fallbackHeadline,
         formattedHeadline: fallbackHeadline,
         highlightWords: ["कार्रवाई", "जांच", "फैसला"],
-        location: "विशेष कवरेज",
+        location: "",
         summary: fallbackSummary,
         category: "अपराध व कानून",
         hasPerson: true,
@@ -5817,7 +5817,7 @@ JSON Schema:
         parsedData.pickedImages.fourth = pickedImages.fourth;
       }
 
-      parsedData.location = cleanLocationField(parsedData.location || "विशेष कवरेज");
+      parsedData.location = cleanLocationField(parsedData.location || "");
       parsedData.category = cleanCategoryField(parsedData.category || "ताज़ा समाचार");
 
       if (!parsedData.headline || isInvalidUrlHeadline(parsedData.headline)) {
@@ -5994,13 +5994,15 @@ function cleanLocationField(loc: string): string {
     .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, "")
     .trim();
 
+  if (cleaned === "विशेष कवरेज") return "";
+
   const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
   const locationParts = parts.filter((p) => !CATEGORY_KEYWORDS_LIST.some((cat) => cat.toLowerCase() === p.toLowerCase()));
 
   if (locationParts.length > 0) {
     cleaned = locationParts.join(", ");
   } else {
-    cleaned = "विशेष कवरेज";
+    cleaned = "";
   }
 
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
@@ -6027,7 +6029,7 @@ app.post("/api/format-static-caption", (req, res) => {
   try {
     const { headline, location, content, linkUrl, channelUsername, username } = req.body;
     const cleanH = cleanHeadlineText(headline || "");
-    const cleanLoc = (location || "मध्य प्रदेश").trim();
+    const cleanLoc = cleanLocationField(location || "");
     const sourceText = (content || headline || "").trim();
 
     const formattedSummary = ensureHashtagHierarchy(
@@ -6036,14 +6038,15 @@ app.post("/api/format-static-caption", (req, res) => {
       channelUsername || username || ""
     );
 
-    const fullCaption = `🚨 ${cleanH || "ताज़ा समाचार अपडेट"}\n\n📍 स्थान: ${cleanLoc}\n\n${formattedSummary}\n\n🔗 पूरा समाचार देखें: ${linkUrl || "ainewsmaker.online"}`;
+    const locLine = cleanLoc ? `\n\nस्थान: ${cleanLoc}` : "";
+    const fullCaption = `${cleanH || "ताज़ा समाचार"}${locLine}\n\n${formattedSummary}`;
 
     return res.json({
       success: true,
       caption: fullCaption,
       summary: formattedSummary,
       location: cleanLoc,
-      hashtags: ["#AINews", "#BreakingNews", "#HindiNews", "#AINewsMaker"],
+      hashtags: ["#AINews", "#BreakingNews", "#HindiNews", "#AiNewsMaker"],
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -6061,7 +6064,7 @@ function ensureHashtagHierarchy(summaryText: string, location: string = "", user
   const cleanUser = (username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
   const userTag = cleanUser ? `#${cleanUser}` : "#AINews";
 
-  const locTag = location ? `#${location.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News` : "";
+  const locTag = location && location !== "विशेष कवरेज" ? `#${location.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News` : "";
   const filteredMiddleTags = rawTags.filter(
     (t) => {
       const lower = t.toLowerCase();

@@ -4759,12 +4759,12 @@ async function fetchAndProcessNewsUrl(rawUrl) {
   };
 }
 function formatCaptionVariants(headline, location, factsText, username = "") {
-  const loc = (location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936").trim();
+  const loc = (location || "").trim();
   const cleanFacts = (factsText || "").replace(/#[\w\u0900-\u097F]+/g, "").trim();
   const sentences = cleanFacts.split(/[।\.\n]+/).map((s) => s.trim()).filter((s) => s.length > 10);
-  const p1 = `${headline}\u0964 ${loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${loc} \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924` : "\u0907\u0938"} \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u094B \u0932\u0947\u0915\u0930 \u0924\u093E\u091C\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u093E\u092E\u0928\u0947 \u0906\u092F\u093E \u0939\u0948\u0964`;
+  const p1 = `${headline}\u0964 ${loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${loc} \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924` : "\u0907\u0938"} \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u0924\u093E\u091C\u093E \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u093E\u092E\u0928\u0947 \u0906\u0908 \u0939\u0948\u0964`;
   const p2 = sentences.slice(0, 3).join("\u0964 ") || "\u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u092E\u0947\u0902 \u0915\u0908 \u0905\u0939\u092E \u0924\u0925\u094D\u092F \u0914\u0930 \u0915\u093E\u0930\u0923 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964 \u092A\u094D\u0930\u0924\u094D\u092F\u0915\u094D\u0937\u0926\u0930\u094D\u0936\u093F\u092F\u094B\u0902 \u0935 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u0942\u0924\u094D\u0930\u094B\u0902 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0947 \u092A\u094D\u0930\u092D\u093E\u0935 \u0915\u093E \u0917\u0939\u0928\u0924\u093E \u0938\u0947 \u0906\u0915\u0932\u0928 \u0915\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948\u0964";
-  const p3 = sentences.slice(3, 5).join("\u0964 ") || "\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0914\u0930 \u0909\u0924\u094D\u0924\u0930\u0926\u093E\u092F\u0940 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0924\u0947 \u0939\u0941\u090F \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964 \u0905\u0917\u094D\u0930\u093F\u092E \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0932\u0917\u093E\u0924\u093E\u0930 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964";
+  const p3 = sentences.slice(3, 5).join("\u0964 ") || "\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0914\u0930 \u0909\u0924\u094D\u0924\u0930\u0926\u093E\u092F\u0940 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u0924\u094D\u0935\u0930\u093F\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947\u0924\u0947 \u0939\u0941\u090F \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964 \u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u091C\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964";
   const detailedBody = `${p1}
 
 ${p2}
@@ -4773,11 +4773,11 @@ ${p3}`;
   const captionDetailed = ensureHashtagHierarchy(detailedBody, loc, username);
   const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
     `${headline} \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915 \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0926\u0930\u094D\u091C`,
-    `${loc} \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0935 \u092A\u0941\u0932\u093F\u0938 \u091C\u093E\u0902\u091A \u0924\u0947\u091C`,
+    `${loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${loc} \u092E\u0947\u0902 ` : ""}\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0935 \u092A\u0941\u0932\u093F\u0938 \u091C\u093E\u0902\u091A \u0924\u0947\u091C`,
     `\u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0914\u0930 \u0926\u093F\u0936\u093E-\u0924\u092F \u0915\u0940 \u0917\u0908`
   ]).map((b) => `\u2022 ${b}`);
-  const bulletIntro = `\u{1F4CC} \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: ${headline}
-\u{1F4CD} \u0938\u094D\u0925\u093E\u0928: ${loc}`;
+  const bulletIntro = `\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: ${headline}${loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `
+\u0938\u094D\u0925\u093E\u0928: ${loc}` : ""}`;
   const bulletOutro = `\u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u092E\u0932\u093E \u092E\u094C\u0915\u0947 \u0915\u0940 \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u0915\u0930 \u0930\u0939\u093E \u0939\u0948 \u0914\u0930 \u0905\u0917\u094D\u0930\u093F\u092E \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`;
   const bulletsBody = `${bulletIntro}
 
@@ -4785,7 +4785,7 @@ ${bulletItems.join("\n")}
 
 ${bulletOutro}`;
   const captionBullets = ensureHashtagHierarchy(bulletsBody, loc, username);
-  const shortP1 = `${headline}\u0964 ${loc} \u0938\u0947 \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0907\u0938 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915 \u092C\u094D\u092F\u094B\u0930\u093E \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0924\u0925\u094D\u092F \u0926\u0930\u094D\u091C \u0915\u0930 \u0932\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964`;
+  const shortP1 = `${headline}\u0964 ${loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${loc} \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924` : "\u0907\u0938"} \u0924\u093E\u091C\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092E\u0947\u0902 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915 \u092C\u094D\u092F\u094B\u0930\u093E \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0924\u0925\u094D\u092F \u0926\u0930\u094D\u091C \u0915\u0930 \u0932\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964`;
   const shortP2 = (sentences[0] ? `${sentences[0]}\u0964 ` : "") + "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0909\u0924\u094D\u0924\u0930\u0926\u093E\u092F\u0940 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0917\u0947 \u0915\u0940 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0942\u0930\u0940 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964";
   const shortBody = `${shortP1}
 
@@ -4850,7 +4850,7 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
     }
   }
   const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
-  let detectedLocation = "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C";
+  let detectedLocation = "";
   if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
     detectedLocation = "\u0935\u093E\u0936\u093F\u0902\u0917\u091F\u0928";
   } else if (/संसद|सुप्रीम कोर्ट|नई दिल्ली|केंद्र सरकार|राष्ट्रपति भवन|निर्वाचन आयोग|आरबीआई|भारत सरकार|राजधानी दिल्ली|national/i.test(fullCorpus)) {
@@ -5231,7 +5231,7 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
         headline: fallbackHeadline,
         formattedHeadline: fallbackHeadline,
         highlightWords: ["\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908", "\u091C\u093E\u0902\u091A", "\u092B\u0948\u0938\u0932\u093E"],
-        location: "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C",
+        location: "",
         summary: fallbackSummary,
         category: "\u0905\u092A\u0930\u093E\u0927 \u0935 \u0915\u093E\u0928\u0942\u0928",
         hasPerson: true,
@@ -5548,7 +5548,7 @@ JSON Schema:
         if (!parsedData.pickedImages) parsedData.pickedImages = {};
         parsedData.pickedImages.fourth = pickedImages.fourth;
       }
-      parsedData.location = cleanLocationField(parsedData.location || "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C");
+      parsedData.location = cleanLocationField(parsedData.location || "");
       parsedData.category = cleanCategoryField(parsedData.category || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930");
       if (!parsedData.headline || isInvalidUrlHeadline(parsedData.headline)) {
         parsedData.headline = "\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u092B\u0948\u0938\u0932\u093E, \u0905\u0917\u094D\u0930\u093F\u092E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940";
@@ -5681,12 +5681,13 @@ function cleanHeadlineText(text) {
 function cleanLocationField(loc) {
   if (!loc) return "";
   let cleaned = loc.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, "").trim();
+  if (cleaned === "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C") return "";
   const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
   const locationParts = parts.filter((p) => !CATEGORY_KEYWORDS_LIST.some((cat) => cat.toLowerCase() === p.toLowerCase()));
   if (locationParts.length > 0) {
     cleaned = locationParts.join(", ");
   } else {
-    cleaned = "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C";
+    cleaned = "";
   }
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   cleaned = cleaned.replace(/\s{2,}/g, " ");
@@ -5705,26 +5706,25 @@ app.post("/api/format-static-caption", (req, res) => {
   try {
     const { headline, location, content, linkUrl, channelUsername, username } = req.body;
     const cleanH = cleanHeadlineText(headline || "");
-    const cleanLoc = (location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936").trim();
+    const cleanLoc = cleanLocationField(location || "");
     const sourceText = (content || headline || "").trim();
     const formattedSummary = ensureHashtagHierarchy(
       sanitizePressNoteFlattery(sourceText),
       cleanLoc,
       channelUsername || username || ""
     );
-    const fullCaption = `\u{1F6A8} ${cleanH || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F"}
+    const locLine = cleanLoc ? `
 
-\u{1F4CD} \u0938\u094D\u0925\u093E\u0928: ${cleanLoc}
+\u0938\u094D\u0925\u093E\u0928: ${cleanLoc}` : "";
+    const fullCaption = `${cleanH || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930"}${locLine}
 
-${formattedSummary}
-
-\u{1F517} \u092A\u0942\u0930\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0926\u0947\u0916\u0947\u0902: ${linkUrl || "ainewsmaker.online"}`;
+${formattedSummary}`;
     return res.json({
       success: true,
       caption: fullCaption,
       summary: formattedSummary,
       location: cleanLoc,
-      hashtags: ["#AINews", "#BreakingNews", "#HindiNews", "#AINewsMaker"]
+      hashtags: ["#AINews", "#BreakingNews", "#HindiNews", "#AiNewsMaker"]
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -5737,7 +5737,7 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "") {
   const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || []).filter((t, i, arr) => arr.indexOf(t) === i);
   const cleanUser = (username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
   const userTag = cleanUser ? `#${cleanUser}` : "#AINews";
-  const locTag = location ? `#${location.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News` : "";
+  const locTag = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `#${location.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News` : "";
   const filteredMiddleTags = rawTags.filter(
     (t) => {
       const lower = t.toLowerCase();

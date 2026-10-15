@@ -1133,7 +1133,7 @@ export default function App() {
       formattedHeadline: '',
       highlightWords: [],
       headlineAlign: 'center',
-      location: savedProfile?.district || 'विशेष कवरेज',
+      location: savedProfile?.district || '',
       summary: '',
       category: 'ताज़ा खबर',
       images: {
@@ -1496,7 +1496,7 @@ export default function App() {
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
     const effectiveLink = post.sourceUrl || (post.id ? `https://www.ainewsmaker.online/news/${post.id}` : 'https://www.ainewsmaker.online');
-    const effectiveLoc = post.district || post.location || 'मध्य प्रदेश';
+    const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');
 
@@ -1611,8 +1611,10 @@ export default function App() {
 
     // Instantly copy social media caption to clipboard
     const savedProf = getSavedChannelProfile();
-    const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
-    const captionText = `🚨 ${post.title}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${post.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
+    const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '#reporter';
+    const locLine = effectiveLoc ? `\n\n📍 स्थान: ${effectiveLoc}` : '';
+    const locTag = effectiveLoc ? `#${effectiveLoc.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News ` : '';
+    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${userTag} ${locTag}#BreakingNews #HindiNews #AiNewsMaker`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }

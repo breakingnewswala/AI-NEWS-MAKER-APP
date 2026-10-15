@@ -449,16 +449,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         aspectRatio: '4 / 5',
       }}
     >
-      {/* 1. BACKGROUND PHOTOS ACCORDING TO USER'S SELECTED LAYOUT */}
-      {card.frameDesign === 'graphic_001' ? (
+      {/* 0. BASE BACKGROUND FOR GRAPHIC_001 */}
+      {card.frameDesign === 'graphic_001' && (
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
           <img
             src="/assets/primary_news_graphic_bg.jpg"
             alt="Primary Graphic Background"
             className="w-full h-full object-cover"
+            crossOrigin="anonymous"
           />
         </div>
-      ) : card.frameDesign === 'jacket-morning' ? (
+      )}
+
+      {/* 1. BACKGROUND PHOTOS ACCORDING TO USER'S SELECTED LAYOUT */}
+      {card.frameDesign === 'jacket-morning' ? (
         <div className="absolute inset-0 z-0 bg-neutral-950 overflow-hidden">
           {(card.morningCustomBgUrl || (card.images.main && card.images.main.trim().length > 0)) ? (
             <div className="w-full h-full relative">
@@ -555,6 +559,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={mainStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -563,6 +568,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   src={secondPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -574,6 +580,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -607,6 +614,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               alt="News Photo"
               className="w-full h-full object-cover transition-all duration-150"
               style={mainStyle}
+              crossOrigin="anonymous"
               onError={handleImgError}
             />
           </div>
@@ -620,6 +628,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               alt=""
               className="w-full h-full object-cover transition-all duration-150"
               style={mainStyle}
+              crossOrigin="anonymous"
               onError={handleImgError}
             />
           </div>
@@ -635,6 +644,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -645,6 +655,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -661,6 +672,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -671,6 +683,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -686,6 +699,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -695,6 +709,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -711,6 +726,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={mainStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -720,6 +736,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={secondStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -730,6 +747,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={thirdStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -745,6 +763,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -755,6 +774,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={secondStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -764,6 +784,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
                   style={thirdStyle}
+                  crossOrigin="anonymous"
                   onError={handleImgError}
                 />
               </div>
@@ -781,6 +802,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={mainStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -791,6 +813,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={secondStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -801,6 +824,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={thirdStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -811,6 +835,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 alt=""
                 className="w-full h-full object-cover transition-all duration-150"
                 style={fourthStyle}
+                crossOrigin="anonymous"
                 onError={handleImgError}
               />
             </div>
@@ -1006,6 +1031,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   src={card.customLogoUrl}
                   alt="Channel Logo"
                   className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]"
+                  crossOrigin="anonymous"
                 />
               ) : (
                 <span className="text-white font-black text-lg sm:text-xl md:text-2xl tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-['Poppins']">

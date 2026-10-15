@@ -1796,10 +1796,50 @@ async function drawGraphic001Canvas(
     ctx.fillStyle = redGrad;
     ctx.fillRect(0, bannerY, width, bannerH);
 
+    // Left & Right Dark Red Chevron Accent Stripes (matching original SVG and preview)
+    ctx.save();
+    ctx.fillStyle = '#7A0005';
+    ctx.globalAlpha = 0.6;
+    const scaleX = width / 1080;
+    const scaleY = height / 1350;
+
+    const drawChevron = (pts: [number, number][]) => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0] * scaleX, pts[0][1] * scaleY);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i][0] * scaleX, pts[i][1] * scaleY);
+      }
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    // Left chevrons
+    drawChevron([[0, 800], [60, 800], [30, 860], [0, 860]]);
+    drawChevron([[0, 880], [75, 880], [35, 960], [0, 960]]);
+    drawChevron([[0, 980], [90, 980], [40, 1080], [0, 1080]]);
+    drawChevron([[0, 1100], [80, 1100], [30, 1200], [0, 1200]]);
+
+    // Right chevrons
+    drawChevron([[1080, 800], [1020, 800], [1050, 860], [1080, 860]]);
+    drawChevron([[1080, 880], [1005, 880], [1045, 960], [1080, 960]]);
+    drawChevron([[1080, 980], [990, 980], [1040, 1080], [1080, 1080]]);
+    drawChevron([[1080, 1100], [1000, 1100], [1050, 1200], [1080, 1200]]);
+    ctx.restore();
+
+    // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
+    const streakGrad = ctx.createLinearGradient(0, bannerY, width, bannerY);
+    streakGrad.addColorStop(0, 'rgba(255, 26, 26, 0)');
+    streakGrad.addColorStop(0.35, 'rgba(255, 77, 0, 0.85)');
+    streakGrad.addColorStop(0.5, '#FFE600');
+    streakGrad.addColorStop(0.65, 'rgba(255, 77, 0, 0.85)');
+    streakGrad.addColorStop(1, 'rgba(255, 26, 26, 0)');
+    ctx.fillStyle = streakGrad;
+    ctx.fillRect(0, bannerY - 3, width, 6);
+
     // Bevel highlight lines matching banner edges
-    ctx.fillStyle = 'rgba(255, 230, 160, 0.7)';
+    ctx.fillStyle = 'rgba(255, 230, 160, 0.85)';
     ctx.fillRect(0, bannerY, width, 3);
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
     ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
 
     // Render headline text in bold white with yellow highlights
@@ -1830,15 +1870,23 @@ async function drawGraphic001Canvas(
 
     for (const line of headlineLines) {
       let lineWidth = 0;
-      for (const token of line) {
-        lineWidth += ctx.measureText(token.text + ' ').width;
+      const tokenSpacings: string[] = [];
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const nextToken = line[i + 1];
+        const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
+        const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
+        tokenSpacings.push(spacing);
+        lineWidth += ctx.measureText(token.text + spacing).width;
       }
 
       let curX = width / 2 - lineWidth / 2;
-      for (const token of line) {
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const spacing = tokenSpacings[i];
         ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
         ctx.fillText(token.text, curX, startY);
-        curX += ctx.measureText(token.text + ' ').width;
+        curX += ctx.measureText(token.text + spacing).width;
       }
       startY += headlineLineH;
     }

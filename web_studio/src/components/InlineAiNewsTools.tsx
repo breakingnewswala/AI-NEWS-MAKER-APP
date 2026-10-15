@@ -131,25 +131,27 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const finalTags = [userTag, ...middleTags, '#AiNewsMaker'].join(' ');
 
     if (style === 'bullets') {
+      const intro = `${headline}। ${loc ? `${loc} से जुड़े` : 'इस'} मामले में मुख्य तथ्य:`;
       const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
-        `${headline} को लेकर मुख्य घटनाक्रम दर्ज`,
-        `${loc} में प्रशासनिक व पुलिस दल सक्रिय`,
-        `वरिष्ठ अधिकारियों द्वारा आवश्यक दिशा-निर्देश जारी`,
+        `घटनाक्रम को लेकर मुख्य विवरण संज्ञान में लिया गया है।`,
+        `संबंधित विभाग और अधिकारियों द्वारा आवश्यक जांच की जा रही है।`,
+        `तथ्यों के आधार पर अग्रिम दिशा-निर्देश दिए गए हैं।`,
       ]).map((b) => `• ${b}`);
-      return `📌 मुख्य घटनाक्रम: ${headline}\n📍 स्थान: ${loc}\n\n${bulletItems.join('\n')}\n\nस्थिति पर लगातार नजर रखी जा रही है और अग्रिम कार्रवाई जारी है।\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${finalTags}`;
+      const closing = `स्थिति पर लगातार नजर रखी जा रही है और अग्रिम कार्रवाई जारी है।`;
+      return `${intro}\n\n${bulletItems.join('\n')}\n\n${closing}\n\n${finalTags}`;
     }
 
     if (style === 'short') {
-      const shortP1 = `🚨 ${headline}\n\n📍 स्थान: ${loc}\n\n${sentences[0] || 'घटनाक्रम के बाद प्रशासनिक स्तर पर आवश्यक संज्ञान लिया गया है।'}`;
-      const shortP2 = `${sentences[1] || 'मामले में उत्तरदायी अधिकारियों द्वारा आगे की प्रक्रिया पूरी की जा रही है।'}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${finalTags}`;
-      return `${shortP1}\n\n${shortP2}`;
+      const shortP1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} ताजा घटनाक्रम में महत्वपूर्ण जानकारी सामने आई है। ${sentences[0] || 'मामले को लेकर संबंधित स्तर पर संज्ञान लिया गया है।'}`;
+      const shortP2 = `${sentences[1] || 'उत्तरदायी अधिकारियों द्वारा स्थिति का जायजा लेते हुए अग्रिम प्रक्रिया पूरी की जा रही है।'}`;
+      return `${shortP1}\n\n${shortP2}\n\n${finalTags}`;
     }
 
     // Default: Detailed (3 full paragraphs)
-    const p1 = `🚨 ${headline}\n\n📍 स्थान: ${loc}\n\n${sentences[0] || 'इस महत्वपूर्ण समाचार को लेकर ताजा घटनाक्रम सामने आया है।'}`;
+    const p1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} मुख्य घटनाक्रम को लेकर ताजा जानकारी सामने आई है। ${sentences[0] || 'मामले की पूरी पृष्ठभूमि की समीक्षा की जा रही है।'}`;
     const p2 = sentences.slice(1, 3).join('। ') || 'प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।';
-    const p3 = (sentences.slice(3, 5).join('। ') || 'प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है।') + `\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${finalTags}`;
-    return `${p1}\n\n${p2}\n\n${p3}`;
+    const p3 = sentences.slice(3, 5).join('। ') || 'प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है।';
+    return `${p1}\n\n${p2}\n\n${p3}\n\n${finalTags}`;
   };
 
   const handleSwitchCaptionStyle = (newStyle: 'detailed' | 'bullets' | 'short') => {
@@ -316,7 +318,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     // Immediate apply: As soon as user clicks "खबर से ग्राफिक बनाएँ", load title, summary and image immediately into card
     if (extraData?.title || extraData?.imageUrl) {
       const immediateHeadline = extraData.title || card.headline;
-      const immediateLocation = extraData.location || card.location || 'विशेष कवरेज';
+      const immediateLocation = extraData.location || card.location || '';
       const immediateImage = extraData.imageUrl || card.images.main;
       const immediateSummary = extraData.summary || card.summary;
       const extraPhotos = extraData.additionalPhotos || [];
@@ -414,7 +416,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(opts[0] || res.headline || extraData?.title || card.headline);
-      const finalLoc = cleanLocationField(res.location || extraData?.location || card.location || 'विशेष कवरेज');
+      const finalLoc = cleanLocationField(res.location || extraData?.location || card.location || '');
       const safeProxy = (u?: string) => {
         if (!u || !u.trim()) return '';
         const trimmed = u.trim();
@@ -528,7 +530,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || card.headline);
-      const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || card.location || 'विशेष कवरेज');
+      const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || card.location || '');
       const finalImage = (extraData?.imageUrl && !extraData.imageUrl.includes('placeholder'))
         ? extraData.imageUrl
         : (card.images.main || extraData?.imageUrl || '');
@@ -663,7 +665,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setUseWebsitePhoto(!!res.pickedImages?.main);
 
       const finalHeadline = cleanHeadlineText(opts[0] || res.headline || card.headline);
-      const finalLoc = res.location || card.location || 'विशेष कवरेज';
+      const finalLoc = cleanLocationField(res.location || card.location || '');
       const finalImage = res.pickedImages?.main || card.images.main;
 
       const effectiveCaption = formatCaptionByStyle(
@@ -727,7 +729,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         setUseWebsitePhoto(false);
 
         const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || card.headline);
-        const finalLoc = fallbackResult.location || card.location || 'विशेष कवरेज';
+        const finalLoc = cleanLocationField(fallbackResult.location || card.location || '');
 
         const effectiveCaption = formatCaptionByStyle(
           captionStyle,
@@ -1314,7 +1316,28 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setUseWebsitePhoto(!useWebsitePhoto)}
+                  onClick={() => {
+                    const nextVal = !useWebsitePhoto;
+                    setUseWebsitePhoto(nextVal);
+                    if (nextVal) {
+                      const photoToRestore = result?.pickedImages?.main || (card as any).extractedArticlePhotos?.[0] || '';
+                      if (photoToRestore) {
+                        onChange({
+                          images: {
+                            ...card.images,
+                            main: photoToRestore,
+                          },
+                        });
+                      }
+                    } else {
+                      onChange({
+                        images: {
+                          ...card.images,
+                          main: '',
+                        },
+                      });
+                    }
+                  }}
                   className={`px-2 py-0.5 text-[11px] font-bold rounded border cursor-pointer ${
                     useWebsitePhoto
                       ? 'bg-green-600/30 text-green-300 border-green-500'
