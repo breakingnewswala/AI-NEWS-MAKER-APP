@@ -303,15 +303,27 @@ export default function App() {
   }, []);
 
   // News feed posts state - auto-migrates from v1 and validates live format (no dummy seeds)
+  // Part N: Filter deleted items on initial mount to prevent deleted news from flashing after refresh
+  // Part M: Sort newest first
   const [posts, setPosts] = useState<NewsFeedPost[]>(() => {
     try {
       localStorage.removeItem('app_news_posts_v1');
+      const rawDel = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
+      const deletedSet = new Set<string>(rawDel ? JSON.parse(rawDel) : []);
       const saved = localStorage.getItem('app_news_posts_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Strictly purge any obsolete dummy live-post seed records
-          const clean = parsed.filter((p: any) => p && p.id && !String(p.id).startsWith('live-post-'));
+          // Strictly purge any deleted or obsolete dummy live-post seed records
+          const clean = parsed.filter((p: any) => p && p.id && !deletedSet.has(p.id) && !String(p.id).startsWith('live-post-'));
+          clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+            const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+            const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+            if ((timeB || 0) !== (timeA || 0)) {
+              return (timeB || 0) - (timeA || 0);
+            }
+            return String(b.id).localeCompare(String(a.id));
+          });
           if (clean.length > 0) return clean;
         }
       }
@@ -362,6 +374,14 @@ export default function App() {
         const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
         if (Array.isArray(apiPosts)) {
           const cleanApi = apiPosts.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+          cleanApi.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+            const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+            const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+            if ((timeB || 0) !== (timeA || 0)) {
+              return (timeB || 0) - (timeA || 0);
+            }
+            return String(b.id).localeCompare(String(a.id));
+          });
           setPosts(cleanApi);
           try {
             localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
@@ -381,6 +401,14 @@ export default function App() {
           const data = await fbRes.json();
           if (Array.isArray(data)) {
             const clean = data.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+            clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+              if ((timeB || 0) !== (timeA || 0)) {
+                return (timeB || 0) - (timeA || 0);
+              }
+              return String(b.id).localeCompare(String(a.id));
+            });
             setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));
@@ -401,6 +429,14 @@ export default function App() {
           const data = await staticRes.json();
           if (Array.isArray(data)) {
             const clean = data.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+            clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+              if ((timeB || 0) !== (timeA || 0)) {
+                return (timeB || 0) - (timeA || 0);
+              }
+              return String(b.id).localeCompare(String(a.id));
+            });
             setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));

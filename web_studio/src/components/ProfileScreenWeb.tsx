@@ -40,6 +40,7 @@ import {
   Mail,
   MapPin,
   Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
@@ -73,6 +74,7 @@ import {
   submitLogoChangeRequest,
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
+  fetchLogoChangeRequests,
   checkAccountUniqueness,
   canAccessTemplateManager,
 } from '../lib/userPlanManager';
@@ -238,12 +240,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   };
 
   const [isLockedForUserState, setIsLockedForUserState] = useState(() => !isAdmin && isChannelProfileLocked(currentUser));
-  const isLockedForUser = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl || channelProfile.channelLogoGifUrl));
+  const isLockedForUser = isLockedForUserState;
+  const isLogoLocked = isLockedForUserState || (!isAdmin && Boolean(channelProfile.channelLogoUrl || channelProfile.channelLogoPngUrl));
+  const isGifLocked = !isAdmin && Boolean(channelProfile.channelLogoGifUrl);
   const [isLogoReqModalOpen, setIsLogoReqModalOpen] = useState(false);
+  const [logoReqType, setLogoReqType] = useState<'logo' | 'gif'>('logo');
+  const [isSubmittingLogoReq, setIsSubmittingLogoReq] = useState(false);
   const [logoReqReason, setLogoReqReason] = useState("नया आधिकारिक चैनल लोगो अपडेट करना है");
   const [newRequestedLogoUrl, setNewRequestedLogoUrl] = useState<string>('');
   const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
-    getUserLogoChangeRequestStatus(currentUser?.email || '')
+    getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo')
+  );
+  const [gifReqStatus, setGifReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
+    getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif')
   );
 
   // Manual Username Creation state & handler (Google Email != Username)
@@ -352,6 +361,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleNewRequestedLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (logoReqType === 'gif') {
+      if (!file.type.includes('gif') && !file.name.toLowerCase().endsWith('.gif')) {
+        alert('कृपया केवल मान्य एनिमेटेड GIF फ़ाइल (.gif) चुनें।');
+        return;
+      }
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      alert('फ़ाइल का आकार 15MB से अधिक नहीं होना चाहिए।');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const res = ev.target?.result as string;
@@ -363,8 +385,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   useEffect(() => {
     const handleLogoUpdates = () => {
       setIsLockedForUserState(!isAdmin && isChannelProfileLocked(currentUser));
-      setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || ''));
+      setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo'));
+      setGifReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif'));
     };
+
+    if (currentUser?.email) {
+      fetchLogoChangeRequests(currentUser.email).then(() => handleLogoUpdates()).catch(() => {});
+    }
+
     window.addEventListener('ai_news_logo_requests_updated', handleLogoUpdates);
     window.addEventListener('ai_news_channel_profile_unlocked', handleLogoUpdates);
     window.addEventListener('ai_news_plan_users_changed', handleLogoUpdates);
@@ -1596,178 +1624,176 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )}
 
                 {/* If user profile is locked, show locked display card. Otherwise, show upload options */}
-                {isLockedForUser ? (
-                  <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border-2 border-amber-500/50 rounded-xl p-4 space-y-3 shadow-lg">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-500 flex items-center justify-center text-emerald-400 shrink-0">
-                          <Lock className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-black text-white flex items-center gap-1.5">
-                            <span>चैनल लोगो (स्थायी रूप से सुरक्षित)</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 font-bold border border-emerald-700">
-                              One-Time Set ✓
-                            </span>
-                          </h4>
-                          <p className="text-[11px] text-slate-400">
-                            सुरक्षा व कॉपीराइट नियमों के तहत चैनल लोगो केवल एक बार सेट किया जा सकता है।
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-slate-800 text-amber-300 font-mono border border-slate-700">
-                        🔒 One-Time Locked
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3.5 p-3 bg-slate-950 rounded-xl border border-slate-800">
-                      <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                        <img
-                          src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
-                          alt="Channel Logo"
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-xs font-bold text-white flex items-center gap-2">
-                          <span>{channelProfile.channelNameHi || 'आपका चैनल'}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-mono">
-                            {channelProfile.channelLogoType === 'gif' ? '🎬 GIF' : '📦 PNG'}
+                {/* PNG & GIF Logo Management Cards */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {/* CARD 1: PNG CHANNEL LOGO (प्राइमरी लोगो) */}
+                    <div className="p-3.5 rounded-xl border transition-all bg-amber-500/10 border-amber-400/80 shadow-md ring-1 ring-amber-400/40">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                          <span>📦</span>
+                          <span>PNG CHANNEL LOGO (प्राइमरी लोगो)</span>
+                        </span>
+                        {isLogoLocked ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-bold border border-emerald-700">
+                            🔒 One-Time Locked
                           </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          {channelProfile.channelNameEn || 'AI News Maker'}
-                        </div>
-                        <p className="text-[10px] text-amber-200/80">
-                          लोगो में बदलाव कराने हेतु एडमिन से अनुरोध करें।
-                        </p>
+                        ) : (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-400 text-black font-extrabold">
+                            सभी ग्राफिक्स में
+                          </span>
+                        )}
+                      </div>
 
-                        <div className="pt-2 flex items-center gap-2 flex-wrap">
-                          {logoReqStatus === 'pending' ? (
-                            <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
-                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                              <span>लोगो बदलने का अनुरोध एडमिन के पास लंबित है</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                          <img
+                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
+                            alt="PNG Logo"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {isLogoLocked ? (
+                            <div>
+                              <p className="text-[10px] text-slate-300 font-semibold mb-1">
+                                {channelProfile.channelNameHi || 'आपका चैनल'}
+                              </p>
+                              {logoReqStatus === 'pending' ? (
+                                <div className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-[11px] font-bold flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                                  <span>अनुरोध एडमिन के पास लंबित है</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLogoReqType('logo');
+                                    setLogoReqReason('नया आधिकारिक चैनल लोगो अपडेट करना है');
+                                    setNewRequestedLogoUrl('');
+                                    setIsLogoReqModalOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-[11px] rounded-lg shadow cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                                  <span>लोगो बदलने हेतु अनुरोध</span>
+                                </button>
+                              )}
                             </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => setIsLogoReqModalOpen(true)}
-                              className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition flex items-center gap-2 active:scale-95 border border-amber-300 ring-2 ring-amber-400/30"
-                            >
-                              <ShieldCheck className="w-4 h-4 text-slate-950 shrink-0" />
-                              <span>लोगो बदलने हेतु अनुरोध</span>
-                            </button>
+                            <>
+                              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>{pngUploadLoading ? 'अपलोड हो रहा है...' : 'PNG लोगो अपलोड'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                                  onChange={handlePngLogoUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              <p className="text-[10px] text-slate-400">
+                                सामान्य ग्राफिक्स, ई-पेपर व पोस्टर्स का प्राइमरी लोगो
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 2: GIF CHANNEL LOGO (केवल वीडियो फीड - प्रथम बार सीधा अपलोड, बाद में अनुरोध) */}
+                    <div className={`p-3.5 rounded-xl border transition-all ${
+                      channelProfile.channelLogoGifUrl
+                        ? 'bg-red-500/10 border-red-500/80 shadow-md ring-1 ring-red-500/40'
+                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-red-300 flex items-center gap-1">
+                          <span>🎬</span>
+                          <span>GIF CHANNEL LOGO (केवल वीडियो फीड)</span>
+                        </span>
+                        {channelProfile.channelLogoGifUrl ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">
+                            सक्रिय GIF ✓
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                            PNG फॉलबैक
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                          {channelProfile.channelLogoGifUrl ? (
+                            <img
+                              src={channelProfile.channelLogoGifUrl}
+                              alt="GIF Logo"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <Film className="w-6 h-6 text-slate-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {/* Part B: First-time direct upload without admin request; subsequent replacements require admin change request */}
+                          {!channelProfile.channelLogoGifUrl ? (
+                            <>
+                              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>{gifUploadLoading ? 'अपलोड हो रहा है...' : 'GIF लोगो अपलोड (प्रथम बार सीधा अपलोड)'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/gif,.gif"
+                                  onChange={handleGifLogoUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              <p className="text-[10px] text-slate-400">
+                                नए यूज़र पहली बार सीधे एनिमेटेड GIF अपलोड कर सकते हैं
+                              </p>
+                            </>
+                          ) : (
+                            <div>
+                              <p className="text-[10px] text-emerald-400 font-medium mb-1">
+                                ✅ वीडियो फीड में एनिमेटेड GIF सक्रिय
+                              </p>
+                              {gifReqStatus === 'pending' ? (
+                                <div className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/60 text-amber-300 rounded-lg text-[11px] font-bold flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                                  <span>GIF बदलने का अनुरोध लंबित है</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLogoReqType('gif');
+                                    setLogoReqReason('नया आधिकारिक चैनल GIF अपडेट करना है');
+                                    setNewRequestedLogoUrl('');
+                                    setIsLogoReqModalOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 text-white font-black text-[11px] rounded-lg shadow cursor-pointer transition flex items-center gap-1.5 active:scale-95"
+                                >
+                                  <Film className="w-3.5 h-3.5 shrink-0" />
+                                  <span>GIF बदलने के लिए अनुरोध करें</span>
+                                </button>
+                              )}
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                स्वीकृति तक वर्तमान GIF सक्रिय रहेगा
+                              </p>
+                            </div>
+                          )}
+
+                          {gifUploadError && (
+                            <p className="text-[10px] text-red-400 font-bold">{gifUploadError}</p>
                           )}
                         </div>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    {/* 2 Distinct Upload Options: PNG CHANNEL LOGO & GIF CHANNEL LOGO */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                      {/* OPTION 1: PNG CHANNEL LOGO (प्राइमरी लोगो - सभी सामान्य ग्राफिक्स में) */}
-                      <div className="p-3.5 rounded-xl border transition-all bg-amber-500/10 border-amber-400/80 shadow-md ring-1 ring-amber-400/40">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                            <span>📦</span>
-                            <span>PNG CHANNEL LOGO (प्राइमरी लोगो)</span>
-                          </span>
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-400 text-black font-extrabold">
-                            सभी ग्राफिक्स में
-                          </span>
-                        </div>
 
-                        <div className="flex items-center gap-3">
-                          <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                            <img
-                              src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
-                              alt="PNG Logo"
-                              className="w-full h-full object-contain"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>{pngUploadLoading ? 'अपलोड हो रहा है...' : 'PNG लोगो अपलोड'}</span>
-                              <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/jpg,image/webp"
-                                onChange={handlePngLogoUpload}
-                                className="hidden"
-                              />
-                            </label>
-                            <p className="text-[10px] text-slate-400">
-                              सामान्य ग्राफिक्स, ई-पेपर व पोस्टर्स का प्राइमरी लोगो
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* OPTION 2: GIF CHANNEL LOGO (केवल वीडियो फीड में उपयोग) */}
-                      <div className={`p-3.5 rounded-xl border transition-all ${
-                        channelProfile.channelLogoGifUrl
-                          ? 'bg-red-500/10 border-red-500/80 shadow-md ring-1 ring-red-500/40'
-                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                      }`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-red-300 flex items-center gap-1">
-                            <span>🎬</span>
-                            <span>GIF CHANNEL LOGO (केवल वीडियो फीड)</span>
-                          </span>
-                          {channelProfile.channelLogoGifUrl ? (
-                            <button
-                              type="button"
-                              onClick={handleRemoveGifLogo}
-                              className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-950/80 text-red-300 hover:bg-red-900/80 border border-red-700/60 transition cursor-pointer"
-                              title="GIF हटाएं व PNG पर वापस जाएँ"
-                            >
-                              ✕ GIF हटाएं
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
-                              PNG फॉलबैक
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                            {channelProfile.channelLogoGifUrl ? (
-                              <img
-                                src={channelProfile.channelLogoGifUrl}
-                                alt="GIF Logo"
-                                className="w-full h-full object-contain"
-                              />
-                            ) : (
-                              <Film className="w-6 h-6 text-slate-600" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 space-y-1.5">
-                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-400/40 text-xs font-bold rounded-lg cursor-pointer transition">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>{gifUploadLoading ? 'अपलोड हो रहा है...' : (channelProfile.channelLogoGifUrl ? 'GIF बदलें' : 'GIF लोगो अपलोड')}</span>
-                              <input
-                                type="file"
-                                accept="image/gif"
-                                onChange={handleGifLogoUpload}
-                                className="hidden"
-                              />
-                            </label>
-                            {gifUploadError && (
-                              <p className="text-[10px] text-red-400 font-bold">{gifUploadError}</p>
-                            )}
-                            <p className="text-[10px] text-slate-400">
-                              {channelProfile.channelLogoGifUrl
-                                ? '✅ वीडियो फीड में एनिमेटेड GIF सक्रिय'
-                                : 'अनुपलब्ध होने पर वीडियो में PNG लोगो स्वतः दिखेगा'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Dedicated Save Logo Button for Admin */}
+                  {/* Channel Branding Action Bar */}
+                  {(!isLogoLocked || isAdmin) && (
                     <div className="pt-3 pb-1 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
                       <div className="text-xs text-slate-300 flex items-center gap-2 font-medium">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -1790,40 +1816,41 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         </span>
                       </button>
                     </div>
+                  )}
 
-                    {/* Admin Logo Management Tools */}
+                  {/* Admin / Utility Tools */}
+                  {(!isLogoLocked || isAdmin) && (
                     <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsJpgModalOpen(true)}
-                          className="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                          title="JPG लोगो से बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                          <span>JPG को PNG में बदलें</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsJpgModalOpen(true)}
+                        className="px-3 py-1.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+                        title="JPG लोगो से बैकग्राउंड हटाकर पारदर्शी PNG बनाएं"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        <span>JPG को PNG में बदलें</span>
+                      </button>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* लोगो बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
+              {/* लोगो / GIF बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
               {isLogoReqModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
                   <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
-                          <ShieldCheck className="w-5 h-5" />
+                        <div className={`p-2 rounded-xl ${logoReqType === 'gif' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                          {logoReqType === 'gif' ? <Film className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />}
                         </div>
                         <div>
                           <h3 className="text-white font-bold text-base">
-                            लोगो बदलने हेतु एडमिन से अनुरोध
+                            {logoReqType === 'gif' ? 'GIF बदलने हेतु एडमिन से अनुरोध' : 'लोगो बदलने हेतु एडमिन से अनुरोध'}
                           </h3>
                           <p className="text-[11px] text-slate-400">
-                            नया लोगो अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें
+                            {logoReqType === 'gif'
+                              ? 'नया एनिमेटेड GIF (.gif) अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें'
+                              : 'नया लोगो अपलोड करें और एडमिन स्वीकृति हेतु अनुरोध सबमिट करें'}
                           </p>
                         </div>
                       </div>
@@ -1837,17 +1864,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
 
                     <div className="space-y-4">
-                      {/* Current & New Logo Preview Side-by-Side */}
+                      {/* Current & New Asset Preview Side-by-Side */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* 1. Current Logo */}
+                        {/* 1. Current Asset */}
                         <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                           <span className="text-[11px] font-bold text-slate-400 block">
-                            1. वर्तमान चैनल लोगो (Current Logo):
+                            {logoReqType === 'gif' ? '1. वर्तमान चैनल GIF:' : '1. वर्तमान चैनल लोगो:'}
                           </span>
                           <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
                             <img
-                              src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
-                              alt="Current Logo"
+                              src={
+                                logoReqType === 'gif'
+                                  ? (channelProfile.channelLogoGifUrl || '/assets/ai_news_maker_logo.png')
+                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png')
+                              }
+                              alt="Current Asset"
                               className="max-h-20 w-auto object-contain"
                             />
                           </div>
@@ -1856,10 +1887,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           </div>
                         </div>
 
-                        {/* 2. New Logo Upload & Preview */}
-                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2">
-                          <span className="text-[11px] font-bold text-amber-300 block flex items-center justify-between">
-                            <span>2. नया लोगो (New Logo Upload):</span>
+                        {/* 2. New Asset Upload & Preview */}
+                        <div className={`p-3 bg-slate-950 rounded-xl border space-y-2 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
+                          <span className={`text-[11px] font-bold block flex items-center justify-between ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
+                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload):'}</span>
                             {newRequestedLogoUrl && (
                               <button
                                 type="button"
@@ -1874,22 +1905,26 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             {newRequestedLogoUrl ? (
                               <img
                                 src={newRequestedLogoUrl}
-                                alt="New Logo Preview"
+                                alt="New Asset Preview"
                                 className="max-h-20 w-auto object-contain"
                               />
                             ) : (
                               <div className="text-center text-slate-500 space-y-1">
-                                <ImageIcon className="w-6 h-6 mx-auto opacity-60" />
-                                <span className="text-[10px] block">लोगो फ़ाइल चुनें</span>
+                                {logoReqType === 'gif' ? <Film className="w-6 h-6 mx-auto opacity-60" /> : <ImageIcon className="w-6 h-6 mx-auto opacity-60" />}
+                                <span className="text-[10px] block">{logoReqType === 'gif' ? 'GIF फ़ाइल चुनें' : 'लोगो फ़ाइल चुनें'}</span>
                               </div>
                             )}
                           </div>
-                          <label className="w-full py-1.5 px-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition">
-                            <Upload className="w-3.5 h-3.5 text-amber-400" />
-                            <span>{newRequestedLogoUrl ? 'लोगो बदलें' : '📁 नया लोगो चुनें'}</span>
+                          <label className={`w-full py-1.5 px-2.5 border text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition ${
+                            logoReqType === 'gif'
+                              ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300'
+                              : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
+                          }`}>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>{newRequestedLogoUrl ? (logoReqType === 'gif' ? 'GIF बदलें' : 'लोगो बदलें') : (logoReqType === 'gif' ? '📁 नया GIF चुनें' : '📁 नया लोगो चुनें')}</span>
                             <input
                               type="file"
-                              accept="image/png,image/jpeg,image/gif,image/*"
+                              accept={logoReqType === 'gif' ? 'image/gif,.gif' : 'image/png,image/jpeg,image/webp,image/*'}
                               onChange={handleNewRequestedLogoUpload}
                               className="hidden"
                             />
@@ -1898,19 +1933,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       </div>
 
                       {/* Request Status Info if active */}
-                      {logoReqStatus !== 'none' && (
+                      {((logoReqType === 'gif' ? gifReqStatus : logoReqStatus) !== 'none') && (
                         <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs font-bold ${
-                          logoReqStatus === 'pending'
+                          (logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'pending'
                             ? 'bg-amber-950/70 border-amber-500/50 text-amber-300'
-                            : logoReqStatus === 'approved'
+                            : (logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'approved'
                             ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
                             : 'bg-rose-950/70 border-rose-500/50 text-rose-300'
                         }`}>
                           <span>वर्तमान स्थिति (Request Status):</span>
                           <span>
-                            {logoReqStatus === 'pending'
+                            {(logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'pending'
                               ? '⏳ लंबित (Admin Review Underway)'
-                              : logoReqStatus === 'approved'
+                              : (logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'approved'
                               ? '✅ स्वीकृत (Approved)'
                               : '❌ अस्वीकृत (Rejected)'}
                           </span>
@@ -1920,13 +1955,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       {/* Reason Textarea */}
                       <div>
                         <label className="block text-xs font-bold text-slate-300 mb-1">
-                          लोगो बदलने का कारण (Reason for Logo Change) *
+                          {logoReqType === 'gif' ? 'GIF बदलने का कारण (Reason for GIF Change) *' : 'लोगो बदलने का कारण (Reason for Logo Change) *'}
                         </label>
                         <textarea
                           rows={2}
                           value={logoReqReason}
                           onChange={(e) => setLogoReqReason(e.target.value)}
-                          placeholder="यहाँ लोगो बदलने का आधिकारिक कारण लिखें..."
+                          placeholder={logoReqType === 'gif' ? 'यहाँ GIF बदलने का आधिकारिक कारण लिखें...' : 'यहाँ लोगो बदलने का आधिकारिक कारण लिखें...'}
                           className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500"
                         />
                       </div>
@@ -1964,33 +1999,70 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsLogoReqModalOpen(false)}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition"
+                        disabled={isSubmittingLogoReq}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition disabled:opacity-50"
                       >
                         रद्द करें
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
+                        disabled={isSubmittingLogoReq || !newRequestedLogoUrl || !logoReqReason.trim()}
+                        onClick={async () => {
+                          if (!newRequestedLogoUrl) {
+                            alert(logoReqType === 'gif' ? 'कृपया नया GIF अपलोड करें।' : 'कृपया नया लोगो अपलोड करें।');
+                            return;
+                          }
                           if (!logoReqReason.trim()) {
                             alert('कृपया कारण दर्ज करें।');
                             return;
                           }
-                          submitLogoChangeRequest(
-                            currentUser?.email || '',
-                            channelProfile.channelNameHi || '',
-                            channelProfile.channelLogoUrl,
-                            logoReqReason.trim(),
-                            newRequestedLogoUrl || undefined,
-                            currentUser?.name || channelProfile.fullName || 'यूज़र',
-                            channelProfile.username || currentUser?.username || ''
-                          );
-                          setLogoReqStatus('pending');
-                          setIsLogoReqModalOpen(false);
-                          alert('✅ आपका अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।');
+                          try {
+                            setIsSubmittingLogoReq(true);
+                            const currentUrl = logoReqType === 'gif'
+                              ? channelProfile.channelLogoGifUrl
+                              : (channelProfile.channelLogoPngUrl || channelProfile.channelLogoUrl);
+                            await submitLogoChangeRequest(
+                              currentUser?.email || '',
+                              channelProfile.channelNameHi || '',
+                              currentUrl,
+                              logoReqReason.trim(),
+                              newRequestedLogoUrl,
+                              currentUser?.name || channelProfile.fullName || 'यूज़र',
+                              channelProfile.username || currentUser?.username || '',
+                              logoReqType
+                            );
+                            if (logoReqType === 'gif') {
+                              setGifReqStatus('pending');
+                            } else {
+                              setLogoReqStatus('pending');
+                            }
+                            setIsLogoReqModalOpen(false);
+                            alert(
+                              logoReqType === 'gif'
+                                ? '✅ आपका GIF बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया GIF स्वतः सक्रिय हो जाएगा। तब तक आपका वर्तमान GIF चालू रहेगा।'
+                                : '✅ आपका लोगो बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।'
+                            );
+                          } catch (err: any) {
+                            console.error('Logo request error:', err);
+                            alert('अनुरोध सबमिट करने में त्रुटि: ' + (err?.message || 'कृपया पुनः प्रयास करें।'));
+                          } finally {
+                            setIsSubmittingLogoReq(false);
+                          }
                         }}
-                        className="px-5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95"
+                        className={`px-5 py-2.5 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          logoReqType === 'gif'
+                            ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 text-white'
+                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950'
+                        }`}
                       >
-                        अनुरोध सबमिट करें (Submit Request)
+                        {isSubmittingLogoReq ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                            <span>सबमिट हो रहा है...</span>
+                          </>
+                        ) : (
+                          <span>अनुरोध सबमिट करें (Submit Request)</span>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -2964,5 +3036,7 @@ return (
         </div>
       )}
     </div>
+  </div>
   );
 };
+

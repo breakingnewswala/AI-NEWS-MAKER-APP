@@ -30,9 +30,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Increase payload limits for image uploads
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+// Increase payload limits for video and image uploads
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // Dynamic runtime cloud configuration (OpenAI API key & custom domain)
 const CONFIGURED_OPENAI_KEY = "";
@@ -183,12 +183,60 @@ interface StoredNewsPost {
 
 const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
 const PROFILES_DB_FILE = path.join(process.cwd(), "user_profiles_db.json");
+const LOGO_REQUESTS_DB_FILE = path.join(process.cwd(), "logo_change_requests_db.json");
 const UPLOAD_LOGOS_DIR = path.join(process.cwd(), "public", "uploads", "logos");
 const WEB_UPLOAD_LOGOS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+const UPLOAD_VIDEOS_DIR = path.join(process.cwd(), "public", "uploads", "videos");
+const WEB_UPLOAD_VIDEOS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "videos");
+const UPLOAD_THUMBNAILS_DIR = path.join(process.cwd(), "public", "uploads", "thumbnails");
+const WEB_UPLOAD_THUMBNAILS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "thumbnails");
 
 try {
   fs.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
+  fs.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
+  fs.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
 } catch { }
+
+interface ServerLogoChangeRequest {
+  id: string;
+  userEmail: string;
+  userName?: string;
+  username?: string;
+  channelName: string;
+  currentLogoUrl?: string;
+  newLogoUrl?: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: number;
+  requestType?: 'logo' | 'gif';
+  adminNotes?: string;
+}
+
+function loadLogoRequestsDatabase(): ServerLogoChangeRequest[] {
+  try {
+    if (fs.existsSync(LOGO_REQUESTS_DB_FILE)) {
+      const raw = fs.readFileSync(LOGO_REQUESTS_DB_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list;
+    }
+  } catch (err: any) {
+    console.error("Error reading logo requests database:", err.message);
+  }
+  return [];
+}
+
+function saveLogoRequestsDatabase(list: ServerLogoChangeRequest[]): boolean {
+  try {
+    fs.writeFileSync(LOGO_REQUESTS_DB_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return true;
+  } catch (err: any) {
+    console.error("Error saving logo requests database:", err.message);
+    return false;
+  }
+}
 
 
 function getInitialRichNewsPosts(): StoredNewsPost[] {
@@ -495,6 +543,14 @@ app.get("/api/news-posts", (req, res) => {
     }
 
     return true;
+  });
+
+  // 4. Sort newest-first: newest approved/published news at the top, older progressively lower
+  activePosts.sort((a, b) => {
+    const timeA = Number(a.timestamp) || 0;
+    const timeB = Number(b.timestamp) || 0;
+    if (timeB !== timeA) return timeB - timeA;
+    return String(b.id).localeCompare(String(a.id));
   });
 
   // Update publishedTime dynamically
@@ -852,7 +908,7 @@ const USERS_MASTER_FILE = path.join(process.cwd(), "users_master_database.json")
 const USERS_DB_FILE = path.join(process.cwd(), "users_accounts_db.json");
 const NOTIFICATIONS_DB_FILE = path.join(process.cwd(), "notifications_database.json");
 
-export interface AuthoritativeUser {
+interface AuthoritativeUser {
   userId: string;
   email: string;
   id?: string;
@@ -904,7 +960,7 @@ export interface AuthoritativeUser {
   assignedCustomActive?: boolean;
 }
 
-export interface StoredNotification {
+interface StoredNotification {
   id: string;
   title: string;
   message?: string;
@@ -1574,6 +1630,14 @@ function loadVideosDatabase(): StoredVideoItem[] {
         return false; // older than 4 days -> auto delete
       }
       return true;
+    });
+
+    // Sort newest-first: newest published videos appear at the top
+    validVideos.sort((a, b) => {
+      const timeA = Number(a.createdAt) || 0;
+      const timeB = Number(b.createdAt) || 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return String(b.id).localeCompare(String(a.id));
     });
 
     if (validVideos.length !== videos.length) {
@@ -3669,6 +3733,267 @@ app.post("/api/remove-gif-logo", enforceUserAccessMiddleware, (req, res) => {
   }
 });
 
+// ============================================================================
+// LOGO & GIF CHANGE REQUESTS API (Real Backend Persistence & Admin Approval)
+// ============================================================================
+
+// 1. GET /api/logo-change-requests - List requests (filtered by user or all for admin)
+app.get("/api/logo-change-requests", (req, res) => {
+  try {
+    const emailFilter = (req.query.email as string || "").trim().toLowerCase();
+    const allRequests = loadLogoRequestsDatabase();
+
+    // Sort newest first
+    allRequests.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
+    if (emailFilter) {
+      const userReqs = allRequests.filter((r) => r.userEmail === emailFilter);
+      return res.json({ success: true, requests: userReqs });
+    }
+
+    return res.json({ success: true, requests: allRequests });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 2. POST /api/logo-change-requests - User submits logo or GIF change request
+app.post("/api/logo-change-requests", (req, res) => {
+  try {
+    const {
+      userEmail,
+      channelName,
+      currentLogoUrl,
+      reason,
+      newLogoUrl,
+      userName,
+      username,
+      requestType = "logo",
+    } = req.body;
+
+    if (!userEmail || !userEmail.trim()) {
+      return res.status(400).json({ error: "उपयोगकर्ता ईमेल अनिवार्य है।" });
+    }
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ error: "लोगो बदलने का कारण अनिवार्य है।" });
+    }
+
+    const cleanEmail = userEmail.trim().toLowerCase();
+    const allRequests = loadLogoRequestsDatabase();
+
+    // Check if there is already a pending request for this user and type
+    const existingPending = allRequests.find(
+      (r) => r.userEmail === cleanEmail && r.status === "pending" && (r.requestType || "logo") === requestType
+    );
+    if (existingPending) {
+      return res.status(409).json({
+        error: `आपका ${requestType === 'gif' ? 'GIF' : 'लोगो'} बदलने का अनुरोध पहले से एडमिन के पास लंबित है।`,
+        request: existingPending,
+      });
+    }
+
+    let finalNewLogoUrl = newLogoUrl;
+    // If newLogoUrl is a base64 DataURL, save it as a file on disk to prevent bloated database
+    if (newLogoUrl && typeof newLogoUrl === "string" && newLogoUrl.startsWith("data:image/")) {
+      try {
+        const isGif = requestType === "gif" || newLogoUrl.startsWith("data:image/gif");
+        const ext = isGif ? "gif" : "png";
+        const savedFilename = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const base64Data = newLogoUrl.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+
+        const filePath = path.join(UPLOAD_LOGOS_DIR, savedFilename);
+        const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, savedFilename);
+        fs.writeFileSync(filePath, buffer);
+        try { fs.writeFileSync(webFilePath, buffer); } catch { }
+
+        finalNewLogoUrl = `/uploads/logos/${savedFilename}`;
+      } catch (fileErr) {
+        console.warn("Could not save request logo to disk, keeping raw url:", fileErr);
+      }
+    }
+
+    const newRequest: ServerLogoChangeRequest = {
+      id: `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userEmail: cleanEmail,
+      userName: userName || cleanEmail.split("@")[0],
+      username: username || cleanEmail.split("@")[0],
+      channelName: channelName || "मेरा न्यूज़ चैनल",
+      currentLogoUrl: currentLogoUrl || "",
+      newLogoUrl: finalNewLogoUrl || "",
+      reason: reason.trim(),
+      status: "pending",
+      createdAt: Date.now(),
+      requestType: requestType === "gif" ? "gif" : "logo",
+    };
+
+    allRequests.unshift(newRequest);
+    saveLogoRequestsDatabase(allRequests);
+
+    return res.json({ success: true, request: newRequest });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 3. POST /api/logo-change-requests/:id/approve - Admin approves request
+app.post("/api/logo-change-requests/:id/approve", (req, res) => {
+  try {
+    const { id } = req.params;
+    const allRequests = loadLogoRequestsDatabase();
+    const reqIndex = allRequests.findIndex((r) => r.id === id);
+
+    if (reqIndex === -1) {
+      return res.status(404).json({ error: "अनुरोध नहीं मिला।" });
+    }
+
+    const targetReq = allRequests[reqIndex];
+    targetReq.status = "approved";
+    saveLogoRequestsDatabase(allRequests);
+
+    // Update the corresponding user's profile with the new logo / GIF
+    const cleanEmail = targetReq.userEmail.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    let targetKey = "";
+
+    if (allProfiles[cleanEmail]) {
+      targetKey = cleanEmail;
+    } else {
+      for (const k of Object.keys(allProfiles)) {
+        const p = allProfiles[k];
+        const pEmail = (p.email || "").toLowerCase().trim();
+        const pUser = (p.username || "").toLowerCase().trim();
+        if (pEmail === cleanEmail || (targetReq.username && pUser === targetReq.username.toLowerCase().trim())) {
+          targetKey = k;
+          break;
+        }
+      }
+    }
+
+    if (targetKey && allProfiles[targetKey]) {
+      const prof = allProfiles[targetKey];
+      if (targetReq.requestType === "gif" && targetReq.newLogoUrl) {
+        prof.channelLogoGifUrl = targetReq.newLogoUrl;
+        prof.channelLogoType = "gif";
+      } else if (targetReq.newLogoUrl) {
+        prof.channelLogoUrl = targetReq.newLogoUrl;
+        prof.channelLogoPngUrl = targetReq.newLogoUrl;
+        prof.channelLogoType = "png";
+      }
+      prof.updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+
+      try {
+        registerOrUpdateUserAuthoritative(prof);
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      request: targetReq,
+      message: `यूज़र ${targetReq.userEmail} का ${targetReq.requestType === 'gif' ? 'GIF' : 'लोगो'} अनुरोध स्वीकृत हो गया।`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 4. POST /api/logo-change-requests/:id/reject - Admin rejects request
+app.post("/api/logo-change-requests/:id/reject", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adminNotes } = req.body || {};
+    const allRequests = loadLogoRequestsDatabase();
+    const reqIndex = allRequests.findIndex((r) => r.id === id);
+
+    if (reqIndex === -1) {
+      return res.status(404).json({ error: "अनुरोध नहीं मिला।" });
+    }
+
+    const targetReq = allRequests[reqIndex];
+    targetReq.status = "rejected";
+    if (adminNotes) targetReq.adminNotes = adminNotes;
+    saveLogoRequestsDatabase(allRequests);
+
+    return res.json({
+      success: true,
+      request: targetReq,
+      message: `यूज़र ${targetReq.userEmail} का अनुरोध अस्वीकृत कर दिया गया।`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// ============================================================================
+// ADMIN VIDEO FILE & THUMBNAIL UPLOAD ENDPOINTS
+// ============================================================================
+
+// 5. POST /api/admin/videos/upload-file - Uploads real video file and saves to /uploads/videos
+app.post("/api/admin/videos/upload-file", (req, res) => {
+  try {
+    const { videoData, filename = "video.mp4" } = req.body;
+    if (!videoData || typeof videoData !== "string") {
+      return res.status(400).json({ error: "वीडियो डेटा अनिवार्य है।" });
+    }
+
+    // Determine extension
+    let ext = "mp4";
+    if (filename.toLowerCase().endsWith(".webm") || videoData.startsWith("data:video/webm")) {
+      ext = "webm";
+    } else if (filename.toLowerCase().endsWith(".mov") || videoData.startsWith("data:video/quicktime")) {
+      ext = "mov";
+    } else if (filename.toLowerCase().endsWith(".m4v") || videoData.startsWith("data:video/x-m4v")) {
+      ext = "m4v";
+    }
+
+    const savedFilename = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+
+    const filePath = path.join(UPLOAD_VIDEOS_DIR, savedFilename);
+    const webFilePath = path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
+    fs.writeFileSync(filePath, buffer);
+    try { fs.writeFileSync(webFilePath, buffer); } catch { }
+
+    const videoUrl = `/uploads/videos/${savedFilename}`;
+    return res.json({ success: true, videoUrl, filename: savedFilename });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 6. POST /api/admin/videos/upload-thumbnail - Uploads thumbnail image and saves to /uploads/thumbnails
+app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
+  try {
+    const { imageData, filename = "thumbnail.jpg" } = req.body;
+    if (!imageData || typeof imageData !== "string") {
+      return res.status(400).json({ error: "थंबनेल इमेज डेटा अनिवार्य है।" });
+    }
+
+    let ext = "jpg";
+    if (filename.toLowerCase().endsWith(".png") || imageData.startsWith("data:image/png")) {
+      ext = "png";
+    } else if (filename.toLowerCase().endsWith(".webp") || imageData.startsWith("data:image/webp")) {
+      ext = "webp";
+    }
+
+    const savedFilename = `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+
+    const filePath = path.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
+    const webFilePath = path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
+    fs.writeFileSync(filePath, buffer);
+    try { fs.writeFileSync(webFilePath, buffer); } catch { }
+
+    const thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
+    return res.json({ success: true, thumbnailUrl, filename: savedFilename });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // 4. POST Admin Reset User Logo
 app.post("/api/admin/reset-user-logo", (req, res) => {
   try {
@@ -4279,7 +4604,7 @@ function getOpenAIClient(): OpenAI {
 }
 
 // Template Configuration Registry for AI Generation Constraints
-export interface TemplateConfig {
+interface TemplateConfig {
   id: string;
   template_id: string;
   name: string;
@@ -4290,7 +4615,7 @@ export interface TemplateConfig {
   description?: string;
 }
 
-export const TEMPLATE_CONFIG_REGISTRY: Record<string, TemplateConfig> = {
+const TEMPLATE_CONFIG_REGISTRY: Record<string, TemplateConfig> = {
   graphic_001: {
     id: "graphic_001",
     template_id: "graphic_001",
@@ -4405,7 +4730,7 @@ export const TEMPLATE_CONFIG_REGISTRY: Record<string, TemplateConfig> = {
   },
 };
 
-export function getTemplateConfig(templateId?: string): TemplateConfig {
+function getTemplateConfig(templateId?: string): TemplateConfig {
   const tid = templateId || "graphic_001";
   if (TEMPLATE_CONFIG_REGISTRY[tid]) {
     return TEMPLATE_CONFIG_REGISTRY[tid];

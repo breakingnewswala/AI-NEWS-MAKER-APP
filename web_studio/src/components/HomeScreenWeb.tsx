@@ -434,30 +434,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
     const rawList = [...newFromRss, ...validPosts];
 
-    // Interleave / shuffle by category for a balanced, dynamic feed
-    const categoryBuckets: Record<string, NewsFeedPost[]> = {};
-    for (const item of rawList) {
-      const cat = item.category || 'general';
-      if (!categoryBuckets[cat]) categoryBuckets[cat] = [];
-      categoryBuckets[cat].push(item);
-    }
-
-    const shuffled: NewsFeedPost[] = [];
-    const keys = Object.keys(categoryBuckets);
-    let maxLen = 0;
-    for (const k of keys) {
-      if (categoryBuckets[k].length > maxLen) maxLen = categoryBuckets[k].length;
-    }
-
-    for (let i = 0; i < maxLen; i++) {
-      for (const k of keys) {
-        if (i < categoryBuckets[k].length) {
-          shuffled.push(categoryBuckets[k][i]);
-        }
+    // Part M: Both Home Feed and Video Feed must show the newest eligible content first and older content below
+    rawList.sort((a, b) => {
+      const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+      const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+      if ((timeB || 0) !== (timeA || 0)) {
+        return (timeB || 0) - (timeA || 0);
       }
-    }
+      return String(b.id).localeCompare(String(a.id));
+    });
 
-    return shuffled.length > 0 ? shuffled : rawList;
+    return rawList;
   }, [posts, activeRssPosts]);
 
   const toggleSelectNews = (id: string) => {

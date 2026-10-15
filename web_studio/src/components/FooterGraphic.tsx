@@ -81,7 +81,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const isLightBg = luminance >= 0.5;
   const effectiveTextColor = footerTextColor && footerTextColor.trim() !== ''
     ? footerTextColor
-    : (isLightBg ? '#0F172A' : '#FFFFFF');
+    : (isLightBg ? '#000000' : '#FFFFFF');
   const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
 
   // 1. Social Username: From user profile only, no hardcoded '@AINewsMaker' default

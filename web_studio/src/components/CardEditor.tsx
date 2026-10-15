@@ -41,6 +41,7 @@ import {
   Plus,
   Minus,
   FolderOpen,
+  AlertCircle,
 } from 'lucide-react';
 import {
   saveCustomFrame,
@@ -124,13 +125,39 @@ export const HIGHLIGHT_COLOR_PRESETS = [
   { color: '#F97316', label: 'नारंगी (Orange)', bg: 'bg-orange-500', text: 'text-white' },
 ];
 
+export const FOOTER_BG_PRIMARY_PRESETS = [
+  { color: '#FFFFFF', name: 'White', nameHi: 'सफ़ेद (डिफ़ॉल्ट)', border: 'border-neutral-300' },
+  { color: '#EDEDED', name: 'Light Gray', nameHi: 'हल्का ग्रे', border: 'border-neutral-300' },
+  { color: '#FFF1D6', name: 'Cream', nameHi: 'क्रीम', border: 'border-amber-200' },
+  { color: '#D9F0FF', name: 'Sky Blue', nameHi: 'स्काई ब्लू', border: 'border-sky-300' },
+  { color: '#DDF5E3', name: 'Mint Green', nameHi: 'मिंट ग्रीन', border: 'border-emerald-300' },
+];
+
+export const FOOTER_BG_SECONDARY_PRESETS = [
+  { color: '#FFF200', name: 'Bright Yellow', nameHi: 'ब्राइट यलो', border: 'border-yellow-400' },
+  { color: '#FFE1EC', name: 'Light Pink', nameHi: 'हल्का गुलाबी', border: 'border-pink-300' },
+  { color: '#E8E0FF', name: 'Light Lavender', nameHi: 'लैवेंडर', border: 'border-purple-300' },
+  { color: '#FFE3C2', name: 'Peach', nameHi: 'पीच', border: 'border-orange-200' },
+  { color: '#D8F3F0', name: 'Aqua', nameHi: 'एक्वा', border: 'border-teal-200' },
+  { color: '#FFF4B8', name: 'Pale Yellow', nameHi: 'पेल यलो', border: 'border-yellow-200' },
+  { color: '#F5E6D3', name: 'Beige', nameHi: 'बेज', border: 'border-amber-200' },
+  { color: '#E1E8F5', name: 'Light Steel Blue', nameHi: 'स्टील ब्लू', border: 'border-slate-300' },
+  { color: '#E8E8C9', name: 'Light Olive', nameHi: 'ऑलिव', border: 'border-lime-200' },
+];
+
 export const FOOTER_BG_PRESETS = [
-  { color: '#FFFFFF', label: 'सफ़ेद (White)', border: 'border-neutral-300' },
-  { color: '#FFE600', label: 'पीला (Yellow)', border: 'border-yellow-500' },
-  { color: '#DC2626', label: 'लाल (Red)', border: 'border-red-600' },
-  { color: '#0F172A', label: 'डार्क नेवी (Navy)', border: 'border-slate-700' },
-  { color: '#000000', label: 'गहरा काला (Black)', border: 'border-neutral-700' },
-  { color: '#F1F5F9', label: 'हल्का ग्रे (Light)', border: 'border-slate-300' },
+  ...FOOTER_BG_PRIMARY_PRESETS.map((p) => ({ color: p.color, label: `${p.nameHi} (${p.name})`, border: p.border })),
+  ...FOOTER_BG_SECONDARY_PRESETS.map((p) => ({ color: p.color, label: `${p.nameHi} (${p.name})`, border: p.border })),
+];
+
+export const FOOTER_TEXT_COLOR_PRESETS = [
+  { color: '#000000', name: 'Black', nameHi: 'काला (डिफ़ॉल्ट)' },
+  { color: '#333333', name: 'Dark Gray', nameHi: 'डार्क ग्रे' },
+  { color: '#FFFFFF', name: 'White', nameHi: 'सफ़ेद' },
+  { color: '#17365D', name: 'Dark Blue', nameHi: 'डार्क ब्लू' },
+  { color: '#176B3A', name: 'Dark Green', nameHi: 'डार्क ग्रीन' },
+  { color: '#8B1E1E', name: 'Dark Red', nameHi: 'डार्क रेड' },
+  { color: '#5B2C83', name: 'Dark Purple', nameHi: 'डार्क पर्पल' },
 ];
 
 interface CardEditorProps {
@@ -1783,52 +1810,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
           </div>
 
-          {/* Alignment */}
+          {/* Alignment: Strictly Centered & Locked for News Graphics */}
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-semibold">
-              <AlignJustify className="w-3.5 h-3.5 text-yellow-400" />
+              <AlignCenter className="w-3.5 h-3.5 text-yellow-400" />
               <span>अलाइनमेंट (Alignment):</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                🔒 Center Locked
+              </span>
             </div>
-            <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-md border border-neutral-800">
-              <button
-                type="button"
-                onClick={() => onChange({ headlineAlign: 'center' })}
-                className={`flex-1 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                  (!card.headlineAlign || card.headlineAlign === 'center')
-                    ? 'bg-yellow-400 text-neutral-950 shadow-sm font-extrabold'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-                title="बीच में (Center - डिफ़ॉल्ट)"
-              >
-                <AlignCenter className="w-3 h-3" />
-                <span>Center</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onChange({ headlineAlign: 'justify' })}
-                className={`flex-1 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                  card.headlineAlign === 'justify'
-                    ? 'bg-yellow-400 text-neutral-950 shadow-sm font-extrabold'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-                title="दोनों तरफ से बराबर (Justify - समाचार पत्र प्रारूप)"
-              >
-                <AlignJustify className="w-3 h-3" />
-                <span>Justify</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onChange({ headlineAlign: 'left' })}
-                className={`flex-1 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                  card.headlineAlign === 'left'
-                    ? 'bg-yellow-400 text-neutral-950 shadow-sm font-extrabold'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-                title="बाईं ओर (Left)"
-              >
-                <AlignLeft className="w-3 h-3" />
-                <span>Left</span>
-              </button>
+            <div className="flex items-center gap-2 bg-neutral-900/90 px-3 py-1.5 rounded-md border border-neutral-800 text-xs font-bold text-amber-300 justify-center">
+              <AlignCenter className="w-4 h-4 text-amber-400" />
+              <span>हेडलाइन हमेशा क्षैतिज रूप से मध्य में केंद्रित रहेगी (Centered)</span>
             </div>
           </div>
         </div>
@@ -2145,6 +2138,23 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             {bg.label}
                           </button>
                         ))}
+                        <div className="flex items-center gap-1 ml-1">
+                          <input
+                            type="color"
+                            value={item.backgroundColor && item.backgroundColor !== 'transparent' ? item.backgroundColor : '#DC2626'}
+                            onChange={(e) => {
+                              const updated = card.customTextOverlays?.map((t) =>
+                                t.id === item.id ? { ...t, backgroundColor: e.target.value } : t
+                              );
+                              onChange({ customTextOverlays: updated });
+                            }}
+                            className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent p-0"
+                            title="कस्टम बैकग्राउंड रंग चुनें"
+                          />
+                          <span className="text-[9px] text-neutral-400 font-mono">
+                            {item.backgroundColor && item.backgroundColor !== 'transparent' ? item.backgroundColor : 'कस्टम'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3814,31 +3824,191 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </span>
               </div>
 
-              {/* Background Color Presets */}
-              <div className="space-y-1.5">
+              {/* Part H: 14-Color Dedicated Footer Background Palette */}
+              <div className="space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-neutral-400 font-semibold">फुटर बैकग्राउंड रंग:</span>
-                  <span className="font-mono text-[10px] text-amber-300">{card.footerBgColor || '#FFFFFF'}</span>
+                  <span className="text-neutral-300 font-bold flex items-center gap-1">
+                    <span>🎨</span>
+                    <span>फुटर बैकग्राउंड रंग (Footer Background):</span>
+                  </span>
+                  <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
+                    {card.footerBgColor || '#FFFFFF'}
+                  </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {FOOTER_BG_PRESETS.map((p) => {
-                    const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+
+                {/* Primary Colors — First 5 options displayed prominently */}
+                <div className="space-y-1">
+                  <span className="text-[10px] text-neutral-400 block font-semibold">1. मुख्य प्राथमिक रंग (Primary 5):</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {FOOTER_BG_PRIMARY_PRESETS.map((p) => {
+                      const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                      return (
+                        <button
+                          key={p.color}
+                          type="button"
+                          onClick={() => onChange({ footerBgColor: p.color })}
+                          className={`px-2 py-1.5 rounded-lg text-left text-xs font-bold border flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
+                            isSel ? 'ring-2 ring-yellow-400 scale-[1.02] shadow-md border-yellow-400' : 'hover:border-neutral-500'
+                          } ${p.border}`}
+                          style={{ backgroundColor: p.color, color: '#0F172A' }}
+                          title={`${p.nameHi} - ${p.color}`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-3.5 h-3.5 rounded-full border border-neutral-400/60 shrink-0 shadow-inner" style={{ backgroundColor: p.color }} />
+                            <span className="text-[10.5px] truncate">{p.nameHi}</span>
+                          </div>
+                          <span className="font-mono text-[9px] text-neutral-600 shrink-0">{p.color}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Remaining 9 Colors — Expandable / Horizontally scrollable palette */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[10px] text-neutral-400 block font-semibold">2. अतिरिक्त रंग पैलेट (Remaining 9):</span>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                    {FOOTER_BG_SECONDARY_PRESETS.map((p) => {
+                      const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                      return (
+                        <button
+                          key={p.color}
+                          type="button"
+                          onClick={() => onChange({ footerBgColor: p.color })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                            isSel ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400' : 'hover:border-neutral-500'
+                          } ${p.border}`}
+                          style={{ backgroundColor: p.color, color: '#0F172A' }}
+                          title={`${p.nameHi} (${p.name}) - ${p.color}`}
+                        >
+                          <span className="w-3 h-3 rounded-full border border-neutral-400/60 shadow-inner" style={{ backgroundColor: p.color }} />
+                          <span className="text-[10px] whitespace-nowrap">{p.nameHi}</span>
+                          <span className="font-mono text-[9px] text-neutral-600">{p.color}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Color Option for Footer Background */}
+                <div className="flex items-center justify-between p-2 bg-neutral-900 rounded-lg border border-neutral-800">
+                  <span className="text-[11px] text-neutral-300 font-semibold flex items-center gap-1.5">
+                    <span>🖌️</span>
+                    <span>कस्टम बैकग्राउंड रंग (Custom Color):</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={card.footerBgColor || '#FFFFFF'}
+                      onChange={(e) => onChange({ footerBgColor: e.target.value })}
+                      className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
+                      title="कस्टम बैकग्राउंड रंग चुनें"
+                    />
+                    <input
+                      type="text"
+                      value={card.footerBgColor || '#FFFFFF'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                          onChange({ footerBgColor: val });
+                        }
+                      }}
+                      className="w-20 px-2 py-0.5 bg-neutral-950 border border-neutral-700 rounded text-amber-300 font-mono text-xs focus:border-yellow-400 focus:outline-hidden"
+                      placeholder="#FFFFFF"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Part I: Independent Footer Text Color Picker (Default #000000 Black) */}
+              <div className="pt-2 border-t border-neutral-800/80 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-neutral-300 font-bold flex items-center gap-1">
+                    <span>✏️</span>
+                    <span>फुटर टेक्स्ट रंग (Footer Text Color - डिफ़ॉल्ट काला):</span>
+                  </span>
+                  <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
+                    {card.footerTextColor || '#000000'}
+                  </span>
+                </div>
+
+                {/* Suggested Text Colors */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {FOOTER_TEXT_COLOR_PRESETS.map((p) => {
+                    const isSel = (card.footerTextColor || '#000000').toUpperCase() === p.color.toUpperCase();
                     return (
                       <button
                         key={p.color}
                         type="button"
-                        onClick={() => onChange({ footerBgColor: p.color })}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
-                          isSel ? 'ring-2 ring-yellow-400 scale-105 shadow-sm' : 'hover:border-neutral-500'
-                        } ${p.border}`}
-                        style={{ backgroundColor: p.color, color: p.color === '#0F172A' || p.color === '#000000' || p.color === '#DC2626' ? '#FFFFFF' : '#1E293B' }}
+                        onClick={() => onChange({ footerTextColor: p.color })}
+                        className={`px-2 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isSel ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400' : 'hover:border-neutral-500'
+                        }`}
+                        style={{
+                          backgroundColor: p.color,
+                          color: p.color === '#FFFFFF' ? '#0F172A' : '#FFFFFF',
+                          borderColor: p.color === '#FFFFFF' ? '#D1D5DB' : '#4B5563',
+                        }}
+                        title={`${p.nameHi} - ${p.color}`}
                       >
-                        <span className="text-[10px]">{p.label}</span>
+                        <span className="text-[10px] whitespace-nowrap">{p.nameHi}</span>
                         {isSel && <span className="text-[10px]">✓</span>}
                       </button>
                     );
                   })}
+                  {/* Custom Text Color Picker with HEX input */}
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <input
+                      type="color"
+                      value={card.footerTextColor || '#000000'}
+                      onChange={(e) => onChange({ footerTextColor: e.target.value })}
+                      className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                      title="कस्टम टेक्स्ट रंग चुनें"
+                    />
+                    <input
+                      type="text"
+                      value={card.footerTextColor || '#000000'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                          onChange({ footerTextColor: val });
+                        }
+                      }}
+                      className="w-18 px-1.5 py-0.5 bg-neutral-950 border border-neutral-700 rounded text-amber-300 font-mono text-[11px] focus:border-yellow-400 focus:outline-hidden"
+                      placeholder="#000000"
+                    />
+                  </div>
                 </div>
+
+                {/* Live Contrast Warning if readability is reduced */}
+                {(() => {
+                  const getLum = (hex: string) => {
+                    const c = (hex || '#FFFFFF').replace('#', '').trim();
+                    let r = 255, g = 255, b = 255;
+                    if (c.length === 3) {
+                      r = parseInt(c[0] + c[0], 16);
+                      g = parseInt(c[1] + c[1], 16);
+                      b = parseInt(c[2] + c[2], 16);
+                    } else if (c.length === 6) {
+                      r = parseInt(c.substring(0, 2), 16);
+                      g = parseInt(c.substring(2, 4), 16);
+                      b = parseInt(c.substring(4, 6), 16);
+                    }
+                    return 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+                  };
+                  const bgLum = getLum(card.footerBgColor || '#FFFFFF');
+                  const txLum = getLum(card.footerTextColor || '#000000');
+                  const contrast = Math.abs(bgLum - txLum);
+                  if (contrast < 0.25) {
+                    return (
+                      <div className="p-2 bg-amber-500/15 border border-amber-400/50 rounded-lg text-amber-200 text-[10.5px] flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <span>⚠️ ध्यान दें: बैकग्राउंड और टेक्स्ट रंग के बीच कम कंट्रास्ट के कारण फुटर टेक्स्ट पढ़ने में असुविधा हो सकती है।</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* WhatsApp Single Toggle (Strictly ON/OFF only - No number input box) */}

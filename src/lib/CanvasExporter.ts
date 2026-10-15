@@ -1754,12 +1754,35 @@ async function drawGraphic001Canvas(
     ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pin Glyph
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 20px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('📍', pinCenterX, pinCenterY);
+    // Part F: Original White Location Icon Asset
+    let locIconLoaded = false;
+    try {
+      const locIconImg = await loadImage('/assets/location_white_icon.png');
+      if (locIconImg && locIconImg.width > 0) {
+        const iconSize = Math.round(pinR * 1.35);
+        ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
+        locIconLoaded = true;
+      }
+    } catch {}
+
+    if (!locIconLoaded) {
+      try {
+        const locIconImg = await loadImage('assets/location_white_icon.png');
+        if (locIconImg && locIconImg.width > 0) {
+          const iconSize = Math.round(pinR * 1.35);
+          ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
+          locIconLoaded = true;
+        }
+      } catch {}
+    }
+
+    if (!locIconLoaded) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '900 20px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('📍', pinCenterX, pinCenterY);
+    }
 
     // Location Text (Bold Dark Black)
     ctx.fillStyle = '#090A0E';
@@ -1770,9 +1793,9 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
-  // 5. RED HEADLINE AREA (Y = 61.33% to 89.85%, Height = 28.52%)
+  // 5. RED HEADLINE AREA (Part D & E: Expanded to 31.47% height, 4-line support, centered)
   const bannerY = Math.round(height * 0.6133);
-  const bannerH = Math.round(height * 0.2852);
+  const bannerH = Math.round(height * 0.3147);
 
   const hasUserHeadline = Boolean(
     card.headline &&
@@ -1842,7 +1865,7 @@ async function drawGraphic001Canvas(
     ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
     ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
 
-    // Render headline text in bold white with yellow highlights
+    // Render headline text in bold white with yellow highlights - Part E: Up to 4 lines support
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = (card.highlightColor && card.highlightColor !== '#DC2626') ? card.highlightColor : '#FFE600';
@@ -1851,14 +1874,14 @@ async function drawGraphic001Canvas(
     let testFontSize = 64;
     for (let s = 70; s >= 36; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
-      if (testLines.length <= 3) {
+      if (testLines.length <= 4) {
         testFontSize = s;
         break;
       }
     }
 
     const headlineLineH = Math.round(testFontSize * 1.32);
-    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 3);
+    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
     const totalHeadH = headlineLines.length * headlineLineH;
     let startY = bannerY + bannerH / 2 - totalHeadH / 2 + Math.round(headlineLineH * 0.42);
 
@@ -1895,7 +1918,7 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasUserHeadline, nothing is drawn over the red banner,
   // allowing the authentic background image's Step 3 instructions to show through!
 
-  // 6. BOTTOM FOOTER AREA (Height = 10.15%, ~137px on 1080x1350)
+  // 6. BOTTOM FOOTER AREA (Part D: Reduced height = ~7.2% vs ~10.15%, Part I: default #000000 Black)
   const footerH = height - (bannerY + bannerH);
   const activeFooter = getActiveFooterPng(card);
   if (card.showMasterBranding !== false || Boolean(activeFooter)) {
@@ -1911,7 +1934,7 @@ async function drawGraphic001Canvas(
       card.activeSocialIcons,
       card.showMobileNumber,
       card.footerBgColor || '#FFFFFF',
-      card.footerTextColor || '#0F172A',
+      card.footerTextColor || '#000000',
       card.footerIconStyle || 'color',
       card.showWebsite
     );
@@ -1936,7 +1959,52 @@ async function drawGraphic001Canvas(
     } catch {}
   }
 
-  // 9. TOPMOST VISUAL LAYERS: WATERMARK & DATE STAMP
+  // 9. Part C: Universal Text Watermark across photo area (0 to photoH)
+  if (card.showTextWatermark || card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) {
+    await drawUniversalWatermark(ctx, width, photoH, card);
+  }
+
+  // 10. Part J: Custom Text Overlays (Single-line horizontal nowrap, safe-zone clamped, custom bg color)
+  if (card.customTextOverlays && card.customTextOverlays.length > 0) {
+    for (const item of card.customTextOverlays) {
+      ctx.save();
+      const clampedX = Math.max(8, Math.min(92, item.x));
+      const clampedY = Math.max(8, Math.min(92, item.y));
+      const posX = (clampedX / 100) * width;
+      const posY = (clampedY / 100) * height;
+      const fSize = Math.max(16, Math.round(item.fontSize * (width / 420) * 0.9));
+      ctx.font = `${item.isBold !== false ? '800' : '500'} ${fSize}px "${item.fontFamily || 'Arial'}", sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+
+      const textMetrics = ctx.measureText(item.text);
+      const textW = textMetrics.width;
+      const padX = (item.backgroundColor && item.backgroundColor !== 'transparent') ? 22 : 8;
+      const padY = (item.backgroundColor && item.backgroundColor !== 'transparent') ? 10 : 4;
+      const boxW = textW + padX * 2;
+      const boxH = fSize + padY * 2;
+
+      if (item.backgroundColor && item.backgroundColor !== 'transparent') {
+        ctx.fillStyle = item.backgroundColor;
+        ctx.beginPath();
+        ctx.roundRect(posX - boxW / 2, posY - boxH / 2, boxW, boxH, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
+      }
+
+      ctx.fillStyle = item.color || '#FFFFFF';
+      ctx.fillText(item.text, posX, posY);
+      ctx.restore();
+    }
+  }
+
+  // 11. TOPMOST VISUAL LAYERS: WATERMARK & DATE STAMP
   drawPhotoDisclaimerWatermark(ctx, width, height, card);
   drawDateStamp(ctx, width, height, card);
 
@@ -5951,8 +6019,8 @@ async function drawUniversalWatermark(
   card: NewsCardData
 ) {
   const isImageWatermark = card.watermarkType === 'image' && !!card.watermarkImage;
-  const opacity = card.watermarkOpacity ?? (card.breakingWatermarkOpacity ?? 0.12);
-  const color = card.watermarkColor || (card.breakingWatermarkColor ?? 'white');
+  const opacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? (card.breakingWatermarkOpacity ?? 0.15);
+  const color = card.textWatermarkColor || card.watermarkColor || (card.breakingWatermarkColor ?? 'white');
 
   ctx.save();
   ctx.beginPath();
@@ -6002,6 +6070,8 @@ async function drawUniversalWatermark(
     ctx.textBaseline = 'middle';
 
     const textToDraw = (
+      card.textWatermarkContent ||
+      card.channelNameEn ||
       card.watermarkText ||
       card.breakingWatermarkText ||
       (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')

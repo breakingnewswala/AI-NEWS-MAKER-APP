@@ -1053,7 +1053,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               }}
             >
               <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                <MapPin className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white stroke-[2.5]" />
+                <img
+                  src="/assets/location_white_icon.png"
+                  alt="Location"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain"
+                />
               </div>
               <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
                 {card.location && card.location.trim() && card.location.trim() !== 'लोकेशन'
@@ -1063,7 +1067,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           )}
 
-          {/* Red Headline Area (Top: 61.33%, Height: 28.52%):
+          {/* Red Headline Area (Top: 61.33%, Height: 31.47% - Expanded to utilize reclaimed vertical space):
               - When no headline is entered, the authentic background image's Step 3 instructions show.
               - When user writes a headline, this red banner overlay replaces instructions with their headline in real time. */}
           {Boolean(
@@ -1081,7 +1085,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
               style={{
                 top: '61.33%',
-                height: '28.52%',
+                height: '31.47%',
                 background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
                 boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
               }}
@@ -1091,11 +1095,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               <div className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-80 pointer-events-none" />
 
               <h1
-                className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-3 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] px-2"
+                className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] px-2"
                 style={{
                   fontFamily: card.headlineFontFamily || 'Baloo 2',
                   fontSize: `${effectivePreviewFontSize}px`,
-                  textAlign: (card.headlineAlign as any) || 'center',
+                  textAlign: 'center',
                 }}
               >
                 {renderFormattedHeadline()}
@@ -1103,12 +1107,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           )}
 
-          {/* Bottom White Master Branding Footer (Bottom 0 to 10.15%):
+          {/* Bottom Master Branding Footer (Bottom 0 to 7.2%):
               Renders user's actual saved Footer with correct social media icons */}
           <div
             className="absolute inset-x-0 bottom-0 z-30 flex items-center bg-white pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
             style={{
-              height: '10.15%',
+              height: '7.2%',
             }}
           >
             <FooterGraphic
@@ -1121,7 +1125,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               showMobileNumber={card.showMobileNumber}
               activeSocialIcons={card.activeSocialIcons}
               footerBgColor={card.footerBgColor || '#FFFFFF'}
-              footerTextColor={card.footerTextColor || '#111827'}
+              footerTextColor={card.footerTextColor || '#000000'}
               footerIconStyle={card.footerIconStyle || 'color'}
               showMasterBranding={card.showMasterBranding}
             />
@@ -3171,8 +3175,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               key={item.id}
               className="absolute select-none pointer-events-auto shadow-md transition-transform"
               style={{
-                left: `${item.x}%`,
-                top: `${item.y}%`,
+                left: `${Math.max(8, Math.min(92, item.x))}%`,
+                top: `${Math.max(8, Math.min(92, item.y))}%`,
                 transform: 'translate(-50%, -50%)',
                 fontFamily: item.fontFamily ? `"${item.fontFamily}", sans-serif` : 'inherit',
                 fontSize: `${Math.max(11, Math.round(item.fontSize * previewScale * 1.6))}px`,
@@ -3183,8 +3187,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 borderRadius: '8px',
                 border: item.backgroundColor && item.backgroundColor !== 'transparent' ? '1px solid rgba(255,255,255,0.2)' : 'none',
                 textShadow: item.backgroundColor && item.backgroundColor !== 'transparent' ? 'none' : '0 2px 4px rgba(0,0,0,0.9), 0 0 3px #000',
-                whiteSpace: 'pre-wrap',
+                whiteSpace: 'nowrap',
                 maxWidth: '85%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
               {item.text}

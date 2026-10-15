@@ -1182,6 +1182,8 @@ export interface LogoChangeRequest {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: number;
+  requestType?: 'logo' | 'gif';
+  adminNotes?: string;
 }
 
 export function getLogoChangeRequests(): LogoChangeRequest[] {
@@ -1193,41 +1195,112 @@ export function getLogoChangeRequests(): LogoChangeRequest[] {
   return [];
 }
 
-export function submitLogoChangeRequest(
+export async function fetchLogoChangeRequests(userEmail?: string): Promise<LogoChangeRequest[]> {
+  try {
+    const url = userEmail
+      ? getApiUrl(`/api/logo-change-requests?email=${encodeURIComponent(userEmail.trim())}`)
+      : getApiUrl('/api/logo-change-requests');
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.requests)) {
+        if (typeof window !== 'undefined') {
+          // If admin (fetching all), update localStorage
+          if (!userEmail) {
+            localStorage.setItem('logo_change_requests', JSON.stringify(data.requests));
+          } else {
+            // Merge into local cache
+            const existing = getLogoChangeRequests();
+            const merged = [...data.requests, ...existing.filter((e) => !data.requests.some((r: any) => r.id === e.id))];
+            localStorage.setItem('logo_change_requests', JSON.stringify(merged));
+          }
+          window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
+        }
+        return data.requests;
+      }
+    }
+  } catch (err) {
+    console.warn('fetchLogoChangeRequests error:', err);
+  }
+  return getLogoChangeRequests();
+}
+
+export async function submitLogoChangeRequest(
   userEmail: string,
   channelName: string,
   currentLogoUrl: string | undefined,
   reason: string,
   newLogoUrl?: string,
   userName?: string,
-  username?: string
-): LogoChangeRequest {
+  username?: string,
+  requestType: 'logo' | 'gif' = 'logo'
+): Promise<LogoChangeRequest> {
+  const cleanEmail = userEmail.toLowerCase().trim();
   const reqs = getLogoChangeRequests();
   const newReq: LogoChangeRequest = {
     id: `req_${Date.now()}`,
-    userEmail: userEmail.toLowerCase().trim(),
+    userEmail: cleanEmail,
     userName,
     username,
     channelName,
     currentLogoUrl,
     newLogoUrl,
-    reason,
+    reason: reason.trim(),
     status: 'pending',
     createdAt: Date.now(),
+    requestType,
   };
-  reqs.unshift(newReq);
+
+  // Immediate optimistic update to local cache
+  const updatedReqs = [newReq, ...reqs.filter((r) => r.id !== newReq.id)];
   if (typeof window !== 'undefined') {
-    localStorage.setItem('logo_change_requests', JSON.stringify(reqs));
+    localStorage.setItem('logo_change_requests', JSON.stringify(updatedReqs));
     window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
   }
+
+  // Authoritative Backend API Sync
+  try {
+    const res = await fetch(getApiUrl('/api/logo-change-requests'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userEmail: cleanEmail,
+        channelName,
+        currentLogoUrl,
+        reason: reason.trim(),
+        newLogoUrl,
+        userName,
+        username,
+        requestType,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.request) {
+        const serverReq = data.request;
+        const finalReqs = [serverReq, ...updatedReqs.filter((r) => r.id !== newReq.id && r.id !== serverReq.id)];
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('logo_change_requests', JSON.stringify(finalReqs));
+          window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
+        }
+        return serverReq;
+      }
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP error ${res.status}`);
+    }
+  } catch (err: any) {
+    console.warn('submitLogoChangeRequest server sync notice:', err.message);
+  }
+
   return newReq;
 }
 
-export function getUserLogoChangeRequestStatus(userEmail: string): 'none' | 'pending' | 'approved' | 'rejected' {
+export function getUserLogoChangeRequestStatus(userEmail: string, requestType: 'logo' | 'gif' = 'logo'): 'none' | 'pending' | 'approved' | 'rejected' {
   if (!userEmail) return 'none';
   const reqs = getLogoChangeRequests();
   const clean = userEmail.toLowerCase().trim();
-  const userReq = reqs.find((r) => r.userEmail === clean);
+  const userReq = reqs.find((r) => r.userEmail === clean && (r.requestType || 'logo') === requestType);
   return userReq ? userReq.status : 'none';
 }
 
@@ -1253,27 +1326,40 @@ export function approveLogoChangeRequest(requestId: string): void {
         localStorage.setItem('unlocked_channel_profiles', JSON.stringify(unlocked));
       }
 
-      // When admin approves, if a new logo was uploaded, sync it as the user's permanent saved channel logo
+      // When admin approves, sync approved logo or GIF
       if (req.newLogoUrl) {
         try {
           const userProfKey = `user_profile_${cleanEmail}`;
           let prof: any = {};
           const existingRaw = localStorage.getItem(userProfKey);
           if (existingRaw) prof = JSON.parse(existingRaw);
-          prof.channelLogoUrl = req.newLogoUrl;
-          prof.channelLogoPngUrl = req.newLogoUrl;
+
+          if (req.requestType === 'gif') {
+            prof.channelLogoGifUrl = req.newLogoUrl;
+            prof.channelLogoType = 'gif';
+          } else {
+            prof.channelLogoUrl = req.newLogoUrl;
+            prof.channelLogoPngUrl = req.newLogoUrl;
+            prof.channelLogoType = 'png';
+          }
           localStorage.setItem(userProfKey, JSON.stringify(prof));
 
           // Also update active session profile if it matches the current user
           const activeProfRaw = localStorage.getItem('user_channel_profile');
           if (activeProfRaw) {
             const activeProf = JSON.parse(activeProfRaw);
-            activeProf.channelLogoUrl = req.newLogoUrl;
-            activeProf.channelLogoPngUrl = req.newLogoUrl;
+            if (req.requestType === 'gif') {
+              activeProf.channelLogoGifUrl = req.newLogoUrl;
+              activeProf.channelLogoType = 'gif';
+            } else {
+              activeProf.channelLogoUrl = req.newLogoUrl;
+              activeProf.channelLogoPngUrl = req.newLogoUrl;
+              activeProf.channelLogoType = 'png';
+            }
             localStorage.setItem('user_channel_profile', JSON.stringify(activeProf));
           }
         } catch (e) {
-          console.warn('Error applying approved logo:', e);
+          console.warn('Error applying approved logo/gif:', e);
         }
       }
 
@@ -1284,6 +1370,13 @@ export function approveLogoChangeRequest(requestId: string): void {
           u.isProfileLocked = false;
           localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
         }
+      } catch {}
+
+      // Call authoritative backend API
+      try {
+        fetch(getApiUrl(`/api/logo-change-requests/${encodeURIComponent(requestId)}/approve`), {
+          method: 'POST',
+        }).catch((err) => console.warn('Backend approveLogoChangeRequest notice:', err));
       } catch {}
 
       window.dispatchEvent(new Event('channel_profile_updated'));
@@ -1396,6 +1489,11 @@ export function rejectLogoChangeRequest(requestId: string): void {
       localStorage.setItem('logo_change_requests', JSON.stringify(reqs));
       window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
     }
+    try {
+      fetch(getApiUrl(`/api/logo-change-requests/${encodeURIComponent(requestId)}/reject`), {
+        method: 'POST',
+      }).catch((err) => console.warn('Backend rejectLogoChangeRequest notice:', err));
+    } catch {}
   }
 }
 

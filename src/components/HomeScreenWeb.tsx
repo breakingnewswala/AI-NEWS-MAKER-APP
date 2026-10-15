@@ -7,7 +7,6 @@ import {
   Clock,
   Radio,
   PlusCircle,
-  Plus,
   Eye,
   Check,
   ChevronRight,
@@ -46,7 +45,6 @@ import {
   getSavedNewsChannels,
   getApprovedRssIds,
   approveRssPost,
-  rejectRssPost,
   isRssPostApproved,
   fetchAdminRssSourcesFromBackend,
   syncAllSourcesLive,
@@ -436,30 +434,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
     const rawList = [...newFromRss, ...validPosts];
 
-    // Interleave / shuffle by category for a balanced, dynamic feed
-    const categoryBuckets: Record<string, NewsFeedPost[]> = {};
-    for (const item of rawList) {
-      const cat = item.category || 'general';
-      if (!categoryBuckets[cat]) categoryBuckets[cat] = [];
-      categoryBuckets[cat].push(item);
-    }
-
-    const shuffled: NewsFeedPost[] = [];
-    const keys = Object.keys(categoryBuckets);
-    let maxLen = 0;
-    for (const k of keys) {
-      if (categoryBuckets[k].length > maxLen) maxLen = categoryBuckets[k].length;
-    }
-
-    for (let i = 0; i < maxLen; i++) {
-      for (const k of keys) {
-        if (i < categoryBuckets[k].length) {
-          shuffled.push(categoryBuckets[k][i]);
-        }
+    // Part M: Both Home Feed and Video Feed must show the newest eligible content first and older content below
+    rawList.sort((a, b) => {
+      const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+      const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+      if ((timeB || 0) !== (timeA || 0)) {
+        return (timeB || 0) - (timeA || 0);
       }
-    }
+      return String(b.id).localeCompare(String(a.id));
+    });
 
-    return shuffled.length > 0 ? shuffled : rawList;
+    return rawList;
   }, [posts, activeRssPosts]);
 
   const toggleSelectNews = (id: string) => {
@@ -1088,68 +1073,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </h3>
           </div>
 
-          {filteredPosts.length === 0 ? (
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-8 sm:p-12 text-center flex flex-col items-center justify-center space-y-4 max-w-lg mx-auto shadow-xl">
-              <div className="w-16 h-16 rounded-full bg-slate-800/80 flex items-center justify-center text-amber-400">
-                {isSyncingNews ? (
-                  <RefreshCw className="w-8 h-8 animate-spin" />
-                ) : (
-                  <Newspaper className="w-8 h-8 text-slate-400" />
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <h4 className="text-base sm:text-lg font-black text-white">
-                  {isSyncingNews
-                    ? 'लाइव समाचार लोड हो रहे हैं...'
-                    : selectedCategory !== 'all'
-                    ? 'इस श्रेणी में अभी कोई खबर उपलब्ध नहीं है'
-                    : 'वर्तमान में कोई खबर उपलब्ध नहीं है'}
-                </h4>
-                <p className="text-xs sm:text-sm text-slate-400 max-w-sm">
-                  {isSyncingNews
-                    ? 'कृपया प्रतीक्षा करें, क्लाउड व सर्वर से ताज़ा खबरें सिंक की जा रही हैं।'
-                    : selectedCategory !== 'all'
-                    ? 'अन्य श्रेणियों की खबरें देखने के लिए नीचे दिए गए बटन पर टैप करें।'
-                    : 'ताज़ा समाचार प्राप्त करने के लिए रिफ्रेश करें अथवा एडमिन द्वारा नई खबर जोड़ें।'}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-                {selectedCategory !== 'all' ? (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategory('all')}
-                    className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shadow-amber-400/20"
-                  >
-                    सभी खबरें देखें
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={isSyncingNews}
-                      onClick={onRefreshLiveNews}
-                      className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-amber-400/20 disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNews ? 'animate-spin' : ''}`} />
-                      <span>{isSyncingNews ? 'सिंक हो रहा है...' : 'लाइव रिफ्रेश करें'}</span>
-                    </button>
-                    {canModerate && onOpenAddPostModal && (
-                      <button
-                        type="button"
-                        onClick={onOpenAddPostModal}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>नई खबर जोड़ें</span>
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredPosts.map((post) => {
               const isSelected = selectedNewsIds.includes(post.id);
               const isHighlighted = post.isExclusive;
@@ -1180,36 +1104,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </label>
 
                       <div className="flex items-center gap-1 flex-wrap">
-                        {/* 0. RSS Approval & Reject Buttons if pending */}
+                        {/* 0. RSS Approval Button if pending */}
                         {post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await approveRssPost(post.id);
-                                setApprovedRssIds(getApprovedRssIds());
-                              }}
-                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
-                              title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
-                            >
-                              <Check className="w-3 h-3 text-white" />
-                              <span>स्वीकृत करें (Approve)</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await rejectRssPost(post.id);
-                                setApprovedRssIds(getApprovedRssIds());
-                              }}
-                              className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow"
-                              title="इस RSS खबर को अस्वीकृत करें"
-                            >
-                              <X className="w-3 h-3 text-white" />
-                              <span>अस्वीकृत (Reject)</span>
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              approveRssPost(post.id);
+                              setApprovedRssIds(getApprovedRssIds());
+                            }}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
+                            title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
+                          >
+                            <Check className="w-3 h-3 text-white" />
+                            <span>स्वीकृत करें (Approve)</span>
+                          </button>
                         )}
 
                         {/* 1. Thumbnail Source Toggle (Source / Default / Manual) */}
@@ -1382,32 +1291,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                   {/* Dedicated Action Button for Pending RSS in Admin View */}
                   {canModerate && post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
-                    <div className="px-4 pb-2 grid grid-cols-2 gap-2">
+                    <div className="px-4 pb-2">
                       <button
                         type="button"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          await approveRssPost(post.id);
+                          approveRssPost(post.id);
                           setApprovedRssIds(getApprovedRssIds());
                         }}
-                        className="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
+                        className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
                         title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
                       >
                         <Check className="w-4 h-4 text-white" />
-                        <span>स्वीकृत करें (Approve)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await rejectRssPost(post.id);
-                          setApprovedRssIds(getApprovedRssIds());
-                        }}
-                        className="py-2.5 px-3 bg-gradient-to-r from-rose-700 to-red-600 hover:from-rose-600 hover:to-red-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
-                        title="इस RSS खबर को अस्वीकृत करें"
-                      >
-                        <X className="w-4 h-4 text-white" />
-                        <span>अस्वीकृत (Reject)</span>
+                        <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
                       </button>
                     </div>
                   )}
@@ -1439,8 +1335,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
               );
             })}
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Footer Note */}

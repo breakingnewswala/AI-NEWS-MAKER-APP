@@ -77,6 +77,7 @@ import {
   PLAN_KEY_MAP,
   LogoChangeRequest,
   getLogoChangeRequests,
+  fetchLogoChangeRequests,
   approveLogoChangeRequest,
   rejectLogoChangeRequest,
 } from '../lib/userPlanManager';
@@ -151,7 +152,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Authoritative real-time user sync on mount, subTab change, window focus & periodic interval
+  // Authoritative real-time user & logo requests sync on mount, subTab change, window focus & periodic interval
   useEffect(() => {
     let isMounted = true;
     const fetchUsers = () => {
@@ -162,16 +163,32 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       }).catch(() => {});
     };
 
+    const fetchLogoReqs = () => {
+      fetchLogoChangeRequests().then((reqs) => {
+        if (isMounted && Array.isArray(reqs)) {
+          setLogoRequests(reqs);
+        }
+      }).catch(() => {});
+    };
+
     fetchUsers();
-    const interval = setInterval(fetchUsers, 4000);
+    fetchLogoReqs();
+    const interval = setInterval(() => {
+      fetchUsers();
+      fetchLogoReqs();
+    }, 4000);
     window.addEventListener('focus', fetchUsers);
+    window.addEventListener('focus', fetchLogoReqs);
     window.addEventListener('ai_news_plan_users_changed', fetchUsers);
+    window.addEventListener('ai_news_logo_requests_updated', fetchLogoReqs);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', fetchUsers);
+      window.removeEventListener('focus', fetchLogoReqs);
       window.removeEventListener('ai_news_plan_users_changed', fetchUsers);
+      window.removeEventListener('ai_news_logo_requests_updated', fetchLogoReqs);
     };
   }, [subTab]);
 

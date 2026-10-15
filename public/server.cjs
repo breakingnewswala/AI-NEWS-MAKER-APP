@@ -7,10 +7,6 @@ var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -27,7 +23,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // server_firestore_adapter.cjs
 var require_server_firestore_adapter = __commonJS({
@@ -961,12 +956,6 @@ var require_migrate_json_to_firestore = __commonJS({
 });
 
 // server.ts
-var server_exports = {};
-__export(server_exports, {
-  TEMPLATE_CONFIG_REGISTRY: () => TEMPLATE_CONFIG_REGISTRY,
-  getTemplateConfig: () => getTemplateConfig
-});
-module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
@@ -990,8 +979,8 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(import_express.default.json({ limit: "25mb" }));
-app.use(import_express.default.urlencoded({ extended: true, limit: "25mb" }));
+app.use(import_express.default.json({ limit: "100mb" }));
+app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
 var quotaExceededInfo = {
@@ -1093,11 +1082,42 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
 });
 var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
 var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
+var LOGO_REQUESTS_DB_FILE = import_path.default.join(process.cwd(), "logo_change_requests_db.json");
 var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
 var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+var UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "videos");
+var WEB_UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "videos");
+var UPLOAD_THUMBNAILS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "thumbnails");
+var WEB_UPLOAD_THUMBNAILS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "thumbnails");
 try {
   import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
 } catch {
+}
+function loadLogoRequestsDatabase() {
+  try {
+    if (import_fs.default.existsSync(LOGO_REQUESTS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(LOGO_REQUESTS_DB_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list;
+    }
+  } catch (err) {
+    console.error("Error reading logo requests database:", err.message);
+  }
+  return [];
+}
+function saveLogoRequestsDatabase(list) {
+  try {
+    import_fs.default.writeFileSync(LOGO_REQUESTS_DB_FILE, JSON.stringify(list, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error saving logo requests database:", err.message);
+    return false;
+  }
 }
 function getInitialRichNewsPosts() {
   const now = Date.now();
@@ -1322,6 +1342,12 @@ app.get("/api/news-posts", (req, res) => {
       return false;
     }
     return true;
+  });
+  activePosts.sort((a, b) => {
+    const timeA = Number(a.timestamp) || 0;
+    const timeB = Number(b.timestamp) || 0;
+    if (timeB !== timeA) return timeB - timeA;
+    return String(b.id).localeCompare(String(a.id));
   });
   const dynamicPosts = activePosts.map((p) => ({
     ...p,
@@ -2180,6 +2206,12 @@ function loadVideosDatabase() {
         return false;
       }
       return true;
+    });
+    validVideos.sort((a, b) => {
+      const timeA = Number(a.createdAt) || 0;
+      const timeB = Number(b.createdAt) || 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return String(b.id).localeCompare(String(a.id));
     });
     if (validVideos.length !== videos.length) {
       saveVideosDatabase(validVideos);
@@ -3836,6 +3868,222 @@ app.post("/api/remove-gif-logo", enforceUserAccessMiddleware, (req, res) => {
       return res.json({ success: true, message: "GIF logo removed successfully" });
     }
     return res.json({ success: true, message: "Profile already without GIF logo" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/logo-change-requests", (req, res) => {
+  try {
+    const emailFilter = (req.query.email || "").trim().toLowerCase();
+    const allRequests = loadLogoRequestsDatabase();
+    allRequests.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+    if (emailFilter) {
+      const userReqs = allRequests.filter((r) => r.userEmail === emailFilter);
+      return res.json({ success: true, requests: userReqs });
+    }
+    return res.json({ success: true, requests: allRequests });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/logo-change-requests", (req, res) => {
+  try {
+    const {
+      userEmail,
+      channelName,
+      currentLogoUrl,
+      reason,
+      newLogoUrl,
+      userName,
+      username,
+      requestType = "logo"
+    } = req.body;
+    if (!userEmail || !userEmail.trim()) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u092C\u0926\u0932\u0928\u0947 \u0915\u093E \u0915\u093E\u0930\u0923 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    const cleanEmail = userEmail.trim().toLowerCase();
+    const allRequests = loadLogoRequestsDatabase();
+    const existingPending = allRequests.find(
+      (r) => r.userEmail === cleanEmail && r.status === "pending" && (r.requestType || "logo") === requestType
+    );
+    if (existingPending) {
+      return res.status(409).json({
+        error: `\u0906\u092A\u0915\u093E ${requestType === "gif" ? "GIF" : "\u0932\u094B\u0917\u094B"} \u092C\u0926\u0932\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u0939\u0932\u0947 \u0938\u0947 \u090F\u0921\u092E\u093F\u0928 \u0915\u0947 \u092A\u093E\u0938 \u0932\u0902\u092C\u093F\u0924 \u0939\u0948\u0964`,
+        request: existingPending
+      });
+    }
+    let finalNewLogoUrl = newLogoUrl;
+    if (newLogoUrl && typeof newLogoUrl === "string" && newLogoUrl.startsWith("data:image/")) {
+      try {
+        const isGif = requestType === "gif" || newLogoUrl.startsWith("data:image/gif");
+        const ext = isGif ? "gif" : "png";
+        const savedFilename = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const base64Data = newLogoUrl.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, savedFilename);
+        const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, savedFilename);
+        import_fs.default.writeFileSync(filePath, buffer);
+        try {
+          import_fs.default.writeFileSync(webFilePath, buffer);
+        } catch {
+        }
+        finalNewLogoUrl = `/uploads/logos/${savedFilename}`;
+      } catch (fileErr) {
+        console.warn("Could not save request logo to disk, keeping raw url:", fileErr);
+      }
+    }
+    const newRequest = {
+      id: `req_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userEmail: cleanEmail,
+      userName: userName || cleanEmail.split("@")[0],
+      username: username || cleanEmail.split("@")[0],
+      channelName: channelName || "\u092E\u0947\u0930\u093E \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932",
+      currentLogoUrl: currentLogoUrl || "",
+      newLogoUrl: finalNewLogoUrl || "",
+      reason: reason.trim(),
+      status: "pending",
+      createdAt: Date.now(),
+      requestType: requestType === "gif" ? "gif" : "logo"
+    };
+    allRequests.unshift(newRequest);
+    saveLogoRequestsDatabase(allRequests);
+    return res.json({ success: true, request: newRequest });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/logo-change-requests/:id/approve", (req, res) => {
+  try {
+    const { id } = req.params;
+    const allRequests = loadLogoRequestsDatabase();
+    const reqIndex = allRequests.findIndex((r) => r.id === id);
+    if (reqIndex === -1) {
+      return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    const targetReq = allRequests[reqIndex];
+    targetReq.status = "approved";
+    saveLogoRequestsDatabase(allRequests);
+    const cleanEmail = targetReq.userEmail.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    let targetKey = "";
+    if (allProfiles[cleanEmail]) {
+      targetKey = cleanEmail;
+    } else {
+      for (const k of Object.keys(allProfiles)) {
+        const p = allProfiles[k];
+        const pEmail = (p.email || "").toLowerCase().trim();
+        const pUser = (p.username || "").toLowerCase().trim();
+        if (pEmail === cleanEmail || targetReq.username && pUser === targetReq.username.toLowerCase().trim()) {
+          targetKey = k;
+          break;
+        }
+      }
+    }
+    if (targetKey && allProfiles[targetKey]) {
+      const prof = allProfiles[targetKey];
+      if (targetReq.requestType === "gif" && targetReq.newLogoUrl) {
+        prof.channelLogoGifUrl = targetReq.newLogoUrl;
+        prof.channelLogoType = "gif";
+      } else if (targetReq.newLogoUrl) {
+        prof.channelLogoUrl = targetReq.newLogoUrl;
+        prof.channelLogoPngUrl = targetReq.newLogoUrl;
+        prof.channelLogoType = "png";
+      }
+      prof.updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+      try {
+        registerOrUpdateUserAuthoritative(prof);
+      } catch {
+      }
+    }
+    return res.json({
+      success: true,
+      request: targetReq,
+      message: `\u092F\u0942\u091C\u093C\u0930 ${targetReq.userEmail} \u0915\u093E ${targetReq.requestType === "gif" ? "GIF" : "\u0932\u094B\u0917\u094B"} \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u092F\u093E\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/logo-change-requests/:id/reject", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adminNotes } = req.body || {};
+    const allRequests = loadLogoRequestsDatabase();
+    const reqIndex = allRequests.findIndex((r) => r.id === id);
+    if (reqIndex === -1) {
+      return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    const targetReq = allRequests[reqIndex];
+    targetReq.status = "rejected";
+    if (adminNotes) targetReq.adminNotes = adminNotes;
+    saveLogoRequestsDatabase(allRequests);
+    return res.json({
+      success: true,
+      request: targetReq,
+      message: `\u092F\u0942\u091C\u093C\u0930 ${targetReq.userEmail} \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/videos/upload-file", (req, res) => {
+  try {
+    const { videoData, filename = "video.mp4" } = req.body;
+    if (!videoData || typeof videoData !== "string") {
+      return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0921\u0947\u091F\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    let ext = "mp4";
+    if (filename.toLowerCase().endsWith(".webm") || videoData.startsWith("data:video/webm")) {
+      ext = "webm";
+    } else if (filename.toLowerCase().endsWith(".mov") || videoData.startsWith("data:video/quicktime")) {
+      ext = "mov";
+    } else if (filename.toLowerCase().endsWith(".m4v") || videoData.startsWith("data:video/x-m4v")) {
+      ext = "m4v";
+    }
+    const savedFilename = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    const filePath = import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
+    const webFilePath = import_path.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
+    import_fs.default.writeFileSync(filePath, buffer);
+    try {
+      import_fs.default.writeFileSync(webFilePath, buffer);
+    } catch {
+    }
+    const videoUrl = `/uploads/videos/${savedFilename}`;
+    return res.json({ success: true, videoUrl, filename: savedFilename });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
+  try {
+    const { imageData, filename = "thumbnail.jpg" } = req.body;
+    if (!imageData || typeof imageData !== "string") {
+      return res.status(400).json({ error: "\u0925\u0902\u092C\u0928\u0947\u0932 \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    let ext = "jpg";
+    if (filename.toLowerCase().endsWith(".png") || imageData.startsWith("data:image/png")) {
+      ext = "png";
+    } else if (filename.toLowerCase().endsWith(".webp") || imageData.startsWith("data:image/webp")) {
+      ext = "webp";
+    }
+    const savedFilename = `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    const filePath = import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
+    const webFilePath = import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
+    import_fs.default.writeFileSync(filePath, buffer);
+    try {
+      import_fs.default.writeFileSync(webFilePath, buffer);
+    } catch {
+    }
+    const thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
+    return res.json({ success: true, thumbnailUrl, filename: savedFilename });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -6771,10 +7019,5 @@ setInterval(() => {
 }, 6e4);
 startServer().catch((err) => {
   console.error("Failed to start server:", err);
-});
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  TEMPLATE_CONFIG_REGISTRY,
-  getTemplateConfig
 });
 //# sourceMappingURL=server.cjs.map
