@@ -38,11 +38,35 @@ import {
   Download,
   Flag,
   ExternalLink,
+  Coins,
+  Gift,
+  Film,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin } from '../lib/userPlanManager';
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
+
+// Social Media Brand Icons for Story Feature (Part H)
+export const FacebookIcon = () => (
+  <svg className="w-3.5 h-3.5 text-blue-500 fill-current" viewBox="0 0 24 24">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+  </svg>
+);
+
+export const InstagramIcon = () => (
+  <svg className="w-3.5 h-3.5 text-pink-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+  </svg>
+);
+
+export const WhatsAppIcon = () => (
+  <svg className="w-3.5 h-3.5 text-emerald-500 fill-current" viewBox="0 0 24 24">
+    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z" />
+  </svg>
+);
 import { getApiUrl } from '../lib/apiConfig';
 import {
   getActiveRssNewsPosts,
@@ -237,6 +261,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
 
+  // Bonus News Intro Popup state (Part P - persisted dismissal)
+  const [bonusIntroPost, setBonusIntroPost] = useState<NewsFeedPost | null>(null);
+
   // Dynamic Unified Categories (Single Source of Truth from CategoryManager)
   const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
 
@@ -250,6 +277,20 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   useEffect(() => {
     setLocalPosts(posts);
   }, [posts]);
+
+  useEffect(() => {
+    try {
+      const dismissed = localStorage.getItem('bonus_news_intro_dismissed');
+      if (!dismissed) {
+        const bonusItem = localPosts.find((p) => p.isBonus);
+        if (bonusItem) {
+          setBonusIntroPost(bonusItem);
+        }
+      }
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [localPosts]);
 
   // Admin Raw News modal state
   const [isRawNewsModalOpen, setIsRawNewsModalOpen] = useState(false);
@@ -1036,27 +1077,36 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       {cleanViewerHeadline(post.title)}
                     </h3>
 
-                    {/* Summary */}
-                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed mb-2.5">
+                    {/* Summary - In-place expansion per Part F */}
+                    <p
+                      className={`text-xs text-slate-300 leading-relaxed mb-2.5 transition-all ${
+                        expandedCardId === `highlight-${post.id}`
+                          ? 'whitespace-pre-line text-slate-200'
+                          : 'line-clamp-2'
+                      }`}
+                    >
                       {post.summary}
                     </p>
-
-                    {/* Inline Full Content Reader (toggled by 'विवरण पढ़ें / पूरी खबर पढ़ें') */}
-                    {expandedCardId === `highlight-${post.id}` && (
-                      <div className="mb-2.5 p-3 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 leading-relaxed whitespace-pre-line animate-in fade-in duration-200">
-                        {cleanUserFacingFullContent(post.fullContent || post.summary)}
-                      </div>
-                    )}
                   </div>
 
                   {/* Action Buttons */}
                   <div className="flex flex-col gap-1.5 pt-2.5 border-t border-slate-800/80 mt-auto">
+                    {post.isBonus && (
+                      <div className="text-[10px] text-amber-300 font-bold bg-amber-950/70 border border-amber-500/40 rounded py-1 px-2 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Coins className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>रिवॉर्ड पात्रता: <strong>{post.rewardCoins || 100} Coins</strong></span>
+                        </span>
+                        <span className="text-[9px] text-amber-200">ग्राफिक बनाकर क्लेम करें</span>
+                      </div>
+                    )}
                     {isNewsGraphicCreated(currentUser?.email, post.id) && (
                       <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
                         ✓ इस खबर का ग्राफिक बनाया जा चुका है
                       </span>
                     )}
                     <div className="flex items-center gap-2">
+                      {/* 1. पूरी खबर पढ़ें - in-place expansion */}
                       <button
                         type="button"
                         onClick={() =>
@@ -1076,6 +1126,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </span>
                       </button>
 
+                      {/* 2. खबर से ग्राफिक बनाएं */}
                       <button
                         type="button"
                         onClick={() => onOpenStudioWithNews(post)}
@@ -1089,13 +1140,41 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
                       </button>
 
+                      {/* 3. रिपोर्ट करें - Hidden for Admin per Part G */}
+                      {!canModerate && (
+                        <button
+                          type="button"
+                          onClick={() => setReportingPost(post)}
+                          className="p-1.5 bg-slate-800/80 hover:bg-rose-950/50 hover:text-rose-400 text-slate-400 rounded-xl border border-slate-700/60 transition-colors cursor-pointer"
+                          title="इस खबर की रिपोर्ट करें"
+                        >
+                          <Flag className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 4. Social Media Story Section (Part H: UI Only, Full Width) */}
+                    <div className="w-full mt-1.5 pt-1.5 border-t border-slate-800/70 flex items-center justify-between gap-1.5 bg-slate-900/60 p-1.5 rounded-xl border border-slate-800">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="p-1 rounded-md bg-blue-500/10 border border-blue-500/20" title="Facebook Story">
+                          <FacebookIcon />
+                        </span>
+                        <span className="p-1 rounded-md bg-pink-500/10 border border-pink-500/20" title="Instagram Story">
+                          <InstagramIcon />
+                        </span>
+                        <span className="p-1 rounded-md bg-emerald-500/10 border border-emerald-500/20" title="WhatsApp Status">
+                          <WhatsAppIcon />
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setReportingPost(post)}
-                        className="p-1.5 bg-slate-800/80 hover:bg-rose-950/50 hover:text-rose-400 text-slate-400 rounded-xl border border-slate-700/60 transition-colors cursor-pointer"
-                        title="इस खबर की रिपोर्ट करें"
+                        disabled
+                        className="flex-1 py-1 px-1.5 bg-slate-800/80 text-slate-400 font-bold text-[10.5px] rounded-lg border border-slate-700/60 flex items-center justify-center gap-1 cursor-not-allowed opacity-80"
+                        title="सोशल मीडिया स्टोरी फीचर जल्द आ रहा है (Coming Soon)"
                       >
-                        <Flag className="w-3.5 h-3.5" />
+                        <Film className="w-3 h-3 text-amber-400/70" />
+                        <span className="truncate">सोशल मीडिया स्टोरी बनाएँ</span>
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-normal">जल्द</span>
                       </button>
                     </div>
                   </div>
@@ -1178,7 +1257,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 <div
                   key={post.id}
                   className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${
-                    isHighlighted
+                    post.isBonus
+                      ? 'border-yellow-500/80 ring-2 ring-yellow-400/40 shadow-xl shadow-yellow-500/10'
+                      : isHighlighted
                       ? 'border-amber-400 ring-2 ring-amber-400/40 shadow-xl shadow-amber-500/10'
                       : `${catTheme.cardBorder} hover:shadow-lg`
                   }`}
@@ -1270,6 +1351,29 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span>{isHighlighted ? 'हाइलाइटेड' : 'हाइलाइट'}</span>
                         </button>
 
+                        {/* 2.5 Bonus News Toggle Button in Admin Bar */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onEditNews) {
+                              onEditNews({
+                                ...post,
+                                isBonus: !post.isBonus,
+                                rewardCoins: post.rewardCoins || 100,
+                              });
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition cursor-pointer ${
+                            post.isBonus
+                              ? 'bg-yellow-400 text-slate-950 shadow-sm'
+                              : 'bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700'
+                          }`}
+                          title="बोनस खबर टॉगल करें"
+                        >
+                          <Coins className={`w-3 h-3 ${post.isBonus ? 'fill-slate-950' : 'text-yellow-400'}`} />
+                          <span>{post.isBonus ? 'बोनस सक्रिय' : 'बोनस'}</span>
+                        </button>
+
                         {/* 3. Edit Button */}
                         <button
                           type="button"
@@ -1307,6 +1411,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         loading="lazy"
                       />
                       <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
+                        {post.isBonus && (
+                          <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
+                            <Coins className="w-2.5 h-2.5 text-slate-950" />
+                            बोनस खबर ({post.rewardCoins || 100} Coins)
+                          </span>
+                        )}
                         {isHighlighted && (
                           <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
                             <Star className="w-2.5 h-2.5 fill-slate-950" />
@@ -1350,7 +1460,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       >
                         {cleanViewerHeadline(post.title)}
                       </h4>
-                      <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">
+
+                      {/* Summary - In-place expansion per Part F */}
+                      <p
+                        className={`text-xs text-slate-400 leading-relaxed transition-all ${
+                          expandedCardId === post.id
+                            ? 'whitespace-pre-line text-slate-200'
+                            : 'line-clamp-3'
+                        }`}
+                      >
                         {post.summary}
                       </p>
 
@@ -1370,13 +1488,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               title={`अतिरिक्त फोटो ${pIdx + 1}`}
                             />
                           ))}
-                        </div>
-                      )}
-
-                      {/* Inline Content Expansion (No popup!) */}
-                      {expandedCardId === post.id && (
-                        <div className="pt-2 text-xs text-slate-300 leading-relaxed border-t border-slate-800/80 whitespace-pre-line animate-in fade-in duration-200">
-                          {cleanUserFacingFullContent(post.fullContent || post.summary)}
                         </div>
                       )}
                     </div>
@@ -1416,6 +1527,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   )}
 
                   <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex flex-col gap-2">
+                    {post.isBonus && (
+                      <div className="text-[10px] text-amber-300 font-bold bg-amber-950/70 border border-amber-500/40 rounded py-1 px-2 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Coins className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>रिवॉर्ड पात्रता: <strong>{post.rewardCoins || 100} Coins</strong></span>
+                        </span>
+                        <span className="text-[9px] text-amber-200">ग्राफिक बनाकर क्लेम करें</span>
+                      </div>
+                    )}
                     {isNewsGraphicCreated(currentUser?.email, post.id) && (
                       <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
                         ✓ इस खबर का ग्राफिक बनाया जा चुका है
@@ -1446,16 +1566,44 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         title="पूरी खबर पढ़ें"
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        <span>{expandedCardId === post.id ? 'बंद करें' : 'पूरी खबर पढ़ें'}</span>
+                        <span>{expandedCardId === post.id ? 'संक्षिप्त करें' : 'पूरी खबर पढ़ें'}</span>
                       </button>
 
+                      {/* Report button hidden for Admin per Part G */}
+                      {!canModerate && (
+                        <button
+                          type="button"
+                          onClick={() => setReportingPost(post)}
+                          className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700/60 transition-colors cursor-pointer"
+                          title="इस खबर की रिपोर्ट करें"
+                        >
+                          <Flag className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Social Media Story Section (Part H: UI Only, Full Width) */}
+                    <div className="w-full mt-1 pt-1.5 border-t border-slate-800/70 flex items-center justify-between gap-1.5 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="p-1 rounded-md bg-blue-500/10 border border-blue-500/20" title="Facebook Story">
+                          <FacebookIcon />
+                        </span>
+                        <span className="p-1 rounded-md bg-pink-500/10 border border-pink-500/20" title="Instagram Story">
+                          <InstagramIcon />
+                        </span>
+                        <span className="p-1 rounded-md bg-emerald-500/10 border border-emerald-500/20" title="WhatsApp Status">
+                          <WhatsAppIcon />
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => setReportingPost(post)}
-                        className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700/60 transition-colors cursor-pointer"
-                        title="इस खबर की रिपोर्ट करें"
+                        disabled
+                        className="flex-1 py-1 px-2 bg-slate-800/80 text-slate-400 border border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
+                        title="सोशल मीडिया स्टोरी बनाएँ (शीघ्र आ रहा है)"
                       >
-                        <Flag className="w-3.5 h-3.5" />
+                        <Film className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>सोशल मीडिया स्टोरी बनाएँ</span>
+                        <span className="text-[9px] bg-slate-700 text-amber-300 px-1 py-0.2 rounded">शीघ्र</span>
                       </button>
                     </div>
                   </div>
@@ -1510,6 +1658,37 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm font-bold focus:border-amber-400 focus:outline-hidden"
                 />
+              </div>
+
+              {/* News Article URL with website navigation button per Part E */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-300">
+                    न्यूज़ आर्टिकल लिंक (News Article URL)
+                  </label>
+                  {editingPost.sourceUrl && (
+                    <a
+                      href={editingPost.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition cursor-pointer"
+                      title="वेबसाइट पर मूल खबर खोलें"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>वेबसाइट पर जाएँ</span>
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://example.com/news-article.html"
+                  value={editingPost.sourceUrl || ''}
+                  onChange={(e) => setEditingPost({ ...editingPost, sourceUrl: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  RSS से आए URL में यदि अतिरिक्त ट्रैकिंग पैरामीटर हों तो उन्हें यहां सही किया जा सकता है।
+                </p>
               </div>
 
               <div>
@@ -1731,6 +1910,41 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   />
                   <span>हाइलाइटेड / एक्सक्लूसिव</span>
                 </label>
+              </div>
+
+              {/* Bonus News Configuration per Part O */}
+              <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-black text-amber-300">
+                    <input
+                      type="checkbox"
+                      checked={!!editingPost.isBonus}
+                      onChange={(e) => setEditingPost({ ...editingPost, isBonus: e.target.checked, rewardCoins: editingPost.rewardCoins || 100 })}
+                      className="w-4 h-4 accent-amber-400 rounded"
+                    />
+                    <span>🪙 बोनस खबर बनाएं (Bonus News)</span>
+                  </label>
+                  {editingPost.isBonus && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-500 text-slate-950 rounded-md">सक्रिय</span>
+                  )}
+                </div>
+
+                {editingPost.isBonus && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <label className="text-xs text-slate-300 font-bold shrink-0">
+                      रिवॉर्ड कॉइन्स (Default: 100):
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="10"
+                      value={editingPost.rewardCoins || 100}
+                      onChange={(e) => setEditingPost({ ...editingPost, rewardCoins: Math.max(1, parseInt(e.target.value) || 100) })}
+                      className="w-28 px-2.5 py-1.5 bg-slate-950 border border-amber-500/50 rounded-lg text-amber-300 font-black text-xs focus:border-amber-400 focus:outline-hidden"
+                    />
+                    <span className="text-[10px] text-slate-400">Coins प्रति स्वीकृत क्लेम</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
@@ -2105,6 +2319,93 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bonus News Info Popup Modal (Part P) */}
+      {bonusIntroPost && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl shadow-amber-500/20 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                  <Coins className="w-6 h-6" />
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-amber-300">बोनस खबर रिवॉर्ड ऑफर!</h3>
+                  <p className="text-[11px] text-slate-400">ग्राफिक बनाएं, शेयर करें और कॉइन्स कमाएं</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('bonus_news_intro_dismissed', 'true');
+                  } catch {}
+                  setBonusIntroPost(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                  चयनित बोनस खबर:
+                </span>
+                <p className="text-xs font-bold text-white line-clamp-2">
+                  {bonusIntroPost.title}
+                </p>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">इनाम राशि:</span>
+                  <span className="text-sm font-black text-yellow-400 flex items-center gap-1">
+                    <Coins className="w-4 h-4" />
+                    {bonusIntroPost.rewardCoins || 100} Coins
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-xs text-slate-300">
+                <p className="font-bold text-amber-300">रिवॉर्ड प्राप्त करने के 3 आसान चरण:</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-300">
+                  <li><strong>ग्राफिक बनाएं:</strong> इस खबर से सुंदर न्यूज़ ग्राफिक तैयार करें और JPG डाउनलोड करें।</li>
+                  <li><strong>सोशल मीडिया पर शेयर करें:</strong> अपने Facebook, Instagram या WhatsApp पर पोस्ट करें।</li>
+                  <li><strong>स्क्रीनशॉट सबमिट करें:</strong> रिवॉर्ड्स सेक्शन में जाकर पोस्ट का स्क्रीनशॉट अपलोड करें। एडमिन अप्रूवल के बाद {bonusIntroPost.rewardCoins || 100} Coins आपके वॉलेट में जुड़ जाएंगे!</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('bonus_news_intro_dismissed', 'true');
+                  } catch {}
+                  setBonusIntroPost(null);
+                  onOpenStudioWithNews(bonusIntroPost);
+                }}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>अभी ग्राफिक बनाएं</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('bonus_news_intro_dismissed', 'true');
+                  } catch {}
+                  setBonusIntroPost(null);
+                }}
+                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                समझ गया
+              </button>
+            </div>
           </div>
         </div>
       )}

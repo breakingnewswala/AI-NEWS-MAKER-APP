@@ -38,6 +38,7 @@ import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
+import { generateVideoDownloadFileName } from '../lib/dateUtils';
 
 export type VideoAspect = '4:5' | '9:16' | '16:9' | '1:1' | '4:3';
 export type VideoTransitionType = 'none' | 'fade' | 'flash' | 'zoom' | 'slide' | 'glitch';
@@ -120,21 +121,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   // Priority: 1. User Uploaded GIF, 2. Default Saved Channel Logo (PNG/Standard)
   const primaryLogo = profile?.channelLogoGifUrl || profile?.channelLogoPngUrl || profile?.channelLogoUrl || currentUser?.channelLogoUrl || '';
   const [channelLogoUrl, setChannelLogoUrl] = useState<string>(primaryLogo);
-
-  // Listen to profile updates (Video feed prioritizes GIF logo, falls back to PNG primary logo)
-  useEffect(() => {
-    const handleProfileUpdate = () => {
-      try {
-        const raw = localStorage.getItem('user_channel_profile');
-        if (!raw) return;
-        const p = JSON.parse(raw);
-        const logo = p.channelLogoGifUrl || p.channelLogoPngUrl || p.channelLogoUrl || '';
-        if (logo) setChannelLogoUrl(logo);
-      } catch {}
-    };
-    window.addEventListener('channel_profile_updated', handleProfileUpdate);
-    return () => window.removeEventListener('channel_profile_updated', handleProfileUpdate);
-  }, []);
   const [logoScale, setLogoScale] = useState<number>(125); // 50% to 180%, default 125%
   const [socialHandle, setSocialHandle] = useState<string>(
     profile?.username ? (profile.username.startsWith('@') ? profile.username : `@${profile.username}`) : '@AINewsMaker'
@@ -148,6 +134,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     profile?.showMobileNumber ?? true
   );
+
+  // Listen to profile updates (Video feed prioritizes GIF logo, falls back to PNG primary logo)
+  useEffect(() => {
+    const handleProfileUpdate = (e: any) => {
+      const p = e.detail;
+      if (p) {
+        const logo = p.channelLogoGifUrl || p.channelLogoPngUrl || p.channelLogoUrl || '';
+        if (logo) setChannelLogoUrl(logo);
+      }
+    };
+    window.addEventListener('channel_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('channel_profile_updated', handleProfileUpdate);
+  }, []);
 
   const [tickerText, setTickerText] = useState<string>(
     '⚡ ताज़ा बुलेटिन: देश भर के डिजिटल पत्रकारों के लिए नई प्रेस नियमावली जारी • लाइव अपडेट्स जारी'
@@ -613,7 +612,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setVideoExportProgress(50);
       setVideoExportStatus('जैकेट व ऑडियो सिंक किए जा रहे हैं...');
 
-      const filename = `news_video_${Date.now()}.mp4`;
+      const filename = generateVideoDownloadFileName('mp4');
 
       // 1. Android Native Bridge integration
       if (

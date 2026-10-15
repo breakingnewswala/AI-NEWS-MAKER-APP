@@ -1089,7 +1089,7 @@ export default function App() {
 
         const savedProf = getSavedChannelProfile();
         const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
-        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate #AINewsMaker`;
+        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
         }
@@ -1187,38 +1187,46 @@ export default function App() {
     setToastMessage(msg);
   };
 
-  // Full reset / clean card to default template matching user specification
+  // Full reset / clean card to default template matching user specification (Part C)
   const handleResetCard = () => {
-    // Clear active draft ID reference
+    // Clear active draft ID reference & direct news session context
     setCurrentDraftId(null);
+    setAutoFillNews(null);
+    setAiResetKey((k) => k + 1);
 
     const savedProfile = getSavedChannelProfile();
     const activeSocialKeys = savedProfile?.socialIcons
       ? Object.entries(savedProfile.socialIcons).filter(([_, active]) => active).map(([key]) => key)
       : ['instagram', 'facebook', 'twitter', 'youtube', 'whatsapp'];
 
-
     setCard((prev) => ({
       ...prev,
+      sourceNewsId: undefined,
       frameDesign: 'graphic_001',
-      headline: prev.headline || '',
-      formattedHeadline: prev.formattedHeadline || '',
-      highlightWords: prev.highlightWords || [],
+      headline: '',
+      formattedHeadline: '',
+      highlightWords: [],
       headlineAlign: 'center',
-      location: savedProfile?.district || prev.location || '',
-      summary: prev.summary || '',
-      category: prev.category || 'ताज़ा खबर',
+      headlineFontSize: 20,
+      location: savedProfile?.district || 'लोकेशन',
+      summary: '',
+      category: 'ताज़ा खबर',
       images: {
-        main: prev.images?.main || '',
-        second: prev.images?.second || '',
+        main: '',
+        second: '',
+        third: '',
+        fourth: '',
       },
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
-      customLogoUrl: prev.customLogoUrl || savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
-      brandName: savedProfile?.channelNameHi || prev.brandName || prev.channelNameHi || '',
-      brandTagline: savedProfile?.channelNameEn || prev.brandTagline || prev.channelNameEn || '',
-      channelNameHi: savedProfile?.channelNameHi || prev.channelNameHi || prev.brandName || '',
-      channelNameEn: savedProfile?.channelNameEn || prev.channelNameEn || prev.brandTagline || '',
+      customLogoUrl: savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
+      logoScale: 1.25,
+      logoX: 5.5,
+      logoY: 5.5,
+      brandName: savedProfile?.channelNameHi || '',
+      brandTagline: savedProfile?.channelNameEn || '',
+      channelNameHi: savedProfile?.channelNameHi || '',
+      channelNameEn: savedProfile?.channelNameEn || '',
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
         : '',
@@ -1227,31 +1235,39 @@ export default function App() {
       showMobileNumber: savedProfile?.showMobileNumber !== false,
       showWebsite: savedProfile?.showWebsite !== false,
       activeSocialIcons: activeSocialKeys,
-      customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : prev.customHeaderPng,
-      customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : prev.customFooterPng,
+      customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : undefined,
+      customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : undefined,
       speakerName: '',
       speakerTitle: '',
-      dateStr: prev.dateStr || '',
-      showDate: prev.showDate ?? false,
-      showWatermark: prev.showWatermark ?? false,
+      dateStr: '',
+      showDate: false,
+      showWatermark: false,
+      showSuperBreakingWatermark: false,
+      showTextWatermark: false,
+      showAiPhotoBadge: false,
+      showSymbolicPhotoBadge: false,
+      customTextOverlays: [],
       showLocation: true,
       showCallout: false,
       calloutTag: '',
       layout: 'single',
       aspectRatio: '4:5',
-      headlineFontSize: 28,
       highlightColor: '#FFE600',
       showMasterBranding: true,
+      extractedArticlePhotos: [],
     }));
 
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('caption_draft');
+      localStorage.removeItem('studio_active_news_photos');
+      localStorage.removeItem('ai_tools_raw_url');
+      localStorage.removeItem('ai_tools_raw_news');
     } catch (e) {
       // ignore
     }
 
     setActiveStep(1);
-
     showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
   };
 
@@ -1689,7 +1705,7 @@ export default function App() {
     const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '#reporter';
     const locLine = effectiveLoc ? `\n\n📍 स्थान: ${effectiveLoc}` : '';
     const locTag = effectiveLoc ? `#${effectiveLoc.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News ` : '';
-    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${userTag} ${locTag}#BreakingNews #HindiNews #AiNewsMaker`;
+    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${userTag} ${locTag}#BreakingNews #HindiNews`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }
@@ -2077,7 +2093,7 @@ export default function App() {
 
                       {/* FULL-WIDTH CONTROL BAR (100% Viewport Width Container, Edge-to-Edge) */}
                       <div className="w-[100vw] relative left-[calc(-50vw+50%)] my-2 bg-white border-y border-slate-200/90 py-1.5 shadow-md">
-                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-3 gap-2">
+                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-4 gap-1.5">
                           {/* 1. JPG (Download) */}
                           <button
                             type="button"
@@ -2127,6 +2143,18 @@ export default function App() {
                           >
                             <Bookmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                             <span className="truncate">Draft</span>
+                          </button>
+
+                          {/* 4. Refresh */}
+                          <button
+                            type="button"
+                            onClick={handleResetCard}
+                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
+                            title="रीसेट / नया ग्राफिक सेशन"
+                            aria-label="रीसेट करें"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span className="truncate">रिफ्रेश</span>
                           </button>
                         </div>
                       </div>
@@ -2273,11 +2301,22 @@ export default function App() {
                       <button
                         type="button"
                         onClick={handleSaveCurrentCardAsDraft}
-                        className="flex-1 min-w-[75px] py-2 sm:py-2.5 px-2 sm:px-3 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                        className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
                         title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
                       >
                         <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
                         <span className="whitespace-nowrap">ड्राफ्ट</span>
+                      </button>
+
+                      {/* 4. रिफ्रेश */}
+                      <button
+                        type="button"
+                        onClick={handleResetCard}
+                        className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                        title="नया ग्राफिक / रीसेट सेशन"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                        <span className="whitespace-nowrap">रिफ्रेश</span>
                       </button>
                     </div>
 

@@ -14,12 +14,13 @@ import {
   ShieldCheck,
   Layers,
   ArrowRight,
+  Lock,
 } from 'lucide-react';
 import { NewsCardData } from '../types';
 import { CardPreview } from './CardPreview';
 import { ProfileScreenWeb } from './ProfileScreenWeb';
 import { ReporterUser } from './LoginModal';
-import { isUserAdmin } from '../lib/userPlanManager';
+import { isUserAdmin, isUserActionAllowed } from '../lib/userPlanManager';
 
 interface ExportScreenWebProps {
   card: NewsCardData;
@@ -54,6 +55,8 @@ export const ExportScreenWeb: React.FC<ExportScreenWebProps> = ({
   const [copiedAnchor, setCopiedAnchor] = useState(false);
 
   const isAdmin = isUserAdmin(currentUser);
+  const actionAllowance = isUserActionAllowed(currentUser);
+  const isActionLocked = !isAdmin && !actionAllowance.allowed;
 
   // Auto-formatted social media caption with hashtags
   const captionText = `${card.headline || 'ताज़ा समाचार'}
@@ -63,11 +66,12 @@ ${card.summary || ''}
 📍 स्थान: ${card.location || 'मध्य प्रदेश'}
 📅 दिनांक: ${card.date || 'आज'}
 
-#BreakingNews #HindiNews #${(card.location || 'MP').replace(/\s+/g, '')}News #${(card.category || 'News').replace(/\s+/g, '')} #AINewsMaker`;
+#BreakingNews #HindiNews #${(card.location || 'MP').replace(/\s+/g, '')}News #${(card.category || 'News').replace(/\s+/g, '')}`;
 
   const anchorScriptText = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर आ रही है ${card.location || 'मध्य प्रदेश'} से। ${card.headline || ''}। अधिकारियों द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है। आइए देखते हैं पूरी रिपोर्ट।`;
 
   const handleCopyCaption = () => {
+    if (isActionLocked) return;
     navigator.clipboard.writeText(captionText);
     setCopiedCaption(true);
     setTimeout(() => setCopiedCaption(false), 2000);
@@ -189,6 +193,18 @@ ${card.summary || ''}
 
           {/* Right Column: Instant Download & Social Copy Actions (lg: 6 cols) */}
           <div className="lg:col-span-6 space-y-4">
+            {isActionLocked && (
+              <div className="bg-red-950/80 border-2 border-red-600/80 rounded-2xl p-4 text-red-200 text-xs shadow-xl flex items-start gap-3 animate-in fade-in">
+                <Lock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-black text-sm text-white">7-Day Free Trial समाप्त हो चुका है</div>
+                  <p className="text-red-300/90 leading-relaxed">
+                    कार्ड डाउनलोड, इमेज कॉपी व कैप्शन की सुविधा वर्तमान में निष्क्रिय है। ग्राफिक्स बनाने व प्रीव्यू करने की सुविधा खुली है। डाउनलोड व कैप्शन जारी रखने के लिए कृपया अपनी प्रोफाइल में जाकर मेंबरशिप प्लान चुनें।
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Primary Download Actions Card */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
               <h3 className="text-sm font-black text-white mb-1 flex items-center gap-2">
@@ -202,27 +218,42 @@ ${card.summary || ''}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <button
                   onClick={() => onDownload('jpeg')}
-                  disabled={downloading}
-                  className="py-3 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50"
+                  disabled={downloading || isActionLocked}
+                  className={`py-3 px-4 font-black rounded-xl text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 transition active:scale-95 ${
+                    isActionLocked
+                      ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 cursor-pointer disabled:opacity-50'
+                  }`}
+                  title={isActionLocked ? 'ट्रायल समाप्त — डाउनलोड लॉक' : 'HD JPG डाउनलोड करें'}
                 >
-                  <Download className="w-4 h-4 text-slate-950" />
+                  {isActionLocked ? <Lock className="w-4 h-4 text-neutral-400" /> : <Download className="w-4 h-4 text-slate-950" />}
                   <span>{downloading ? 'तैयार हो रहा है...' : 'HD JPG डाउनलोड करें'}</span>
                 </button>
 
                 <button
                   onClick={() => onDownload('png')}
-                  disabled={downloading}
-                  className="py-3 px-4 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 text-white font-black rounded-xl text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50"
+                  disabled={downloading || isActionLocked}
+                  className={`py-3 px-4 font-black rounded-xl text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 transition active:scale-95 ${
+                    isActionLocked
+                      ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 text-white cursor-pointer disabled:opacity-50'
+                  }`}
+                  title={isActionLocked ? 'ट्रायल समाप्त — डाउनलोड लॉक' : 'HD PNG डाउनलोड करें'}
                 >
-                  <Download className="w-4 h-4 text-white" />
+                  {isActionLocked ? <Lock className="w-4 h-4 text-neutral-400" /> : <Download className="w-4 h-4 text-white" />}
                   <span>HD PNG डाउनलोड करें</span>
                 </button>
               </div>
 
               <button
                 onClick={onCopyImage}
-                disabled={downloading}
-                className="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 border border-slate-700/80 cursor-pointer"
+                disabled={downloading || isActionLocked}
+                className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 border ${
+                  isActionLocked
+                    ? 'bg-neutral-800/80 text-neutral-500 border-neutral-700/50 opacity-60 cursor-not-allowed'
+                    : 'bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border-slate-700/80 cursor-pointer'
+                }`}
+                title={isActionLocked ? 'ट्रायल समाप्त — इमेज कॉपी लॉक' : 'इमेज क्लिपबोर्ड में कॉपी करें'}
               >
                 {copied ? (
                   <>
@@ -231,7 +262,7 @@ ${card.summary || ''}
                   </>
                 ) : (
                   <>
-                    <Copy className="w-4 h-4" />
+                    {isActionLocked ? <Lock className="w-4 h-4 text-neutral-400" /> : <Copy className="w-4 h-4" />}
                     <span>इमेज क्लिपबोर्ड में कॉपी करें (Ctrl+V)</span>
                   </>
                 )}
@@ -248,7 +279,13 @@ ${card.summary || ''}
 
                 <button
                   onClick={handleCopyCaption}
-                  className="px-2.5 py-1 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                  disabled={isActionLocked}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition ${
+                    isActionLocked
+                      ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 opacity-60 cursor-not-allowed'
+                      : 'bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 cursor-pointer'
+                  }`}
+                  title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन कॉपी लॉक' : 'कैप्शन कॉपी करें'}
                 >
                   {copiedCaption ? (
                     <>
@@ -257,7 +294,7 @@ ${card.summary || ''}
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3 h-3" />
+                      {isActionLocked ? <Lock className="w-3 h-3 text-neutral-400" /> : <Copy className="w-3 h-3" />}
                       <span>कैप्शन कॉपी करें</span>
                     </>
                   )}
@@ -269,10 +306,19 @@ ${card.summary || ''}
               </div>
 
               <button
-                onClick={onOpenCaptionModal}
-                className="mt-3 text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  if (isActionLocked) return;
+                  onOpenCaptionModal();
+                }}
+                disabled={isActionLocked}
+                className={`mt-3 text-xs font-bold flex items-center gap-1.5 ${
+                  isActionLocked
+                    ? 'text-neutral-500 opacity-60 cursor-not-allowed'
+                    : 'text-amber-400 hover:text-amber-300 cursor-pointer'
+                }`}
+                title={isActionLocked ? 'ट्रायल समाप्त — AI कैप्शन लॉक' : 'AI द्वारा कैप्शन बनाएं'}
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                {isActionLocked ? <Lock className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
                 <span>AI द्वारा और अधिक हैशटैग व 3 पैराग्राफ कैप्शन बनाएं</span>
               </button>
             </div>

@@ -129,8 +129,10 @@ export interface NewsCardData {
   customLogoPngUrl?: string; // Dedicated PNG logo
   customLogoGifUrl?: string; // Dedicated GIF animated logo
   logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.0)
-  logoX?: number; // Logo X position percentage within safe zone (10% to 90%, default 10)
-  logoY?: number; // Logo Y position percentage within safe zone (10% to 90%, default 10)
+  logoSizePercent?: number; // Scaling percentage alias (50 to 180, default 125)
+  showTextGraphic?: boolean; // Text graphic toggle (default OFF: showTextGraphic: false)
+  logoX?: number; // Logo X position percentage within safe zone (5.0% to 92%, default 5.5)
+  logoY?: number; // Logo Y position percentage within safe zone (5.0% to 60%, default 5.5)
   customHeaderPng?: string; // Uploaded header PNG (IMAGE NEWS.png)
   headersByDesign?: Partial<Record<FrameDesign, string>>; // Separate header graphic per frame template
   customFooterPng?: string; // Uploaded footer PNG (Footer.png)
@@ -436,4 +438,45 @@ export interface ChannelProfile {
   footerIconStyle?: 'color' | 'dark' | 'neutral'; // Default footer icon style
   showMasterBranding?: boolean; // Default master branding visibility
   headlineFontFamily?: string; // Default headline font family
+}
+
+export interface RewardClaim {
+  claimId: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  username: string;
+  newsItemId: string;
+  newsTitle: string;
+  rewardCoins: number;
+  graphicDownloadedAt: number;
+  screenshotStoragePath: string; // URL / data URI of proof screenshot
+  submittedAt: number;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  reviewedAt?: number;
+  rejectionReason?: string;
+  walletTransactionId?: string;
+}
+
+export interface WalletTransaction {
+  transactionId: string;
+  userId: string;
+  userEmail: string;
+  claimId?: string;
+  newsItemId?: string;
+  newsTitle?: string;
+  transactionType: 'credit' | 'debit';
+  coinAmount: number;
+  status: 'completed' | 'cancelled';
+  createdAt: number;
+  createdBy: string;
+}
+
+export interface UserWallet {
+  userId: string;
+  userEmail: string;
+  balance: number; // Approved coins balance
+  pendingBalance: number; // Coins in pending claims
+  updatedAt: number;
 }

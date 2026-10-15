@@ -36,11 +36,9 @@ export function getUserFirstHashtag(card?: NewsCardData): string {
 
 // Build hashtags strictly ensuring:
 // 1. FIRST TAG = User's Username (#<username>)
-// 2. LAST TAG = #AINewsMaker (English)
-// 3. NO #breakingnewswala or #BNWTV
+// 2. NO #breakingnewswala or #AINewsMaker
 export function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
   const firstTag = getUserFirstHashtag(card);
-  const lastTag = '#AINewsMaker';
 
   const loc = (location || 'News')
     .split(/[\/,]/)[0]
@@ -62,8 +60,8 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
       lower !== '#breakingnewswala' &&
       lower !== '#bnwtv' &&
       lower !== '#ब्रेकिंगन्यूजवाला' &&
-      lower !== firstTag.toLowerCase() &&
-      lower !== lastTag.toLowerCase()
+      lower !== '#ainewsmaker' &&
+      lower !== firstTag.toLowerCase()
     );
   });
 
@@ -83,13 +81,13 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
   const uniqueMidTags: string[] = [];
   for (const t of tagList) {
     const lower = t.toLowerCase();
-    if (!seen.has(lower) && lower !== firstTag.toLowerCase() && lower !== lastTag.toLowerCase()) {
+    if (!seen.has(lower) && lower !== firstTag.toLowerCase() && lower !== '#ainewsmaker') {
       seen.add(lower);
       uniqueMidTags.push(t);
     }
   }
 
-  return [firstTag, ...uniqueMidTags, lastTag].join(' ');
+  return [firstTag, ...uniqueMidTags].join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({
@@ -197,7 +195,7 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
 नियम:
 1. भाषा शुद्ध, स्पष्ट और गंभीर हिंदी पत्रकारिता शैली की होनी चाहिए।
 2. कोई अनावश्यक काल्पनिक बातें न जोड़ें।
-3. पहला हैशटैग ${firstUserTag} और अंतिम हैशटैग #AINewsMaker ही होना चाहिए।
+3. पहला हैशटैग ${firstUserTag} रखें। किसी भी ब्रांड का अनचाहा हैशटैग न जोड़ें।
 `;
 
       const response = await fetch('/api/generate-ai-news', {

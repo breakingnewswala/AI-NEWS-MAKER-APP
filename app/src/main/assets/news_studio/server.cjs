@@ -1083,12 +1083,15 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
 var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
 var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
 var LOGO_REQUESTS_DB_FILE = import_path.default.join(process.cwd(), "logo_change_requests_db.json");
+var REWARDS_DB_FILE = import_path.default.join(process.cwd(), "rewards_database.json");
 var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
 var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
 var UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "videos");
 var WEB_UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "videos");
 var UPLOAD_THUMBNAILS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "thumbnails");
 var WEB_UPLOAD_THUMBNAILS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "thumbnails");
+var UPLOAD_SCREENSHOTS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "screenshots");
+var WEB_UPLOAD_SCREENSHOTS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "screenshots");
 try {
   import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
   import_fs.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
@@ -1096,7 +1099,35 @@ try {
   import_fs.default.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
   import_fs.default.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
   import_fs.default.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(UPLOAD_SCREENSHOTS_DIR, { recursive: true });
+  import_fs.default.mkdirSync(WEB_UPLOAD_SCREENSHOTS_DIR, { recursive: true });
 } catch {
+}
+function loadRewardsDatabase() {
+  try {
+    if (import_fs.default.existsSync(REWARDS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(REWARDS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      return {
+        claims: Array.isArray(parsed.claims) ? parsed.claims : [],
+        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+        downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
+        wallets: parsed.wallets && typeof parsed.wallets === "object" ? parsed.wallets : {}
+      };
+    }
+  } catch (err) {
+    console.error("Error reading rewards_database.json:", err.message);
+  }
+  return { claims: [], transactions: [], downloadEvents: [], wallets: {} };
+}
+function saveRewardsDatabase(db) {
+  try {
+    import_fs.default.writeFileSync(REWARDS_DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error saving rewards_database.json:", err.message);
+    return false;
+  }
 }
 function loadLogoRequestsDatabase() {
   try {
@@ -1546,6 +1577,330 @@ app.delete("/api/drafts/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+function isAuthorizedAdmin(req) {
+  const email = (req.headers["x-user-email"] || req.headers["x-admin-email"] || req.body?.adminEmail || req.body?.userEmail || req.body?.email || req.query?.adminEmail || req.query?.userEmail || req.query?.email || "").toString().toLowerCase().trim();
+  const uid = (req.headers["x-user-id"] || req.headers["x-admin-id"] || req.body?.adminId || req.body?.userId || req.query?.userId || "").toString().toLowerCase().trim();
+  if (isProtectedAdminAccount(email)) return true;
+  if (email === "admin" || uid === "admin" || uid === "master_admin_001") return true;
+  const users = loadUsersMasterDatabase();
+  const match = users.find(
+    (u) => email && u.email && u.email.toLowerCase().trim() === email || uid && u.userId && u.userId.toLowerCase().trim() === uid
+  );
+  return Boolean(match && (match.role === "admin" || match.role === "superadmin"));
+}
+app.post("/api/admin/news-posts/:id/bonus", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u092C\u094B\u0928\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { id } = req.params;
+    const { isBonus, rewardCoins } = req.body;
+    let posts = loadNewsDatabase();
+    const idx = posts.findIndex((p) => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0938\u092E\u093E\u091A\u093E\u0930 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    posts[idx] = {
+      ...posts[idx],
+      isBonus: typeof isBonus === "boolean" ? isBonus : !posts[idx].isBonus,
+      rewardCoins: Number(rewardCoins) >= 0 ? Number(rewardCoins) : posts[idx].rewardCoins || 5
+    };
+    saveNewsDatabase(posts);
+    return res.json({ success: true, post: posts[idx], posts });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/rewards/download-event", (req, res) => {
+  try {
+    const { userId, userEmail, rewardCoins } = req.body;
+    const newsItemId = (req.body.newsItemId || req.body.postId || "").toString().trim();
+    const newsTitle = (req.body.newsTitle || req.body.postTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930").toString().trim();
+    const cleanEmail = (userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!newsItemId || !cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "newsItemId and user identification required" });
+    }
+    const rDb = loadRewardsDatabase();
+    const eventId = `dl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEvent = {
+      eventId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      newsItemId,
+      newsTitle: newsTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930",
+      rewardCoins: Number(rewardCoins) || 5,
+      downloadedAt: Date.now()
+    };
+    rDb.downloadEvents = [newEvent, ...rDb.downloadEvents.filter((e) => !(e.userId === cleanUserId && e.newsItemId === newsItemId))];
+    saveRewardsDatabase(rDb);
+    return res.json({ success: true, eventId, event: newEvent });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user/wallet", (req, res) => {
+  try {
+    const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
+    if (!email && !userId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    const rDb = loadRewardsDatabase();
+    const walletKey = email || userId;
+    const wallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const userClaims = rDb.claims.filter(
+      (c) => email && c.userEmail && c.userEmail.toLowerCase() === email || userId && c.userId && c.userId === userId
+    );
+    const userDownloads = rDb.downloadEvents.filter(
+      (e) => email && e.userEmail && e.userEmail.toLowerCase() === email || userId && e.userId && e.userId === userId
+    );
+    const claimedNewsIds = new Set(
+      userClaims.filter((c) => c.status === "pending" || c.status === "approved").map((c) => c.newsItemId)
+    );
+    const eligibleDownloads = userDownloads.filter((e) => !claimedNewsIds.has(e.newsItemId)).map((e) => ({
+      ...e,
+      postId: e.newsItemId,
+      postTitle: e.newsTitle
+    }));
+    const mappedClaims = userClaims.map((c) => ({
+      ...c,
+      postId: c.newsItemId,
+      postTitle: c.newsTitle
+    }));
+    const userTransactions = rDb.transactions.filter(
+      (t) => email && t.userEmail && t.userEmail.toLowerCase() === email || userId && t.userId && t.userId === userId
+    );
+    return res.json({
+      success: true,
+      wallet,
+      claims: mappedClaims,
+      eligibleDownloads,
+      transactions: userTransactions
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/rewards/upload-screenshot", (req, res) => {
+  try {
+    const { imageBase64, mimeType = "image/jpeg" } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: "\u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0907\u092E\u0947\u091C \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const ext = mimeType.includes("png") ? "png" : "jpg";
+    const filename = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const filePath = import_path.default.join(UPLOAD_SCREENSHOTS_DIR, filename);
+    const webFilePath = import_path.default.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
+    const buf = Buffer.from(cleanBase64, "base64");
+    import_fs.default.writeFileSync(filePath, buf);
+    try {
+      import_fs.default.writeFileSync(webFilePath, buf);
+    } catch {
+    }
+    const url = `/uploads/screenshots/${filename}`;
+    return res.json({ success: true, url });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/rewards/claim", (req, res) => {
+  try {
+    const {
+      userId,
+      userEmail,
+      userName,
+      username,
+      rewardCoins,
+      graphicDownloadedAt,
+      screenshotUrl
+    } = req.body;
+    const newsItemId = (req.body.newsItemId || req.body.postId || "").toString().trim();
+    const newsTitle = (req.body.newsTitle || req.body.postTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930").toString().trim();
+    const cleanEmail = (userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!newsItemId || !screenshotUrl || !cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "\u0938\u092E\u093E\u091A\u093E\u0930, \u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0914\u0930 \u092F\u0942\u091C\u093C\u0930 \u092A\u0939\u091A\u093E\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964" });
+    }
+    const rDb = loadRewardsDatabase();
+    const existingActiveClaim = rDb.claims.find(
+      (c) => (cleanEmail && c.userEmail && c.userEmail.toLowerCase() === cleanEmail || cleanUserId && c.userId && c.userId === cleanUserId) && c.newsItemId === newsItemId && (c.status === "pending" || c.status === "approved")
+    );
+    if (existingActiveClaim) {
+      return res.status(409).json({
+        error: existingActiveClaim.status === "approved" ? "\u0907\u0938 \u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964" : "\u0907\u0938 \u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0906\u092A\u0915\u093E \u0915\u094D\u0932\u0947\u092E \u092A\u0939\u0932\u0947 \u0938\u0947 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u092E\u0947\u0902 (Pending) \u0939\u0948\u0964"
+      });
+    }
+    const coinsToClaim = Number(rewardCoins) > 0 ? Number(rewardCoins) : 5;
+    const claimId = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newClaim = {
+      id: claimId,
+      claimId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      userName: userName || username || "\u092F\u0942\u091C\u093C\u0930",
+      username: username || userName || cleanEmail.split("@")[0],
+      newsItemId,
+      postId: newsItemId,
+      newsTitle: newsTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930",
+      postTitle: newsTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930",
+      rewardCoins: coinsToClaim,
+      graphicDownloadedAt: Number(graphicDownloadedAt) || Date.now(),
+      screenshotUrl,
+      submittedAt: Date.now(),
+      createdAt: Date.now(),
+      status: "pending"
+    };
+    rDb.claims.unshift(newClaim);
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    rDb.wallets[walletKey].pendingCoins += coinsToClaim;
+    saveRewardsDatabase(rDb);
+    return res.json({ success: true, claim: newClaim, wallet: rDb.wallets[walletKey] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/rewards/claims", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const rDb = loadRewardsDatabase();
+    const totalClaims = rDb.claims.length;
+    const pendingCount = rDb.claims.filter((c) => c.status === "pending").length;
+    const approvedCount = rDb.claims.filter((c) => c.status === "approved").length;
+    const rejectedCount = rDb.claims.filter((c) => c.status === "rejected").length;
+    const totalCoinsCredited = rDb.claims.filter((c) => c.status === "approved").reduce((sum, c) => sum + (c.rewardCoins || 0), 0);
+    const totalBonusPosts = loadNewsDatabase().filter((p) => p.isBonus).length;
+    const mappedClaims = rDb.claims.map((c) => ({
+      ...c,
+      postId: c.newsItemId,
+      postTitle: c.newsTitle
+    }));
+    return res.json({
+      success: true,
+      claims: mappedClaims,
+      stats: {
+        totalClaims,
+        pendingClaims: pendingCount,
+        approvedClaims: approvedCount,
+        rejectedClaims: rejectedCount,
+        totalCoinsCredited,
+        totalBonusPosts
+      },
+      summary: {
+        totalClaims,
+        pendingCount,
+        approvedCount,
+        rejectedCount,
+        totalCoinsCredited,
+        totalBonusPosts
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { id } = req.params;
+    const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
+    const rDb = loadRewardsDatabase();
+    const claim = rDb.claims.find((c) => c.claimId === id || c.id === id);
+    if (!claim) {
+      return res.status(404).json({ error: "\u0915\u094D\u0932\u0947\u092E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    if (claim.status === "approved") {
+      return res.json({ success: true, claim: { ...claim, id: claim.claimId }, message: "\u092F\u0939 \u0915\u094D\u0932\u0947\u092E \u092A\u0939\u0932\u0947 \u0938\u0947 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u0948" });
+    }
+    const wasPending = claim.status === "pending";
+    const coins = claim.rewardCoins || 5;
+    const walletKey = (claim.userEmail || claim.userId || "").toLowerCase().trim();
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (wasPending) {
+      rDb.wallets[walletKey].pendingCoins = Math.max(0, rDb.wallets[walletKey].pendingCoins - coins);
+    }
+    rDb.wallets[walletKey].coinBalance += coins;
+    rDb.wallets[walletKey].totalEarnedCoins += coins;
+    const txId = `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: claim.userId,
+      userEmail: claim.userEmail,
+      claimId: claim.claimId,
+      newsItemId: claim.newsItemId,
+      newsTitle: claim.newsTitle,
+      description: `\u092C\u094B\u0928\u0938 \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u0938\u094D\u0935\u0940\u0915\u0943\u0924: ${claim.newsTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930"}`,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: coins,
+      amount: coins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: adminEmail
+    };
+    rDb.transactions.unshift(tx);
+    claim.status = "approved";
+    claim.reviewedBy = adminEmail;
+    claim.reviewedAt = Date.now();
+    claim.walletTransactionId = txId;
+    claim.id = claim.claimId;
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      claim,
+      wallet: rDb.wallets[walletKey],
+      message: `\u0915\u094D\u0932\u0947\u092E \u0938\u094D\u0935\u0940\u0915\u0943\u0924: ${coins} \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u0915\u0949\u0907\u0928\u094D\u0938 \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u0947 \u0935\u0949\u0932\u0947\u091F \u092E\u0947\u0902 \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0915\u0930 \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { id } = req.params;
+    const { reason } = req.body;
+    const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
+    const rDb = loadRewardsDatabase();
+    const claim = rDb.claims.find((c) => c.claimId === id || c.id === id);
+    if (!claim) {
+      return res.status(404).json({ error: "\u0915\u094D\u0932\u0947\u092E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const wasPending = claim.status === "pending";
+    const coins = claim.rewardCoins || 5;
+    const walletKey = (claim.userEmail || claim.userId || "").toLowerCase().trim();
+    if (wasPending && rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey].pendingCoins = Math.max(0, rDb.wallets[walletKey].pendingCoins - coins);
+    }
+    claim.status = "rejected";
+    claim.rejectionReason = (reason || "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F \u0915\u093E \u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E\u0964").trim();
+    claim.reviewedBy = adminEmail;
+    claim.reviewedAt = Date.now();
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      claim,
+      wallet: rDb.wallets[walletKey],
+      message: "\u0915\u094D\u0932\u0947\u092E \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var CHANNELS_DB_FILE = import_path.default.join(process.cwd(), "restricted_channels_db.json");
 var DEFAULT_SEED_CHANNELS = [
   { id: "res_aajtak", channelName: "\u0906\u091C \u0924\u0915 (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
@@ -1848,12 +2203,16 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   const emailRaw = (userPayload.email || "").toString().trim();
   const cleanEmail = emailRaw.toLowerCase();
   const cleanUserId = (userPayload.userId || userPayload.uid || "").toString().toLowerCase().trim();
+  const rawMobile = (userPayload.mobile || userPayload.mobileNumber || "").toString().replace(/[^0-9]/g, "").slice(-10);
   const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com";
   const isBreakingNewsWala = cleanEmail === "breakingnewswala.com@gmail.com";
   const users = loadUsersMasterDatabase();
-  const idx = users.findIndex(
-    (u) => cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail || cleanEmail && u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || cleanUserId && u.userId && u.userId.toLowerCase().trim() === cleanUserId || cleanUserId && u.email && u.email.toLowerCase().trim() === cleanUserId
-  );
+  const idx = users.findIndex((u) => {
+    const uEmail = (u.email || "").toLowerCase().trim();
+    const uUserId = (u.userId || "").toLowerCase().trim();
+    const uPhone = (u.mobileNumber || u.mobile || "").toString().replace(/[^0-9]/g, "").slice(-10);
+    return cleanEmail && uEmail && uEmail === cleanEmail || cleanEmail && uEmail && uEmail.replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || cleanUserId && uUserId && uUserId === cleanUserId || cleanUserId && uEmail && uEmail === cleanUserId || rawMobile.length === 10 && uPhone.length === 10 && uPhone === rawMobile;
+  });
   const now = Date.now();
   let updatedRecord;
   const rawReqUser = (userPayload.username || "").toString().trim().replace(/^@+/, "");
@@ -1970,6 +2329,23 @@ function reconcileAllUsers() {
       if (email === "breakingnewswala@gmail.com" || email === "admin@breakingnewswala.com") {
         continue;
       }
+      if (!email.includes("@")) {
+        const phone = (p.mobileNumber || p.mobile || k).toString().replace(/[^0-9]/g, "").slice(-10);
+        if (phone.length === 10) {
+          const existingUserWithPhone = Array.from(userMap.values()).find((u) => {
+            const uP = (u.mobileNumber || u.mobile || "").toString().replace(/[^0-9]/g, "").slice(-10);
+            return uP === phone;
+          });
+          if (existingUserWithPhone) {
+            existingUserWithPhone.name = existingUserWithPhone.name || p.fullName || p.username;
+            existingUserWithPhone.fullName = existingUserWithPhone.fullName || p.fullName;
+            if (p.channelNameHi) existingUserWithPhone.channelNameHi = p.channelNameHi;
+            if (p.channelLogoUrl) existingUserWithPhone.channelLogoUrl = p.channelLogoUrl;
+            continue;
+          }
+        }
+        continue;
+      }
       if (!userMap.has(email)) {
         userMap.set(email, {
           userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1989,9 +2365,9 @@ function reconcileAllUsers() {
           district: p.district || "",
           websiteUrl: p.websiteUrl || "",
           socialIcons: p.socialIcons,
-          role: p.role || (email === "admin.ainewsmaker@gmail.com" ? "superadmin" : email === "breakingnewswala.com@gmail.com" ? "admin" : "user"),
-          tier: p.tier || (email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "ultra" : "basic"),
-          planName: p.tier === "ultra" || email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : "BASIC",
+          role: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "superadmin" : p.role || "user",
+          tier: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "ultra" : p.tier || "basic",
+          planName: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : p.tier === "ultra" ? "VIP DESK" : "BASIC",
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -2042,7 +2418,7 @@ function reconcileAllUsers() {
       name: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
       fullName: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
       username: adminProf?.username || existingAdmin?.username || "breakingnewswala",
-      role: "admin",
+      role: "superadmin",
       tier: "ultra",
       planName: "VIP DESK",
       channelName: adminProf?.channelNameHi || existingAdmin?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
@@ -3249,12 +3625,19 @@ function saveProfilesDatabase(data) {
 app.get("/api/user-profile", (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
   const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
+  const rawMobile = (req.query.mobile || req.query.phone || "").toString().replace(/[^0-9]/g, "").slice(-10);
   const allProfiles = loadProfilesDatabase();
   let match = null;
   if (idOrEmail) {
     match = Object.values(allProfiles).find(
       (p) => p.userId && p.userId.toLowerCase() === idOrEmail || p.uid && p.uid.toLowerCase() === idOrEmail || p.email && p.email.toLowerCase().trim() === idOrEmail || p.email && p.email.toLowerCase().replace(/\s+/g, "") === idOrEmail.replace(/\s+/g, "") || p.username && p.username.toLowerCase() === idOrEmail
     );
+  }
+  if (!match && rawMobile.length === 10) {
+    match = Object.values(allProfiles).find((p) => {
+      const pm = (p.mobileNumber || p.mobile || "").toString().replace(/[^0-9]/g, "").slice(-10);
+      return pm === rawMobile;
+    });
   }
   if (!match && username) {
     match = Object.values(allProfiles).find(

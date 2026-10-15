@@ -1,4 +1,4 @@
-import { Smartphone, Download } from 'lucide-react';
+import { Smartphone, Download, Coins, Award, Clock } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import {
   User,
@@ -403,8 +403,120 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     };
   }, [currentUser?.email, isAdmin]);
 
-  // Tabs: 'profile', 'membership', 'templates_manager', 'policies' - initially closed per requirement
-  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'templates_manager' | 'policies' | ''>('');
+  // User Rewards Wallet state
+  const [walletData, setWalletData] = useState<{
+    coinBalance: number;
+    pendingCoins: number;
+    totalEarnedCoins: number;
+  }>({ coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 });
+  const [walletClaims, setWalletClaims] = useState<any[]>([]);
+  const [eligibleDownloads, setEligibleDownloads] = useState<any[]>([]);
+  const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
+  const [selectedEligibleDownload, setSelectedEligibleDownload] = useState<any | null>(null);
+  const [claimScreenshotBase64, setClaimScreenshotBase64] = useState<string>('');
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [claimSubmitSuccess, setClaimSubmitSuccess] = useState<string>('');
+  const [claimSubmitError, setClaimSubmitError] = useState<string>('');
+
+  const fetchUserWallet = () => {
+    const email = (currentUser?.email || channelProfile?.email || '').toLowerCase().trim();
+    const uid = currentUser?.userId || currentUser?.uid || '';
+    if (!email && !uid) return;
+    fetch(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(uid)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.wallet) setWalletData(data.wallet);
+          if (Array.isArray(data.claims)) setWalletClaims(data.claims);
+          if (Array.isArray(data.eligibleDownloads)) setEligibleDownloads(data.eligibleDownloads);
+          if (Array.isArray(data.transactions)) setWalletTransactions(data.transactions);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchUserWallet();
+  }, [currentUser?.email]);
+
+  const handleScreenshotFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setClaimSubmitError('स्क्रीनशॉट फ़ाइल 10MB से कम होनी चाहिए');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      setClaimScreenshotBase64((evt.target?.result as string) || '');
+      setClaimSubmitError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitRewardClaim = async () => {
+    if (!selectedEligibleDownload) {
+      setClaimSubmitError('कृपया पहले वह बोनस समाचार चुनें जिसका आपने ग्राफिक डाउनलोड किया था');
+      return;
+    }
+    if (!claimScreenshotBase64) {
+      setClaimSubmitError('कृपया अपने सोशल मीडिया पोस्ट (Instagram, Facebook या WhatsApp) का स्क्रीनशॉट अपलोड करें');
+      return;
+    }
+    setIsSubmittingClaim(true);
+    setClaimSubmitError('');
+    setClaimSubmitSuccess('');
+    try {
+      // 1. Upload screenshot
+      const upRes = await fetch('/api/rewards/upload-screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: claimScreenshotBase64,
+          mimeType: 'image/jpeg',
+        }),
+      });
+      const upData = await upRes.json();
+      if (!upData.success || !upData.url) {
+        throw new Error(upData.error || 'स्क्रीनशॉट अपलोड विफल रहा');
+      }
+
+      // 2. Submit Claim
+      const email = (currentUser?.email || channelProfile?.email || '').toLowerCase().trim();
+      const uid = currentUser?.userId || currentUser?.uid || email;
+      const claimRes = await fetch('/api/rewards/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: uid,
+          userEmail: email,
+          userName: channelProfile.fullName || currentUser?.name || 'यूज़र',
+          username: channelProfile.username || currentUser?.username || 'reporter',
+          newsItemId: selectedEligibleDownload.newsItemId,
+          newsTitle: selectedEligibleDownload.newsTitle,
+          rewardCoins: selectedEligibleDownload.rewardCoins || 5,
+          graphicDownloadedAt: selectedEligibleDownload.downloadedAt,
+          screenshotUrl: upData.url,
+        }),
+      });
+      const claimData = await claimRes.json();
+      if (!claimData.success) {
+        throw new Error(claimData.error || 'क्लेम सबमिट नहीं हो सका');
+      }
+
+      setClaimSubmitSuccess(`🎉 आपका क्लेम सफलतापूर्वक सबमिट हो गया! एडमिन सत्यापन के बाद ${selectedEligibleDownload.rewardCoins || 5} कॉइन्स आपके वॉलेट में जुड़ जाएंगे।`);
+      setClaimScreenshotBase64('');
+      setSelectedEligibleDownload(null);
+      fetchUserWallet();
+    } catch (err: any) {
+      setClaimSubmitError(err.message || 'क्लेम सबमिशन में त्रुटि');
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  };
+
+  // Tabs: 'profile', 'membership', 'rewards_wallet', 'templates_manager', 'policies' - initially closed per requirement
+  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'rewards_wallet' | 'templates_manager' | 'policies' | ''>('');
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
     if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
@@ -2530,87 +2642,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     )}
                   </div>
 
-                  {/* Username & Location - Clean & Real Data + Manual Username Creation */}
-                  <div className="flex flex-col items-center sm:items-start gap-1 w-full">
-                    <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap text-xs text-slate-300">
-                      {displayUsername ? (
-                        <div className="flex items-center gap-1.5 font-bold text-amber-300 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                          <span>{displayUsername}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setManualUsernameInput(displayUsername.replace(/^@/, ''));
-                              setIsUsernameEditing(!isUsernameEditing);
-                              setUsernameError('');
-                            }}
-                            className="text-[10px] text-slate-400 hover:text-amber-300 ml-1 transition"
-                            title="यूज़रनेम बदलें"
-                          >
-                            ✏️
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsUsernameEditing(!isUsernameEditing);
-                            setUsernameError('');
-                          }}
-                          className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-[11px] font-black rounded-lg shadow cursor-pointer transition active:scale-95 flex items-center gap-1"
-                        >
-                          <span>✏️ अपना यूज़रनेम बनाएं (Set Username)</span>
-                        </button>
-                      )}
-
-                      {displayLocation && (
-                        <>
-                          <span className="text-slate-600">•</span>
-                          <span className="flex items-center gap-1 text-slate-300 font-medium">
-                            <MapPin className="w-3 h-3 text-red-400 shrink-0" />
-                            <span>{displayLocation}</span>
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Inline Manual Username Creation Form */}
-                    {isUsernameEditing && (
-                      <div className="mt-2 p-3 bg-slate-950 border border-amber-500/60 rounded-xl space-y-2 w-full max-w-sm animate-in fade-in duration-200 text-left">
-                        <label className="block text-[11px] font-bold text-amber-300">
-                          अपना मनपसंद यूज़रनेम चुनें (जैसे: rahul_sharma):
-                        </label>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-mono font-bold text-amber-400">@</span>
-                          <input
-                            type="text"
-                            value={manualUsernameInput}
-                            onChange={(e) => {
-                              setManualUsernameInput(e.target.value.toLowerCase().replace(/[^a-zA-Z0-9_]/g, ''));
-                              setUsernameError('');
-                            }}
-                            placeholder="username"
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-400 focus:outline-hidden"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveManualUsername}
-                            className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg transition cursor-pointer shrink-0"
-                          >
-                            सेव करें
-                          </button>
-                        </div>
-                        {usernameError && (
-                          <p className="text-[10px] text-red-400 font-bold leading-tight">
-                            ⚠️ {usernameError}
-                          </p>
-                        )}
-                        <p className="text-[10px] text-slate-400">
-                          * Google Email से यूज़रनेम स्वतः नहीं बनेगा। यूज़रनेम Unique होना आवश्यक है।
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Clean Email Display (No boxed container/border) */}
                   {displayEmail && (
                     <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-300 pt-0.5">
@@ -2651,21 +2682,44 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           : '7-Day Free Trial'}
                       </span>
                     </div>
-                    {subscription.hasActivePaidPlan ? (
-                      <span className="px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-xs">
-                        सक्रिय पेड प्लान
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                        <span>🪙</span>
+                        <span>{walletData?.coinBalance ?? 0} Coins</span>
                       </span>
-                    ) : subscription.isTrialExpired ? (
-                      <span className="px-2 py-0.5 bg-red-950/90 border border-red-700 text-red-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
-                        <Lock className="w-2.5 h-2.5" />
-                        <span>समाप्त (Expired)</span>
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-emerald-950/90 border border-emerald-700 text-emerald-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>सक्रिय (Active)</span>
-                      </span>
-                    )}
+                      {subscription.hasActivePaidPlan ? (
+                        <span className="px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-xs">
+                          सक्रिय
+                        </span>
+                      ) : subscription.isTrialExpired ? (
+                        <span className="px-2 py-0.5 bg-red-950/90 border border-red-700 text-red-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>समाप्त</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-emerald-950/90 border border-emerald-700 text-emerald-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>सक्रिय</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Wallet Quick Summary in Trial Box */}
+                  <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-bold flex items-center gap-1">
+                      <span>🪙</span>
+                      <span>रिवॉर्ड्स वॉलेट:</span>
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-black text-amber-300 text-xs sm:text-sm">{walletData?.coinBalance ?? 0}</span>
+                      <span className="text-[10px] text-slate-400">कॉइन्स</span>
+                      {walletData?.pendingCoins > 0 && (
+                        <span className="text-[9.5px] text-yellow-300 bg-yellow-950/80 px-1.5 py-0.5 rounded border border-yellow-700/60 font-bold">
+                          +{walletData.pendingCoins} पेंडिंग
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Expiry Date */}
@@ -2930,6 +2984,443 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               )}
             </div>
 
+            {/* OPTION 3: रिवॉर्ड्स व पॉइंट्स वॉलेट (Rewards & Points Wallet) */}
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'rewards_wallet' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+              <button
+                type="button"
+                onClick={() => setNormalUserTab(normalUserTab === 'rewards_wallet' ? '' : 'rewards_wallet')}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'rewards_wallet' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
+                    <span>3</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm sm:text-base font-black text-white block truncate">
+                        3. रिवॉर्ड्स व पॉइंट्स वॉलेट
+                      </span>
+                      <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                        Rewards Wallet
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      बोनस न्यूज़ शेयर करें, स्क्रीनशॉट अपलोड करें और कॉइन्स कमाएं
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 text-xs font-mono font-bold rounded-lg border border-amber-500/40 flex items-center gap-1 shadow-xs">
+                    <span>🪙</span>
+                    <span>{walletData?.coinBalance ?? 0} Coins</span>
+                  </span>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'rewards_wallet' ? 'rotate-180 text-amber-400' : ''}`} />
+                </div>
+              </button>
+              {normalUserTab === 'rewards_wallet' && (
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-6">
+                  {/* 1. THREE COIN BALANCE CARDS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Card 1: Available Coins */}
+                    <div className="bg-gradient-to-br from-amber-950/80 via-slate-900 to-slate-900 border-2 border-amber-500/60 rounded-2xl p-4 shadow-xl flex items-center justify-between relative overflow-hidden">
+                      <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
+                      <div>
+                        <div className="text-xs text-amber-300 font-bold flex items-center gap-1.5">
+                          <Coins className="w-4 h-4 text-amber-400" />
+                          <span>उपलब्ध कॉइन बैलेंस</span>
+                        </div>
+                        <div className="text-2xl sm:text-3xl font-black font-mono text-amber-300 mt-1">
+                          {walletData?.coinBalance ?? 0}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">रिडीमेबल वॉलेट बैलेंस</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0 text-xl">
+                        🪙
+                      </div>
+                    </div>
+
+                    {/* Card 2: Pending Coins */}
+                    <div className="bg-gradient-to-br from-yellow-950/60 via-slate-900 to-slate-900 border border-yellow-700/60 rounded-2xl p-4 shadow-xl flex items-center justify-between relative overflow-hidden">
+                      <div>
+                        <div className="text-xs text-yellow-300 font-bold flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 text-yellow-400" />
+                          <span>समीक्षाधीन कॉइन्स</span>
+                        </div>
+                        <div className="text-2xl sm:text-3xl font-black font-mono text-yellow-300 mt-1">
+                          {walletData?.pendingCoins ?? 0}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">एडमिन अप्रूवल की प्रतीक्षा में</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-300 shrink-0 text-xl">
+                        ⏳
+                      </div>
+                    </div>
+
+                    {/* Card 3: Total Earned */}
+                    <div className="bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-700/60 rounded-2xl p-4 shadow-xl flex items-center justify-between relative overflow-hidden">
+                      <div>
+                        <div className="text-xs text-emerald-300 font-bold flex items-center gap-1.5">
+                          <Award className="w-4 h-4 text-emerald-400" />
+                          <span>कुल अर्जित रिवॉर्ड</span>
+                        </div>
+                        <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-300 mt-1">
+                          {walletData?.totalEarnedCoins ?? 0}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">अब तक कमाए गए कुल कॉइन्स</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shrink-0 text-xl">
+                        🏆
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. HOW IT WORKS GUIDE */}
+                  <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-700/80 rounded-2xl p-4 shadow-md space-y-3">
+                    <h4 className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>बोनस न्यूज़ शेयर करके कॉइन्स कैसे कमाएं? (How to Earn)</span>
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[11px] font-mono font-bold">1</span>
+                          <span>बोनस न्यूज़ डाउनलोड करें</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          होम स्क्रीन पर <strong>⭐ बोनस न्यूज़</strong> टैग वाले समाचार का न्यूज़ ग्राफिक बनाएं व डाउनलोड करें।
+                        </p>
+                      </div>
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[11px] font-mono font-bold">2</span>
+                          <span>सोशल मीडिया पर पोस्ट करें</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          डाउनलोड किए गए ग्राफिक को अपने <strong>Instagram Story/Post, Facebook या WhatsApp Status</strong> पर शेयर करें।
+                        </p>
+                      </div>
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[11px] font-mono font-bold">3</span>
+                          <span>स्क्रीनशॉट अपलोड कर क्लेम करें</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          अपने पोस्ट का स्क्रीनशॉट यहाँ अपलोड करें। एडमिन अप्रूवल के बाद तुरंत वॉलेट में कॉइन्स क्रेडिट हो जाएंगे!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. SUBMIT NEW CLAIM CARD */}
+                  <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
+                        <Upload className="w-4 h-4 text-amber-400" />
+                        <span>नया रिवॉर्ड क्लेम सबमिट करें (Submit Reward Claim)</span>
+                      </h4>
+                      <span className="text-[11px] text-amber-300 font-bold bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-800/80">
+                        उपलब्ध बोनस डाउनलोड्स: {eligibleDownloads.length}
+                      </span>
+                    </div>
+
+                    {eligibleDownloads.length === 0 ? (
+                      <div className="p-4 bg-slate-950/80 border border-dashed border-slate-700 rounded-xl text-center space-y-2">
+                        <div className="text-2xl">📰</div>
+                        <div className="text-xs font-bold text-slate-300">
+                          कोई नया बोनस न्यूज़ डाउनलोड उपलब्ध नहीं है
+                        </div>
+                        <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                          पहले होम स्क्रीन पर जाएं, किसी <strong>⭐ बोनस न्यूज़</strong> कार्ड का ग्राफिक डाउनलोड करें, फिर अपने सोशल मीडिया पर पोस्ट करके उसका स्क्रीनशॉट यहाँ अपलोड करें।
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Step A: Select Eligible Download */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                            <span>1. वह बोनस समाचार चुनें जिसे आपने शेयर किया है:</span>
+                            <span className="text-red-400">*</span>
+                          </label>
+                          <select
+                            value={selectedEligibleDownload ? selectedEligibleDownload.postId : ''}
+                            onChange={(e) => {
+                              const found = eligibleDownloads.find((d) => d.postId === e.target.value);
+                              setSelectedEligibleDownload(found || null);
+                            }}
+                            className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm text-white font-medium focus:outline-none transition"
+                          >
+                            <option value="">-- बोनस समाचार चुनें --</option>
+                            {eligibleDownloads.map((d) => (
+                              <option key={d.postId} value={d.postId}>
+                                🪙 +{d.rewardCoins} कॉइन्स | {d.postTitle || d.postId} (डाउनलोड: {new Date(d.downloadedAt).toLocaleDateString('hi-IN')})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selected Preview Highlight */}
+                        {selectedEligibleDownload && (
+                          <div className="p-3 bg-amber-950/30 border border-amber-500/40 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
+                            <div className="min-w-0 pr-2">
+                              <span className="text-slate-400 block text-[10px]">चयनित समाचार:</span>
+                              <span className="text-white font-bold truncate block">{selectedEligibleDownload.postTitle}</span>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <span className="px-2.5 py-1 bg-amber-400 text-slate-950 text-xs font-mono font-black rounded-lg shadow-sm">
+                                +{selectedEligibleDownload.rewardCoins} कॉइन्स
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Step B: Upload Screenshot */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                            <span>2. सोशल मीडिया पोस्ट/स्टोरी का स्क्रीनशॉट अपलोड करें:</span>
+                            <span className="text-red-400">*</span>
+                          </label>
+                          <input
+                            type="file"
+                            id="claim-screenshot-file-input"
+                            accept="image/*"
+                            onChange={handleScreenshotFileChange}
+                            className="hidden"
+                          />
+                          {!claimScreenshotBase64 ? (
+                            <label
+                              htmlFor="claim-screenshot-file-input"
+                              className="border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 hover:bg-slate-900 rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
+                            >
+                              <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400">
+                                <Upload className="w-5 h-5" />
+                              </div>
+                              <span className="text-xs font-bold text-slate-200">
+                                स्क्रीनशॉट फ़ाइल चुनें या यहाँ क्लिक करें
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                JPG, PNG, WEBP (अधिकतम 10MB)
+                              </span>
+                            </label>
+                          ) : (
+                            <div className="p-3 bg-slate-950/90 border border-emerald-600/60 rounded-xl flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={claimScreenshotBase64}
+                                  alt="Proof screenshot"
+                                  className="w-16 h-16 object-cover rounded-lg border border-emerald-500 shadow-md"
+                                />
+                                <div>
+                                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>स्क्रीनशॉट चयनित!</span>
+                                  </span>
+                                  <label
+                                    htmlFor="claim-screenshot-file-input"
+                                    className="text-[11px] text-amber-400 hover:underline cursor-pointer block mt-0.5"
+                                  >
+                                    फ़ाइल बदलें
+                                  </label>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setClaimScreenshotBase64('')}
+                                className="p-2 text-slate-400 hover:text-red-400 transition cursor-pointer"
+                                title="हटाएं"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Error and Success Notices */}
+                        {claimSubmitError && (
+                          <div className="p-3 bg-red-950/80 border border-red-700 text-red-300 rounded-xl text-xs flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                            <span>{claimSubmitError}</span>
+                          </div>
+                        )}
+                        {claimSubmitSuccess && (
+                          <div className="p-3 bg-emerald-950/80 border border-emerald-600 text-emerald-200 rounded-xl text-xs flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>{claimSubmitSuccess}</span>
+                          </div>
+                        )}
+
+                        {/* Submit Button */}
+                        <button
+                          type="button"
+                          disabled={!selectedEligibleDownload || !claimScreenshotBase64 || isSubmittingClaim}
+                          onClick={handleSubmitRewardClaim}
+                          className={`w-full py-3 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xl ${
+                            !selectedEligibleDownload || !claimScreenshotBase64 || isSubmittingClaim
+                              ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                              : 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-500/20 active:scale-98'
+                          }`}
+                        >
+                          {isSubmittingClaim ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                              <span>सत्यापन व क्लेम अपलोड जारी है...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Coins className="w-4 h-4 text-slate-950" />
+                              <span>
+                                रिवॉर्ड क्लेम सबमिट करें (+{selectedEligibleDownload?.rewardCoins || 0} कॉइन्स हेतु)
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4. SUBMITTED CLAIMS STATUS HISTORY */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-400" />
+                        <span>सबमिट किए गए क्लेम स्थिति (Submitted Claims History)</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={fetchUserWallet}
+                        className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>रिफ्रेश</span>
+                      </button>
+                    </div>
+
+                    {walletClaims.length === 0 ? (
+                      <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl text-center text-xs text-slate-400">
+                        आपने अभी तक कोई क्लेम सबमिट नहीं किया है।
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                        {walletClaims.map((claim) => (
+                          <div
+                            key={claim.id}
+                            className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md"
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              {claim.screenshotUrl ? (
+                                <a
+                                  href={claim.screenshotUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 relative group block"
+                                  title="स्क्रीनशॉट देखें"
+                                >
+                                  <img
+                                    src={claim.screenshotUrl}
+                                    alt="Proof"
+                                    className="w-12 h-12 object-cover rounded-lg border border-slate-700 group-hover:border-amber-400 transition"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-lg transition">
+                                    <ExternalLink className="w-3.5 h-3.5 text-white" />
+                                  </div>
+                                </a>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 text-slate-500">
+                                  <ImageIcon className="w-5 h-5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs sm:text-sm font-bold text-white truncate max-w-xs">
+                                    {claim.postTitle || 'बोनस समाचार'}
+                                  </span>
+                                  <span className="text-[11px] font-mono font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/80">
+                                    🪙 +{claim.rewardCoins} कॉइन्स
+                                  </span>
+                                </div>
+                                <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                                  <span>सबमिट: {new Date(claim.createdAt).toLocaleDateString('hi-IN')}</span>
+                                  {claim.reviewedAt && (
+                                    <span>• समीक्षा: {new Date(claim.reviewedAt).toLocaleDateString('hi-IN')}</span>
+                                  )}
+                                </div>
+                                {claim.status === 'rejected' && claim.rejectionReason && (
+                                  <div className="text-[11px] text-red-300 bg-red-950/50 border border-red-900/60 rounded px-2 py-0.5 mt-1">
+                                    कारण: {claim.rejectionReason}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="shrink-0 self-end sm:self-center">
+                              {claim.status === 'pending' && (
+                                <span className="px-2.5 py-1 bg-yellow-950/80 border border-yellow-700 text-yellow-300 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs">
+                                  <Clock className="w-3 h-3 text-yellow-400" />
+                                  <span>समीक्षाधीन</span>
+                                </span>
+                              )}
+                              {claim.status === 'approved' && (
+                                <span className="px-2.5 py-1 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>स्वीकृत (+{claim.rewardCoins} क्रेडिट)</span>
+                                </span>
+                              )}
+                              {claim.status === 'rejected' && (
+                                <span className="px-2.5 py-1 bg-red-950/80 border border-red-700 text-red-300 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs">
+                                  <AlertCircle className="w-3 h-3 text-red-400" />
+                                  <span>अस्वीकृत</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 5. WALLET TRANSACTIONS LOG */}
+                  <div className="space-y-3 border-t border-slate-800/80 pt-4">
+                    <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-amber-400" />
+                      <span>वॉलेट लेन-देन विवरण (Transaction Log)</span>
+                    </h4>
+
+                    {walletTransactions.length === 0 ? (
+                      <div className="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl text-center text-xs text-slate-400">
+                        वॉलेट में अभी तक कोई लेन-देन दर्ज नहीं हुआ है।
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {walletTransactions.map((tx) => (
+                          <div
+                            key={tx.id}
+                            className="p-2.5 bg-slate-900/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="font-bold text-white truncate">{tx.description}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {new Date(tx.createdAt).toLocaleString('hi-IN')}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div
+                                className={`font-mono font-black ${
+                                  tx.type === 'credit' ? 'text-emerald-400' : 'text-red-400'
+                                }`}
+                              >
+                                {tx.type === 'credit' ? `+${tx.amount}` : `-${tx.amount}`} कॉइन्स
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                बैलेंस: {tx.balanceAfter}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* OPTION FOR PRO / VIP / ADMIN: टेम्प्लेट व कस्टम फ्रेम्स मैनेजर */}
             {canAccessTemplateManager(currentUser) && (
               <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'templates_manager' ? 'border-purple-400 bg-slate-900/95 ring-2 ring-purple-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
@@ -2970,7 +3461,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               </div>
             )}
 
-            {/* OPTION: सहायता एवं नीतियाँ */}
+            {/* OPTION 4: सहायता एवं नीतियाँ */}
             <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
@@ -2979,11 +3470,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                    <span>3</span>
+                    <span>4</span>
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      3. सहायता एवं नीतियाँ
+                      4. सहायता एवं नीतियाँ
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
@@ -3004,7 +3495,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               )}
             </div>
 
-            {/* OPTION 4: लॉगआउट */}
+            {/* OPTION 5: लॉगआउट */}
             <div className="rounded-2xl border border-red-900/60 bg-red-950/20 overflow-hidden shadow-lg">
               <button
                 type="button"
@@ -3013,11 +3504,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                    <span>4</span>
+                    <span>5</span>
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-red-200 block truncate">
-                      4. लॉगआउट
+                      5. लॉगआउट
                     </span>
                     <p className="text-xs text-red-400/80 truncate mt-0.5">
                       सुरक्षित रूप से अपने खाते से बाहर निकलें

@@ -683,7 +683,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       textBreakingHeadlineY,
       Math.round(headlineFontSize * 1.14),
       scaledLineH,
-      card.headlineAlign || 'center',
+      'center',
       56,
       true, // isLightBackground = true
       false,
@@ -746,7 +746,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       headlineTextY,
       headlineFontSize,
       headlineLineHeight,
-      card.headlineAlign || 'center',
+      'center',
       48,
       true, // isLightBackground = true
       false,
@@ -818,9 +818,9 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
 
     currentY += quoteBadgeH + gap;
 
-    // B. Headline / Statement Text (Respects user's headlineAlign: 'justify' | 'center' | 'left')
+    // B. Headline / Statement Text (Always centered per master prompt)
     const quoteTextStartY = currentY;
-    const effectiveAlign = card.headlineAlign || 'center';
+    const effectiveAlign = 'center';
     drawRenderedHeadlineLines(
       ctx,
       headlineLines,
@@ -910,7 +910,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       headlineStartY,
       headlineFontSize,
       headlineLineHeight,
-      card.headlineAlign || 'center',
+      'center',
       48,
       false,
       false,
@@ -1479,6 +1479,7 @@ async function drawMorningJacketBackground(
 // Red Headline Area (61.33% to 89.85% height; shows default Step 3 instructions when no headline is entered,
 // replaces with real-time white/yellow headline on red gradient when headline is entered),
 // Bottom Footer Area (89.85% to 100% height; draws user's saved FooterGraphic)
+// showTextGraphic: false (Part B / Section 3: Text graphic default is OFF on new graphics)
 // ============================================================================
 async function drawGraphic001Canvas(
   ctx: CanvasRenderingContext2D,
@@ -1681,17 +1682,19 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasValidMainPhoto, nothing is drawn over the photo area,
   // allowing the authentic background image's camera icon and Step 4 instructions to show through!
 
-  // 3. TOP-LEFT LOGO AREA (Clamped strictly to Inner Safe-Zone [10%, 90%] and grows inward)
+  // 3. TOP-LEFT LOGO AREA (Positioned authentically at 5.5%, 5.5% and grows downward towards footer)
   if (card.showMasterBranding !== false) {
     ctx.save();
-    const safeLeft = Math.round(width * 0.10);
-    const safeTop = Math.round(height * 0.10);
-    const safeRight = Math.round(width * 0.90);
-    const safeBottom = Math.round(height * 0.90);
+    const safeLeft = Math.round(width * 0.05);
+    const safeTop = Math.round(height * 0.05);
+    const safeRight = Math.round(width * 0.92);
+    const safeBottom = Math.round(height * 0.60);
+    const defaultX = Math.round(width * 0.055);
+    const defaultY = Math.round(height * 0.055);
 
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
-    const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
+    const scale = Math.min(1.8, Math.max(0.5, card.logoSizePercent ? card.logoSizePercent / 100 : (card.logoScale ?? 1.25)));
 
     let lW = Math.round(baseW * scale);
     let lH = Math.round(baseH * scale);
@@ -1709,13 +1712,14 @@ async function drawGraphic001Canvas(
     if (lW > safeRight - safeLeft) lW = safeRight - safeLeft;
     if (lH > safeBottom - safeTop) lH = safeBottom - safeTop;
 
-    const userPosX = card.logoX !== undefined ? Math.round((card.logoX / 100) * width) : safeLeft;
-    const userPosY = card.logoY !== undefined ? Math.round((card.logoY / 100) * height) : safeTop;
+    const userPosX = card.logoX !== undefined ? Math.round((card.logoX / 100) * width) : defaultX;
+    const userPosY = card.logoY !== undefined ? Math.round((card.logoY / 100) * height) : defaultY;
 
     let finalX = userPosX;
     let finalY = userPosY;
 
     // Inward clamping: ensure logo never crosses any edge of the inner safe zone
+    // Top stays anchored so scaling expands downward towards footer
     if (finalX + lW > safeRight) finalX = Math.max(safeLeft, safeRight - lW);
     if (finalY + lH > safeBottom) finalY = Math.max(safeTop, safeBottom - lH);
     if (finalX < safeLeft) finalX = safeLeft;
@@ -1817,9 +1821,9 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
-  // 5. RED HEADLINE AREA (Part D & E: Expanded to 31.47% height, 4-line support, centered)
+  // 5. RED HEADLINE AREA (Height: 28.52%, starting at 61.33% and ending at 89.85%)
   const bannerY = Math.round(height * 0.6133);
-  const bannerH = Math.round(height * 0.3147);
+  const bannerH = Math.round(height * 0.2852);
 
   const hasUserHeadline = Boolean(
     card.headline &&
@@ -1942,7 +1946,7 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasUserHeadline, nothing is drawn over the red banner,
   // allowing the authentic background image's Step 3 instructions to show through!
 
-  // 6. BOTTOM FOOTER AREA (Part D: Reduced height = ~7.2% vs ~10.15%, Part I: default #000000 Black)
+  // 6. BOTTOM FOOTER AREA (Exact 10.15% / 0.1015 footer height ratio = 121.8px on 1200px canvas, remaining from 89.85%)
   const footerH = height - (bannerY + bannerH);
   const activeFooter = getActiveFooterPng(card);
   if (card.showMasterBranding !== false || Boolean(activeFooter)) {
@@ -1984,7 +1988,7 @@ async function drawGraphic001Canvas(
   }
 
   // 9. Part C: Universal Text Watermark across photo area (0 to photoH)
-  if (card.showTextWatermark || card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) {
+  if (card.showTextWatermark === true || card.showWatermark === true || card.showSuperBreakingWatermark === true) {
     await drawUniversalWatermark(ctx, width, photoH, card);
   }
 
@@ -6334,6 +6338,16 @@ async function drawThemeFooterBar(
   const phoneIconWidth = cleanPhone ? 30 : 0;
   const phoneTextWidth = cleanPhone ? ctx.measureText(displayPhone).width : 0;
   const phoneGroupWidth = cleanPhone ? phoneIconWidth + 8 + phoneTextWidth : 0;
+
+  if (!displayHandle && !cleanWebsite && !cleanPhone) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = textColor;
+    ctx.font = `700 24px "Noto Sans Devanagari", Arial, sans-serif`;
+    ctx.fillText('| सोशल मीडिया / वेबसाइट जानकारी हेतु स्थान |', width / 2, iconY);
+    ctx.restore();
+    return;
+  }
 
   const hasSocial = icons.length > 0 || Boolean(displayHandle);
   const socialGroupWidth = iconsGroupWidth + (displayHandle ? 8 + handleWidth : 0);

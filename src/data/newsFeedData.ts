@@ -18,6 +18,8 @@ export interface NewsFeedPost {
   manualThumbnailUrl?: string;
   additionalPhotos?: string[];
   status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  isBonus?: boolean;
+  rewardCoins?: number;
 }
 
 export interface VideoFeedItem {

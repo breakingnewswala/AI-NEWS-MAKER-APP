@@ -122,6 +122,24 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     ? (cleanPhone.startsWith('+') ? cleanPhone : `+91 ${cleanPhone}`)
     : '';
 
+  // If user has not provided handle, website, or phone, display authentic default placeholder from template
+  if (!displayHandle && !isWebsiteActive && !isWhatsappActive) {
+    return (
+      <div
+        style={{
+          backgroundColor: footerBgColor,
+          color: effectiveTextColor,
+          fontFamily: 'Noto Sans Devanagari, Arial, Helvetica, sans-serif',
+        }}
+        className="h-full w-full border-t border-neutral-300/40 px-2 sm:px-4 py-0 flex items-center justify-center select-none overflow-hidden text-center"
+      >
+        <span className="font-bold text-xs sm:text-sm tracking-wide text-center">
+          | सोशल मीडिया / वेबसाइट जानकारी हेतु स्थान |
+        </span>
+      </div>
+    );
+  }
+
   // Determine active elements count for dynamic centering and adaptive sizing
   const activeElements: ('social' | 'website' | 'whatsapp')[] = ['social'];
   if (isWebsiteActive) activeElements.push('website');

@@ -38,6 +38,7 @@ import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
+import { generateVideoDownloadFileName } from '../lib/dateUtils';
 
 export type VideoAspect = '4:5' | '9:16' | '16:9' | '1:1' | '4:3';
 export type VideoTransitionType = 'none' | 'fade' | 'flash' | 'zoom' | 'slide' | 'glitch';
@@ -611,7 +612,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setVideoExportProgress(50);
       setVideoExportStatus('जैकेट व ऑडियो सिंक किए जा रहे हैं...');
 
-      const filename = `news_video_${Date.now()}.mp4`;
+      const filename = generateVideoDownloadFileName('mp4');
 
       // 1. Android Native Bridge integration
       if (

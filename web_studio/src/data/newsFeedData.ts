@@ -18,6 +18,8 @@ export interface NewsFeedPost {
   manualThumbnailUrl?: string;
   additionalPhotos?: string[];
   status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  isBonus?: boolean;
+  rewardCoins?: number;
 }
 
 export interface VideoFeedItem {
@@ -93,7 +95,10 @@ export const INITIAL_CATEGORIES = [
   { id: 'state', name: '📍 राज्य / स्थानीय' },
 ];
 
-export const INITIAL_NEWS_POSTS: NewsFeedPost[] = [
+// Production feed starts empty so dummy seed cards are never shown as real news
+export const INITIAL_NEWS_POSTS: NewsFeedPost[] = [];
+
+export const SAMPLE_TEMPLATE_PRESETS: NewsFeedPost[] = [
   {
     id: 'live-post-1',
     title: 'भारत ने लॉन्च किया नया AI सुपरकंप्यूटिंग नेटवर्क, वैश्विक स्तर पर बनी नई पहचान',

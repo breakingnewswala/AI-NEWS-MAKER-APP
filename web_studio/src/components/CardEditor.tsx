@@ -1809,21 +1809,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <span>बड़ा (48px)</span>
             </div>
           </div>
-
-          {/* Alignment: Strictly Centered & Locked for News Graphics */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-semibold">
-              <AlignCenter className="w-3.5 h-3.5 text-yellow-400" />
-              <span>अलाइनमेंट (Alignment):</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
-                🔒 Center Locked
-              </span>
-            </div>
-            <div className="flex items-center gap-2 bg-neutral-900/90 px-3 py-1.5 rounded-md border border-neutral-800 text-xs font-bold text-amber-300 justify-center">
-              <AlignCenter className="w-4 h-4 text-amber-400" />
-              <span>हेडलाइन हमेशा क्षैतिज रूप से मध्य में केंद्रित रहेगी (Centered)</span>
-            </div>
-          </div>
         </div>
 
         {/* Interactive Manual Word Highlighting System */}
@@ -3786,9 +3771,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onChange({ logoScale: 1.25, logoX: 10, logoY: 10 })}
+                      onClick={() => onChange({ logoScale: 1.25, logoX: 5.5, logoY: 5.5 })}
                       className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-[10px] border border-neutral-700 cursor-pointer"
-                      title="डिफ़ॉल्ट सेफ-ज़ोन (10%) पर रीसेट करें"
+                      title="डिफ़ॉल्ट सेफ-ज़ोन (5.5%) पर रीसेट करें"
                     >
                       डिफ़ॉल्ट (125%)
                     </button>
@@ -3801,7 +3786,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   max="1.8"
                   step="0.05"
                   value={card.logoScale ?? 1.25}
-                  onChange={(e) => onChange({ logoScale: parseFloat(e.target.value) })}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    onChange({ logoScale: val, logoSizePercent: Math.round(val * 100) });
+                  }}
                   className="w-full accent-yellow-400 cursor-pointer"
                 />
                 <div className="flex justify-between text-[10px] text-neutral-500 font-semibold">

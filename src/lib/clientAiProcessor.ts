@@ -231,7 +231,6 @@ export function processNewsLocally(
     '#BreakingNews',
     '#HindiNews',
     ...(catTag ? [`#${catTag}`] : []),
-    '#AiNewsMaker',
   ];
 
   const summaryPara1 = extractedDesc

@@ -48,6 +48,9 @@ import {
   Ban,
   UserCheck,
   Download,
+  Coins,
+  Award,
+  Loader2,
 } from 'lucide-react';
 import {
   isUserSuperAdmin,
@@ -131,9 +134,29 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onAddCategory,
   onDeleteCategory,
 }) => {
-  // Sub-tabs: 10 main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
+  // Sub-tabs: main accordions in exact order - initially closed per requirement
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
+
+  // Rewards & Claims Manager State (Part S)
+  const [adminRewardsStats, setAdminRewardsStats] = useState({
+    totalClaims: 0,
+    pendingClaims: 0,
+    approvedClaims: 0,
+    rejectedClaims: 0,
+    totalCoinsCredited: 0,
+    totalBonusPosts: 0,
+  });
+  const [adminRewardsClaims, setAdminRewardsClaims] = useState<any[]>([]);
+  const [isLoadingRewards, setIsLoadingRewards] = useState(false);
+  const [rewardsFilter, setRewardsFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [rewardsSearch, setRewardsSearch] = useState('');
+  const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
+  const [rejectingClaimId, setRejectingClaimId] = useState<string | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState('सोशल मीडिया पोस्ट सत्यापन विफल');
+  const [isProcessingRewardAction, setIsProcessingRewardAction] = useState(false);
+  const [rewardActionMsg, setRewardActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const effectiveCurrentUser = currentUser || (() => {
     try {
       const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
@@ -141,6 +164,87 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     } catch {}
     return null;
   })();
+
+  const fetchAdminRewards = () => {
+    setIsLoadingRewards(true);
+    const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
+    fetch(`/api/admin/rewards/claims?adminEmail=${encodeURIComponent(adminEmail)}`, {
+      headers: {
+        'x-admin-email': adminEmail,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.stats) setAdminRewardsStats(data.stats);
+          if (Array.isArray(data.claims)) setAdminRewardsClaims(data.claims);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingRewards(false));
+  };
+
+  useEffect(() => {
+    fetchAdminRewards();
+  }, [subTab]);
+
+  const handleApproveRewardClaim = async (claimId: string) => {
+    setIsProcessingRewardAction(true);
+    setRewardActionMsg(null);
+    try {
+      const res = await fetch(`/api/admin/rewards/claims/${claimId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminEmail: effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRewardActionMsg({ type: 'success', text: '✅ क्लेम सफलतापूर्वक स्वीकृत किया गया और यूज़र के वॉलेट में कॉइन्स क्रेडिट हो गए!' });
+        fetchAdminRewards();
+      } else {
+        setRewardActionMsg({ type: 'error', text: data.error || 'अप्रूवल विफल रहा' });
+      }
+    } catch (err: any) {
+      setRewardActionMsg({ type: 'error', text: err.message || 'नेटवर्क त्रुटि' });
+    } finally {
+      setIsProcessingRewardAction(false);
+    }
+  };
+
+  const handleRejectRewardClaim = async (claimId: string) => {
+    if (!rejectReasonInput.trim()) {
+      alert('कृपया अस्वीकृति का कारण दर्ज करें');
+      return;
+    }
+    setIsProcessingRewardAction(true);
+    setRewardActionMsg(null);
+    try {
+      const res = await fetch(`/api/admin/rewards/claims/${claimId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminEmail: effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com',
+          reason: rejectReasonInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRewardActionMsg({ type: 'success', text: '❌ क्लेम अस्वीकृत किया गया।' });
+        setRejectingClaimId(null);
+        setRejectReasonInput('सोशल मीडिया पोस्ट सत्यापन विफल');
+        fetchAdminRewards();
+      } else {
+        setRewardActionMsg({ type: 'error', text: data.error || 'अस्वीकृति विफल रही' });
+      }
+    } catch (err: any) {
+      setRewardActionMsg({ type: 'error', text: err.message || 'नेटवर्क त्रुटि' });
+    } finally {
+      setIsProcessingRewardAction(false);
+    }
+  };
+
   const isSuperAdminUser = isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
 
   // Restricted Channels Management State
@@ -2684,7 +2788,355 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 7: RSS लिंक्स डैशबोर्ड (RSS LINKS DASHBOARD)                         */}
+        {/* STEP 7: बोनस रिवॉर्ड्स व क्लेम रिव्यू मैनेजर (BONUS REWARDS & CLAIMS)     */}
+        {/* ========================================================================= */}
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rewards' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'rewards' ? '' : 'rewards')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'rewards' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
+                <span>7</span>
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm sm:text-base font-black text-white block truncate">
+                    7. बोनस रिवॉर्ड्स व क्लेम रिव्यू मैनेजर
+                  </span>
+                  <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                    Rewards & Claims
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  यूज़र्स के सोशल मीडिया शेयर क्लेम्स का सत्यापन, अप्रूवल व कॉइन्स क्रेडिट
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className={`px-2.5 py-1 text-xs font-mono font-bold rounded-lg border flex items-center gap-1.5 ${
+                adminRewardsStats.pendingClaims > 0
+                  ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 animate-pulse'
+                  : 'bg-slate-950 text-slate-400 border-slate-800'
+              }`}>
+                <span>⏳</span>
+                <span>{adminRewardsStats.pendingClaims} पेंडिंग क्लेम</span>
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'rewards' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'rewards' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-6">
+              {/* Header Stats Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
+                  <div className="text-[11px] text-slate-400">कुल बोनस न्यूज़</div>
+                  <div className="text-xl font-mono font-black text-white mt-0.5">{adminRewardsStats.totalBonusPosts}</div>
+                </div>
+                <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
+                  <div className="text-[11px] text-slate-400">कुल क्लेम्स</div>
+                  <div className="text-xl font-mono font-black text-white mt-0.5">{adminRewardsStats.totalClaims}</div>
+                </div>
+                <div className="bg-yellow-950/40 border border-yellow-700/60 p-3 rounded-xl">
+                  <div className="text-[11px] text-yellow-300 font-bold">लंबित समीक्षा</div>
+                  <div className="text-xl font-mono font-black text-yellow-300 mt-0.5">{adminRewardsStats.pendingClaims}</div>
+                </div>
+                <div className="bg-emerald-950/40 border border-emerald-700/60 p-3 rounded-xl">
+                  <div className="text-[11px] text-emerald-300 font-bold">स्वीकृत क्लेम</div>
+                  <div className="text-xl font-mono font-black text-emerald-300 mt-0.5">{adminRewardsStats.approvedClaims}</div>
+                </div>
+                <div className="bg-red-950/40 border border-red-700/60 p-3 rounded-xl">
+                  <div className="text-[11px] text-red-300 font-bold">अस्वीकृत क्लेम</div>
+                  <div className="text-xl font-mono font-black text-red-300 mt-0.5">{adminRewardsStats.rejectedClaims}</div>
+                </div>
+                <div className="bg-amber-950/40 border border-amber-600/60 p-3 rounded-xl">
+                  <div className="text-[11px] text-amber-300 font-bold">कुल क्रेडिट कॉइन्स</div>
+                  <div className="text-xl font-mono font-black text-amber-300 mt-0.5 flex items-center gap-1">
+                    <span>🪙</span>
+                    <span>{adminRewardsStats.totalCoinsCredited}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Alert Feedback */}
+              {rewardActionMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border flex items-center justify-between gap-2 ${
+                  rewardActionMsg.type === 'success'
+                    ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200'
+                    : 'bg-red-950/90 border-red-500 text-red-200'
+                }`}>
+                  <span>{rewardActionMsg.text}</span>
+                  <button type="button" onClick={() => setRewardActionMsg(null)} className="text-xs hover:opacity-75">✕</button>
+                </div>
+              )}
+
+              {/* Filters & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={rewardsSearch}
+                    onChange={(e) => setRewardsSearch(e.target.value)}
+                    placeholder="यूज़र का नाम, ईमेल, फ़ोन या न्यूज़ शीर्षक खोजें..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(['all', 'pending', 'approved', 'rejected'] as const).map((filterKey) => (
+                    <button
+                      key={filterKey}
+                      type="button"
+                      onClick={() => setRewardsFilter(filterKey)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        rewardsFilter === filterKey
+                          ? 'bg-amber-400 text-slate-950 shadow-md'
+                          : 'bg-slate-950 hover:bg-slate-850 text-slate-300 border border-slate-800'
+                      }`}
+                    >
+                      {filterKey === 'all' && `सभी (${adminRewardsClaims.length})`}
+                      {filterKey === 'pending' && `समीक्षाधीन (${adminRewardsStats.pendingClaims})`}
+                      {filterKey === 'approved' && `स्वीकृत (${adminRewardsStats.approvedClaims})`}
+                      {filterKey === 'rejected' && `अस्वीकृत (${adminRewardsStats.rejectedClaims})`}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={fetchAdminRewards}
+                    disabled={isLoadingRewards}
+                    className="p-2 bg-slate-950 hover:bg-slate-850 text-slate-300 border border-slate-800 rounded-lg cursor-pointer transition ml-1"
+                    title="ताज़ा करें"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRewards ? 'animate-spin text-amber-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Claims List Table / Cards */}
+              {isLoadingRewards && adminRewardsClaims.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                  <span>क्लेम्स लोड हो रहे हैं...</span>
+                </div>
+              ) : adminRewardsClaims.length === 0 ? (
+                <div className="p-8 bg-slate-900/40 border border-dashed border-slate-800 rounded-xl text-center text-xs text-slate-400">
+                  अभी तक किसी भी यूज़र ने बोनस रिवॉर्ड क्लेम सबमिट नहीं किया है।
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {adminRewardsClaims
+                    .filter((c) => {
+                      const matchFilter = rewardsFilter === 'all' || c.status === rewardsFilter;
+                      const q = rewardsSearch.toLowerCase().trim();
+                      const matchSearch =
+                        !q ||
+                        (c.userEmail && c.userEmail.toLowerCase().includes(q)) ||
+                        (c.userName && c.userName.toLowerCase().includes(q)) ||
+                        (c.postTitle && c.postTitle.toLowerCase().includes(q)) ||
+                        (c.userMobile && c.userMobile.includes(q));
+                      return matchFilter && matchSearch;
+                    })
+                    .map((claim) => (
+                      <div
+                        key={claim.id}
+                        className={`p-4 rounded-xl border transition-all flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 ${
+                          claim.status === 'pending'
+                            ? 'bg-slate-900/95 border-yellow-700/60 shadow-lg'
+                            : 'bg-slate-900/60 border-slate-800'
+                        }`}
+                      >
+                        {/* Left: Proof Screenshot Thumbnail */}
+                        <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                          {claim.screenshotUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewScreenshotUrl(claim.screenshotUrl)}
+                              className="relative group shrink-0 rounded-xl overflow-hidden border-2 border-slate-700 hover:border-amber-400 transition cursor-pointer shadow-md"
+                              title="बड़ा देखने के लिए क्लिक करें"
+                            >
+                              <img
+                                src={claim.screenshotUrl}
+                                alt="Claim proof"
+                                className="w-16 h-16 sm:w-20 sm:h-20 object-cover group-hover:scale-105 transition duration-200"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                <ExternalLink className="w-4 h-4 text-white" />
+                              </div>
+                            </button>
+                          ) : (
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 text-slate-500">
+                              <span>कोई फ़ोटो नहीं</span>
+                            </div>
+                          )}
+
+                          {/* Center: Claim Information */}
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-black text-white">{claim.userName || 'यूज़र'}</span>
+                              <span className="text-xs font-mono text-slate-400">({claim.userEmail})</span>
+                              {claim.userMobile && (
+                                <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                                  📞 +91 {claim.userMobile}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-slate-200 flex items-center gap-2 flex-wrap">
+                              <span className="text-slate-400">समाचार:</span>
+                              <strong className="text-white truncate max-w-md">{claim.postTitle || claim.postId}</strong>
+                              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 font-mono font-black text-xs rounded border border-amber-500/40">
+                                🪙 +{claim.rewardCoins} कॉइन्स
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-400 flex items-center gap-2 flex-wrap">
+                              <span>सबमिट तिथि: {new Date(claim.createdAt).toLocaleString('hi-IN')}</span>
+                              {claim.reviewedAt && (
+                                <span>• समीक्षा: {new Date(claim.reviewedAt).toLocaleString('hi-IN')} ({claim.reviewedBy || 'Admin'})</span>
+                              )}
+                            </div>
+
+                            {claim.status === 'rejected' && claim.rejectionReason && (
+                              <div className="text-xs text-red-300 bg-red-950/60 border border-red-900 rounded-lg p-1.5 mt-1">
+                                ❌ <strong>अस्वीकृति कारण:</strong> {claim.rejectionReason}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: Actions / Status */}
+                        <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between w-full lg:w-auto gap-2.5 shrink-0 border-t lg:border-t-0 border-slate-800 pt-2 lg:pt-0">
+                          {claim.status === 'pending' ? (
+                            <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+                              <button
+                                type="button"
+                                disabled={isProcessingRewardAction}
+                                onClick={() => handleApproveRewardClaim(claim.id)}
+                                className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer transition active:scale-95 disabled:opacity-50"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>स्वीकृत करें (+{claim.rewardCoins} Coins)</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isProcessingRewardAction}
+                                onClick={() => {
+                                  setRejectingClaimId(claim.id);
+                                  setRejectReasonInput('सोशल मीडिया पोस्ट सत्यापन विफल');
+                                }}
+                                className="px-3 py-2 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 text-xs font-bold rounded-xl shadow cursor-pointer transition active:scale-95 disabled:opacity-50"
+                              >
+                                <span>अस्वीकृत</span>
+                              </button>
+                            </div>
+                          ) : claim.status === 'approved' ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-bold rounded-lg shadow-xs">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span>स्वीकृत (कॉइन्स क्रेडिटेड)</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-red-950/80 border border-red-700 text-red-300 text-xs font-bold rounded-lg shadow-xs">
+                              <AlertCircle className="w-4 h-4 text-red-400" />
+                              <span>अस्वीकृत</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* MODAL 1: Screenshot Full Preview */}
+              {previewScreenshotUrl && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+                  onClick={() => setPreviewScreenshotUrl(null)}
+                >
+                  <div
+                    className="relative max-w-3xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-2">
+                        <Upload className="w-4 h-4 text-amber-400" />
+                        <span>सोशल मीडिया पोस्ट सत्यापन स्क्रीनशॉट</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewScreenshotUrl(null)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="p-3 overflow-auto flex items-center justify-center max-h-[80vh]">
+                      <img
+                        src={previewScreenshotUrl}
+                        alt="Full proof"
+                        className="max-h-[75vh] w-auto object-contain rounded-lg shadow-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODAL 2: Reject Claim with Reason Prompt */}
+              {rejectingClaimId && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                  <div className="w-full max-w-md bg-slate-900 border-2 border-red-700/80 rounded-2xl p-5 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400" />
+                        <span>रिवॉर्ड क्लेम अस्वीकृत करें</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setRejectingClaimId(null)}
+                        className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-300">
+                      कृपया अस्वीकृति का कारण लिखें। यह कारण यूज़र को उनके रिवॉर्ड्स वॉलेट हिस्ट्री में दिखाई देगा:
+                    </p>
+
+                    <input
+                      type="text"
+                      value={rejectReasonInput}
+                      onChange={(e) => setRejectReasonInput(e.target.value)}
+                      placeholder="उदा. सोशल मीडिया पोस्ट का स्क्रीनशॉट स्पष्ट नहीं है"
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-red-500 rounded-xl p-3 text-xs text-white focus:outline-none"
+                    />
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setRejectingClaimId(null)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                      >
+                        रद्द करें
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessingRewardAction}
+                        onClick={() => handleRejectRewardClaim(rejectingClaimId)}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black rounded-xl shadow-lg cursor-pointer transition active:scale-95 disabled:opacity-50"
+                      >
+                        {isProcessingRewardAction ? 'अस्वीकृत किया जा रहा है...' : 'अस्वीकृत करें'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* STEP 8: RSS लिंक्स डैशबोर्ड (RSS LINKS DASHBOARD)                         */}
         {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rss' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
@@ -2694,11 +3146,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>7</span>
+                <span>8</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  7. RSS लिंक्स डैशबोर्ड
+                  8. RSS लिंक्स डैशबोर्ड
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स प्रबंधन व लाइव स्टेटस
@@ -3064,7 +3516,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 8: वेब लिंक्स मैनेजर (WEB LINKS DASHBOARD)                           */}
+        {/* STEP 9: वेब लिंक्स मैनेजर (WEB LINKS DASHBOARD)                           */}
         {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'web' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
@@ -3074,11 +3526,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>8</span>
+                <span>9</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  8. वेब लिंक्स मैनेजर
+                  9. वेब लिंक्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   वेबसाइट एवं आर्टिकल वेब लिंक्स प्रबंधन व लाइव वेब स्क्रैपिंग
@@ -3363,7 +3815,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 9: प्रतिबंधित चैनल सुरक्षा सूची (RESTRICTED CHANNELS SECURITY LIST) */}
+        {/* STEP 10: प्रतिबंधित चैनल सुरक्षा सूची (RESTRICTED CHANNELS SECURITY LIST) */}
         {/* ========================================================================= */}
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
@@ -3373,11 +3825,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>9</span>
+                <span>10</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  9. प्रतिबंधित चैनल सुरक्षा सूची
+                  10. प्रतिबंधित चैनल सुरक्षा सूची
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति
@@ -3711,7 +4163,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
         {/* ========================================================================= */}
-        {/* STEP 10: सहायता एवं नीतियाँ (HELP & POLICIES)                               */}
+        {/* STEP 11: सहायता एवं नीतियाँ (HELP & POLICIES)                               */}
         {/* ========================================================================= */}
         <div id="section-policies" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
@@ -3721,11 +4173,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>10</span>
+                <span>11</span>
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  10. सहायता एवं नीतियाँ
+                  11. सहायता एवं नीतियाँ
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
