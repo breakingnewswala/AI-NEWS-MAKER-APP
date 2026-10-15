@@ -358,6 +358,9 @@ export interface AIAnalysisResult {
   formattedHeadline: string;
   location: string;
   summary: string;
+  captionDetailed?: string;
+  captionBullets?: string;
+  captionShort?: string;
   anchorScript?: string; // Structured TV anchor script
   categories?: string[]; // Structured category tags
   tags?: string[]; // Social hashtags

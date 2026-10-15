@@ -82,50 +82,99 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const [aiPhotoPrompt, setAiPhotoPrompt] = useState<string>('');
   const [captionCopied, setCaptionCopied] = useState<boolean>(false);
 
-  // Structured 3-paragraph caption formatter with strict hashtag hierarchy: 1st: #${username}, Last: #AINewsMaker
-  const formatFullCaption = (headline: string, location: string, summary: string, sourceUrl?: string) => {
-    const effectiveUrl = sourceUrl || linkUrl || card.websiteUrl || 'ainewsmaker.online';
-    let cleanSummary = (summary || '').trim();
+  // 3 Caption Styles: detailed (3 paragraphs), bullets (bullet points), short (2 paragraphs)
+  const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
+  const isExecutingRef = React.useRef<boolean>(false);
+  const lastTriggerPayloadRef = React.useRef<string>('');
 
+  const normalizeInputUrl = (u: string): string => {
+    const trimmed = (u || '').trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (/^www\./i.test(trimmed) || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(trimmed)) {
+      return `https://${trimmed}`;
+    }
+    return trimmed;
+  };
+
+  // Structured caption formatter supporting 3 distinct styles with strict hashtag hierarchy:
+  // 1st: #${username}, Middle: location & news tags, Last: #AiNewsMaker
+  const formatCaptionByStyle = (
+    style: 'detailed' | 'bullets' | 'short',
+    headline: string,
+    location: string,
+    baseSummary: string,
+    currentRes?: AIAnalysisResult | null,
+    sourceUrl?: string
+  ): string => {
+    if (currentRes) {
+      if (style === 'detailed' && currentRes.captionDetailed) return currentRes.captionDetailed;
+      if (style === 'bullets' && currentRes.captionBullets) return currentRes.captionBullets;
+      if (style === 'short' && currentRes.captionShort) return currentRes.captionShort;
+    }
+
+    const effectiveUrl = sourceUrl || linkUrl || card.websiteUrl || 'ainewsmaker.online';
+    const loc = location || 'मध्य प्रदेश';
     const hashtagRegex = /#[\w\u0900-\u097F]+/g;
-    const existingTags: string[] = cleanSummary.match(hashtagRegex) || [];
-    const textWithoutTags = cleanSummary.replace(hashtagRegex, '').trim();
+    const cleanBody = (baseSummary || '').replace(hashtagRegex, '').trim();
+    const sentences = cleanBody
+      .split(/[।\.\n]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 10);
 
     const cleanUser = card.socialHandle
       ? card.socialHandle.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')
       : (currentUser?.username ? currentUser.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '');
     const userTag = cleanUser ? `#${cleanUser}` : '#AINews';
+    const locTag = loc && loc !== 'विशेष कवरेज' ? `#${loc.replace(/[^\w\u0900-\u097F]/g, '')}News` : '';
+    const middleTags = [locTag, '#BreakingNews', '#HindiNews'].filter(Boolean);
+    const finalTags = [userTag, ...middleTags, '#AiNewsMaker'].join(' ');
 
-    const middleTags = existingTags.filter((t: string) => {
-      const lower = t.toLowerCase();
-      return lower !== '#breakingnewswala' &&
-        lower !== '#bnwtv' &&
-        lower !== '#ainewsmaker' &&
-        lower !== userTag.toLowerCase() &&
-        !lower.startsWith('#http') &&
-        !lower.startsWith('#www') &&
-        !lower.startsWith('#url');
-    });
-
-    if (middleTags.length === 0) {
-      if (location && location !== 'विशेष कवरेज') {
-        const locTag = `#${location.replace(/[^\w\u0900-\u097F]/g, '')}News`;
-        if (locTag.length > 2) middleTags.push(locTag);
-      }
-      middleTags.push('#BreakingNews', '#HindiNews');
+    if (style === 'bullets') {
+      const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
+        `${headline} को लेकर मुख्य घटनाक्रम दर्ज`,
+        `${loc} में प्रशासनिक व पुलिस दल सक्रिय`,
+        `वरिष्ठ अधिकारियों द्वारा आवश्यक दिशा-निर्देश जारी`,
+      ]).map((b) => `• ${b}`);
+      return `📌 मुख्य घटनाक्रम: ${headline}\n📍 स्थान: ${loc}\n\n${bulletItems.join('\n')}\n\nस्थिति पर लगातार नजर रखी जा रही है और अग्रिम कार्रवाई जारी है।\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${finalTags}`;
     }
 
-    const finalTags = [userTag, ...middleTags, '#AINewsMaker'];
-    const uniqueTags = Array.from(new Set(finalTags)).join(' ');
+    if (style === 'short') {
+      const shortP1 = `🚨 ${headline}\n\n📍 स्थान: ${loc}\n\n${sentences[0] || 'घटनाक्रम के बाद प्रशासनिक स्तर पर आवश्यक संज्ञान लिया गया है।'}`;
+      const shortP2 = `${sentences[1] || 'मामले में उत्तरदायी अधिकारियों द्वारा आगे की प्रक्रिया पूरी की जा रही है।'}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${finalTags}`;
+      return `${shortP1}\n\n${shortP2}`;
+    }
 
-    return `🚨 ${headline}\n\n📍 स्थान: ${location || 'मध्य प्रदेश'}\n\n${textWithoutTags}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${uniqueTags}`;
+    // Default: Detailed (3 full paragraphs)
+    const p1 = `🚨 ${headline}\n\n📍 स्थान: ${loc}\n\n${sentences[0] || 'इस महत्वपूर्ण समाचार को लेकर ताजा घटनाक्रम सामने आया है।'}`;
+    const p2 = sentences.slice(1, 3).join('। ') || 'प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।';
+    const p3 = (sentences.slice(3, 5).join('। ') || 'प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है।') + `\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${finalTags}`;
+    return `${p1}\n\n${p2}\n\n${p3}`;
+  };
+
+  const handleSwitchCaptionStyle = (newStyle: 'detailed' | 'bullets' | 'short') => {
+    setCaptionStyle(newStyle);
+    const h = result?.headline || card.headline;
+    const loc = result?.location || card.location || 'मध्य प्रदेश';
+    const newSummary = formatCaptionByStyle(newStyle, h, loc, result?.summary || card.summary || '', result, linkUrl);
+    if (result) {
+      setResult({
+        ...result,
+        summary: newSummary,
+      });
+    }
+    onChange({ summary: newSummary });
   };
 
   const handleCopyCaption = () => {
-    const fullCaption = formatFullCaption(
-      result?.headline || card.headline,
-      result?.location || card.location || 'मध्य प्रदेश',
+    const h = result?.headline || card.headline;
+    const loc = result?.location || card.location || 'मध्य प्रदेश';
+    const fullCaption = formatCaptionByStyle(
+      captionStyle,
+      h,
+      loc,
       result?.summary || card.summary || '',
+      result,
       linkUrl || card.websiteUrl
     );
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -156,7 +205,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       lastProcessedTimeRef.current = autoFillNews.timestamp;
     }
 
-    const effectiveTargetUrl = autoFillNews.url || (autoFillNews.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(autoFillNews.title.slice(0, 30))}` : '');
+    const rawUrl = autoFillNews.url || (autoFillNews.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(autoFillNews.title.slice(0, 30))}` : '');
+    const effectiveTargetUrl = normalizeInputUrl(rawUrl);
     const rawContent = autoFillNews.fullNews || autoFillNews.summary || autoFillNews.title || '';
     
     if (autoFillNews.url) {
@@ -203,7 +253,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         text = await navigator.clipboard.readText();
       }
       if (text && text.trim()) {
-        setLinkUrl(text.trim());
+        setLinkUrl(normalizeInputUrl(text.trim()));
         setError(null);
       } else {
         setError('क्लिपबोर्ड खाली है या अनुमति नहीं है। कृपया लिंक सीधे बॉक्स में पेस्ट करें।');
@@ -236,13 +286,22 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   // Automated execution for Step 2A (when user clicks 'खबर से ग्राफिक बनाएं' in feed)
   const triggerProcessDirectly = async (url: string, rawText: string, extraData?: AutoFillNewsData) => {
-    let effectiveLink = url.trim();
+    let effectiveLink = normalizeInputUrl(url);
     let effectiveText = rawText.trim();
 
     if (effectiveLink && !effectiveLink.startsWith('http://') && !effectiveLink.startsWith('https://')) {
       effectiveText = effectiveLink;
       effectiveLink = '';
     }
+
+    const payloadKey = `${effectiveLink}|${effectiveText}|${extraData?.timestamp || ''}`;
+    if (isExecutingRef.current) return;
+    if (lastTriggerPayloadRef.current === payloadKey && Date.now() - lastProcessedTimeRef.current < 2500) {
+      return;
+    }
+    isExecutingRef.current = true;
+    lastTriggerPayloadRef.current = payloadKey;
+    lastProcessedTimeRef.current = Date.now();
 
     setLoading(true);
     setError(null);
@@ -271,7 +330,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setHeadlineOptions([
         immediateHeadline,
         immediateSummary ? immediateSummary.slice(0, 90) : immediateHeadline,
-        `${immediateLocation}: ${immediateHeadline}`
+        `${immediateLocation}: ${immediateHeadline}`,
+        `${immediateHeadline} पर ताजा अपडेट व विश्लेषण`
       ]);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!immediateImage);
@@ -291,6 +351,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           linkUrl: effectiveLink || undefined,
           customPrompt: customPrompt.trim() || undefined,
           aiProvider,
+          channelUsername: card.socialHandle || currentUser?.username || undefined,
           template_id: tplConfig.template_id,
           headline_line_count: targetMaxLines,
           headline_max_lines: targetMaxLines,
@@ -359,12 +420,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           : (extraData?.imageUrl || card.images.main)
       );
 
+      const effectiveCaption = formatCaptionByStyle(
+        captionStyle,
+        finalHeadline,
+        finalLoc,
+        res.summary || extraData?.summary || '',
+        res,
+        effectiveLink || url
+      );
+
       onChange({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
         highlightWords: res.highlightWords || [],
         location: finalLoc,
-        summary: res.summary || extraData?.summary || card.summary,
+        summary: effectiveCaption,
         images: {
           ...card.images,
           main: finalImage,
@@ -372,9 +442,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         },
       });
 
-      const captionText = formatFullCaption(finalHeadline, finalLoc, res.summary || extraData?.summary || '', effectiveLink || url);
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(captionText).catch(() => {});
+        navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
     } catch (err: any) {
       console.warn('API error, executing client AI fallback:', err);
@@ -416,31 +485,41 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         ? extraData.imageUrl
         : (card.images.main || extraData?.imageUrl || '');
 
+      const effectiveCaption = formatCaptionByStyle(
+        captionStyle,
+        finalHeadline,
+        finalLoc,
+        fallbackResult.summary || extraData?.summary || '',
+        fallbackResult,
+        effectiveLink || url
+      );
+
       onChange({
         headline: finalHeadline,
         formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
         highlightWords: fallbackResult.highlightWords || [],
         location: finalLoc,
-        summary: fallbackResult.summary || extraData?.summary || card.summary,
+        summary: effectiveCaption,
         images: {
           ...card.images,
           main: finalImage,
         },
       });
 
-      const captionText = formatFullCaption(finalHeadline, finalLoc, fallbackResult.summary || extraData?.summary || '', effectiveLink || url);
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(captionText).catch(() => {});
+        navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
     } finally {
       setLoading(false);
+      isExecutingRef.current = false;
     }
   };
 
   // Main AI Process
   const handleProcess = async () => {
+    if (isExecutingRef.current) return;
     const isLinkMode = activeTab === 'link';
-    let effectiveLink = isLinkMode ? linkUrl.trim() : '';
+    let effectiveLink = isLinkMode ? normalizeInputUrl(linkUrl) : '';
     let effectiveText = !isLinkMode ? inputText.trim() : '';
     const rawPrompt = customPrompt.trim();
 
@@ -451,7 +530,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
     }
 
-    // Fallback: If no link and no main text, but user provided prompt in prompt box
     if (!effectiveLink && !effectiveText && rawPrompt) {
       effectiveText = rawPrompt;
     }
@@ -461,6 +539,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       return;
     }
 
+    isExecutingRef.current = true;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -481,6 +560,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           linkUrl: effectiveLink || undefined,
           customPrompt: (customPrompt.trim() ? customPrompt.trim() + ' ' : '') + `(सख्ती से अधिकतम ${targetMaxLines} लाइन हेडलाइन)`,
           aiProvider,
+          channelUsername: card.socialHandle || currentUser?.username || undefined,
           template_id: tplConfig.template_id,
           headline_line_count: targetMaxLines,
           headline_max_lines: targetMaxLines,
@@ -511,25 +591,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 3 && res.summary) {
-        const s = cleanHeadlineText(res.summary.slice(0, 90));
-        if (s && !opts.includes(s)) opts.push(s);
+      if (opts.length < 4) {
+        if (res.summary) {
+          const s = cleanHeadlineText(res.summary.slice(0, 90));
+          if (s && !opts.includes(s)) opts.push(s);
+        }
+        if (res.location && res.headline) {
+          const locOpt = cleanHeadlineText(`${res.location}: ${res.headline}`);
+          if (locOpt && !opts.includes(locOpt)) opts.push(locOpt);
+        }
       }
-      setHeadlineOptions(opts);
+      setHeadlineOptions(opts.slice(0, 4));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main);
 
-      // Auto-apply to Card so user sees result immediately in Preview
       const finalHeadline = cleanHeadlineText(opts[0] || res.headline || card.headline);
       const finalLoc = res.location || card.location || 'विशेष कवरेज';
       const finalImage = res.pickedImages?.main || card.images.main;
+
+      const effectiveCaption = formatCaptionByStyle(
+        captionStyle,
+        finalHeadline,
+        finalLoc,
+        res.summary || '',
+        res,
+        effectiveLink
+      );
 
       onChange({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
         highlightWords: res.highlightWords || [],
         location: finalLoc,
-        summary: res.summary || card.summary,
+        summary: effectiveCaption,
         images: {
           ...card.images,
           main: finalImage,
@@ -537,15 +631,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         },
       });
 
-      // Auto-copy social media caption to clipboard
-      const captionText = formatFullCaption(finalHeadline, finalLoc, res.summary || '', effectiveLink);
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(captionText).catch(() => {});
+        navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
     } catch (err: any) {
       console.warn('API error, executing client AI fallback:', err);
       try {
-        // Reliable offline / local fallback with strict template capacity
         const fallbackResult = processNewsLocally(
           effectiveText || effectiveLink,
           effectiveLink || undefined,
@@ -563,7 +654,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           const cleanMain = cleanHeadlineText(fallbackResult.headline);
           if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
         }
-        if (opts.length < 3) {
+        if (opts.length < 4) {
           if (fallbackResult.summary) {
             opts.push(cleanHeadlineText(fallbackResult.summary.slice(0, 90)));
           }
@@ -571,30 +662,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
 
         setResult(fallbackResult);
-        setHeadlineOptions(opts);
+        setHeadlineOptions(opts.slice(0, 4));
         setSelectedHeadlineIndex(0);
         setUseWebsitePhoto(false);
 
         const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || card.headline);
         const finalLoc = fallbackResult.location || card.location || 'विशेष कवरेज';
 
+        const effectiveCaption = formatCaptionByStyle(
+          captionStyle,
+          finalHeadline,
+          finalLoc,
+          fallbackResult.summary || '',
+          fallbackResult,
+          effectiveLink
+        );
+
         onChange({
           headline: finalHeadline,
           formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
           highlightWords: fallbackResult.highlightWords || [],
           location: finalLoc,
-          summary: fallbackResult.summary || card.summary,
+          summary: effectiveCaption,
         });
 
-        const captionText = formatFullCaption(finalHeadline, finalLoc, fallbackResult.summary || '', effectiveLink);
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(captionText).catch(() => {});
+          navigator.clipboard.writeText(effectiveCaption).catch(() => {});
         }
       } catch {
         setError('खबर की जानकारी प्राप्त नहीं हो सकी। कृपया लिंक जाँचें या खबर का टेक्स्ट पेस्ट करें।');
       }
     } finally {
       setLoading(false);
+      isExecutingRef.current = false;
     }
   };
 
@@ -984,9 +1084,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           {/* Headline Options */}
           {headlineOptions.length > 0 && (
             <div className="space-y-1.5">
-              <span className="text-[11px] text-neutral-400 font-bold">पसंदीदा हेडलाइन पर क्लिक करें:</span>
+              <span className="text-[11px] text-neutral-400 font-bold">4 हेडलाइन विकल्प (पसंदीदा पर क्लिक करें):</span>
               {headlineOptions.map((opt, idx) => {
                 const isSelected = selectedHeadlineIndex === idx;
+                const styleNames = ['#1 ब्रेकिंग स्टाइल', '#2 तथ्यात्मक', '#3 एक्शन/फैसला', '#4 जनसरोकार'];
+                const badgeLabel = styleNames[idx] || `#${idx + 1}`;
                 return (
                   <div
                     key={idx}
@@ -998,11 +1100,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                     }`}
                   >
                     <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0 mt-0.5 ${
+                      className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold shrink-0 mt-0.5 whitespace-nowrap ${
                         isSelected ? 'bg-yellow-400 text-neutral-950' : 'bg-neutral-800 text-neutral-400'
                       }`}
                     >
-                      #{idx + 1}
+                      {badgeLabel}
                     </span>
                     <span className="flex-1 leading-snug">{opt}</span>
                     {isSelected && <Check className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />}
@@ -1057,13 +1159,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* AI Generated 3-Paragraph Social Media Caption / Summary */}
-          <div className="p-3 bg-neutral-900/90 rounded-xl border border-neutral-800 space-y-2">
-            <div className="flex items-center justify-between">
+          {/* AI Generated Social Media Caption with 3 Style Switchers */}
+          <div className="p-3 bg-neutral-900/90 rounded-xl border border-neutral-800 space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 text-blue-400" />
                 <span className="text-xs font-bold text-neutral-200">
-                  सोशल मीडिया कैप्शन (3 पैराग्राफ):
+                  सोशल मीडिया कैप्शन:
                 </span>
               </div>
               <button
@@ -1077,7 +1179,44 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 title="सोशल मीडिया कैप्शन कॉपी करें"
               >
                 {captionCopied ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
-                <span>{captionCopied ? 'कैप्शन कॉपी हो गया!' : 'कॉपी करें'}</span>
+                <span>{captionCopied ? 'कैप्शन कॉपी हो गया!' : 'कैप्शन कॉपी'}</span>
+              </button>
+            </div>
+
+            {/* 3 Caption Style Buttons */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-neutral-950 rounded-lg border border-neutral-800">
+              <button
+                type="button"
+                onClick={() => handleSwitchCaptionStyle('detailed')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-bold transition-all cursor-pointer text-center ${
+                  captionStyle === 'detailed'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+                }`}
+              >
+                विस्तृत (3 पैराग्राफ)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchCaptionStyle('bullets')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-bold transition-all cursor-pointer text-center ${
+                  captionStyle === 'bullets'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+                }`}
+              >
+                बुलेट पॉइंट्स
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchCaptionStyle('short')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-bold transition-all cursor-pointer text-center ${
+                  captionStyle === 'short'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+                }`}
+              >
+                संक्षिप्त (2 पैराग्राफ)
               </button>
             </div>
 
@@ -1089,13 +1228,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 setResult((prev) => (prev ? { ...prev, summary: val } : null));
                 onChange({ summary: val });
               }}
-              placeholder="3 पैराग्राफ का विस्तृत समाचार विवरण यहाँ आएगा..."
+              placeholder="कैप्शन विवरण यहाँ आएगा..."
               className="w-full bg-neutral-950 border border-neutral-700/80 rounded-lg p-2.5 text-xs text-neutral-200 focus:border-blue-400 focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed"
             />
 
             <div className="flex items-center justify-between text-[11px] text-neutral-400">
               <span className="leading-tight">
-                💡 3 पैराग्राफ (घटना, पृष्ठभूमि, व कार्रवाई) + #${card.socialHandle || 'Username'} ... #AINewsMaker
+                💡 {captionStyle === 'detailed' ? 'स्टाइल 1: 3 विस्तृत पैराग्राफ' : captionStyle === 'bullets' ? 'स्टाइल 2: मुख्य बुलेट पॉइंट्स' : 'स्टाइल 3: 2 संक्षिप्त पैराग्राफ'} + #{card.socialHandle || currentUser?.username || 'Username'} ... #AiNewsMaker
               </span>
               {captionCopied && (
                 <span className="text-emerald-400 font-bold animate-in fade-in">

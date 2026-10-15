@@ -5634,7 +5634,7 @@ function getHeadlineLines(
 
   const parseTokensFromChunk = (chunk: string): WordToken[] => {
     const tokens: WordToken[] = [];
-    const yellowRegex = /\[yellow\](.*?)\[\/yellow\]/g;
+    const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/g;
     let lastIndex = 0;
     let match;
 

@@ -252,7 +252,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const raw = cleanHeadlineText(rawUncleaned);
 
     const parseLineParts = (textChunk: string) => {
-      const yellowRegex = /\[yellow\](.*?)\[\/yellow\]/g;
+      const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/g;
       const parts: { text: string; isYellow: boolean }[] = [];
       let lastIndex = 0;
       let match;
