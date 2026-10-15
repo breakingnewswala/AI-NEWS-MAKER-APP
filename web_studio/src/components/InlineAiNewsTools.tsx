@@ -22,7 +22,7 @@ import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
-import { cleanHeadlineText } from '../lib/speakerUtils';
+import { cleanHeadlineText, cleanLocationField, cleanCategoryField } from '../lib/speakerUtils';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
 
@@ -336,11 +336,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         extractedArticlePhotos: extraPhotos.length > 0 ? extraPhotos : card.extractedArticlePhotos,
       });
 
+      const baseImmediate = cleanHeadlineText(immediateHeadline);
       setHeadlineOptions([
-        immediateHeadline,
-        immediateSummary ? immediateSummary.slice(0, 90) : immediateHeadline,
-        `${immediateLocation}: ${immediateHeadline}`,
-        `${immediateHeadline} पर ताजा अपडेट व विश्लेषण`
+        baseImmediate,
+        cleanHeadlineText(`${baseImmediate}: मुख्य तथ्यों का पूरा विवरण`),
+        cleanHeadlineText(`मामले में त्वरित संज्ञान, अग्रिम दिशा-निर्देश व जांच जारी`),
+        cleanHeadlineText(`${baseImmediate}: आम जनजीवन पर असर और परिणाम`),
       ]);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!immediateImage);
@@ -358,6 +359,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         body: JSON.stringify({
           input: effectiveText || extraData?.title || undefined,
           linkUrl: effectiveLink || undefined,
+          imageUrl: extraData?.imageUrl || card.images.main || undefined,
           customPrompt: customPrompt.trim() || undefined,
           aiProvider,
           channelUsername: card.socialHandle || currentUser?.username || undefined,
@@ -378,6 +380,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const res: AIAnalysisResult = data.data;
       if (res.headline) res.headline = cleanHeadlineText(res.headline);
       if (res.formattedHeadline) res.formattedHeadline = cleanHeadlineText(res.formattedHeadline);
+      if (res.location) res.location = cleanLocationField(res.location);
+      if (res.category) res.category = cleanCategoryField(res.category);
       setResult(res);
 
       const opts: string[] = [];
@@ -392,17 +396,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
       if (opts.length < 4) {
-        if (extraData?.title) {
-          const t = cleanHeadlineText(extraData.title);
-          if (t && !opts.includes(t)) opts.push(t);
-        }
-        if (res.summary) {
-          const s = cleanHeadlineText(res.summary.slice(0, 90));
-          if (s && !opts.includes(s)) opts.push(s);
-        }
-        if (res.location && res.headline) {
-          const locOpt = cleanHeadlineText(`${res.location}: ${res.headline}`);
-          if (locOpt && !opts.includes(locOpt)) opts.push(locOpt);
+        const baseH = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
+        const standardOptions = [
+          baseH,
+          cleanHeadlineText(`${baseH}: मुख्य तथ्यों का विस्तृत ब्योरा`),
+          cleanHeadlineText(`मामले को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी`),
+          cleanHeadlineText(`${baseH}: आम जनता पर असर और आगामी परिणाम`),
+        ];
+        for (const sOpt of standardOptions) {
+          if (!opts.includes(sOpt) && opts.length < 4) {
+            opts.push(sOpt);
+          }
         }
       }
       setHeadlineOptions(opts.slice(0, 4));
@@ -410,18 +414,18 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(opts[0] || res.headline || extraData?.title || card.headline);
-      const finalLoc = res.location || extraData?.location || card.location || 'विशेष कवरेज';
+      const finalLoc = cleanLocationField(res.location || extraData?.location || card.location || 'विशेष कवरेज');
       const safeProxy = (u?: string) => {
         if (!u || !u.trim()) return '';
         const trimmed = u.trim();
-        if (trimmed.startsWith('/api/proxy-image')) {
+        if (trimmed.includes('/api/proxy-image')) {
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
           return getApiUrl(trimmed);
         }
         if (
           (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
           typeof window !== 'undefined' &&
-          !trimmed.startsWith(window.location.origin) &&
-          !trimmed.includes('/api/proxy-image')
+          !trimmed.startsWith(window.location.origin)
         ) {
           return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
         }
@@ -504,13 +508,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
       if (opts.length < 4) {
-        if (fallbackResult.summary) {
-          opts.push(cleanHeadlineText(fallbackResult.summary.slice(0, 90)));
-        }
-        opts.push(`${fallbackResult.location}: ${fallbackResult.headline}`);
-        if (opts.length < 4 && extraData?.title) {
-          const t = cleanHeadlineText(extraData.title);
-          if (t && !opts.includes(t)) opts.push(t);
+        const baseH = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || 'ताज़ा समाचार');
+        const standardOptions = [
+          baseH,
+          cleanHeadlineText(`${baseH}: मुख्य तथ्यों का विस्तृत ब्योरा`),
+          cleanHeadlineText(`मामले को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी`),
+          cleanHeadlineText(`${baseH}: आम जनता पर असर और आगामी परिणाम`),
+        ];
+        for (const sOpt of standardOptions) {
+          if (!opts.includes(sOpt) && opts.length < 4) {
+            opts.push(sOpt);
+          }
         }
       }
 
@@ -520,7 +528,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || card.headline);
-      const finalLoc = fallbackResult.location || extraData?.location || card.location || 'विशेष कवरेज';
+      const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || card.location || 'विशेष कवरेज');
       const finalImage = (extraData?.imageUrl && !extraData.imageUrl.includes('placeholder'))
         ? extraData.imageUrl
         : (card.images.main || extraData?.imageUrl || '');

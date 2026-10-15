@@ -2164,13 +2164,13 @@ export default function App() {
                     </div>
 
                     {/* Action Bar below Preview: 4 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
-                      {/* 1. JPG डाउनलोड */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
+                      {/* 1. JPG डाउनलोड - Priority Action */}
                       <button
                         type="button"
                         onClick={() => handleDownload('jpeg')}
                         disabled={downloading || isActionLocked}
-                        className={`py-2.5 px-2 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                        className={`flex-[1.4] min-w-[110px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
                           isActionLocked
                             ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
                             : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
@@ -2178,7 +2178,7 @@ export default function App() {
                         title={isActionLocked ? 'ट्रायल समाप्त — डाउनलोड लॉक' : 'कार्ड को HD JPG इमेज में डाउनलोड करें'}
                       >
                         {isActionLocked ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />}
-                        <span className="truncate">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
+                        <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
                       </button>
 
                       {/* 2. कैप्शन */}
@@ -2193,7 +2193,7 @@ export default function App() {
                           }
                         }}
                         disabled={isActionLocked}
-                        className={`py-2.5 px-2 font-bold text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                        className={`flex-1 min-w-[70px] py-2 sm:py-2.5 px-1.5 sm:px-2 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1 transition-all active:scale-95 whitespace-nowrap ${
                           isActionLocked
                             ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
                             : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
@@ -2201,29 +2201,29 @@ export default function App() {
                         title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन और शेयर'}
                       >
                         {isActionLocked ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />}
-                        <span className="truncate">कैप्शन</span>
+                        <span className="whitespace-nowrap">कैप्शन</span>
                       </button>
 
                       {/* 3. ड्राफ्ट */}
                       <button
                         type="button"
                         onClick={handleSaveCurrentCardAsDraft}
-                        className="py-2.5 px-2 bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="flex-1 min-w-[65px] py-2 sm:py-2.5 px-1.5 sm:px-2 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
                         title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
                       >
                         <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                        <span className="truncate">ड्राफ्ट</span>
+                        <span className="whitespace-nowrap">ड्राफ्ट</span>
                       </button>
 
                       {/* 4. रिफ्रेश */}
                       <button
                         type="button"
                         onClick={handleResetCard}
-                        className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className="flex-1 min-w-[65px] py-2 sm:py-2.5 px-1.5 sm:px-2 bg-neutral-800 hover:bg-neutral-700 text-white font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
                         title="कार्ड रीसेट करें"
                       >
                         <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                        <span>रिफ्रेश</span>
+                        <span className="whitespace-nowrap">रिफ्रेश</span>
                       </button>
                     </div>
 

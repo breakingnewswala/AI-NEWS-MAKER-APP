@@ -68,20 +68,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const getProxiedImageUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
+    if (trimmed.includes('/api/proxy-image')) {
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+      return getApiUrl(trimmed);
+    }
     if (
       trimmed.startsWith('http://') ||
       trimmed.startsWith('https://')
     ) {
       if (
         typeof window !== 'undefined' &&
-        !trimmed.startsWith(window.location.origin) &&
-        !trimmed.startsWith('/api/proxy-image')
+        !trimmed.startsWith(window.location.origin)
       ) {
         return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
       }
-    }
-    if (trimmed.startsWith('/api/proxy-image')) {
-      return getApiUrl(trimmed);
     }
     return trimmed;
   };

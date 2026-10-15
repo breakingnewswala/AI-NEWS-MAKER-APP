@@ -4203,9 +4203,15 @@ app.get("/privacy/delete-account", serveAccountDeletionHtml);
 // Image proxy endpoint to bypass CORS when loading news site images onto HTML5 Canvas
 app.get("/api/proxy-image", async (req, res) => {
   try {
-    const imageUrl = req.query.url as string;
+    let imageUrl = req.query.url as string;
     if (!imageUrl) {
       return res.status(400).send("Missing url parameter");
+    }
+
+    // Unwrap any recursive or nested proxy calls
+    while (imageUrl.includes("/api/proxy-image?url=")) {
+      const parts = imageUrl.split("/api/proxy-image?url=");
+      imageUrl = decodeURIComponent(parts[parts.length - 1]);
     }
 
     const response = await fetch(imageUrl, {
@@ -4686,7 +4692,12 @@ function parseArticleHtml(html: string, pageUrl: string): {
   const extractedParagraphs: string[] = [];
 
   for (const pMatch of pMatches) {
-    const pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
+    let pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
+    pClean = pClean
+      .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
+      .replace(/(?:loading[\s\.]*)+/gi, "")
+      .replace(/(?:please wait[\s\.]*)+/gi, "")
+      .trim();
     if (pClean.length > 30 && !extractedParagraphs.includes(pClean)) {
       if (
         !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved/i.test(pClean)
@@ -4698,6 +4709,11 @@ function parseArticleHtml(html: string, pageUrl: string): {
   }
 
   let bodyContent = extractedParagraphs.join("\n\n");
+  bodyContent = bodyContent
+    .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
+    .replace(/(?:loading[\s\.]*)+/gi, "")
+    .replace(/(?:please wait[\s\.]*)+/gi, "")
+    .trim();
 
   // 4. Images: og:image, twitter:image, JSON-LD, body <img>
   const foundImages: string[] = [];
@@ -4771,12 +4787,13 @@ function parseArticleHtml(html: string, pageUrl: string): {
 
 // Fetch URL handling both RSS/XML Feeds and Standard Web Articles
 async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleResult | null> {
-  const safety = isSafePublicUrl(rawUrl);
+  const normalizedRawUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
+  const safety = isSafePublicUrl(normalizedRawUrl);
   if (!safety.safe) {
     throw new Error(safety.error || "सुरक्षा कारणों से यह URL प्रोसेस नहीं किया जा सकता।");
   }
 
-  const response = await fetch(rawUrl, {
+  const response = await fetch(normalizedRawUrl, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -4790,7 +4807,7 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
     throw new Error(`वेबसाइट से रिस्पॉन्स प्राप्त नहीं हुआ (HTTP ${response.status})।`);
   }
 
-  const finalRedirectedUrl = response.url || rawUrl;
+  const finalRedirectedUrl = response.url || normalizedRawUrl;
   const redirectSafety = isSafePublicUrl(finalRedirectedUrl);
   if (!redirectSafety.safe) {
     throw new Error("पुनर्निर्देशित (Redirected) URL सुरक्षा कारणों से अमान्य है।");
@@ -4823,7 +4840,7 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
       let itemLink = (lMatch ? (lMatch[1] || lMatch[2] || lMatch[3] || "") : "").trim();
 
       if (itemLink) {
-        itemLink = resolveUrl(itemLink, finalRedirectedUrl);
+        itemLink = resolveUrl(cleanHtmlEntities(itemLink).replace(/&amp;/g, "&"), finalRedirectedUrl);
       }
 
       // Description / Summary
@@ -5029,9 +5046,9 @@ function createLocalNewsFallback(
   let detectedLocation = "विशेष कवरेज";
 
   if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
-    detectedLocation = "अंतरराष्ट्रीय / वाशिंगटन";
+    detectedLocation = "वाशिंगटन";
   } else if (/संसद|सुप्रीम कोर्ट|नई दिल्ली|केंद्र सरकार|राष्ट्रपति भवन|निर्वाचन आयोग|आरबीआई|भारत सरकार|राजधानी दिल्ली|national/i.test(fullCorpus)) {
-    detectedLocation = "नई दिल्ली / राष्ट्रीय";
+    detectedLocation = "नई दिल्ली";
   } else {
     const indianLocations = [
       "शहडोल", "रीवा", "सीधी", "सतना", "भोपाल", "इंदौर", "जबलपुर", "ग्वालियर", "उज्जैन",
@@ -5048,55 +5065,56 @@ function createLocalNewsFallback(
     }
   }
 
+  detectedLocation = cleanLocationField(detectedLocation);
+
   // 4. Detect Category
-  let category = "ताज़ा ख़बर";
+  let category = "ताज़ा समाचार";
   const categories: string[] = ["ताज़ा"];
   if (/आईटी|टेक|ग्रीन कार्ड|वीजा|कंपनियों|टाटा|विप्रो|इंफोसिस|शेयर|बाजार|सेंसेक्स|अर्थव्यवस्था|बैंक|रुपया|डॉलर|कारोबार|tech|business/i.test(fullCorpus)) {
-    category = "कारोबार / टेक";
+    category = "कारोबार";
     categories.push("बिजनेस", "वैश्विक बाजार");
   } else if (/हादसा|दुर्घटना|टक्कर|पलटी|घायल|मौत|accident/i.test(fullCorpus)) {
     category = "हादसा";
     categories.push("हादसा", "सड़क सुरक्षा");
   } else if (/अपराध|गिरफ्तार|पुलिस|हत्या|चोरी|रेड|धोखाधड़ी|crime/i.test(fullCorpus)) {
-    category = "क्राइम";
+    category = "अपराध";
     categories.push("अपराध", "पुलिस कार्रवाई");
   } else if (/राजनीति|चुनाव|कांग्रेस|बीजेपी|भाजपा|संसद|विधानसभा|politics/i.test(fullCorpus)) {
-    category = "सियासत";
+    category = "राजनीति";
     categories.push("राजनीति", "राष्ट्रीय");
   } else if (/अंतरराष्ट्रीय|अमेरिका|ट्रम्प|रूस|युद्ध|international/i.test(fullCorpus)) {
-    category = "विदेश";
+    category = "अंतरराष्ट्रीय";
     categories.push("अंतरराष्ट्रीय", "वैश्विक अपडेट");
   } else {
-    categories.push("ताज़ा समाचार", detectedLocation);
+    category = detectedLocation === "नई दिल्ली" ? "राष्ट्रीय" : "ताज़ा समाचार";
+    categories.push("ताज़ा समाचार");
   }
+
+  category = cleanCategoryField(category);
 
   // 5. Build exactly 4 distinct headline options matching required styles:
   // 1: Breaking Style, 2: Factual Style, 3: Action/Decision Style, 4: Public Impact Style
-  const baseTitle = extractedTitle || (extractedDesc ? extractedDesc.slice(0, 70) : "महत्वपूर्ण समाचार");
+  const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.slice(0, 70)) : "महत्वपूर्ण समाचार");
   const baseDesc = extractedDesc || "";
   const baseContent = extractedContent || "";
 
-  const style1Breaking = sanitizePressNoteFlattery(
+  const style1Breaking = cleanHeadlineText(
     baseTitle && !isInvalidUrlHeadline(baseTitle)
       ? baseTitle
-      : `${detectedLocation !== "विशेष कवरेज" ? `${detectedLocation}: ` : ""}बड़ी घटना से मचा हड़कंप, प्रशासनिक अमला अलर्ट`
-  ).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+      : "बड़ी घटना से मचा हड़कंप, प्रशासनिक अमला अलर्ट"
+  );
 
   let style2Factual = "";
   if (baseDesc && baseDesc.length > 20) {
     const firstSentence = baseDesc.split(/[।\.\!\?]/)[0].trim();
     if (firstSentence && firstSentence.length > 15) {
-      style2Factual = sanitizePressNoteFlattery(
-        detectedLocation !== "विशेष कवरेज" && !firstSentence.includes(detectedLocation)
-          ? `${detectedLocation}: ${firstSentence}`
-          : firstSentence
-      );
+      style2Factual = sanitizePressNoteFlattery(firstSentence);
     }
   }
   if (!style2Factual || style2Factual === style1Breaking) {
     style2Factual = sanitizePressNoteFlattery(`${baseTitle}: मुख्य तथ्यों और घटनाक्रम का विस्तृत ब्योरा`);
   }
-  style2Factual = style2Factual.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  style2Factual = cleanHeadlineText(style2Factual);
 
   let style3Action = "";
   if (baseContent && baseContent.length > 30) {
@@ -5106,13 +5124,9 @@ function createLocalNewsFallback(
     }
   }
   if (!style3Action || style3Action === style1Breaking || style3Action === style2Factual) {
-    style3Action = sanitizePressNoteFlattery(
-      detectedLocation !== "विशेष कवरेज"
-        ? `${detectedLocation}: मामले में तत्काल संज्ञान, जांच व अग्रिम कार्रवाई के आदेश`
-        : "मामले में उत्तरदायी अधिकारियों का कड़ा फैसला, जांच के दिए निर्देश"
-    );
+    style3Action = sanitizePressNoteFlattery("मामले में उत्तरदायी अधिकारियों का कड़ा फैसला, जांच के दिए निर्देश");
   }
-  style3Action = style3Action.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  style3Action = cleanHeadlineText(style3Action);
 
   let style4PublicImpact = "";
   if (baseDesc && baseDesc.includes("।")) {
@@ -5124,14 +5138,16 @@ function createLocalNewsFallback(
   if (!style4PublicImpact || style4PublicImpact === style1Breaking || style4PublicImpact === style2Factual || style4PublicImpact === style3Action) {
     style4PublicImpact = sanitizePressNoteFlattery(`${baseTitle}: आम जनता पर असर और आगामी परिणाम`);
   }
-  style4PublicImpact = style4PublicImpact.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  style4PublicImpact = cleanHeadlineText(style4PublicImpact);
 
-  const headlineOptions = [
+  const rawOptions = [
     style1Breaking,
     style2Factual,
     style3Action,
     style4PublicImpact,
   ];
+
+  const headlineOptions = rawOptions.map((h) => cleanHeadlineText(h)).filter(Boolean);
 
   const headline = headlineOptions[0];
 
@@ -5472,6 +5488,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     input,
     command,
     linkUrl,
+    imageUrl,
     customPrompt,
     template_id,
     headline_max_lines,
@@ -5566,6 +5583,13 @@ Source URL: ${extracted.sourceUrl || normalizedUrl}
         // Not a URL: treat as raw news text / script!
         effectiveInput = effectiveInput ? `${effectiveInput}\n\n${rawLink}` : rawLink;
       }
+    }
+
+    if (!pickedImages.main && imageUrl && typeof imageUrl === "string" && imageUrl.trim()) {
+      const trimmed = imageUrl.trim();
+      pickedImages.main = trimmed.includes("/api/proxy-image")
+        ? trimmed
+        : `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
     }
 
     const channelUsername = (req.body.channelUsername || req.body.username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
@@ -5791,19 +5815,20 @@ JSON Schema:
         parsedData.pickedImages.fourth = pickedImages.fourth;
       }
 
+      parsedData.location = cleanLocationField(parsedData.location || "विशेष कवरेज");
+      parsedData.category = cleanCategoryField(parsedData.category || "ताज़ा समाचार");
+
       if (!parsedData.headline || isInvalidUrlHeadline(parsedData.headline)) {
-        parsedData.headline = parsedData.location && parsedData.location !== "विशेष कवरेज"
-          ? `${parsedData.location}: मामले को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी`
-          : "महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी";
+        parsedData.headline = "महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी";
       } else {
-        parsedData.headline = sanitizePressNoteFlattery(parsedData.headline).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+        parsedData.headline = cleanHeadlineText(parsedData.headline);
       }
 
       // Guarantee exactly 4 distinct headline options
       const cleanOptions: string[] = [];
       if (Array.isArray(parsedData.headlineOptions)) {
         for (const h of parsedData.headlineOptions) {
-          const s = sanitizePressNoteFlattery(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+          const s = cleanHeadlineText(String(h || ""));
           if (s && !isInvalidUrlHeadline(s) && !cleanOptions.includes(s)) {
             cleanOptions.push(s);
           }
@@ -5823,18 +5848,19 @@ JSON Schema:
           channelUsername
         );
         for (const fbOpt of fallbackObj.headlineOptions) {
-          if (!cleanOptions.includes(fbOpt) && cleanOptions.length < 4) {
-            cleanOptions.push(fbOpt);
+          const cleanFb = cleanHeadlineText(fbOpt);
+          if (cleanFb && !cleanOptions.includes(cleanFb) && cleanOptions.length < 4) {
+            cleanOptions.push(cleanFb);
           }
         }
       }
-      parsedData.headlineOptions = cleanOptions.slice(0, 4);
+      parsedData.headlineOptions = cleanOptions.map((h) => cleanHeadlineText(h)).slice(0, 4);
 
       if (parsedData.formattedHeadline) {
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {
           parsedData.formattedHeadline = parsedData.headline;
         } else {
-          parsedData.formattedHeadline = sanitizePressNoteFlattery(parsedData.formattedHeadline).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+          parsedData.formattedHeadline = cleanHeadlineText(parsedData.formattedHeadline);
         }
       } else {
         parsedData.formattedHeadline = parsedData.headline;
@@ -5904,13 +5930,94 @@ JSON Schema:
   }
 });
 
+const CATEGORY_KEYWORDS_LIST = [
+  "राष्ट्रीय",
+  "अंतरराष्ट्रीय",
+  "विदेश",
+  "अपराध",
+  "क्राइम",
+  "सियासत",
+  "राजनीति",
+  "हादसा",
+  "प्रशासन",
+  "विकास",
+  "बिजनेस",
+  "कारोबार",
+  "टेक",
+  "विशेष कवरेज",
+  "ताज़ा ख़बर",
+  "ताज़ा समाचार",
+  "ताज़ा",
+];
+
 function cleanHeadlineText(text: string): string {
   if (!text) return "";
-  let cleaned = text
+  let cleaned = text;
+
+  // 1. Remove UI status / loading text
+  cleaned = cleaned
+    .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
+    .replace(/(?:loading[\s\.]*)+/gi, "")
+    .replace(/(?:please wait[\s\.]*)+/gi, "")
+    .replace(/(?:generating[\s\.]*)+/gi, "")
+    .replace(/(?:ai is processing[\s\.]*)+/gi, "");
+
+  // 2. Remove editorial fluff prefixes
+  cleaned = cleaned
     .replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "")
     .trim();
+
+  // 3. Remove prepended location or category label tags with colons/hyphens
+  cleaned = cleaned
+    .replace(/^(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|नई\s*दिल्ली|भोपाल|इंदौर|रीवा|जबलपुर|ग्वालियर|लखनऊ|पटना|जयपुर|रायपुर|वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय|विदेश|अपराध|क्राइम|सियासत|राजनीति|हादसा|प्रशासन|विकास|बिजनेस|कारोबार|विशेष\s*कवरेज|ताज़ा\s*समाचार|ताज़ा\s*ख़बर)\s*[:\-–—]\s*/i, "")
+    .trim();
+
+  // 4. Remove appended category/location tags at the end of headlines
+  cleaned = cleaned
+    .replace(/\s*[:\-–—]?\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i, "")
+    .trim();
+
+  // 5. Strip trailing punctuation repeatedly
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+
+  // 6. Clean up multiple spaces
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
+
   return cleaned;
+}
+
+function cleanLocationField(loc: string): string {
+  if (!loc) return "";
+  let cleaned = loc
+    .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, "")
+    .trim();
+
+  const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
+  const locationParts = parts.filter((p) => !CATEGORY_KEYWORDS_LIST.some((cat) => cat.toLowerCase() === p.toLowerCase()));
+
+  if (locationParts.length > 0) {
+    cleaned = locationParts.join(", ");
+  } else {
+    cleaned = "विशेष कवरेज";
+  }
+
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
+  return cleaned;
+}
+
+function cleanCategoryField(cat: string): string {
+  if (!cat) return "ताज़ा समाचार";
+  let cleaned = cat
+    .replace(/^(श्रेणी\s*[:\-–—]?|category\s*[:\-–—]?)/i, "")
+    .trim();
+
+  const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
+  const matched = parts.find((p) => CATEGORY_KEYWORDS_LIST.some((ck) => ck.toLowerCase() === p.toLowerCase()));
+  if (matched) return matched;
+
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  return cleaned || "ताज़ा समाचार";
 }
 
 // MODULE 2: Fast Static Caption Formatter Endpoint (for offline/instant quick copy)

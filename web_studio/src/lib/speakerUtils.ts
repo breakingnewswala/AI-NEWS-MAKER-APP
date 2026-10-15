@@ -2,18 +2,111 @@
 
 /**
  * Professional News Headline Formatter:
+ * - Strips UI loading/processing text like "लोड हो रहा है", "Loading...", "Please wait"
  * - Removes starting fluff like "यह खबर है", "जानिए", "देखिए", "Breaking News:", "ब्रेकिंग न्यूज़:"
- * - Strips trailing punctuation like "." or "।" or commas
+ * - Strips accidental location or category tags prepended or appended to headlines (e.g. "नई दिल्ली / राष्ट्रीय:")
+ * - Strips trailing punctuation like "." or "।" or commas or colons
  * - Cleans up multiple spaces
  */
 export function cleanHeadlineText(text: string): string {
   if (!text) return '';
-  let cleaned = text
+  let cleaned = text;
+
+  // 1. Remove UI status / loading text
+  cleaned = cleaned
+    .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, '')
+    .replace(/(?:loading[\s\.]*)+/gi, '')
+    .replace(/(?:please wait[\s\.]*)+/gi, '')
+    .replace(/(?:generating[\s\.]*)+/gi, '')
+    .replace(/(?:ai is processing[\s\.]*)+/gi, '');
+
+  // 2. Remove editorial fluff prefixes
+  cleaned = cleaned
     .replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, '')
     .trim();
-  // Strip trailing punctuation (. or । or ! or ? or , or - or :) repeatedly until clean
+
+  // 3. Remove prepended location or category label tags with colons/hyphens e.g. "नई दिल्ली / राष्ट्रीय: ..." or "भोपाल: ..."
+  cleaned = cleaned
+    .replace(/^(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|नई\s*दिल्ली|भोपाल|इंदौर|रीवा|जबलपुर|ग्वालियर|लखनऊ|पटना|जयपुर|रायपुर|वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय|विदेश|अपराध|क्राइम|सियासत|राजनीति|हादसा|प्रशासन|विकास|बिजनेस|कारोबार|विशेष\s*कवरेज|ताज़ा\s*समाचार|ताज़ा\s*ख़बर)\s*[:\-–—]\s*/i, '')
+    .trim();
+
+  // 4. Remove appended category/location tags at the end of headlines
+  cleaned = cleaned
+    .replace(/\s*[:\-–—]?\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i, '')
+    .trim();
+
+  // 5. Strip trailing punctuation (. or । or ! or ? or , or - or :) repeatedly until clean
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
+
+  // 6. Clean up multiple spaces
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+
   return cleaned;
+}
+
+const CATEGORY_KEYWORDS = [
+  'राष्ट्रीय',
+  'अंतरराष्ट्रीय',
+  'विदेश',
+  'अपराध',
+  'क्राइम',
+  'सियासत',
+  'राजनीति',
+  'हादसा',
+  'प्रशासन',
+  'विकास',
+  'बिजनेस',
+  'कारोबार',
+  'टेक',
+  'विशेष कवरेज',
+  'ताज़ा ख़बर',
+  'ताज़ा समाचार',
+  'ताज़ा'
+];
+
+/**
+ * Sanitizes Location field to ensure ONLY geographical place/city/state is kept.
+ * Strictly removes category labels like "राष्ट्रीय", "अंतरराष्ट्रीय", "अपराध", etc.
+ */
+export function cleanLocationField(loc: string): string {
+  if (!loc) return '';
+  let cleaned = loc
+    .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
+    .trim();
+
+  // Split by slashes or hyphens and remove category names
+  const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
+  const locationParts = parts.filter((p) => !CATEGORY_KEYWORDS.some((cat) => cat.toLowerCase() === p.toLowerCase()));
+
+  if (locationParts.length > 0) {
+    cleaned = locationParts.join(', ');
+  } else {
+    // If every part was a category, try extracting known cities or default
+    cleaned = 'विशेष कवरेज';
+  }
+
+  // Clean trailing punctuation and multiple spaces
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  return cleaned;
+}
+
+/**
+ * Sanitizes Category field to ensure ONLY valid news category is kept without city names.
+ */
+export function cleanCategoryField(cat: string): string {
+  if (!cat) return 'ताज़ा समाचार';
+  let cleaned = cat
+    .replace(/^(श्रेणी\s*[:\-–—]?|category\s*[:\-–—]?)/i, '')
+    .trim();
+
+  // If contains slashes, take the first valid category part
+  const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
+  const matched = parts.find((p) => CATEGORY_KEYWORDS.some((ck) => ck.toLowerCase() === p.toLowerCase()));
+  if (matched) return matched;
+
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
+  return cleaned || 'ताज़ा समाचार';
 }
 
 export interface DetectedSpeaker {
