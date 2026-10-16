@@ -460,7 +460,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input: result.headline + (result.summary ? ' - ' + result.summary : ''),
-          customPrompt: `इस खबर के लिए ठीक 5 बिल्कुल नए, प्रभावशाली, संक्षिप्त और अलग-अलग समाचार कोणों (मुख्य, सवालिया, उत्सुकता, महत्वपूर्ण तथ्य, वैकल्पिक) के हिंदी हेडलाइन विकल्प तैयार करें जो सख्ती से अधिकतम ${targetMaxLines} लाइन में हों।`,
+          customPrompt: `इस खबर के लिए ठीक 5 बिल्कुल नए, प्रभावशाली, संक्षिप्त और अलग-अलग समाचार कोणों (मुख्य निर्णय, प्रत्यक्ष असर, महत्वपूर्ण तथ्य/आंकड़ा, संबंधित बयान या भविष्य की योजना) के हिंदी हेडलाइन विकल्प तैयार करें जो सख्ती से अधिकतम ${targetMaxLines} लाइन में हों।`,
           aiProvider: newsAiProvider,
           template_id: tplConfig.template_id,
           headline_line_count: targetMaxLines,
@@ -487,13 +487,19 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     } catch (err: any) {
       console.warn('Headlines regeneration error, using local generator:', err);
       const cleanH = cleanHeadlineText(result.headline || 'ताज़ा समाचार');
-      const newOpts = [
-        cleanH,
-        cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
-        cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
-        cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
-        cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
-      ].slice(0, 5);
+      const fallbackResult = processNewsLocally(
+        result.headline + (result.summary ? '\n' + result.summary : ''),
+        undefined,
+        {
+          template_id: tplConfig.template_id,
+          headline_max_lines: targetMaxLines,
+          headline_area: tplConfig.headline_area,
+        }
+      );
+      const newOpts =
+        fallbackResult.headlineOptions && fallbackResult.headlineOptions.length > 0
+          ? fallbackResult.headlineOptions.slice(0, 5)
+          : [cleanH];
       setHeadlineOptions(newOpts);
       setSelectedHeadlineIndex(0);
     } finally {

@@ -227,68 +227,104 @@ export function processNewsLocally(
   const corpusToExtract = (extractedDesc || extractedContent) ? `${extractedDesc}\n\n${extractedContent}` : clean;
   const allSentences = extractSafeSentences(corpusToExtract);
 
-  // 5. Build EXACTLY 5 Distinct Journalistic Headlines
-  // विकल्प 1: मुख्य समाचार (Direct event/action)
-  // विकल्प 2: सवाल उठाने वाला समाचार (Factual inquiry)
-  // विकल्प 3: उत्सुकता पैदा करने वाला समाचार (Curiosity/key revelation)
-  // विकल्प 4: महत्वपूर्ण तथ्य या असर (Action/decision/statement)
-  // विकल्प 5: वैकल्पिक समाचार कोण (Public impact/alternative angle)
+  // 5. Build EXACTLY 5 Distinct Journalistic Headlines (No Hardcoded Genre Templates)
   const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
   const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' ').slice(0, 70)) : 'महत्वपूर्ण समाचार');
 
   const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
 
-  let opt1 = '';
-  let opt2 = '';
-  let opt3 = '';
-  let opt4 = '';
-  let opt5 = '';
+  const turnSentenceToHeadline = (sentence: string, maxLength: number = 75): string => {
+    let s = sentence
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '')
+      .replace(/^(?:वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|इस दौरान|मामले में)[,\s]*/gi, '')
+      .replace(/[।\.\,\!\?\:\-]+$/g, '')
+      .trim();
 
-  if (/औद्योगिक|आवास|परियोजना|नियम|फ्लैट|जमीन/i.test(fullCorpus)) {
-    opt1 = 'औद्योगिक क्षेत्रों में आवास परियोजना के लिए नए नियम लागू, जमीन की न्यूनतम कीमत और विकास मापदंड तय';
-    opt2 = 'क्या औद्योगिक क्षेत्रों में अब सस्ते होंगे घर? नई आवास नीति और विकास नियमों से जुड़ी बड़ी अपडेट';
-    opt3 = 'मध्य प्रदेश में नई औद्योगिक आवास नीति लागू, आवासीय परियोजनाओं और जमीन की कीमतों के लिए सख्त मानक तय';
-    opt4 = 'औद्योगिक क्षेत्रों में अब नहीं बनेंगे रो-हाउस और प्लॉट, सिर्फ बहुमंजिला फ्लैट बनाने की अनुमति';
-    opt5 = 'राज्य सरकार का बड़ा फैसला: औद्योगिक भूमि आवंटन और कैप्टिव आवासीय सुविधाओं के बदले नियम';
-  } else if (category === 'हादसा') {
-    opt1 = baseTitle.length > 25 ? baseTitle : 'सड़क हादसे में बड़ा नुकसान, मौके पर प्रशासनिक अमला व बचाव दल रवाना';
-    opt2 = 'सड़क हादसे के बाद सुरक्षा मानकों पर उठे सवाल, क्या रोकी जा सकती थी यह बड़ी अनहोनी';
-    opt3 = 'चीख-पुकार के बीच स्थानीय लोगों ने संभाला मोर्चा, जानिए कैसे बचीं लोगों की जानें';
-    opt4 = 'हादसे के बाद प्रशासन का त्वरित एक्शन: घायलों को तुरंत अस्पताल पहुंचाया, जांच के आदेश';
-    opt5 = 'यातायात सुरक्षा और बदहाल सड़कों पर फूटा लोगों का गुस्सा, सख्त नियमों की मांग तेज';
-  } else if (category === 'अपराध') {
-    opt1 = baseTitle.length > 25 ? baseTitle : 'गंभीर मामले में पुलिस का बड़ा एक्शन, मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार';
-    opt2 = 'इलाके में सुरक्षा व्यवस्था में कहां हुई चूक, पुलिस कार्रवाई और कानून-व्यवस्था पर उठे सवाल';
-    opt3 = 'सीसीटीवी फुटेज और ठोस सबूतों से खुला राज, जानिए कैसे सुलझी पूरी वारदात की गुत्थी';
-    opt4 = 'कानून व्यवस्था पर सख्त रुख: आरोपियों के खिलाफ वैधानिक धाराओं में मुकदमा दर्ज, जेल भेजा';
-    opt5 = 'इलाके में दहशत का माहौल, सुरक्षा बढ़ाने और गश्त तेज करने की मांग को लेकर लोगों में आक्रोश';
-  } else if (category === 'राजनीति') {
-    opt1 = baseTitle.length > 25 ? baseTitle : 'सियासी गलियारों में बड़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज';
-    opt2 = 'क्या आगामी चुनावी रणनीति में होगा बड़ा बदलाव? राजनीतिक विश्लेषकों ने उठाए कई सवाल';
-    opt3 = 'बंद कमरे की अहम बैठक में क्या हुआ तय? नए सियासी समीकरणों को लेकर चर्चाएं गर्म';
-    opt4 = 'पार्टी नेतृत्व का कड़ा निर्देश: संगठनात्मक मजबूती और जनमुद्दों को लेकर बनाई गई नई कार्ययोजना';
-    opt5 = 'जनता से जुड़े नीतिगत मुद्दों पर सत्ता और विपक्ष आमने-सामने, सड़कों पर उतरने की तैयारी';
-  } else if (category === 'कारोबार') {
-    opt1 = baseTitle.length > 25 ? baseTitle : 'नीतिगत बदलाव से टेक और उद्योग जगत में हलचल, कंपनियों ने शुरू की विस्तृत समीक्षा';
-    opt2 = 'उद्योग और रोजगार पर कितना पड़ेगा असर? आर्थिक विशेषज्ञों और कारोबारियों ने उठाए सवाल';
-    opt3 = 'नए नियमों और नीतिगत बदलाव के पीछे का असली कारण क्या, वैश्विक बाजार की टिकी नजरें';
-    opt4 = 'आर्थिक व व्यापारिक असर: प्रमुख कंपनियों के कामकाज पर प्रभाव, उच्चस्तरीय समीक्षा जारी';
-    opt5 = 'निवेशकों और कर्मचारियों में असमंजस, बाजार में आगामी रणनीतियों को लेकर मंथन तेज';
-  } else {
-    // General News / Administration / Public Issues
-    if (titleParts.length > 1 && titleParts[0].length < 40 && titleParts[1].length < 50) {
-      opt1 = cleanHeadlineText(`${titleParts[0]}, ${titleParts[1]}`);
-    } else {
-      opt1 = cleanHeadlineText(baseTitle);
+    if (s.length > maxLength) {
+      const commaIdx = s.lastIndexOf(',', maxLength);
+      const spaceIdx = s.lastIndexOf(' ', maxLength);
+      const cutIdx = commaIdx > 35 ? commaIdx : (spaceIdx > 35 ? spaceIdx : maxLength);
+      s = s.slice(0, cutIdx).trim();
     }
-    opt2 = 'प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार';
-    opt3 = 'घटनाक्रम के बाद मौके पर क्या हुआ सच, सामने आए चौंकाने वाले तथ्य';
-    opt4 = 'लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच के सख्त आदेश, कार्रवाई तय';
-    opt5 = 'स्वास्थ्य व प्रशासनिक सेवाओं की बदहाली पर लोगों का गुस्सा, व्यवस्था में सुधार की उठी मांग';
+    return cleanHeadlineText(s);
+  };
+
+  const calculateHeadlineSimilarity = (h1: string, h2: string): number => {
+    const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
+    const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
+    if (words1.size === 0 || words2.size === 0) return 0;
+    let common = 0;
+    for (const w of words1) {
+      if (words2.has(w)) common++;
+    }
+    return (2 * common) / (words1.size + words2.size);
+  };
+
+  const headlineOptions: string[] = [];
+  const addIfDistinct = (cand: string) => {
+    const cleaned = cleanHeadlineText(cand);
+    if (!cleaned || cleaned.length < 14) return;
+    for (const existing of headlineOptions) {
+      if (existing === cleaned || calculateHeadlineSimilarity(existing, cleaned) > 0.82) {
+        return;
+      }
+    }
+    headlineOptions.push(cleaned);
+  };
+
+  // 1. Primary cleaned headline
+  addIfDistinct(baseTitle);
+
+  // 2. If title has parts separated by colon or dash, generate clean editorial combinations
+  if (titleParts.length >= 2) {
+    if (titleParts[0].length >= 12 && titleParts[1].length >= 12) {
+      addIfDistinct(`${titleParts[1]}: ${titleParts[0]}`);
+    }
+    addIfDistinct(titleParts[0]);
+    addIfDistinct(titleParts[1]);
   }
 
-  const rawOptions = [opt1, opt2, opt3, opt4, opt5];
-  const headlineOptions = rawOptions.map((h) => cleanHeadlineText(h).replace(/[।\.\,\!\?\:\-]+$/g, '').trim());
+  // 3. Derive distinct headlines from the extracted article sentences
+  for (const s of allSentences) {
+    if (headlineOptions.length >= 5) break;
+    addIfDistinct(turnSentenceToHeadline(s));
+  }
+
+  // 4. Try incorporating detected location if not already present
+  if (headlineOptions.length < 5 && detectedLocation && detectedLocation !== 'विशेष कवरेज') {
+    const locClean = detectedLocation.split(',')[0].trim();
+    if (!baseTitle.includes(locClean) && locClean.length > 2) {
+      addIfDistinct(`${locClean}: ${baseTitle}`);
+    }
+  }
+
+  // 5. If still fewer than 5, create distinct phrasing using story clauses
+  if (headlineOptions.length < 5) {
+    const words = baseTitle.split(/\s+/).filter(Boolean);
+    if (words.length >= 6) {
+      const mid = Math.floor(words.length / 2);
+      const partA = words.slice(0, mid).join(' ');
+      const partB = words.slice(mid).join(' ');
+      addIfDistinct(`${partB}: ${partA}`);
+    }
+  }
+
+  // Ensure we have at least 1 headline
+  if (headlineOptions.length === 0) {
+    headlineOptions.push(baseTitle || 'ताज़ा समाचार अपडेट');
+  }
+
+  // Ensure exactly 5 options without generic administrative templates
+  while (headlineOptions.length < 5) {
+    const seed = headlineOptions[0];
+    const cand = `${seed} - ताज़ा अपडेट`;
+    if (!headlineOptions.includes(cand)) {
+      headlineOptions.push(cand);
+    } else {
+      break;
+    }
+  }
+
   const headline = headlineOptions[0];
 
   // Pick highlight words: numbers, quoted words or entities
@@ -335,33 +371,37 @@ export function processNewsLocally(
 
   const locPrefix = locStr ? `${locStr} में ` : '';
 
-  // Style 1: Detailed (3 full paragraphs)
+  // Style 1: Detailed (exactly 3 full factual paragraphs separated by \n\n)
   const dPara1 = allSentences[0]
     ? `${locPrefix}${headline}। ${allSentences[0]}।`
-    : `${locPrefix}${headline} को लेकर बड़ा और गंभीर मामला सामने आया है। प्राप्त जानकारी के अनुसार पूरे घटनाक्रम को लेकर प्रशासनिक स्तर पर हड़कंप मच गया है।`;
+    : `${locPrefix}${headline} को लेकर महत्वपूर्ण जानकारी सामने आई है। इस पूरे मामले को लेकर संबंधित पक्षों में चर्चा तेज हो गई है।`;
 
   const dPara2 = allSentences.slice(1, 4).join('। ') ||
-    'घटना के प्रत्यक्षदर्शियों और सूत्रों के अनुसार मामले में गंभीर लापरवाही सामने आई है। ड्यूटी पर तैनात कर्मियों की कार्यशैली पर सवाल उठ रहे हैं और संबंधित पक्षों द्वारा त्वरित कार्रवाई की मांग की जा रही है।';
+    'मामले के तथ्यों के अनुसार पूरे घटनाक्रम से जुड़े नए नियम और मुख्य बिंदु सामने आए हैं। संबंधित अधिकारियों और जानकारों द्वारा स्थिति का विस्तृत विश्लेषण किया जा रहा है।';
 
   const dPara3 = allSentences[4]
-    ? `${allSentences[4]}। मामले में उत्तरदायी अधिकारियों ने निष्पक्ष जांच और आवश्यक कानूनी व प्रशासनिक कार्रवाई के सख्त आदेश दिए हैं।`
-    : 'मामले की गंभीरता को देखते हुए उच्चाधिकारियों ने तुरंत संज्ञान लिया है और अग्रिम वैधानिक व अनुशासनात्मक कार्रवाई के निर्देश जारी कर दिए गए हैं। स्थिति पर नजर रखी जा रही है।';
+    ? `${allSentences.slice(4, 7).join('। ')}। इस संबंध में आगे की कार्यवाही और आधिकारिक दिशा-निर्देशों पर नजर बनी हुई है।`
+    : 'इस घटनाक्रम को लेकर आवश्यक दिशा-निर्देश जारी किए गए हैं और आगामी फैसलों को लेकर संबंधित विभागों की निगरानी जारी है।';
 
+  const cleanDPara1 = dPara1.replace(/[।\.\s]+$/, '');
   const cleanDPara2 = dPara2.replace(/[।\.\s]+$/, '');
-  const captionDetailed = `${dPara1}\n\n${cleanDPara2}।\n\n${dPara3}\n\n${tagsStr}`;
+  const cleanDPara3 = dPara3.replace(/[।\.\s]+$/, '');
+  const captionDetailed = `${cleanDPara1}।\n\n${cleanDPara2}।\n\n${cleanDPara3}।\n\n${tagsStr}`;
 
   // Style 2: Bullets
   const bulletItems = allSentences.slice(0, 4).map((s) => `• ${s}`);
   if (bulletItems.length < 3) {
-    bulletItems.push('• घटनाक्रम के बाद प्रशासनिक व स्थानीय स्तर पर हड़कंप मच गया है');
-    bulletItems.push('• जिम्मेदार अधिकारियों द्वारा मामले की निष्पक्ष जांच शुरू कर दी गई है');
+    bulletItems.push(`• मुख्य घटनाक्रम: ${headline}`);
+    bulletItems.push('• मामले से जुड़े प्रमुख तथ्यों और दिशा-निर्देशों की समीक्षा जारी है');
   }
-  const captionBullets = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${locStr || 'ताज़ा समाचार'}\n\n${bulletItems.join('\n')}\n\nप्रशासनिक अमला मौके की निगरानी कर रहा है और अग्रिम कार्रवाई की जा रही है।\n\n${tagsStr}`;
+  const captionBullets = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${locStr || 'ताज़ा समाचार'}\n\n${bulletItems.join('\n')}\n\nपूरे मामले पर आगामी अपडेट और आधिकारिक दिशा-निर्देशों की प्रतीक्षा है।\n\n${tagsStr}`;
 
   // Style 3: Short (2 paragraphs)
-  const sPara1 = `${locPrefix}${headline}। ${allSentences[0] || 'पूरे मामले में प्रशासनिक लापरवाही और संवेदनहीनता को लेकर हड़कंप मच गया है।'}`;
-  const sPara2 = `${allSentences[1] ? `${allSentences[1]}। ` : ''}उत्तरदायी अधिकारियों ने घटना का त्वरित संज्ञान लेते हुए जांच व सख्त कार्रवाई के निर्देश दिए हैं।`;
-  const captionShort = `${sPara1}\n\n${sPara2}\n\n${tagsStr}`;
+  const sPara1 = `${locPrefix}${headline}। ${allSentences[0] || 'इस विषय को लेकर महत्वपूर्ण तथ्य और दिशा-निर्देश सामने आए हैं।'}`;
+  const sPara2 = `${allSentences[1] ? `${allSentences[1]}। ` : ''}संबंधित पक्षों द्वारा स्थिति की समीक्षा की जा रही है और आवश्यक कदम उठाए जा रहे हैं।`;
+  const cleanSPara1 = sPara1.replace(/[।\.\s]+$/, '');
+  const cleanSPara2 = sPara2.replace(/[।\.\s]+$/, '');
+  const captionShort = `${cleanSPara1}।\n\n${cleanSPara2}।\n\n${tagsStr}`;
 
   const summary = captionDetailed;
 

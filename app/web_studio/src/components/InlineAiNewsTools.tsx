@@ -85,6 +85,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   // 3 Caption Styles: detailed (3 paragraphs), bullets (bullet points), short (2 paragraphs)
   const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
   const isExecutingRef = React.useRef<boolean>(false);
+  const activeRequestIdRef = React.useRef<number>(0);
   const lastTriggerPayloadRef = React.useRef<string>('');
   const currentAbortControllerRef = React.useRef<AbortController | null>(null);
   const isResetRef = React.useRef<boolean>(false);
@@ -132,6 +133,78 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     return trimmed;
   };
 
+  const buildFiveStoryOptions = (
+    existing: string[],
+    baseH: string,
+    summaryText: string = '',
+    locationText: string = ''
+  ): string[] => {
+    const opts: string[] = [];
+    const addOpt = (cand: string) => {
+      const clean = cleanHeadlineText(cand);
+      if (clean && clean.length >= 12 && !opts.includes(clean)) {
+        opts.push(clean);
+      }
+    };
+
+    existing.forEach(addOpt);
+    addOpt(baseH);
+
+    // Title parts
+    const parts = baseH.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      if (parts[0].length >= 12 && parts[1].length >= 12) {
+        addOpt(`${parts[1]}: ${parts[0]}`);
+      }
+      addOpt(parts[0]);
+      addOpt(parts[1]);
+    }
+
+    // Extract sentences from summary
+    if (summaryText) {
+      const cleanSummary = summaryText
+        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '')
+        .replace(/#[\w\u0900-\u097F]+/g, '');
+      const sentences = cleanSummary
+        .split(/[।\.\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+      for (const sent of sentences) {
+        if (opts.length >= 5) break;
+        let s = sent
+          .replace(/^(?:वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|बता दें कि)[,\s]*/gi, '')
+          .replace(/[।\.\,\!\?\:\-]+$/g, '')
+          .trim();
+        if (s.length > 70) {
+          const cut = s.lastIndexOf(' ', 70);
+          s = s.slice(0, cut > 30 ? cut : 70).trim();
+        }
+        addOpt(s);
+      }
+    }
+
+    // Story-based clause rearrangements or location
+    if (opts.length < 5 && locationText && locationText !== 'विशेष कवरेज') {
+      const locClean = locationText.split(',')[0].trim();
+      if (!baseH.includes(locClean) && locClean.length > 2) {
+        addOpt(`${locClean}: ${baseH}`);
+      }
+    }
+
+    while (opts.length < 5) {
+      const seed = opts[0] || 'ताज़ा समाचार अपडेट';
+      const cand = `${seed} - ताज़ा अपडेट`;
+      if (!opts.includes(cand)) {
+        opts.push(cand);
+      } else {
+        break;
+      }
+    }
+
+    return opts.slice(0, 5);
+  };
+
   // Structured caption formatter supporting 3 distinct styles with strict hashtag hierarchy:
   // 1st: #${username}, Middle: location & news tags, Last: #AiNewsMaker
   const formatCaptionByStyle = (
@@ -151,7 +224,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const ensureStrictHashtags = (caption: string): string => {
       const hashtagRegex = /#[\w\u0900-\u097F]+/g;
       const rawTags = caption.match(hashtagRegex) || [];
-      const cleanBody = caption.replace(hashtagRegex, '').replace(/\n{3,}/g, '\n\n').trim();
+      const cleanBody = caption
+        .replace(hashtagRegex, '')
+        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 
       const locTag = loc && loc !== 'विशेष कवरेज' ? `#${loc.replace(/[^\w\u0900-\u097F]/g, '')}News` : '';
       const midTags: string[] = [];
@@ -189,11 +266,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
 
     const hashtagRegex = /#[\w\u0900-\u097F]+/g;
-    const cleanBody = (baseSummary || '').replace(hashtagRegex, '').trim();
+    const cleanBody = (baseSummary || '')
+      .replace(hashtagRegex, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '')
+      .trim();
     const sentences = cleanBody
       .split(/[।\.\n]+/)
       .map((s) => s.trim())
-      .filter((s) => s.length > 10);
+      .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
 
     if (style === 'bullets') {
       const intro = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${loc}`;
@@ -202,20 +282,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         `संबंधित विभाग और अधिकारियों द्वारा आवश्यक जांच की जा रही है।`,
         `तथ्यों के आधार पर अग्रिम दिशा-निर्देश दिए गए हैं।`,
       ]).map((b) => `• ${b}`);
-      const closing = `प्रशासनिक अमला मौके की निगरानी कर रहा है और अग्रिम कार्रवाई की जा रही है।`;
+      const closing = `पूरे घटनाक्रम को लेकर आगामी आधिकारिक दिशा-निर्देशों की प्रतीक्षा है।`;
       return ensureStrictHashtags(`${intro}\n\n${bulletItems.join('\n')}\n\n${closing}`);
     }
 
     if (style === 'short') {
       const shortP1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} ताजा घटनाक्रम में महत्वपूर्ण जानकारी सामने आई है। ${sentences[0] || 'मामले को लेकर संबंधित स्तर पर संज्ञान लिया गया है।'}`;
-      const shortP2 = `${sentences[1] || 'उत्तरदायी अधिकारियों द्वारा स्थिति का जायजा लेते हुए अग्रिम प्रक्रिया पूरी की जा रही है।'}`;
+      const shortP2 = `${sentences[1] || 'संबंधित पक्षों द्वारा स्थिति की समीक्षा की जा रही है और आवश्यक कदम उठाए जा रहे हैं।'}`;
       return ensureStrictHashtags(`${shortP1}\n\n${shortP2}`);
     }
 
     // Default: Detailed (3 full paragraphs)
     const p1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} मुख्य घटनाक्रम को लेकर ताजा जानकारी सामने आई है। ${sentences[0] || 'मामले की पूरी पृष्ठभूमि की समीक्षा की जा रही है।'}`;
-    const p2 = sentences.slice(1, 3).join('। ') || 'प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।';
-    const p3 = sentences.slice(3, 5).join('। ') || 'प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है।';
+    const p2 = sentences.slice(1, 3).join('। ') || 'प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और नियम सामने आ रहे हैं। संबंधित पक्षों के अनुसार घटनाक्रम से जुड़े प्रभाव का विस्तार से आकलन किया जा रहा है।';
+    const p3 = sentences.slice(3, 5).join('। ') || 'इस संबंध में आवश्यक दिशा-निर्देश जारी किए गए हैं और आगामी फैसलों को लेकर संबंधित विभागों की निगरानी जारी है।';
     return ensureStrictHashtags(`${p1}\n\n${p2}\n\n${p3}`);
   };
 
@@ -366,9 +446,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
 
     const payloadKey = `${effectiveLink}|${effectiveText}|${extraData?.timestamp || ''}`;
-    if (isExecutingRef.current) return;
-    if (lastTriggerPayloadRef.current === payloadKey && Date.now() - lastProcessedTimeRef.current < 2500) {
+    if (lastTriggerPayloadRef.current === payloadKey && Date.now() - lastProcessedTimeRef.current < 2000) {
       return;
+    }
+    const requestId = ++activeRequestIdRef.current;
+    if (currentAbortControllerRef.current) {
+      try {
+        currentAbortControllerRef.current.abort();
+      } catch {}
+      currentAbortControllerRef.current = null;
     }
     isExecutingRef.current = true;
     lastTriggerPayloadRef.current = payloadKey;
@@ -404,13 +490,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
 
       const baseImmediate = cleanHeadlineText(immediateHeadline);
-      setHeadlineOptions([
-        baseImmediate,
-        cleanHeadlineText("मामले में बड़ा खुलासा, सामने आए महत्वपूर्ण तथ्य और नए दिशा-निर्देश"),
-        cleanHeadlineText("क्या नियमों में बदलाव से आम जनता को मिलेगी राहत? उठे गंभीर सवाल"),
-        cleanHeadlineText("उच्चाधिकारियों ने लिया त्वरित संज्ञान, अग्रिम दिशा-निर्देश व जांच जारी"),
-        cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
-      ]);
+      const immOpts = buildFiveStoryOptions([], baseImmediate, immediateSummary, immediateLocation);
+      setHeadlineOptions(immOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!immediateImage);
     }
@@ -442,7 +523,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
       clearTimeout(timeoutId);
 
-      if (isResetRef.current) {
+      if (isResetRef.current || activeRequestIdRef.current !== requestId) {
         return;
       }
 
@@ -469,22 +550,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 5) {
-        const baseH = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
-        const standardOptions = [
-          baseH,
-          cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
-          cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
-          cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
-          cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
-        ];
-        for (const sOpt of standardOptions) {
-          if (!opts.includes(sOpt) && opts.length < 5) {
-            opts.push(sOpt);
-          }
-        }
-      }
-      setHeadlineOptions(opts.slice(0, 5));
+      const finalOpts = buildFiveStoryOptions(
+        opts,
+        cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार'),
+        res.summary || extraData?.summary || '',
+        res.location || extraData?.location || ''
+      );
+      setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
@@ -560,6 +632,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
     } catch (err: any) {
+      if (isResetRef.current || activeRequestIdRef.current !== requestId) {
+        return;
+      }
       console.warn('API error, executing client AI fallback:', err);
       const fallbackResult = processNewsLocally(
         effectiveText || extraData?.title || effectiveLink,
@@ -577,24 +652,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 5) {
-        const baseH = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || 'ताज़ा समाचार');
-        const standardOptions = [
-          baseH,
-          cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
-          cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
-          cleanHeadlineText("मामले को लेकर बड़ा फैसला: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के निर्देश"),
-          cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
-        ];
-        for (const sOpt of standardOptions) {
-          if (!opts.includes(sOpt) && opts.length < 5) {
-            opts.push(sOpt);
-          }
-        }
-      }
+      const finalOpts = buildFiveStoryOptions(
+        opts,
+        cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || 'ताज़ा समाचार'),
+        fallbackResult.summary || extraData?.summary || '',
+        fallbackResult.location || extraData?.location || ''
+      );
 
       setResult(fallbackResult);
-      setHeadlineOptions(opts.slice(0, 5));
+      setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
@@ -667,6 +733,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       return;
     }
 
+    const requestId = ++activeRequestIdRef.current;
+    if (currentAbortControllerRef.current) {
+      try {
+        currentAbortControllerRef.current.abort();
+      } catch {}
+      currentAbortControllerRef.current = null;
+    }
+
     isExecutingRef.current = true;
     setLoading(true);
     setError(null);
@@ -679,6 +753,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     try {
       const controller = new AbortController();
+      currentAbortControllerRef.current = controller;
+      isResetRef.current = false;
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
@@ -697,6 +773,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+
+      if (isResetRef.current || activeRequestIdRef.current !== requestId) {
+        return;
+      }
 
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -719,27 +799,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 5) {
-        if (res.summary) {
-          const s = cleanHeadlineText(res.summary.slice(0, 90));
-          if (s && !opts.includes(s)) opts.push(s);
-        }
-        if (res.location && res.headline) {
-          const locOpt = cleanHeadlineText(`${res.location}: ${res.headline}`);
-          if (locOpt && !opts.includes(locOpt)) opts.push(locOpt);
-        }
-        const baseH = cleanHeadlineText(opts[0] || res.headline || card.headline || 'ताज़ा समाचार');
-        const extras = [
-          cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
-          cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
-          cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
-          cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
-        ];
-        for (const ex of extras) {
-          if (!opts.includes(ex) && opts.length < 5) opts.push(ex);
-        }
-      }
-      setHeadlineOptions(opts.slice(0, 5));
+      const finalOpts = buildFiveStoryOptions(
+        opts,
+        cleanHeadlineText(opts[0] || res.headline || card.headline || 'ताज़ा समाचार'),
+        res.summary || '',
+        res.location || ''
+      );
+      setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main);
 
@@ -776,6 +842,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
     } catch (err: any) {
+      if (isResetRef.current || activeRequestIdRef.current !== requestId) {
+        return;
+      }
       console.warn('API error, executing client AI fallback:', err);
       try {
         const fallbackResult = processNewsLocally(
@@ -795,25 +864,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           const cleanMain = cleanHeadlineText(fallbackResult.headline);
           if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
         }
-        if (opts.length < 5) {
-          if (fallbackResult.summary) {
-            opts.push(cleanHeadlineText(fallbackResult.summary.slice(0, 90)));
-          }
-          opts.push(`${fallbackResult.location}: ${fallbackResult.headline}`);
-          const baseH = cleanHeadlineText(opts[0] || fallbackResult.headline || 'ताज़ा समाचार');
-          const extras = [
-            cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
-            cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
-            cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
-            cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
-          ];
-          for (const ex of extras) {
-            if (!opts.includes(ex) && opts.length < 5) opts.push(ex);
-          }
-        }
+        const finalOpts = buildFiveStoryOptions(
+          opts,
+          cleanHeadlineText(opts[0] || fallbackResult.headline || 'ताज़ा समाचार'),
+          fallbackResult.summary || '',
+          fallbackResult.location || ''
+        );
 
         setResult(fallbackResult);
-        setHeadlineOptions(opts.slice(0, 5));
+        setHeadlineOptions(finalOpts);
         setSelectedHeadlineIndex(0);
         setUseWebsitePhoto(false);
 

@@ -6374,12 +6374,11 @@ function parseArticleHtml(html: string, pageUrl: string): {
 
   if (rawDesc) {
     rawDesc = rawDesc
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
       .replace(
         /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -6407,6 +6406,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
   for (const pMatch of pMatches) {
     let pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
     pClean = pClean
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
       .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
       .replace(/(?:loading[\s\.]*)+/gi, "")
       .replace(/(?:please wait[\s\.]*)+/gi, "")
@@ -6414,15 +6414,14 @@ function parseArticleHtml(html: string, pageUrl: string): {
         /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
       .replace(/\s+/g, " ")
       .trim();
-    if (pClean.length > 30 && !extractedParagraphs.includes(pClean)) {
+    if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
       if (
-        !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved/i.test(pClean)
+        !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|IST|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़/i.test(pClean)
       ) {
         extractedParagraphs.push(pClean);
-        if (extractedParagraphs.join("\n\n").length >= 2500) break;
+        if (extractedParagraphs.join("\n\n").length >= 3500) break;
       }
     }
   }
@@ -6470,12 +6469,11 @@ function parseArticleHtml(html: string, pageUrl: string): {
             if (!rawTitle && item.headline) rawTitle = cleanHeadlineText(cleanHtmlEntities(String(item.headline)));
             if (!rawDesc && item.description) {
               rawDesc = cleanHtmlEntities(String(item.description))
+                .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
                 .replace(
                   /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
                   " "
                 )
-                .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-                .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
                 .replace(/\s+/g, " ")
                 .trim();
             }
@@ -6995,35 +6993,36 @@ function formatCaptionVariants(
       return true;
     });
 
-  // Style 1: Detailed (3 full paragraphs)
+  // Style 1: Detailed (3 substantive paragraphs separated by \n\n)
   const locPrefix = loc && loc !== "विशेष कवरेज" ? `${loc} में ` : "";
   const p1 = sentences[0]
     ? `${locPrefix}${cleanHeadline}। ${sentences[0]}।`
-    : `${locPrefix}${cleanHeadline} को लेकर बड़ा और गंभीर मामला सामने आया है। प्राप्त जानकारी के अनुसार पूरे घटनाक्रम को लेकर प्रशासनिक स्तर पर हड़कंप मच गया है।`;
+    : `${locPrefix}${cleanHeadline} को लेकर महत्वपूर्ण जानकारी सामने आई है। इस पूरे घटनाक्रम पर संबंधित पक्षों का ध्यान केंद्रित है।`;
 
-  const p2 = sentences.slice(1, 4).join("। ") || "प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।";
+  const p2 = sentences.slice(1, 3).join("। ") || 
+    (sentences[1] ? `${sentences[1]}।` : "मामले से जुड़े प्रमुख तथ्यों और विवरणों का संबंधित स्तर पर गहनता से विश्लेषण किया जा रहा है।");
 
-  const p3 = sentences[4]
-    ? `${sentences[4]}। मामले में उत्तरदायी अधिकारियों ने निष्पक्ष जांच और आवश्यक कानूनी व प्रशासनिक कार्रवाई के सख्त आदेश दिए हैं।`
-    : "मामले की गंभीरता को देखते हुए उच्चाधिकारियों ने तुरंत संज्ञान लिया है और अग्रिम वैधानिक व अनुशासनात्मक कार्रवाई के निर्देश जारी कर दिए गए हैं। स्थिति पर नजर रखी जा रही है।";
+  const p3 = sentences[3] || sentences[2]
+    ? `${sentences[3] || sentences[2]}। मामले में आगे की स्थिति पर नजर रखी जा रही है।`
+    : "इस संबंध में संबंधित स्तर से अग्रिम प्रक्रिया और दिशा-निर्देशों के अनुरूप आवश्यक कदम उठाए जा रहे हैं।";
 
-  const detailedBody = `${p1}\n\n${p2}।\n\n${p3}`;
+  const detailedBody = `${p1}\n\n${p2}\n\n${p3}`;
   const captionDetailed = ensureHashtagHierarchy(detailedBody, loc, username);
 
   // Style 2: Bullet Points (Intro + 3-4 bullets + status paragraph)
   const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
-    `${cleanHeadline} को लेकर प्राथमिक रिपोर्ट दर्ज`,
-    `${loc && loc !== "विशेष कवरेज" ? `${loc} में ` : ""}संबंधित मामले को लेकर प्रशासनिक व पुलिस जांच तेज`,
-    `अधिकारियों द्वारा आवश्यक दिशा-निर्देश और दिशा-तय की गई`,
+    `${cleanHeadline} को लेकर मुख्य विवरण`,
+    ...(sentences.length > 0 ? sentences.slice(0, 2) : ["घटनाक्रम को लेकर सभी पक्षों की प्रतिक्रियाएं"]),
+    "स्थिति पर संबंधित अधिकारियों और विशेषज्ञों द्वारा रखी जा रही नजर",
   ]).map((b) => `• ${b}`);
   const bulletIntro = `मुख्य घटनाक्रम: ${cleanHeadline}${loc && loc !== "विशेष कवरेज" ? `\nस्थान: ${loc}` : ""}`;
-  const bulletOutro = `प्रशासनिक अमला मौके की निगरानी कर रहा है और अग्रिम कार्रवाई की जा रही है।`;
+  const bulletOutro = `मामले से जुड़ी विस्तृत जानकारी और आगामी घटनाक्रम पर अपडेट जारी है।`;
   const bulletsBody = `${bulletIntro}\n\n${bulletItems.join("\n")}\n\n${bulletOutro}`;
   const captionBullets = ensureHashtagHierarchy(bulletsBody, loc, username);
 
   // Style 3: Short (2 concise, impactful paragraphs)
-  const shortP1 = `${locPrefix}${cleanHeadline}। ${sentences[0] || "पूरे मामले में प्रशासनिक संवेदनशीलता और जवाबदेही को लेकर स्थिति पर नजर रखी जा रही है।"}`;
-  const shortP2 = (sentences[1] ? `${sentences[1]}। ` : "") + "उत्तरदायी अधिकारियों ने घटना का त्वरित संज्ञान लेते हुए जांच व आवश्यक दिशा-निर्देश जारी किए हैं।";
+  const shortP1 = `${locPrefix}${cleanHeadline}। ${sentences[0] || "इस महत्वपूर्ण घटनाक्रम को लेकर ताजा जानकारी सामने आई है।"}`;
+  const shortP2 = (sentences[1] ? `${sentences[1]}। ` : "") + "मामले को लेकर अग्रिम प्रक्रिया और आवश्यक कदम उठाए जा रहे हैं।";
   const shortBody = `${shortP1}\n\n${shortP2}`;
   const captionShort = ensureHashtagHierarchy(shortBody, loc, username);
 
@@ -7289,96 +7288,95 @@ function createLocalNewsFallback(
       return true;
     });
 
-  const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
+  const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter((p) => p.length >= 8);
 
-  // Option 1: मुख्य घटनाक्रम
-  let opt1Main = "";
-  if (/औद्योगिक|आवास|परियोजना|नियम|फ्लैट|जमीन/i.test(fullCorpus)) {
-    opt1Main = "औद्योगिक क्षेत्रों में आवास परियोजना के लिए नए नियम लागू, जमीन की न्यूनतम कीमत और विकास मापदंड तय";
-  } else if (titleParts.length > 1 && titleParts[0].length < 40 && titleParts[1].length < 50) {
-    opt1Main = cleanHeadlineText(`${titleParts[0]}, ${titleParts[1]}`);
-  } else {
-    opt1Main = cleanHeadlineText(baseTitle);
-  }
+  // Helper to convert sentence to clean headline
+  const turnSentenceToHeadline = (sentence: string, maxLength: number = 105): string => {
+    let s = cleanHeadlineText(sentence)
+      .replace(/^(इसके तहत|इसके अनुसार|इनके तहत|प्राप्त जानकारी के अनुसार|सूत्रों के अनुसार|बता दें कि|गौरतलब है कि|वहीं|इधर|हालांकि|दरअसल|सभी)\s+/gi, "")
+      .trim();
+    if (s.length > maxLength) {
+      const commaIdx = s.lastIndexOf(" और ", maxLength);
+      const spaceIdx = s.lastIndexOf(" ", maxLength);
+      const cutIdx = commaIdx > 35 ? commaIdx : (spaceIdx > 35 ? spaceIdx : maxLength);
+      s = s.slice(0, cutIdx).trim();
+    }
+    return cleanHeadlineText(s);
+  };
 
-  // Option 2: सवाल उठाने वाला दृष्टिकोण
-  let opt2Question = "";
-  if (/औद्योगिक|आवास|फ्लैट|जमीन/i.test(fullCorpus)) {
-    opt2Question = "क्या औद्योगिक क्षेत्रों में अब सस्ते होंगे घर? नई आवास नीति और विकास नियमों से जुड़ी बड़ी अपडेट";
-  } else if (/अस्पताल|ओपीडी|मरीज|लापरवाही|डॉक्टर/i.test(fullCorpus)) {
-    opt2Question = "अस्पताल में संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार";
-  } else if (/हादसा|दुर्घटना|टक्कर|मौत|घायल/i.test(fullCorpus)) {
-    opt2Question = "सड़क हादसे के बाद सुरक्षा मानकों पर उठे सवाल, क्या रोकी जा सकती थी यह बड़ी अनहोनी";
-  } else if (/अपराध|पुलिस|गिरफ्तार|हत्या|चोरी/i.test(fullCorpus)) {
-    opt2Question = "इलाके में कानून व्यवस्था पर उठे गंभीर सवाल, क्या आरोपियों पर होगी सख्त कानूनी कार्रवाई";
-  } else if (/राजनीति|चुनाव|मंत्री|सरकार/i.test(fullCorpus)) {
-    opt2Question = "सियासी हलकों में नई बहस, आगामी रणनीति को लेकर क्या होगा बड़ा फैसला";
-  } else {
-    opt2Question = "क्या नियमों में बदलाव से आम जनता को मिलेगी राहत? नए दिशा-निर्देशों पर उठ रहे सवाल";
-  }
-
-  // Option 3: उत्सुकता पैदा करने वाला दृष्टिकोण
-  let opt3Curiosity = "";
-  if (/औद्योगिक|आवास|फ्लैट/i.test(fullCorpus)) {
-    opt3Curiosity = "मध्य प्रदेश में नई औद्योगिक आवास नीति लागू, आवासीय परियोजनाओं और जमीन की कीमतों के लिए सख्त मानक तय";
-  } else if (/वीडियो|कैमरा|फुटेज|वायरल/i.test(fullCorpus)) {
-    opt3Curiosity = "घटना का वीडियो सोशल मीडिया पर वायरल होने से मचा हड़कंप, जानिए मौके पर क्या हुआ था पूरा सच";
-  } else if (articleSentences.length > 1 && articleSentences[1].length > 20 && articleSentences[1].length < 70) {
-    opt3Curiosity = sanitizePressNoteFlattery(`${articleSentences[1]}, जानिए कैसे खुला पूरा मामला`);
-  } else {
-    opt3Curiosity = "मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम और आगे क्या होगा";
-  }
-
-  // Option 4: महत्वपूर्ण तथ्य या प्रभाव
-  let opt4FactOrAction = "";
-  if (/रो-हाउस|बहुमंजिला|सिंगल|डबल|बेडरूम/i.test(fullCorpus)) {
-    opt4FactOrAction = "औद्योगिक क्षेत्रों में अब नहीं बनेंगे रो-हाउस और प्लॉट, सिर्फ बहुमंजिला फ्लैट बनाने की अनुमति";
-  } else if (/सिविल सर्जन|जांच|आदेश|अधिकारी|कार्रवाई|एफआईआर/i.test(fullCorpus)) {
-    opt4FactOrAction = "लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच के सख्त आदेश, कार्रवाई तय";
-  } else if (articleSentences.length > 0 && articleSentences[0].length > 20 && articleSentences[0].length < 70) {
-    opt4FactOrAction = sanitizePressNoteFlattery(articleSentences[0]);
-  } else {
-    opt4FactOrAction = "उच्चाधिकारियों ने लिया त्वरित संज्ञान, नियमों के उल्लंघन पर सख्त कार्रवाई के दिए निर्देश";
-  }
-
-  // Option 5: दूसरा प्रासंगिक समाचार कोण
-  let opt5Alternative = "";
-  if (/औद्योगिक|आवास/i.test(fullCorpus)) {
-    opt5Alternative = "राज्य सरकार का बड़ा फैसला: औद्योगिक भूमि आवंटन और कैप्टिव आवासीय सुविधाओं के बदले नियम";
-  } else if (/अस्पताल|मरीज|स्वास्थ्य/i.test(fullCorpus)) {
-    opt5Alternative = "स्वास्थ्य सेवाओं की बदहाली और बेबसी पर फूटा लोगों का गुस्सा, व्यवस्था में सुधार की मांग";
-  } else if (/जनता|लोग|ग्रामीण|नागरिक/i.test(fullCorpus)) {
-    opt5Alternative = "नीतिगत बदलाव का आम जनजीवन पर दिखेगा व्यापक असर, स्थानीय स्तर पर नई व्यवस्था की मांग तेज";
-  } else {
-    opt5Alternative = "प्रशासनिक अमला मौके की निगरानी में जुटा, स्थिति को लेकर उच्चस्तरीय समीक्षा जारी";
-  }
-
-  const rawOptions = [
-    opt1Main,
-    opt2Question,
-    opt3Curiosity,
-    opt4FactOrAction,
-    opt5Alternative,
-  ];
+  const calculateHeadlineSimilarity = (h1: string, h2: string): number => {
+    const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
+    const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
+    if (words1.size === 0 || words2.size === 0) return 0;
+    let common = 0;
+    for (const w of words1) {
+      if (words2.has(w)) common++;
+    }
+    return (2 * common) / (words1.size + words2.size);
+  };
 
   const headlineOptions: string[] = [];
-  for (const rawOpt of rawOptions) {
-    const cleaned = cleanHeadlineText(rawOpt);
-    if (cleaned && !headlineOptions.includes(cleaned)) {
-      headlineOptions.push(cleaned);
+  const addIfDistinct = (cand: string) => {
+    const cleaned = cleanHeadlineText(cand);
+    if (!cleaned || cleaned.length < 14) return;
+    for (const existing of headlineOptions) {
+      if (existing === cleaned || calculateHeadlineSimilarity(existing, cleaned) > 0.82) {
+        return;
+      }
+    }
+    headlineOptions.push(cleaned);
+  };
+
+  // 1. Primary cleaned headline
+  addIfDistinct(baseTitle);
+
+  // 2. If title has parts separated by colon or dash, generate clean editorial combinations
+  if (titleParts.length >= 2) {
+    if (titleParts[0].length >= 12 && titleParts[1].length >= 12) {
+      addIfDistinct(`${titleParts[1]}: ${titleParts[0]}`);
+    }
+    addIfDistinct(titleParts[0]);
+    addIfDistinct(titleParts[1]);
+  }
+
+  // 3. Derive distinct headlines from the extracted article sentences
+  for (const s of articleSentences) {
+    if (headlineOptions.length >= 5) break;
+    addIfDistinct(turnSentenceToHeadline(s));
+  }
+
+  // 4. Try incorporating detected location if not already present
+  if (headlineOptions.length < 5 && detectedLocation && detectedLocation !== "विशेष कवरेज") {
+    const locClean = detectedLocation.split(",")[0].trim();
+    if (!baseTitle.includes(locClean) && locClean.length > 2) {
+      addIfDistinct(`${locClean}: ${baseTitle}`);
     }
   }
 
-  // Ensure exactly 5 options with clean journalistic fillers
-  const fallbackFillers = [
-    cleanHeadlineText("मामले में प्रशासनिक जांच तेज, अग्रिम कार्रवाई को लेकर निर्देश जारी"),
-    cleanHeadlineText("फैसले के बाद संबंधित विभागों में हलचल, नियमों के पालन के दिए गए निर्देश"),
-    cleanHeadlineText("घटनाक्रम को लेकर उच्चस्तरीय समीक्षा, सुरक्षा व व्यवस्था पर जोर"),
-    cleanHeadlineText("जनहित से जुड़े मुद्दे पर सरकार का कड़ा रुख, स्थिति पर रखी जा रही नजर"),
-  ];
-  for (const filler of fallbackFillers) {
-    if (headlineOptions.length < 5 && !headlineOptions.includes(filler)) {
-      headlineOptions.push(filler);
+  // 5. If still fewer than 5, create distinct phrasing using story clauses
+  if (headlineOptions.length < 5) {
+    const words = baseTitle.split(/\s+/).filter(Boolean);
+    if (words.length >= 6) {
+      const mid = Math.floor(words.length / 2);
+      const partA = words.slice(0, mid).join(" ");
+      const partB = words.slice(mid).join(" ");
+      addIfDistinct(`${partB}: ${partA}`);
+    }
+  }
+
+  // Ensure we have at least 1 headline
+  if (headlineOptions.length === 0) {
+    headlineOptions.push(baseTitle || "ताज़ा समाचार अपडेट");
+  }
+
+  // Ensure exactly 5 options without generic administrative templates
+  while (headlineOptions.length < 5) {
+    const seed = headlineOptions[0];
+    const cand = `${seed} - ताज़ा अपडेट`;
+    if (!headlineOptions.includes(cand)) {
+      headlineOptions.push(cand);
+    } else {
+      break;
     }
   }
 
@@ -7856,13 +7854,14 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 - NO website scraping artifacts (e.g. "कॉपी लिंक", "फाइल फोटो:", "शेयर करें", "क्लिक करें").
 - NO naive colon appending (DO NOT simply append ": प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल" or ": आम जनता पर असर..." to the title). Every headline option must be a crafted, distinct, standalone journalistic headline.
 
-★ EXACTLY 5 DISTINCT EDITORIAL HEADLINE OPTIONS:
-Generate EXACTLY 5 distinct, standalone Hindi headline options based strictly on source facts matching the 5 editorial angles:
-- विकल्प 1 (मुख्य घटनाक्रम): खबर की सबसे महत्वपूर्ण घटना, निर्णय, घोषणा या कार्रवाई सीधे और स्पष्ट रूप में।
-- विकल्प 2 (सवाल उठाने वाला दृष्टिकोण): जहाँ स्रोत के तथ्य आधार देते हों, वहाँ घटना के प्रभाव, नियमों या प्रशासनिक जवाबदेही पर गंभीर सवाल उठाने वाला दृष्टिकोण।
-- विकल्प 3 (उत्सुकता पैदा करने वाला दृष्टिकोण): खबर के किसी महत्वपूर्ण घटनाक्रम, नए नियम या अंदरूनी तथ्य को सामने रखकर पाठक की उत्सुकता बढ़ाने वाला कोण (भ्रामक न हो)।
-- विकल्प 4 (महत्वपूर्ण तथ्य या प्रभाव): खबर में मौजूद विशिष्ट संख्या, नियम (उदा. "सिर्फ बहुमंजिला फ्लैट की अनुमति"), कार्रवाई या कानूनी असर को केंद्र में रखें।
-- विकल्प 5 (दूसरा प्रासंगिक समाचार कोण): उसी खबर का दूसरा महत्वपूर्ण पहलू (जनसामान्य पर प्रभाव, नीतिगत बदलाव या प्रशासन का रुख)।
+★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINE OPTIONS (NO FIXED TEMPLATES):
+Generate EXACTLY 5 publishable, natural, impactful Hindi headline options directly derived from the core facts of the news:
+- Each option must represent a genuinely different editorial angle or focus on a distinct factual element of the story (e.g. key decision/event, major public impact, key quote/accusation, quantitative milestone/rule, or future implication).
+- All 5 options must be complete, professional, broadcast-ready news headlines in pure Devanagari Hindi.
+- DO NOT force options into generic predetermined formulas or fixed sentence patterns.
+- NO question-mark headlines unless the story itself is an investigative piece or unresolved mystery.
+- NO clickbait or artificial curiosity phrases like "सामने आए चौंकाने वाले तथ्य" unless strictly justified by extraordinary facts.
+- NO generic administrative filler like "प्रशासनिक अमला मौके की निगरानी में जुटा" or "लापरवाही पर सख्त संज्ञान".
 - STRICTLY DO NOT output prefixes like "विकल्प 1:", "विकल्प 2:", "Option 1:" in the headline text. Provide pure headline strings.
 - No full stop (।) at the end.
 
@@ -7901,7 +7900,7 @@ ${customPrompt ? `यूज़र का विशेष निर्देश:\
 1. हेडलाइन व कैप्शन में 100% शुद्ध देवनागरी हिंदी का प्रयोग करें। हेडलाइन में [yellow]...[/yellow] टैग के अलावा एक भी अंग्रेजी अक्षर [A-Za-z] न हो।
 2. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
 3. किसी भी हेडलाइन में शहर का सफ़िक्स (जैसे - Bhopal News) या वेबसाइट स्क्रैपिंग टेक्स्ट (जैसे कॉपी लिंक, फाइल फोटो) न हो।
-4. ठीक 5 बिल्कुल अलग-अलग और स्वतंत्र हेडलाइन विकल्प दें (1. मुख्य घटनाक्रम, 2. सवालिया दृष्टिकोण, 3. उत्सुकता/नियम, 4. मुख्य तथ्य/आंकड़ा/कार्रवाई, 5. वैकल्पिक कोण/जनसरोकार)।
+4. ठीक 5 बिल्कुल अलग-अलग, स्वतंत्र और तथ्य-आधारित हेडलाइन विकल्प दें। हर विकल्प खबर के अलग पहलू (मुख्य निर्णय, प्रत्यक्ष असर, मुख्य तथ्य/आंकड़ा, संबंधित बयान या भविष्य की योजना) पर केंद्रित हो। कोई घिसे-पिटे प्रशासनिक या सवालिया सांचे न थोपें।
 5. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें।
 6. मुख्य हेडलाइन: ${targetMaxLines === 2 ? "8-14" : "12-22"} शब्द, बिना पूर्णविराम के।
 7. 2-4 हाईलाइट शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
@@ -7913,11 +7912,11 @@ JSON Schema:
 {
   "headline": "मुख्य हिंदी हेडलाइन (बिना आदरसूचक शब्दों के, 100% शुद्ध देवनागरी हिंदी)",
   "headlineOptions": [
-    "मुख्य घटनाक्रम पर आधारित स्पष्ट हेडलाइन",
-    "तथ्यों के आधार पर सवाल उठाने वाला दृष्टिकोण",
-    "घटनाक्रम या नए नियमों की उत्सुकता जगाने वाला कोण",
-    "महत्वपूर्ण तथ्य, संख्या या कार्रवाई पर केंद्रित कोण",
-    "जनसामान्य पर प्रभाव या दूसरा प्रासंगिक समाचार कोण"
+    "खबर का मुख्य निर्णय या घटनाक्रम",
+    "जनसामान्य या संबंधित वर्ग पर प्रत्यक्ष प्रभाव",
+    "खबर में मौजूद मुख्य तथ्य, आंकड़ा या नियम",
+    "संबंधित पक्ष का बयान, रुख या कार्रवाई",
+    "भविष्य का परिणाम, अगला कदम या दूसरा समाचार कोण"
   ],
   "highlightWords": ["शब्द1", "शब्द2"],
   "formattedHeadline": "हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow]",
