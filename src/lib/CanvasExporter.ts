@@ -6,6 +6,14 @@ import { getEffectiveSpeaker, cleanHeadlineText } from './speakerUtils';
 import { getFormattedHindiDate } from './dateUtils';
 import { shouldShowAppWatermark } from './userPlanManager';
 import {
+  computeCanonicalHeadlineLayout,
+  getTemplateLayoutSpec,
+  getActionSafeZone,
+  getTitleSafeZone,
+  validateCardBeforeDownload,
+  WordToken,
+} from './canonicalLayoutEngine';
+import {
   drawOriginalHeader,
   drawBreakingRedHeader,
   drawInvestigationHeader,
@@ -214,19 +222,19 @@ function drawRoundedRect(
 export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvasElement> {
   const selectedFontFamily = card.headlineFontFamily || 'Baloo 2';
 
-  // Ensure selected font, Baloo 2, Devanagari, and Arial fonts are fully ready before measuring or drawing
+  // Ensure selected font, Baloo 2, Devanagari, Poppins, and Arial fonts are fully ready before measuring or drawing
   if (typeof document !== 'undefined' && document.fonts) {
     try {
       await document.fonts.ready;
-      if (selectedFontFamily !== 'Baloo 2') {
-        await document.fonts.load(`800 48px "${selectedFontFamily}"`);
-        await document.fonts.load(`800 64px "${selectedFontFamily}"`);
+      const targetFonts = [selectedFontFamily, 'Baloo 2', 'Noto Sans Devanagari', 'Poppins', 'Arial'];
+      const targetWeights = ['700', '800', '900'];
+      for (const fam of targetFonts) {
+        for (const w of targetWeights) {
+          try { await document.fonts.load(`${w} 48px "${fam}"`); } catch {}
+          try { await document.fonts.load(`${w} 64px "${fam}"`); } catch {}
+          try { await document.fonts.load(`${w} 72px "${fam}"`); } catch {}
+        }
       }
-      await document.fonts.load('800 48px "Baloo 2"');
-      await document.fonts.load('800 64px "Baloo 2"');
-      await document.fonts.load('700 24px "Baloo 2"');
-      await document.fonts.load('900 34px Arial');
-      await document.fonts.load('800 48px "Noto Sans Devanagari"');
     } catch (e) {
       // Continue if browser does not support font loading API
     }
@@ -1799,9 +1807,11 @@ async function drawGraphic001Canvas(
     ctx.save();
     ctx.font = '800 26px "Noto Sans Devanagari", sans-serif';
     const locTextW = ctx.measureText(cleanLoc).width;
-    const locW = Math.min(Math.round(width * 0.46), locTextW + 80);
+    const maxPillW = Math.round(width * 0.46);
+    const locW = Math.min(maxPillW, locTextW + 80);
     const locH = Math.round(height * 0.045);
-    const locX = width - locW - Math.round(width * 0.048);
+    // Position inside Action Safe (5% inset from right edge = width * 0.95 = 1026px)
+    const locX = Math.round(width * 0.95) - locW;
     const locY = Math.round(height * 0.066);
 
     // White Pill
@@ -1857,9 +1867,15 @@ async function drawGraphic001Canvas(
       ctx.fillText('📍', pinCenterX, pinCenterY);
     }
 
-    // Location Text (Bold Dark Black)
+    // Location Text (Bold Dark Black, fitted safely inside pill)
+    const maxLocTextW = locW - (pinCenterX + pinR + 10 - locX) - 16;
+    let locFontSize = 24;
+    ctx.font = `800 ${locFontSize}px "Noto Sans Devanagari", sans-serif`;
+    while (ctx.measureText(cleanLoc).width > maxLocTextW && locFontSize > 15) {
+      locFontSize -= 1;
+      ctx.font = `800 ${locFontSize}px "Noto Sans Devanagari", sans-serif`;
+    }
     ctx.fillStyle = '#090A0E';
-    ctx.font = '800 24px "Noto Sans Devanagari", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(cleanLoc, pinCenterX + pinR + 10, locY + locH / 2);
@@ -1938,54 +1954,42 @@ async function drawGraphic001Canvas(
     ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
     ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
 
-    // Render headline text in bold white with yellow highlights - Part E: Up to 4 lines support
+    // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = (card.highlightColor && card.highlightColor !== '#DC2626') ? card.highlightColor : '#FFE600';
-    const maxHeadlineW = Math.round(width * 0.90);
 
-    let testFontSize = 68;
-    for (let s = 74; s >= 38; s -= 2) {
-      const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
-      if (testLines.length <= 4) {
-        testFontSize = s;
-        break;
-      }
-    }
+    const layout = computeCanonicalHeadlineLayout({
+      headline: rawHeadline,
+      highlightWords: card.highlightWords,
+      fontFamily: fontFam,
+      templateId: 'graphic_001',
+      aspectRatio: card.aspectRatio,
+      userFontSize: card.headlineFontSize,
+      ctx,
+    });
 
-    const headlineLineH = Math.round(testFontSize * 1.32);
-    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
-    const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2;
-
-    ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
+    ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
     ctx.shadowBlur = 14;
     ctx.shadowOffsetY = 4;
 
-    for (const line of headlineLines) {
-      let lineWidth = 0;
-      const tokenSpacings: string[] = [];
+    layout.lines.forEach((line, lineIdx) => {
+      const metric = layout.lineMetrics[lineIdx];
+      let curX = metric.startX;
+      const lineY = metric.y;
+
       for (let i = 0; i < line.length; i++) {
         const token = line[i];
         const nextToken = line[i + 1];
         const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
         const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
-        tokenSpacings.push(spacing);
-        lineWidth += ctx.measureText(token.text + spacing).width;
-      }
-
-      let curX = width / 2 - lineWidth / 2;
-      for (let i = 0; i < line.length; i++) {
-        const token = line[i];
-        const spacing = tokenSpacings[i];
         ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
-        ctx.fillText(token.text, curX, startY);
+        ctx.fillText(token.text, curX, lineY);
         curX += ctx.measureText(token.text + spacing).width;
       }
-      startY += headlineLineH;
-    }
+    });
     ctx.restore();
   }
   // NOTE: If !hasUserHeadline, nothing is drawn over the red banner,
@@ -2496,37 +2500,34 @@ async function drawGraphic002Canvas(
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C';
 
-    let testFontSize = 66;
-    for (let s = 70; s >= 38; s -= 2) {
-      const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
-      if (testLines.length <= 3) {
-        testFontSize = s;
-        break;
-      }
-    }
+    const layout = computeCanonicalHeadlineLayout({
+      headline: rawHeadline,
+      highlightWords: card.highlightWords,
+      fontFamily: fontFam,
+      templateId: 'graphic_002',
+      aspectRatio: card.aspectRatio,
+      userFontSize: card.headlineFontSize,
+      ctx,
+    });
 
-    const headlineLineH = Math.round(testFontSize * 1.34);
-    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 3);
-    const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = headlineAreaCenterY - totalHeadH / 2 + Math.round(headlineLineH * 0.45);
-
-    ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
+    ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
 
-    for (const line of headlineLines) {
-      let lineWidth = 0;
-      for (const token of line) {
-        lineWidth += ctx.measureText(token.text + ' ').width;
-      }
+    layout.lines.forEach((line, lineIdx) => {
+      const metric = layout.lineMetrics[lineIdx];
+      let curX = metric.startX;
+      const lineY = metric.y;
 
-      let curX = width / 2 - lineWidth / 2;
-      for (const token of line) {
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const nextToken = line[i + 1];
+        const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
+        const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
         ctx.fillStyle = token.isHighlight ? highlightColor : '#111827';
-        ctx.fillText(token.text, curX, startY);
-        curX += ctx.measureText(token.text + ' ').width;
+        ctx.fillText(token.text, curX, lineY);
+        curX += ctx.measureText(token.text + spacing).width;
       }
-      startY += headlineLineH;
-    }
+    });
     ctx.restore();
   }
 
@@ -2889,37 +2890,34 @@ async function drawGraphic003Canvas(
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600';
 
-    let testFontSize = 70;
-    for (let s = 76; s >= 38; s -= 2) {
-      const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
-      if (testLines.length <= 3) {
-        testFontSize = s;
-        break;
-      }
-    }
+    const layout = computeCanonicalHeadlineLayout({
+      headline: rawHeadline,
+      highlightWords: card.highlightWords,
+      fontFamily: fontFam,
+      templateId: 'graphic_003',
+      aspectRatio: card.aspectRatio,
+      userFontSize: card.headlineFontSize,
+      ctx,
+    });
 
-    const headlineLineH = Math.round(testFontSize * 1.34);
-    const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 3);
-    const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = headlineAreaCenterY - totalHeadH / 2 + Math.round(headlineLineH * 0.45);
-
-    ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
+    ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
 
-    for (const line of headlineLines) {
-      let lineWidth = 0;
-      for (const token of line) {
-        lineWidth += ctx.measureText(token.text + ' ').width;
-      }
+    layout.lines.forEach((line, lineIdx) => {
+      const metric = layout.lineMetrics[lineIdx];
+      let curX = metric.startX;
+      const lineY = metric.y;
 
-      let curX = width / 2 - lineWidth / 2;
-      for (const token of line) {
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const nextToken = line[i + 1];
+        const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
+        const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
         ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
-        ctx.fillText(token.text, curX, startY);
-        curX += ctx.measureText(token.text + ' ').width;
+        ctx.fillText(token.text, curX, lineY);
+        curX += ctx.measureText(token.text + spacing).width;
       }
-      startY += headlineLineH;
-    }
+    });
   }
   ctx.restore();
 
@@ -3080,37 +3078,34 @@ async function drawGraphic004Canvas(
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626';
 
-    const maxHeadW = width - 80;
-    let headFontSize = 80;
-    for (let s = 88; s >= 46; s -= 2) {
-      const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadW, s, 0);
-      if (testLines.length <= 3) {
-        headFontSize = s;
-        break;
-      }
-    }
+    const layout = computeCanonicalHeadlineLayout({
+      headline: rawHeadline,
+      highlightWords: card.highlightWords,
+      fontFamily: fontFam,
+      templateId: 'graphic_004',
+      aspectRatio: card.aspectRatio,
+      userFontSize: card.headlineFontSize,
+      ctx,
+    });
 
-    const headLineH = Math.round(headFontSize * 1.28);
-    const headLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadW, headFontSize, 3);
-    const totalHeadH = headLines.length * headLineH;
-    let startY = 224 - totalHeadH / 2 + Math.round(headLineH * 0.44);
+    ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
+    ctx.textBaseline = 'middle';
 
-    ctx.font = `900 ${headFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
+    layout.lines.forEach((line, lineIdx) => {
+      const metric = layout.lineMetrics[lineIdx];
+      let curX = metric.startX;
+      const lineY = metric.y;
 
-    headLines.forEach((line, lineIdx) => {
-      let lineWidth = 0;
-      for (const token of line) {
-        lineWidth += ctx.measureText(token.text + ' ').width;
-      }
-      let curX = width / 2 - lineWidth / 2;
-
-      for (const token of line) {
+      for (let i = 0; i < line.length; i++) {
+        const token = line[i];
+        const nextToken = line[i + 1];
+        const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
+        const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
         const defaultColor = lineIdx === 0 ? '#000000' : '#DC2626';
         ctx.fillStyle = token.isHighlight ? highlightColor : defaultColor;
-        ctx.fillText(token.text, curX, startY);
-        curX += ctx.measureText(token.text + ' ').width;
+        ctx.fillText(token.text, curX, lineY);
+        curX += ctx.measureText(token.text + spacing).width;
       }
-      startY += headLineH;
     });
   }
   ctx.restore();
@@ -5840,11 +5835,6 @@ function drawRed3DPointerArrow(
   ctx.restore();
 }
 
-interface WordToken {
-  text: string;
-  isHighlight: boolean;
-}
-
 // Parse words and break into lines (supports 3 lines for standard breaking news, or 4-6 lines for quotes/jackets)
 function getHeadlineLines(
   ctx: CanvasRenderingContext2D,
@@ -5855,7 +5845,7 @@ function getHeadlineLines(
   maxLines: number = 3
 ): WordToken[][] {
   ctx.save();
-  ctx.font = `800 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+  ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
 
   const parseTokensFromChunk = (chunk: string): WordToken[] => {
     const tokens: WordToken[] = [];
@@ -5947,14 +5937,9 @@ function getHeadlineLines(
     }
   }
 
-  // Cap lines cleanly without appending '...' (preserves full proper 3 lines)
+  // Cap lines cleanly without dumping excess words onto the final line
   if (maxLines > 0 && lines.length > maxLines) {
-    const excessTokens: WordToken[] = [];
-    while (lines.length >= maxLines) {
-      const popped = lines.pop();
-      if (popped) excessTokens.unshift(...popped);
-    }
-    lines.push(excessTokens);
+    lines.splice(maxLines);
   }
 
   ctx.restore();
@@ -6404,8 +6389,9 @@ async function drawThemeFooterBar(
   if ((hasSocial || webGroupWidth > 0) && phoneGroupWidth > 0) totalWidth += 18 + separatorWidth + 18;
   totalWidth += phoneGroupWidth;
 
-  // Adaptive scale to strictly fit in one line
-  const maxAllowedWidth = width - 48;
+  // Adaptive scale to strictly fit inside 90% Action Safe boundary (54px inset on each side = 972px)
+  const safeMarginX = Math.round(width * 0.05);
+  const maxAllowedWidth = Math.round(width * 0.90);
   const scale = totalWidth > maxAllowedWidth ? maxAllowedWidth / totalWidth : 1;
 
   if (scale < 1) {
@@ -6437,7 +6423,7 @@ async function drawThemeFooterBar(
     finalTotalWidth += finalPhoneIconWidth + 6 + finalPhoneTextWidth;
   }
 
-  let curX = Math.max(20, Math.round((width - finalTotalWidth) / 2));
+  let curX = Math.max(safeMarginX, Math.round((width - finalTotalWidth) / 2));
 
   const iconCache: Record<string, HTMLImageElement> = {};
   await Promise.all(

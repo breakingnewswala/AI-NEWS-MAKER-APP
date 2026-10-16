@@ -10,6 +10,12 @@ import { getEffectiveSpeaker, cleanHeadlineText } from '../lib/speakerUtils';
 import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
+import {
+  computeCanonicalHeadlineLayout,
+  getTemplateLayoutSpec,
+  getActionSafeZone,
+  getTitleSafeZone,
+} from '../lib/canonicalLayoutEngine';
 
 interface CardPreviewProps {
   card: NewsCardData;
@@ -347,122 +353,112 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     card.whatsappNumber,
   ]);
 
-  // Exact proportional font size & padding matching CanvasExporter 1080px canvas and exact 20px default preview size
-  const previewScale = containerWidth / 1080;
-  const canvasTargetFontSize = Math.max(38, Math.min(84, Math.round((card.headlineFontSize || 22) * 2.3)));
-  const effectivePreviewFontSize = Math.max(14, Math.min(34, Math.round((card.headlineFontSize || 22) * (containerWidth > 0 ? containerWidth / 400 : 1.05))));
+  // Exact proportional scale matching CanvasExporter 1080px canvas
+  const previewScale = containerWidth > 0 ? containerWidth / 1080 : 0.4;
   const effectivePaddingX = Math.max(12, Math.round(52 * previewScale));
-  // Parse formatted headline with [yellow]...[/yellow] or highlightWords, preserving manual lines
-  const renderFormattedHeadline = () => {
-    const rawUncleaned = card.formattedHeadline || card.headline;
-    if (!rawUncleaned) return null;
-    const raw = cleanHeadlineText(rawUncleaned);
 
-    const parseLineParts = (textChunk: string) => {
-      const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/g;
-      const parts: { text: string; isYellow: boolean }[] = [];
-      let lastIndex = 0;
-      let match;
+  // Single Canonical Layout Calculation for live preview (Shared with CanvasExporter)
+  const canonicalLayout = React.useMemo(() => {
+    return computeCanonicalHeadlineLayout({
+      headline: card.formattedHeadline || card.headline,
+      highlightWords: card.highlightWords,
+      fontFamily: card.headlineFontFamily || 'Baloo 2',
+      templateId: card.frameDesign || 'graphic_001',
+      aspectRatio: card.aspectRatio || '4:5',
+      userFontSize: card.headlineFontSize,
+    });
+  }, [
+    card.formattedHeadline,
+    card.headline,
+    card.highlightWords,
+    card.headlineFontFamily,
+    card.frameDesign,
+    card.aspectRatio,
+    card.headlineFontSize,
+  ]);
 
-      while ((match = yellowRegex.exec(textChunk)) !== null) {
-        if (match.index > lastIndex) {
-          const plain = textChunk.substring(lastIndex, match.index);
-          plain.split(/(\s+)/).forEach((word) => {
-            if (word) {
-              const isHl = card.highlightWords?.some(
-                (hw) => hw && (word.includes(hw) || hw.includes(word))
+  // Canonical preview font size scaled to preview container
+  const effectivePreviewFontSize = Math.max(14, Math.round(canonicalLayout.fontSize * previewScale));
+
+  // Render Canonical Headline Lines matching exported canvas layout pixel-for-pixel
+  const renderFormattedHeadline = (customColor?: string, customHighlight?: string) => {
+    if (!canonicalLayout.lines || canonicalLayout.lines.length === 0) return null;
+
+    const isGraphic1 = card.frameDesign === 'graphic_001';
+    const isGraphic2 = card.frameDesign === 'graphic_002';
+    const isGraphic3 = card.frameDesign === 'graphic_003';
+    const isGraphic4 = card.frameDesign === 'graphic_004';
+    const isDefault = card.frameDesign === 'jacket-default';
+    const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
+    const isTextBreaking = card.frameDesign === 'jacket-text-breaking';
+    const isMorning = card.frameDesign === 'jacket-morning';
+    const isIvory = isMorning && card.morningDesignStyle === 'editorial-ivory';
+    const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
+    const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
+
+    // Base and highlight colors
+    const baseTextColor = customColor || ((isGraphic2 || isGraphic4 || isIvory || isDefault)
+      ? '#000000'
+      : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'))));
+
+    const highlightColor = customHighlight || (isGraphic1
+      ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
+      : isGraphic3
+      ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
+      : isGraphic4
+      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
+      : isGraphic2
+      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C')
+      : isIvory
+      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#B45309')
+      : isEmerald
+      ? '#FACC15'
+      : isMorning
+      ? (card.highlightColor || '#FFE600')
+      : isLightTemplate
+      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
+      : (card.highlightColor || '#FFE600'));
+
+    const effectiveFontSize = Math.max(13, Math.round(canonicalLayout.fontSize * previewScale));
+    const effectiveLineHeight = Math.max(16, Math.round(canonicalLayout.lineHeight * previewScale));
+
+    return (
+      <div className="w-full flex flex-col items-center justify-center select-none pointer-events-none">
+        {canonicalLayout.lines.map((line, lIdx) => (
+          <div
+            key={lIdx}
+            className="w-full flex items-center justify-center whitespace-nowrap text-center leading-none"
+            style={{
+              height: `${effectiveLineHeight}px`,
+              marginBottom: lIdx < canonicalLayout.lines.length - 1 ? `${Math.round(2 * previewScale)}px` : undefined,
+            }}
+          >
+            {line.map((token, tIdx) => {
+              const nextToken = line[tIdx + 1];
+              const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
+              return (
+                <span
+                  key={tIdx}
+                  style={{
+                    color: token.isHighlight ? highlightColor : baseTextColor,
+                    fontSize: `${effectiveFontSize}px`,
+                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontWeight: 900,
+                    textShadow: isIvory ? 'none' : (isLightTemplate ? 'none' : '0 2px 6px rgba(0,0,0,0.85)'),
+                    marginRight: (tIdx < line.length - 1 && !isNextPunctuation)
+                      ? `${Math.max(2, Math.round(effectiveFontSize * 0.28))}px`
+                      : undefined,
+                  }}
+                  className="inline-block"
+                >
+                  {token.text}
+                </span>
               );
-              parts.push({ text: word, isYellow: Boolean(isHl) });
-            }
-          });
-        }
-        const highlighted = match[1];
-        highlighted.split(/(\s+)/).forEach((word) => {
-          if (word) parts.push({ text: word, isYellow: true });
-        });
-        lastIndex = yellowRegex.lastIndex;
-      }
-
-      if (lastIndex < textChunk.length) {
-        const tail = textChunk.substring(lastIndex);
-        tail.split(/(\s+)/).forEach((word) => {
-          if (word) {
-            const isHl = card.highlightWords?.some(
-              (hw) => hw && (word.includes(hw) || hw.includes(word))
-            );
-            parts.push({ text: word, isYellow: Boolean(isHl) });
-          }
-        });
-      }
-
-      const isGraphic1 = card.frameDesign === 'graphic_001';
-      const isGraphic2 = card.frameDesign === 'graphic_002';
-      const isGraphic3 = card.frameDesign === 'graphic_003';
-      const isGraphic4 = card.frameDesign === 'graphic_004';
-      const isDefault = card.frameDesign === 'jacket-default';
-      const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
-      const isTextBreaking = card.frameDesign === 'jacket-text-breaking';
-      const isMorning = card.frameDesign === 'jacket-morning';
-      const isIvory = isMorning && card.morningDesignStyle === 'editorial-ivory';
-      const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
-      const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
-
-      // Base and highlight colors (Primary Graphic 1 / graphic_001 uses white text and yellow highlight on red banner)
-      const baseTextColor = (isGraphic2 || isGraphic4 || isIvory || isDefault)
-        ? '#000000'
-        : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')));
-
-      const highlightColor = isGraphic1
-        ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
-        : isGraphic3
-        ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
-        : isGraphic4
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
-        : isGraphic2
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C')
-        : isIvory
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#B45309')
-        : isEmerald
-        ? '#FACC15'
-        : isMorning
-        ? (card.highlightColor || '#FFE600')
-        : isLightTemplate
-        ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
-        : (card.highlightColor || '#FFE600');
-
-      if (parts.length === 0) {
-        return <span style={{ color: baseTextColor }}>{textChunk}</span>;
-      }
-
-      return parts.map((part, idx) => (
-        <span
-          key={idx}
-          style={{
-            color: part.isYellow ? highlightColor : baseTextColor,
-            textShadow: isIvory ? 'none' : (isLightTemplate ? 'none' : '0 2px 8px rgba(0,0,0,0.9), 0 4px 16px rgba(0,0,0,0.9)'),
-          }}
-          className={part.isYellow ? 'font-black' : 'font-extrabold'}
-        >
-          {part.text}
-        </span>
-      ));
-    };
-
-    const manualLines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-
-    if (manualLines.length > 1) {
-      return (
-        <span className="block">
-          {manualLines.map((mLine, lIdx) => (
-            <span key={lIdx} className="block leading-[1.32]">
-              {parseLineParts(mLine)}
-            </span>
-          ))}
-        </span>
-      );
-    }
-
-    return parseLineParts(raw);
+            })}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   // Aspect ratio class: Graphic Photo News canvas is strictly True 4:5 (1080x1350)
@@ -1157,7 +1153,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <div
               className="absolute z-30 flex items-center gap-1.5 bg-white rounded-full px-2.5 py-0.5 sm:px-3.5 sm:py-1 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto"
               style={{
-                right: '4.8%',
+                right: '5%',
                 top: '6.6%',
                 height: '4.5%',
                 maxWidth: '46%',
@@ -1231,19 +1227,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 </g>
               </svg>
 
-              {/* Headline Text: Center vertically & horizontally with balanced padding */}
-              <div className="relative z-10 w-full h-full flex items-center justify-center px-4 sm:px-6">
-                <h1
-                  className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center px-2"
-                  style={{
-                    fontFamily: card.headlineFontFamily || 'Baloo 2',
-                    fontSize: `${effectivePreviewFontSize}px`,
-                    textAlign: 'center',
-                    textShadow: '0 2px 6px rgba(0, 0, 0, 0.75)',
-                  }}
-                >
+              {/* Headline Text: Center vertically & horizontally within Title Safe bounds */}
+              <div className="relative z-10 w-full h-full flex items-center justify-center px-[10%]">
+                <div className="w-full flex items-center justify-center text-center">
                   {renderFormattedHeadline()}
-                </h1>
+                </div>
               </div>
             </div>
           )}

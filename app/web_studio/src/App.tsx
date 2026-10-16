@@ -26,6 +26,7 @@ import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
+import { validateCardBeforeDownload } from './lib/canonicalLayoutEngine';
 import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
@@ -1516,6 +1517,17 @@ export default function App() {
       }
     } catch {}
 
+    // Validate card against safe-zone layout before download
+    try {
+      const validation = validateCardBeforeDownload(card);
+      if (!validation.isValid && validation.errors.length > 0) {
+        console.warn('Card pre-download validation warning:', validation.errors);
+        showToast(`⚠️ सेफ-ज़ोन चेतावनी: ${validation.errors[0]}`);
+      }
+    } catch (valErr) {
+      console.warn('Pre-download validation check:', valErr);
+    }
+
     const fmt: 'png' | 'jpeg' =
       typeof formatOverride === 'string' && (formatOverride === 'png' || formatOverride === 'jpeg')
         ? formatOverride
@@ -1524,17 +1536,15 @@ export default function App() {
       setDownloading(true);
       setDownloadProgressText('कैनवास तैयार हो रहा है...');
       let canvas: HTMLCanvasElement | null = null;
+      // Primary: High-fidelity canonical 1080x1350 canvas renderer
       try {
-        canvas = await generateCardCanvas('news-card-container');
-      } catch (domErr) {
-        console.warn('generateCardCanvas DOM capture fallback to renderCardToCanvas:', domErr);
-      }
-
-      if (!canvas) {
+        canvas = await renderCardToCanvas(card);
+      } catch (renderErr) {
+        console.warn('renderCardToCanvas failed, attempting DOM capture fallback:', renderErr);
         try {
-          canvas = await renderCardToCanvas(card);
-        } catch (renderErr) {
-          console.error('renderCardToCanvas fallback failed:', renderErr);
+          canvas = await generateCardCanvas('news-card-container');
+        } catch (domErr) {
+          console.error('generateCardCanvas DOM capture also failed:', domErr);
         }
       }
 
@@ -1579,9 +1589,9 @@ export default function App() {
       setDownloading(true);
       let canvas: HTMLCanvasElement | null = null;
       try {
-        canvas = await generateCardCanvas('news-card-container');
-      } catch (e) {
         canvas = await renderCardToCanvas(card);
+      } catch (e) {
+        canvas = await generateCardCanvas('news-card-container');
       }
       if (!canvas) throw new Error('Canvas rendering failed');
       canvas.toBlob(async (blob) => {
