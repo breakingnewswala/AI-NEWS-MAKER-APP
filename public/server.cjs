@@ -3538,33 +3538,87 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
-var DEFAULT_SOURCE_IDS_TO_PURGE = /* @__PURE__ */ new Set([
-  "src_aajtak_live",
-  "src_amarujala_live",
-  "src_ndtv_live",
-  "src_bbc_live",
-  "src_nbt_live"
-]);
+var DEFAULT_PRODUCTION_RSS_SOURCES = [
+  {
+    id: "src_aajtak_live",
+    name: "\u0906\u091C \u0924\u0915 (Aaj Tak) - \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1726e9
+  },
+  {
+    id: "src_amarujala_live",
+    name: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala) - \u0926\u0947\u0936",
+    url: "https://www.amarujala.com/rss/breaking-news.xml",
+    type: "rss",
+    category: "\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1726000001e3
+  },
+  {
+    id: "src_ndtv_live",
+    name: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E - \u0932\u093E\u0907\u0935 \u0938\u092E\u093E\u091A\u093E\u0930",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1726000002e3
+  },
+  {
+    id: "src_bbc_live",
+    name: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "\u0905\u0902\u0924\u0930\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F",
+    isActive: true,
+    createdAt: 1726000003e3
+  },
+  {
+    id: "src_nbt_live",
+    name: "\u0928\u0935\u092D\u093E\u0930\u0924 \u091F\u093E\u0907\u092E\u094D\u0938 (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "\u0930\u093E\u091C\u094D\u092F",
+    isActive: true,
+    createdAt: 1726000004e3
+  }
+];
 function loadRssSourcesDatabase() {
   try {
     if (import_fs.default.existsSync(RSS_SOURCES_FILE)) {
       const raw = import_fs.default.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter((s) => s && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
-        if (cleaned.length !== parsed.length) {
-          saveRssSourcesDatabase(cleaned);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((s) => s && s.url);
+      }
+    }
+    const backupFile = RSS_SOURCES_FILE + ".bak";
+    if (import_fs.default.existsSync(backupFile)) {
+      const rawBak = import_fs.default.readFileSync(backupFile, "utf-8");
+      const parsedBak = JSON.parse(rawBak);
+      if (Array.isArray(parsedBak) && parsedBak.length > 0) {
+        const validBak = parsedBak.filter((s) => s && s.url);
+        if (validBak.length > 0) {
+          saveRssSourcesDatabase(validBak);
+          return validBak;
         }
-        return cleaned;
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return [];
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
 }
 function saveRssSourcesDatabase(sources) {
   try {
+    if (sources.length > 0) {
+      try {
+        import_fs.default.writeFileSync(RSS_SOURCES_FILE + ".bak", JSON.stringify(sources, null, 2), "utf-8");
+      } catch {
+      }
+    }
     import_fs.default.writeFileSync(RSS_SOURCES_FILE, JSON.stringify(sources, null, 2), "utf-8");
     return true;
   } catch (err) {
@@ -3850,7 +3904,7 @@ ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
       location: editorial.location || "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915",
-      status: "PENDING_APPROVAL"
+      status: "APPROVED"
     });
   }
   return posts;
@@ -3993,13 +4047,14 @@ app.post("/api/admin/rss-sources", (req, res) => {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: RSS \u092B\u093C\u0940\u0921\u094D\u0938 \u0914\u0930 \u0935\u0947\u092C \u0932\u093F\u0902\u0915\u094D\u0938 \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u093F\u090F \u091C\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const payload = req.body;
-    let sources = loadRssSourcesDatabase();
+    const existingSources = loadRssSourcesDatabase();
+    let incoming = [];
     if (Array.isArray(payload)) {
-      sources = payload;
+      incoming = payload;
     } else if (payload && Array.isArray(payload.sources)) {
-      sources = payload.sources;
+      incoming = payload.sources;
     } else if (payload && payload.url) {
-      const newSource = {
+      incoming = [{
         id: payload.id || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         name: (payload.name || (payload.type === "web" ? "Web Link" : "RSS Source")).trim(),
         url: payload.url.trim(),
@@ -4008,12 +4063,27 @@ app.post("/api/admin/rss-sources", (req, res) => {
         isActive: payload.isActive !== false,
         createdAt: payload.createdAt || Date.now(),
         itemsFetchedCount: 0
-      };
-      sources = [newSource, ...sources.filter((s) => s.id !== newSource.id)];
+      }];
     }
-    sources = sources.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
-    saveRssSourcesDatabase(sources);
-    return res.json({ success: true, sources });
+    const sourceMap = /* @__PURE__ */ new Map();
+    if (req.query.replace === "true" || payload?.replace === true) {
+      incoming.forEach((s) => {
+        if (s && s.url) sourceMap.set(s.url.trim(), s);
+      });
+    } else {
+      existingSources.forEach((s) => {
+        if (s && s.url) sourceMap.set(s.url.trim(), s);
+      });
+      incoming.forEach((s) => {
+        if (s && s.url) sourceMap.set(s.url.trim(), s);
+      });
+    }
+    let finalSources = Array.from(sourceMap.values());
+    if (finalSources.length === 0) {
+      finalSources = DEFAULT_PRODUCTION_RSS_SOURCES;
+    }
+    saveRssSourcesDatabase(finalSources);
+    return res.json({ success: true, sources: finalSources });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

@@ -3310,37 +3310,89 @@ interface AdminRssSourceRecord {
   itemsFetchedCount?: number;
 }
 
-const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
-
-const DEFAULT_SOURCE_IDS_TO_PURGE = new Set([
-  'src_aajtak_live',
-  'src_amarujala_live',
-  'src_ndtv_live',
-  'src_bbc_live',
-  'src_nbt_live',
-]);
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
+  {
+    id: "src_aajtak_live",
+    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000000000
+  },
+  {
+    id: "src_amarujala_live",
+    name: "अमर उजाला (Amar Ujala) - देश",
+    url: "https://www.amarujala.com/rss/breaking-news.xml",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000001000
+  },
+  {
+    id: "src_ndtv_live",
+    name: "NDTV इंडिया - लाइव समाचार",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000002000
+  },
+  {
+    id: "src_bbc_live",
+    name: "बीबीसी हिंदी (BBC Hindi)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "अंतरराष्ट्रीय",
+    isActive: true,
+    createdAt: 1726000003000
+  },
+  {
+    id: "src_nbt_live",
+    name: "नवभारत टाइम्स (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "राज्य",
+    isActive: true,
+    createdAt: 1726000004000
+  }
+];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   try {
     if (fs.existsSync(RSS_SOURCES_FILE)) {
       const raw = fs.readFileSync(RSS_SOURCES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter((s: any) => s && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
-        if (cleaned.length !== parsed.length) {
-          saveRssSourcesDatabase(cleaned);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((s: any) => s && s.url);
+      }
+    }
+    // Fallback 1: check .bak backup file
+    const backupFile = RSS_SOURCES_FILE + ".bak";
+    if (fs.existsSync(backupFile)) {
+      const rawBak = fs.readFileSync(backupFile, "utf-8");
+      const parsedBak = JSON.parse(rawBak);
+      if (Array.isArray(parsedBak) && parsedBak.length > 0) {
+        const validBak = parsedBak.filter((s: any) => s && s.url);
+        if (validBak.length > 0) {
+          saveRssSourcesDatabase(validBak);
+          return validBak;
         }
-        return cleaned;
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return [];
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
   try {
+    if (sources.length > 0) {
+      try {
+        fs.writeFileSync(RSS_SOURCES_FILE + ".bak", JSON.stringify(sources, null, 2), "utf-8");
+      } catch {}
+    }
     fs.writeFileSync(RSS_SOURCES_FILE, JSON.stringify(sources, null, 2), "utf-8");
     return true;
   } catch (err: any) {
@@ -3680,7 +3732,7 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
       timestamp,
       fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
       location: editorial.location || "विशेष डेस्क",
-      status: "PENDING_APPROVAL",
+      status: "APPROVED",
     });
   }
 
@@ -3864,14 +3916,15 @@ app.post("/api/admin/rss-sources", (req, res) => {
       return res.status(403).json({ error: "अनधिकृत: RSS फ़ीड्स और वेब लिंक्स केवल एडमिन द्वारा प्रबंधित किए जा सकते हैं।" });
     }
     const payload = req.body;
-    let sources = loadRssSourcesDatabase();
+    const existingSources = loadRssSourcesDatabase();
+    let incoming: AdminRssSourceRecord[] = [];
 
     if (Array.isArray(payload)) {
-      sources = payload;
+      incoming = payload;
     } else if (payload && Array.isArray(payload.sources)) {
-      sources = payload.sources;
+      incoming = payload.sources;
     } else if (payload && payload.url) {
-      const newSource: AdminRssSourceRecord = {
+      incoming = [{
         id: payload.id || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         name: (payload.name || (payload.type === 'web' ? 'Web Link' : 'RSS Source')).trim(),
         url: payload.url.trim(),
@@ -3880,15 +3933,30 @@ app.post("/api/admin/rss-sources", (req, res) => {
         isActive: payload.isActive !== false,
         createdAt: payload.createdAt || Date.now(),
         itemsFetchedCount: 0,
-      };
-      sources = [newSource, ...sources.filter((s) => s.id !== newSource.id)];
+      }];
     }
 
-    // Permanently purge any default sources
-    sources = sources.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+    const sourceMap = new Map<string, AdminRssSourceRecord>();
+    if (req.query.replace === 'true' || payload?.replace === true) {
+      incoming.forEach((s) => {
+        if (s && s.url) sourceMap.set(s.url.trim(), s);
+      });
+    } else {
+      existingSources.forEach((s) => {
+        if (s && s.url) sourceMap.set(s.url.trim(), s);
+      });
+      incoming.forEach((s) => {
+        if (s && s.url) sourceMap.set(s.url.trim(), s);
+      });
+    }
 
-    saveRssSourcesDatabase(sources);
-    return res.json({ success: true, sources });
+    let finalSources = Array.from(sourceMap.values());
+    if (finalSources.length === 0) {
+      finalSources = DEFAULT_PRODUCTION_RSS_SOURCES;
+    }
+
+    saveRssSourcesDatabase(finalSources);
+    return res.json({ success: true, sources: finalSources });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

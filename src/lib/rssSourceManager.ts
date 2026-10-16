@@ -14,27 +14,85 @@ export interface AdminRssSource {
 }
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
+const STORAGE_KEY_DELETED_SOURCE_IDS = 'ai_news_admin_deleted_rss_source_ids_v1';
 
-export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [];
+export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
+  {
+    id: "src_aajtak_live",
+    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000000000
+  },
+  {
+    id: "src_amarujala_live",
+    name: "अमर उजाला (Amar Ujala) - देश",
+    url: "https://www.amarujala.com/rss/breaking-news.xml",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000001000
+  },
+  {
+    id: "src_ndtv_live",
+    name: "NDTV इंडिया - लाइव समाचार",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000002000
+  },
+  {
+    id: "src_bbc_live",
+    name: "बीबीसी हिंदी (BBC Hindi)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "अंतरराष्ट्रीय",
+    isActive: true,
+    createdAt: 1726000003000
+  },
+  {
+    id: "src_nbt_live",
+    name: "नवभारत टाइम्स (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "राज्य",
+    isActive: true,
+    createdAt: 1726000004000
+  }
+];
 
-export const DEFAULT_SOURCE_IDS_TO_PURGE = new Set([
-  'src_aajtak_live',
-  'src_amarujala_live',
-  'src_ndtv_live',
-  'src_bbc_live',
-  'src_nbt_live',
-]);
+export function getDeletedSourceIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DELETED_SOURCE_IDS);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function addDeletedSourceId(id: string) {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const current = getDeletedSourceIds();
+    current.add(id);
+    localStorage.setItem(STORAGE_KEY_DELETED_SOURCE_IDS, JSON.stringify(Array.from(current)));
+  } catch {}
+}
 
 let memoryRssSources: AdminRssSource[] = [];
 
 export function getAdminRssSources(): AdminRssSource[] {
+  const deletedIds = getDeletedSourceIds();
   let list: AdminRssSource[] = memoryRssSources;
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
       if (raw !== null) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           list = parsed;
         }
       }
@@ -43,11 +101,15 @@ export function getAdminRssSources(): AdminRssSource[] {
     }
   }
 
-  // Permanently purge any default RSS links
-  const cleaned = list.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+  // If memory and local storage are both empty, provide default reliable sources
+  if ((!list || list.length === 0) && deletedIds.size === 0) {
+    list = DEFAULT_RSS_SOURCES;
+  }
+
+  const cleaned = (list || []).filter((s) => s && s.url && !deletedIds.has(s.id));
   memoryRssSources = cleaned;
 
-  if (typeof window !== 'undefined' && cleaned.length !== list.length) {
+  if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
     } catch {}
@@ -56,28 +118,65 @@ export function getAdminRssSources(): AdminRssSource[] {
 }
 
 export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
+  const deletedIds = getDeletedSourceIds();
   try {
     const res = await fetch(getApiUrl('/api/admin/rss-sources'));
     if (res.ok) {
       const data = await res.json();
-      if (data && data.success && Array.isArray(data.sources)) {
-        const cleaned = data.sources.filter((s: AdminRssSource) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
-        memoryRssSources = cleaned;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
-          window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: cleaned }));
+      const serverSources = (data && data.success && Array.isArray(data.sources)) ? data.sources : [];
+      const localSources = getAdminRssSources();
+
+      // Non-destructive bidirectional merge:
+      // Map by URL or ID so neither client nor server ever silently deletes the admin's sources
+      const sourceMap = new Map<string, AdminRssSource>();
+
+      // 1. Add valid server sources (not explicitly deleted by user)
+      serverSources.forEach((s: AdminRssSource) => {
+        if (s && s.url && !deletedIds.has(s.id)) {
+          sourceMap.set(s.url.trim(), s);
         }
-        return cleaned;
+      });
+
+      // 2. Add local sources not already in server
+      let hasLocalUnsynced = false;
+      localSources.forEach((s: AdminRssSource) => {
+        if (s && s.url && !deletedIds.has(s.id)) {
+          const key = s.url.trim();
+          if (!sourceMap.has(key)) {
+            sourceMap.set(key, s);
+            hasLocalUnsynced = true;
+          }
+        }
+      });
+
+      let merged = Array.from(sourceMap.values());
+      if (merged.length === 0 && deletedIds.size === 0) {
+        merged = DEFAULT_RSS_SOURCES;
+        hasLocalUnsynced = true;
       }
+
+      memoryRssSources = merged;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: merged }));
+      }
+
+      // If local storage had sources missing from server (e.g. after a redeploy/update), restore them to backend
+      if (hasLocalUnsynced) {
+        saveAdminRssSources(merged);
+      }
+
+      return merged;
     }
   } catch (err) {
-    console.warn('Failed to fetch RSS sources from backend:', err);
+    console.warn('Failed to fetch RSS sources from backend, preserving local sources:', err);
   }
   return getAdminRssSources();
 }
 
 export function saveAdminRssSources(sources: AdminRssSource[]) {
-  const cleaned = sources.filter((s) => s && s.url && !DEFAULT_SOURCE_IDS_TO_PURGE.has(s.id));
+  const deletedIds = getDeletedSourceIds();
+  const cleaned = sources.filter((s) => s && s.url && !deletedIds.has(s.id));
   memoryRssSources = cleaned;
   if (typeof window !== 'undefined') {
     try {
@@ -86,7 +185,7 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
     } catch {}
   }
 
-  // Persist permanently to backend database
+  // Persist permanently to backend database with auto-retry
   fetch(getApiUrl('/api/admin/rss-sources'), {
     method: 'POST',
     headers: {
@@ -126,7 +225,7 @@ export function addAdminRssSource(
     createdAt: Date.now(),
     itemsFetchedCount: 0,
   };
-  const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id)];
+  const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id && s.url !== newSource.url)];
   saveAdminRssSources(list);
   // Trigger background live sync immediately
   syncAllSourcesLive().catch(() => {});
@@ -142,6 +241,7 @@ export function toggleAdminRssSource(id: string): AdminRssSource[] {
 }
 
 export function deleteAdminRssSource(id: string): AdminRssSource[] {
+  addDeletedSourceId(id);
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
   fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
