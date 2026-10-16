@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Copy, Check, Share2, Sparkles, Loader2 } from 'lucide-react';
+import { X, Copy, Check, Share2, Sparkles, Loader2, Lock } from 'lucide-react';
 import { NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
+import { isUserActionAllowed } from '../lib/userPlanManager';
 
 interface CaptionModalProps {
   isOpen: boolean;
@@ -35,11 +36,10 @@ export function getUserFirstHashtag(card?: NewsCardData): string {
 
 // Build hashtags strictly ensuring:
 // 1. FIRST TAG = User's Username (#<username>)
-// 2. LAST TAG = #AINewsMaker (English)
-// 3. NO #breakingnewswala or #BNWTV
+// 2. MIDDLE TAGS = Location & News tags (NO #breakingnewswala or #bnwtv)
+// 3. FINAL TAG = Strictly #AINewsMaker
 export function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
   const firstTag = getUserFirstHashtag(card);
-  const lastTag = '#AINewsMaker';
 
   const loc = (location || 'News')
     .split(/[\/,]/)[0]
@@ -61,8 +61,8 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
       lower !== '#breakingnewswala' &&
       lower !== '#bnwtv' &&
       lower !== '#ब्रेकिंगन्यूजवाला' &&
-      lower !== firstTag.toLowerCase() &&
-      lower !== lastTag.toLowerCase()
+      lower !== '#ainewsmaker' &&
+      lower !== firstTag.toLowerCase()
     );
   });
 
@@ -82,13 +82,13 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
   const uniqueMidTags: string[] = [];
   for (const t of tagList) {
     const lower = t.toLowerCase();
-    if (!seen.has(lower) && lower !== firstTag.toLowerCase() && lower !== lastTag.toLowerCase()) {
+    if (!seen.has(lower) && lower !== firstTag.toLowerCase() && lower !== '#ainewsmaker') {
       seen.add(lower);
       uniqueMidTags.push(t);
     }
   }
 
-  return [firstTag, ...uniqueMidTags, lastTag].join(' ');
+  return [firstTag, ...uniqueMidTags, '#AINewsMaker'].filter(Boolean).join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({
@@ -104,6 +104,8 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai'>('gemini');
 
   const firstUserTag = getUserFirstHashtag(card);
+  const actionAllowance = isUserActionAllowed();
+  const isActionLocked = !actionAllowance.allowed;
 
   // Generate strictly 2 to 3 detailed paragraphs of news + tags at the end
   useEffect(() => {
@@ -165,6 +167,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
 
   // Expand or rewrite caption using AI
   const handleExpandWithAI = async (overrideStyle?: 'detailed_3_para' | 'bullet_points' | 'short') => {
+    if (isActionLocked) return;
     const styleToUse = overrideStyle || selectedStyle;
     setIsExpanding(true);
 
@@ -193,7 +196,7 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
 नियम:
 1. भाषा शुद्ध, स्पष्ट और गंभीर हिंदी पत्रकारिता शैली की होनी चाहिए।
 2. कोई अनावश्यक काल्पनिक बातें न जोड़ें।
-3. पहला हैशटैग ${firstUserTag} और अंतिम हैशटैग #AINewsMaker ही होना चाहिए।
+3. पहला हैशटैग ${firstUserTag} रखें। किसी भी ब्रांड का अनचाहा हैशटैग न जोड़ें।
 `;
 
       const response = await fetch('/api/generate-ai-news', {
@@ -233,6 +236,7 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
   if (!isOpen) return null;
 
   const handleCopy = async () => {
+    if (isActionLocked) return;
     try {
       await navigator.clipboard.writeText(captionText);
       setCopied(true);
@@ -268,6 +272,14 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 space-y-4">
+          {isActionLocked && (
+            <div className="bg-red-950/80 border border-red-700/80 rounded-xl p-3 text-red-200 text-xs flex items-center gap-2.5 shadow-md">
+              <Lock className="w-4 h-4 text-red-400 shrink-0" />
+              <span>
+                <strong>7-Day Free Trial समाप्त:</strong> कैप्शन कॉपी व AI जनरेशन की सुविधा निष्क्रिय है। कृपया प्रोफाइल में जाकर प्लान अपग्रेड करें।
+              </span>
+            </div>
+          )}
           {/* AI Provider Switcher */}
           <div className="flex items-center justify-between bg-neutral-950 p-2 rounded-xl border border-neutral-800">
             <span className="text-xs font-bold text-neutral-300">
@@ -385,9 +397,13 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
             <button
               type="button"
               onClick={() => handleExpandWithAI()}
-              disabled={isExpanding}
-              className="text-yellow-400 hover:text-yellow-300 font-bold flex items-center gap-1.5 bg-yellow-400/10 hover:bg-yellow-400/20 px-2.5 py-1 rounded-lg border border-yellow-400/30 transition-all cursor-pointer disabled:opacity-50"
-              title="AI से कैप्शन को फिर से तैयार या बड़ा करें"
+              disabled={isExpanding || isActionLocked}
+              className={`font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
+                isActionLocked
+                  ? 'bg-neutral-800 text-neutral-500 border-neutral-700/60 opacity-60 cursor-not-allowed'
+                  : 'text-yellow-400 hover:text-yellow-300 bg-yellow-400/10 hover:bg-yellow-400/20 border-yellow-400/30 cursor-pointer disabled:opacity-50'
+              }`}
+              title={isActionLocked ? 'ट्रायल समाप्त — AI कैप्शन लॉक' : 'AI से कैप्शन को फिर से तैयार या बड़ा करें'}
             >
               {isExpanding ? (
                 <>
@@ -396,7 +412,7 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3 h-3 text-yellow-400" />
+                  {isActionLocked ? <Lock className="w-3 h-3 text-neutral-400" /> : <Sparkles className="w-3 h-3 text-yellow-400" />}
                   <span>🔄 AI से नया कैप्शन बनाएं / बड़ा करें</span>
                 </>
               )}
@@ -414,7 +430,13 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
           <div className="flex items-center gap-3 pt-1">
             <button
               onClick={handleCopy}
-              className="flex-1 py-3 px-4 rounded-xl bg-green-500 hover:bg-green-400 active:scale-[0.99] text-neutral-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-green-950/40 transition-all"
+              disabled={isActionLocked}
+              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all ${
+                isActionLocked
+                  ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 opacity-60 cursor-not-allowed'
+                  : 'bg-green-500 hover:bg-green-400 active:scale-[0.99] text-neutral-950 cursor-pointer shadow-lg shadow-green-950/40'
+              }`}
+              title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'इंस्टा/फेसबुक कैप्शन कॉपी करें'}
             >
               {copied ? (
                 <>
@@ -423,8 +445,8 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
                 </>
               ) : (
                 <>
-                  <Copy className="w-5 h-5 stroke-[2.5]" />
-                  <span>इंस्टा/फेसबुक कैप्शन कॉपी करें</span>
+                  {isActionLocked ? <Lock className="w-5 h-5 text-neutral-400" /> : <Copy className="w-5 h-5 stroke-[2.5]" />}
+                  <span>{isActionLocked ? 'कैप्शन सुविधा लॉक (ट्रायल समाप्त)' : 'इंस्टा/फेसबुक कैप्शन कॉपी करें'}</span>
                 </>
               )}
             </button>

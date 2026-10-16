@@ -244,7 +244,7 @@ export function processNewsLocally(
 
   // 6. Generate 3 Captions (Detailed 3-Para, Bullets, Short 2-Para)
   const cleanUsername = (channelUsername || '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
-  const userTag = cleanUsername ? `#${cleanUsername}` : '#AINews';
+  const userTag = cleanUsername ? `#${cleanUsername}` : '';
   const locStr = detectedLocation && detectedLocation !== 'विशेष कवरेज' ? detectedLocation : '';
   const locTag = locStr ? `#${locStr.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News` : '';
   const catTag = category.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
@@ -256,7 +256,7 @@ export function processNewsLocally(
     '#HindiNews',
     ...(catTag && !locTag.includes(catTag) ? [`#${catTag}`] : []),
     '#AINewsMaker',
-  ];
+  ].filter(Boolean);
   const tagsStr = tagsList.join(' ');
 
   const locPrefix = locStr ? `${locStr} में ` : '';
@@ -273,7 +273,8 @@ export function processNewsLocally(
     ? `${allSentences[4]}। मामले में उत्तरदायी अधिकारियों ने निष्पक्ष जांच और आवश्यक कानूनी व प्रशासनिक कार्रवाई के सख्त आदेश दिए हैं।`
     : 'मामले की गंभीरता को देखते हुए उच्चाधिकारियों ने तुरंत संज्ञान लिया है और अग्रिम वैधानिक व अनुशासनात्मक कार्रवाई के निर्देश जारी कर दिए गए हैं। स्थिति पर नजर रखी जा रही है।';
 
-  const captionDetailed = `${dPara1}\n\n${dPara2}।\n\n${dPara3}\n\n${tagsStr}`;
+  const cleanDPara2 = dPara2.replace(/[।\.\s]+$/, '');
+  const captionDetailed = `${dPara1}\n\n${cleanDPara2}।\n\n${dPara3}\n\n${tagsStr}`;
 
   // Style 2: Bullets
   const bulletItems = allSentences.slice(0, 4).map((s) => `• ${s}`);

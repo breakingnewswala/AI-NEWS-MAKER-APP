@@ -432,6 +432,14 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       // Single Image / Constrained photo: stops at photoBottomY
       drawImageCover(ctx, mainImg, 0, 0, width, photoBottomY, mCropX, mCropY, mZoom, canvasFilterStr);
     } else if (card.layout === 'split-v') {
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const resolvedSecondPhoto = (card.images?.second && card.images.second !== card.images.main)
+        ? card.images.second
+        : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (card.images?.second || ''));
+      const resolvedThirdPhoto = (card.images?.third && card.images.third !== card.images.main)
+        ? card.images.third
+        : (availablePhotos[2] && availablePhotos[2] !== card.images.main ? availablePhotos[2] : (card.images?.third || ''));
+
       // 2 images: 35% Top, 65% Bottom (35-65 ratio as requested)
       const topH = photoBottomY * 0.35;
       const bottomH = photoBottomY * 0.65;
@@ -441,13 +449,18 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, topH - 2, width, 4);
 
-      if (card.images.second) {
-        const secondImg = await loadImage(card.images.second);
+      if (resolvedSecondPhoto) {
+        const secondImg = await loadImage(resolvedSecondPhoto);
         drawImageCover(ctx, secondImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
       }
     } else if (card.layout === 'double') {
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const resolvedSecondPhoto = (card.images?.second && card.images.second !== card.images.main)
+        ? card.images.second
+        : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (card.images?.second || ''));
+
       // 2 images: 50-50 Up & Down (50% आधी ऊपर, 50% आधी नीचे)
       const topH = photoBottomY * 0.50;
       const bottomH = photoBottomY * 0.50;
@@ -457,23 +470,36 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, topH - 2, width, 4);
 
-      if (card.images.second) {
-        const secondImg = await loadImage(card.images.second);
+      if (resolvedSecondPhoto) {
+        const secondImg = await loadImage(resolvedSecondPhoto);
         drawImageCover(ctx, secondImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
       }
     } else if (card.layout === 'double-h' || card.layout === 'split-h') {
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const resolvedSecondPhoto = (card.images?.second && card.images.second !== card.images.main)
+        ? card.images.second
+        : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (card.images?.second || ''));
+
       // 2 horizontal columns side by side (लेफ्ट-राइट)
       const halfW = width / 2;
       drawImageCover(ctx, mainImg, 0, 0, halfW - 2, photoBottomY, mCropX, mCropY, mZoom, canvasFilterStr);
-      if (card.images.second) {
-        const secondImg = await loadImage(card.images.second);
+      if (resolvedSecondPhoto) {
+        const secondImg = await loadImage(resolvedSecondPhoto);
         drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, photoBottomY, sCropX, sCropY, sZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, photoBottomY, sCropX, sCropY, sZoom, canvasFilterStr);
       }
     } else if (card.layout === 'grid-3') {
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const resolvedSecondPhoto = (card.images?.second && card.images.second !== card.images.main)
+        ? card.images.second
+        : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (card.images?.second || ''));
+      const resolvedThirdPhoto = (card.images?.third && card.images.third !== card.images.main)
+        ? card.images.third
+        : (availablePhotos[2] && availablePhotos[2] !== card.images.main ? availablePhotos[2] : (card.images?.third || ''));
+
       // 3 images: 2 on top, 1 wide at bottom
       const topH = photoBottomY * 0.52;
       const bottomH = photoBottomY * 0.48;
@@ -483,21 +509,29 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       drawImageCover(ctx, mainImg, 0, 0, halfW - 3, topH - 3, mCropX, mCropY, mZoom, canvasFilterStr);
 
       // Top Right
-      if (card.images.second) {
-        const secondImg = await loadImage(card.images.second);
+      if (resolvedSecondPhoto) {
+        const secondImg = await loadImage(resolvedSecondPhoto);
         drawImageCover(ctx, secondImg, halfW + 3, 0, halfW - 3, topH - 3, sCropX, sCropY, sZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, halfW + 3, 0, halfW - 3, topH - 3, sCropX, sCropY, sZoom, canvasFilterStr);
       }
 
       // Bottom Wide
-      if (card.images.third) {
-        const thirdImg = await loadImage(card.images.third);
+      if (resolvedThirdPhoto) {
+        const thirdImg = await loadImage(resolvedThirdPhoto);
         drawImageCover(ctx, thirdImg, 0, topH + 3, width, bottomH - 3, tCropX, tCropY, tZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, 0, topH + 3, width, bottomH - 3, tCropX, tCropY, tZoom, canvasFilterStr);
       }
     } else if (card.layout === 'grid-3-bottom') {
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const resolvedSecondPhoto = (card.images?.second && card.images.second !== card.images.main)
+        ? card.images.second
+        : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (card.images?.second || ''));
+      const resolvedThirdPhoto = (card.images?.third && card.images.third !== card.images.main)
+        ? card.images.third
+        : (availablePhotos[2] && availablePhotos[2] !== card.images.main ? availablePhotos[2] : (card.images?.third || ''));
+
       // 3 images: 1 wide on top, 2 on bottom
       const topH = photoBottomY * 0.48;
       const bottomH = photoBottomY * 0.52;
@@ -507,16 +541,16 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       drawImageCover(ctx, mainImg, 0, 0, width, topH - 3, mCropX, mCropY, mZoom, canvasFilterStr);
 
       // Bottom Left
-      if (card.images.second) {
-        const secondImg = await loadImage(card.images.second);
+      if (resolvedSecondPhoto) {
+        const secondImg = await loadImage(resolvedSecondPhoto);
         drawImageCover(ctx, secondImg, 0, topH + 3, halfW - 3, bottomH - 3, sCropX, sCropY, sZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, 0, topH + 3, halfW - 3, bottomH - 3, sCropX, sCropY, sZoom, canvasFilterStr);
       }
 
       // Bottom Right
-      if (card.images.third) {
-        const thirdImg = await loadImage(card.images.third);
+      if (resolvedThirdPhoto) {
+        const thirdImg = await loadImage(resolvedThirdPhoto);
         drawImageCover(ctx, thirdImg, halfW + 3, topH + 3, halfW - 3, bottomH - 3, tCropX, tCropY, tZoom, canvasFilterStr);
       } else {
         drawImageCover(ctx, mainImg, halfW + 3, topH + 3, halfW - 3, bottomH - 3, tCropX, tCropY, tZoom, canvasFilterStr);
@@ -683,7 +717,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       textBreakingHeadlineY,
       Math.round(headlineFontSize * 1.14),
       scaledLineH,
-      card.headlineAlign || 'center',
+      'center',
       56,
       true, // isLightBackground = true
       false,
@@ -746,7 +780,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       headlineTextY,
       headlineFontSize,
       headlineLineHeight,
-      card.headlineAlign || 'center',
+      'center',
       48,
       true, // isLightBackground = true
       false,
@@ -818,9 +852,9 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
 
     currentY += quoteBadgeH + gap;
 
-    // B. Headline / Statement Text (Respects user's headlineAlign: 'justify' | 'center' | 'left')
+    // B. Headline / Statement Text (Always centered per master prompt)
     const quoteTextStartY = currentY;
-    const effectiveAlign = card.headlineAlign || 'center';
+    const effectiveAlign = 'center';
     drawRenderedHeadlineLines(
       ctx,
       headlineLines,
@@ -910,7 +944,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       headlineStartY,
       headlineFontSize,
       headlineLineHeight,
-      card.headlineAlign || 'center',
+      'center',
       48,
       false,
       false,
@@ -1479,6 +1513,7 @@ async function drawMorningJacketBackground(
 // Red Headline Area (61.33% to 89.85% height; shows default Step 3 instructions when no headline is entered,
 // replaces with real-time white/yellow headline on red gradient when headline is entered),
 // Bottom Footer Area (89.85% to 100% height; draws user's saved FooterGraphic)
+// showTextGraphic: false (Part B / Section 3: Text graphic default is OFF on new graphics)
 // ============================================================================
 async function drawGraphic001Canvas(
   ctx: CanvasRenderingContext2D,
@@ -1568,6 +1603,14 @@ async function drawGraphic001Canvas(
       const mainImg = await loadImage(getSafeCanvasPhotoUrl(card.images.main));
       const layout = card.layout || 'single';
 
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const resolvedSecondPhoto = (card.images?.second && card.images.second !== card.images.main)
+        ? card.images.second
+        : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (card.images?.second || ''));
+      const resolvedThirdPhoto = (card.images?.third && card.images.third !== card.images.main)
+        ? card.images.third
+        : (availablePhotos[2] && availablePhotos[2] !== card.images.main ? availablePhotos[2] : (card.images?.third || ''));
+
       if (layout === 'single' || layout === 'full' || (layout as string) === 'inset-circle') {
         drawImageCover(ctx, mainImg, 0, 0, width, photoH, mCropX, mCropY, mZoom, canvasFilterStr);
       } else if (layout === 'split-v') {
@@ -1577,8 +1620,8 @@ async function drawGraphic001Canvas(
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, topH - 2, width, 4);
 
-        if (card.images?.second) {
-          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+        if (resolvedSecondPhoto) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(resolvedSecondPhoto));
           drawImageCover(ctx, secondImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1589,8 +1632,8 @@ async function drawGraphic001Canvas(
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, halfH - 2, width, 4);
 
-        if (card.images?.second) {
-          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+        if (resolvedSecondPhoto) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(resolvedSecondPhoto));
           drawImageCover(ctx, secondImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, halfH + 2, width, halfH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1601,8 +1644,8 @@ async function drawGraphic001Canvas(
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(halfW - 2, 0, 4, photoH);
 
-        if (card.images?.second) {
-          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+        if (resolvedSecondPhoto) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(resolvedSecondPhoto));
           drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, photoH, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1613,15 +1656,15 @@ async function drawGraphic001Canvas(
         const halfW = Math.round(width * 0.5);
         drawImageCover(ctx, mainImg, 0, 0, halfW - 2, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
 
-        if (card.images?.second) {
-          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+        if (resolvedSecondPhoto) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(resolvedSecondPhoto));
           drawImageCover(ctx, secondImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, halfW + 2, 0, halfW - 2, topH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         }
 
-        if (card.images?.third) {
-          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(card.images.third));
+        if (resolvedThirdPhoto) {
+          const thirdImg = await loadImage(getSafeCanvasPhotoUrl(resolvedThirdPhoto));
           drawImageCover(ctx, thirdImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, topH + 2, width, bottomH - 2, tCropX, tCropY, tZoom, canvasFilterStr);
@@ -1632,8 +1675,8 @@ async function drawGraphic001Canvas(
         const halfW = Math.round(width * 0.5);
         drawImageCover(ctx, mainImg, 0, 0, width, topH - 2, mCropX, mCropY, mZoom, canvasFilterStr);
 
-        if (card.images?.second) {
-          const secondImg = await loadImage(getSafeCanvasPhotoUrl(card.images.second));
+        if (resolvedSecondPhoto) {
+          const secondImg = await loadImage(getSafeCanvasPhotoUrl(resolvedSecondPhoto));
           drawImageCover(ctx, secondImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
         } else {
           drawImageCover(ctx, mainImg, 0, topH + 2, halfW - 2, bottomH - 2, sCropX, sCropY, sZoom, canvasFilterStr);
@@ -1681,17 +1724,18 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasValidMainPhoto, nothing is drawn over the photo area,
   // allowing the authentic background image's camera icon and Step 4 instructions to show through!
 
-  // 3. TOP-LEFT LOGO AREA (Clamped strictly to Inner Safe-Zone [10%, 90%] and grows inward)
+  // 3. TOP-LEFT LOGO AREA (Positioned authentically at 5.5%, 5.5% and grows downward towards footer)
   if (card.showMasterBranding !== false) {
     ctx.save();
-    const safeLeft = Math.round(width * 0.10);
-    const safeTop = Math.round(height * 0.10);
-    const safeRight = Math.round(width * 0.90);
-    const safeBottom = Math.round(height * 0.90);
+    const safeLeft = Math.round(width * 0.05);
+    const safeTop = Math.round(height * 0.05);
+    const safeRight = Math.round(width * 0.95);
+    const safeBottom = Math.round(height * 0.60);
+    const defaultX = Math.round(width * 0.055);
 
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
-    const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
+    const scale = Math.min(1.8, Math.max(0.5, card.logoSizePercent ? card.logoSizePercent / 100 : (card.logoScale ?? 1.25)));
 
     let lW = Math.round(baseW * scale);
     let lH = Math.round(baseH * scale);
@@ -1709,13 +1753,18 @@ async function drawGraphic001Canvas(
     if (lW > safeRight - safeLeft) lW = safeRight - safeLeft;
     if (lH > safeBottom - safeTop) lH = safeBottom - safeTop;
 
-    const userPosX = card.logoX !== undefined ? Math.round((card.logoX / 100) * width) : safeLeft;
-    const userPosY = card.logoY !== undefined ? Math.round((card.logoY / 100) * height) : safeTop;
+    // Location box vertical center is 8.85% (matching CardPreview)
+    const locCenterY = Math.round(height * 0.0885);
+    const defaultY = Math.max(safeTop, Math.round(locCenterY - lH / 2));
+
+    const userPosX = card.logoX !== undefined ? Math.round((card.logoX / 100) * width) : defaultX;
+    const userPosY = card.logoY !== undefined ? Math.round((card.logoY / 100) * height) : defaultY;
 
     let finalX = userPosX;
     let finalY = userPosY;
 
     // Inward clamping: ensure logo never crosses any edge of the inner safe zone
+    // Top stays anchored so scaling expands downward towards footer
     if (finalX + lW > safeRight) finalX = Math.max(safeLeft, safeRight - lW);
     if (finalY + lH > safeBottom) finalY = Math.max(safeTop, safeBottom - lH);
     if (finalX < safeLeft) finalX = safeLeft;
@@ -1817,9 +1866,9 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
-  // 5. RED HEADLINE AREA (Part D & E: Expanded to 31.47% height, 4-line support, centered)
+  // 5. RED HEADLINE AREA (Height: 28.52%, starting at 61.33% and ending at 89.85%)
   const bannerY = Math.round(height * 0.6133);
-  const bannerH = Math.round(height * 0.3147);
+  const bannerH = Math.round(height * 0.2852);
 
   const hasUserHeadline = Boolean(
     card.headline &&
@@ -1893,10 +1942,10 @@ async function drawGraphic001Canvas(
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = (card.highlightColor && card.highlightColor !== '#DC2626') ? card.highlightColor : '#FFE600';
-    const maxHeadlineW = width - 140;
+    const maxHeadlineW = Math.round(width * 0.90);
 
-    let testFontSize = 64;
-    for (let s = 70; s >= 36; s -= 2) {
+    let testFontSize = 68;
+    for (let s = 74; s >= 38; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
       if (testLines.length <= 4) {
         testFontSize = s;
@@ -1907,7 +1956,7 @@ async function drawGraphic001Canvas(
     const headlineLineH = Math.round(testFontSize * 1.32);
     const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
     const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2 + Math.round(headlineLineH * 0.08);
+    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2;
 
     ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
@@ -1942,7 +1991,7 @@ async function drawGraphic001Canvas(
   // NOTE: If !hasUserHeadline, nothing is drawn over the red banner,
   // allowing the authentic background image's Step 3 instructions to show through!
 
-  // 6. BOTTOM FOOTER AREA (Part D: Reduced height = ~7.2% vs ~10.15%, Part I: default #000000 Black)
+  // 6. BOTTOM FOOTER AREA (Exact 10.15% / 0.1015 footer height ratio = 121.8px on 1200px canvas, remaining from 89.85%)
   const footerH = height - (bannerY + bannerH);
   const activeFooter = getActiveFooterPng(card);
   if (card.showMasterBranding !== false || Boolean(activeFooter)) {
@@ -1984,7 +2033,7 @@ async function drawGraphic001Canvas(
   }
 
   // 9. Part C: Universal Text Watermark across photo area (0 to photoH)
-  if (card.showTextWatermark || card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) {
+  if (card.showTextWatermark === true || card.showWatermark === true || card.showSuperBreakingWatermark === true) {
     await drawUniversalWatermark(ctx, width, photoH, card);
   }
 
@@ -6335,6 +6384,16 @@ async function drawThemeFooterBar(
   const phoneTextWidth = cleanPhone ? ctx.measureText(displayPhone).width : 0;
   const phoneGroupWidth = cleanPhone ? phoneIconWidth + 8 + phoneTextWidth : 0;
 
+  if (!displayHandle && !cleanWebsite && !cleanPhone) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = textColor;
+    ctx.font = `700 24px "Noto Sans Devanagari", Arial, sans-serif`;
+    ctx.fillText('| सोशल मीडिया / वेबसाइट जानकारी हेतु स्थान |', width / 2, iconY);
+    ctx.restore();
+    return;
+  }
+
   const hasSocial = icons.length > 0 || Boolean(displayHandle);
   const socialGroupWidth = iconsGroupWidth + (displayHandle ? 8 + handleWidth : 0);
 
@@ -6630,6 +6689,35 @@ export function downloadCanvas(
         }
       };
 
+function triggerGraphicWelcomeReward() {
+  if (typeof window === 'undefined') return;
+  try {
+    let email = '';
+    const rawSession = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+    if (rawSession) {
+      const u = JSON.parse(rawSession);
+      email = u.email || '';
+    }
+    if (!email) return;
+
+    fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, rewardType: 'graphic' }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.awarded) {
+          window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+          setTimeout(() => {
+            alert('🎉 बधाई! पहले ग्राफिक डाउनलोड पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
+          }, 500);
+        }
+      })
+      .catch(() => {});
+  } catch {}
+}
+
       // 1. Android Native Bridge integration (saves directly into Android MediaStore / Pictures Gallery)
       if (
         typeof window !== 'undefined' &&
@@ -6640,6 +6728,7 @@ export function downloadCanvas(
           const dataUrl = getSafeDataUrl();
           if (dataUrl) {
             (window as any).AndroidBridge.downloadImage(dataUrl, cleanFilename);
+            triggerGraphicWelcomeReward();
             resolve(true);
             return;
           }
@@ -6668,6 +6757,7 @@ export function downloadCanvas(
                     document.body.removeChild(link);
                   }
                   URL.revokeObjectURL(objectUrl);
+                  triggerGraphicWelcomeReward();
                   resolve(true);
                 }, 400);
               } else {
@@ -6701,6 +6791,7 @@ export function downloadCanvas(
               if (link.parentNode) {
                 document.body.removeChild(link);
               }
+              triggerGraphicWelcomeReward();
               resolve(true);
             }, 300);
             return;
@@ -6708,6 +6799,7 @@ export function downloadCanvas(
         } catch (fallbackErr) {
           console.warn('Direct fallback failed:', fallbackErr);
         }
+        triggerGraphicWelcomeReward();
         resolve(true);
       }
     } catch (err) {

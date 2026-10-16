@@ -7040,31 +7040,20 @@ function createLocalNewsFallback(
     }
   }
 
-  // 3. Detect genuine location
-  const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
-  let detectedLocation = "";
-
-  if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
-    detectedLocation = "वाशिंगटन";
-  } else if (/संसद|सुप्रीम कोर्ट|नई दिल्ली|केंद्र सरकार|राष्ट्रपति भवन|निर्वाचन आयोग|आरबीआई|भारत सरकार|राजधानी दिल्ली|national/i.test(fullCorpus)) {
-    detectedLocation = "नई दिल्ली";
-  } else {
-    const indianLocations = [
-      "शहडोल", "रीवा", "सीधी", "सतना", "भोपाल", "इंदौर", "जबलपुर", "ग्वालियर", "उज्जैन",
-      "सागर", "छतरपुर", "दमोह", "कटनी", "मंडला", "डिंडोरी", "अनूपपुर", "उमरिया", "सिंगरौली",
-      "निवाड़ी", "टीकमगढ़", "जयपुर", "जोधपुर", "उदयपुर", "लखनऊ", "वाराणसी", "कानपुर", "गोरखपुर",
-      "प्रयागराज", "पटना", "मुजफ्फरपुर", "रांची", "मुंबई", "पुणे", "नागपुर", "अहमदाबाद", "सूरत",
-      "चंडीगढ़", "देहरादून", "रायपुर", "बिलासपुर", "मध्य प्रदेश", "उत्तर प्रदेश", "बिहार", "राजस्थान"
-    ];
-    for (const loc of indianLocations) {
-      if (fullCorpus.includes(loc)) {
-        detectedLocation = loc;
-        break;
-      }
+  // 3. Detect genuine location using district and state detection
+  let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent, targetUrl);
+  if (!detectedLocation) {
+    const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
+    if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
+      detectedLocation = "वाशिंगटन";
+    } else if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट|राजधानी\s*दिल्ली)/i.test(fullCorpus)) {
+      detectedLocation = "नई दिल्ली";
     }
   }
 
   detectedLocation = cleanLocationField(detectedLocation);
+
+  const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
 
   // 4. Detect Category
   let category = "ताज़ा समाचार";
@@ -7091,62 +7080,109 @@ function createLocalNewsFallback(
 
   category = cleanCategoryField(category);
 
-  // 5. Build exactly 4 distinct headline options matching required styles:
-  // 1: Breaking Style, 2: Factual Style, 3: Action/Decision Style, 4: Public Impact Style
-  const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.slice(0, 70)) : "महत्वपूर्ण समाचार");
-  const baseDesc = extractedDesc || "";
-  const baseContent = extractedContent || "";
+  // 5. Build exactly 5 distinct headline options matching the 5 editorial angles:
+  // विकल्प 1: मुख्य समाचार (Clear, factual core event)
+  // विकल्प 2: सवाल उठाने वाला समाचार (Factual inquiry on negligence/action/responsibility)
+  // विकल्प 3: उत्सुकता पैदा करने वाला समाचार (Key development / video / unfolding fact)
+  // विकल्प 4: महत्वपूर्ण तथ्य या असर (Official decision / statement / investigation)
+  // विकल्प 5: वैकल्पिक समाचार कोण (Public impact / citizen ordeal / broader angle)
+  const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
+  const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, " ").slice(0, 70)) : "महत्वपूर्ण समाचार");
 
-  const style1Breaking = cleanHeadlineText(
+  const rawFactsCorpus = `${extractedDesc} ${extractedContent} ${clean}`.replace(cleanBylineRegex, " ");
+  const safeFacts = rawFactsCorpus
+    .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#")
+    .replace(/([A-Za-z])\./g, "$1#DOT#");
+  const articleSentences = safeFacts
+    .split(/[।\n]+|\.\s+/)
+    .map((s) => s.replace(/#DOT#/g, ".").trim())
+    .filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s));
+
+  // Option 1: मुख्य समाचार
+  const opt1Main = cleanHeadlineText(
     baseTitle && !isInvalidUrlHeadline(baseTitle)
       ? baseTitle
       : "बड़ी घटना से मचा हड़कंप, प्रशासनिक अमला अलर्ट"
   );
 
-  let style2Factual = "";
-  if (baseDesc && baseDesc.length > 20) {
-    const firstSentence = baseDesc.split(/[।\.\!\?]/)[0].trim();
-    if (firstSentence && firstSentence.length > 15) {
-      style2Factual = sanitizePressNoteFlattery(firstSentence);
-    }
+  // Option 2: सवाल उठाने वाला समाचार
+  let opt2Question = "";
+  if (/अस्पताल|ओपीडी|मरीज|लापरवाही|डॉक्टर|कैद/i.test(fullCorpus)) {
+    opt2Question = `${baseTitle}: प्रशासनिक संवेदनहीनता और लापरवाही पर उठे सवाल, आखिर कौन है जिम्मेदार`;
+  } else if (/हादसा|दुर्घटना|टक्कर|मौत|घायल/i.test(fullCorpus)) {
+    opt2Question = `${baseTitle}: सुरक्षा मानकों में कहां हुई चूक, घटना को लेकर उठ रहे गंभीर सवाल`;
+  } else if (/अपराध|पुलिस|गिरफ्तार|हत्या|चोरी/i.test(fullCorpus)) {
+    opt2Question = `${baseTitle}: कानून व्यवस्था पर उठे सवाल, क्या आरोपियों के खिलाफ होगी सख्त कार्रवाई`;
+  } else if (/राजनीति|चुनाव|मंत्री|सरकार/i.test(fullCorpus)) {
+    opt2Question = `${baseTitle}: सियासी हलकों में नई बहस, आगामी रणनीति पर क्या होगा फैसला`;
+  } else {
+    opt2Question = `${baseTitle}: पूरे घटनाक्रम को लेकर उठे गंभीर सवाल, क्या होगी सख्त कार्रवाई`;
   }
-  if (!style2Factual || style2Factual === style1Breaking) {
-    style2Factual = sanitizePressNoteFlattery(`${baseTitle}: मुख्य तथ्यों और घटनाक्रम का विस्तृत ब्योरा`);
-  }
-  style2Factual = cleanHeadlineText(style2Factual);
+  opt2Question = cleanHeadlineText(opt2Question);
 
-  let style3Action = "";
-  if (baseContent && baseContent.length > 30) {
-    const actionSentence = baseContent.split(/[।\.\!\?]/)[0].trim();
-    if (actionSentence && actionSentence.length > 15 && actionSentence !== style1Breaking && actionSentence !== style2Factual) {
-      style3Action = sanitizePressNoteFlattery(actionSentence);
-    }
+  // Option 3: उत्सुकता पैदा करने वाला समाचार
+  let opt3Curiosity = "";
+  if (/वीडियो|कैमरा|फुटेज|वायरल/i.test(fullCorpus)) {
+    opt3Curiosity = "घटना का वीडियो सोशल मीडिया पर वायरल होने से मचा हड़कंप, जानिए मौके पर क्या हुआ था";
+  } else if (articleSentences.length > 1 && articleSentences[1].length > 20) {
+    opt3Curiosity = sanitizePressNoteFlattery(`${articleSentences[1]}: जानिए कैसे खुला पूरा मामला और क्या हुआ आगे`);
+  } else if (articleSentences.length > 0 && articleSentences[0].length > 20) {
+    opt3Curiosity = sanitizePressNoteFlattery(`${articleSentences[0]}: घटना के बाद सामने आए चौंकाने वाले तथ्य`);
+  } else {
+    opt3Curiosity = `${baseTitle}: जानिए मामले के पीछे का पूरा सच और क्या है असली वजह`;
   }
-  if (!style3Action || style3Action === style1Breaking || style3Action === style2Factual) {
-    style3Action = sanitizePressNoteFlattery("मामले में उत्तरदायी अधिकारियों का कड़ा फैसला, जांच के दिए निर्देश");
-  }
-  style3Action = cleanHeadlineText(style3Action);
+  opt3Curiosity = cleanHeadlineText(opt3Curiosity);
 
-  let style4PublicImpact = "";
-  if (baseDesc && baseDesc.includes("।")) {
-    const secondSentence = baseDesc.split(/[।\.\!\?]/)[1]?.trim();
-    if (secondSentence && secondSentence.length > 15 && secondSentence !== style1Breaking && secondSentence !== style2Factual && secondSentence !== style3Action) {
-      style4PublicImpact = sanitizePressNoteFlattery(secondSentence);
-    }
+  // Option 4: महत्वपूर्ण तथ्य या असर
+  let opt4FactOrAction = "";
+  if (/सिविल सर्जन|जांच|आदेश|अधिकारी|कार्रवाई|एफआईआर/i.test(fullCorpus)) {
+    opt4FactOrAction = "मामले में उत्तरदायी अधिकारियों का कड़ा संज्ञान, निष्पक्ष जांच व सख्त कार्रवाई के दिए आदेश";
+  } else if (articleSentences.length > 2 && articleSentences[2].length > 20) {
+    opt4FactOrAction = sanitizePressNoteFlattery(articleSentences[2]);
+  } else {
+    opt4FactOrAction = "प्रशासनिक अमले ने लिया त्वरित संज्ञान, स्थिति की निगरानी और जांच के निर्देश जारी";
   }
-  if (!style4PublicImpact || style4PublicImpact === style1Breaking || style4PublicImpact === style2Factual || style4PublicImpact === style3Action) {
-    style4PublicImpact = sanitizePressNoteFlattery(`${baseTitle}: आम जनता पर असर और आगामी परिणाम`);
+  opt4FactOrAction = cleanHeadlineText(opt4FactOrAction);
+
+  // Option 5: वैकल्पिक समाचार कोण (Public impact or alternative angle)
+  let opt5Alternative = "";
+  if (/अस्पताल|मरीज|स्वास्थ्य/i.test(fullCorpus)) {
+    opt5Alternative = "स्वास्थ्य सेवाओं की बदहाली और बेबसी पर फूटा लोगों का गुस्सा, व्यवस्था में सुधार की मांग";
+  } else if (/जनता|लोग|ग्रामीण|नागरिक/i.test(fullCorpus)) {
+    opt5Alternative = `${baseTitle}: आम जनता पर असर और स्थानीय लोगों में भारी आक्रोश`;
+  } else {
+    opt5Alternative = `${baseTitle}: पूरे प्रकरण को लेकर लोगों में चर्चा तेज, प्रशासनिक जवाबदेही की मांग`;
   }
-  style4PublicImpact = cleanHeadlineText(style4PublicImpact);
+  opt5Alternative = cleanHeadlineText(opt5Alternative);
 
   const rawOptions = [
-    style1Breaking,
-    style2Factual,
-    style3Action,
-    style4PublicImpact,
+    opt1Main,
+    opt2Question,
+    opt3Curiosity,
+    opt4FactOrAction,
+    opt5Alternative,
   ];
 
-  const headlineOptions = rawOptions.map((h) => cleanHeadlineText(h)).filter(Boolean);
+  const headlineOptions: string[] = [];
+  for (const rawOpt of rawOptions) {
+    const cleaned = cleanHeadlineText(rawOpt);
+    if (cleaned && !headlineOptions.includes(cleaned)) {
+      headlineOptions.push(cleaned);
+    }
+  }
+
+  // Ensure exactly 5 options
+  const fallbackFillers = [
+    cleanHeadlineText(`${baseTitle}: मुख्य घटनाक्रम और ताजा अपडेट`),
+    cleanHeadlineText(`मामले में प्रशासनिक जांच तेज, आगामी कार्रवाई को लेकर निर्देश जारी`),
+    cleanHeadlineText(`${baseTitle}: आम जनजीवन पर असर और ताजा स्थिति`),
+    cleanHeadlineText(`घटना के बाद सुरक्षा व व्यवस्था को लेकर कड़े दिशा-निर्देश तय`),
+  ];
+  for (const filler of fallbackFillers) {
+    if (headlineOptions.length < 5 && !headlineOptions.includes(filler)) {
+      headlineOptions.push(filler);
+    }
+  }
 
   const headline = headlineOptions[0];
 
@@ -7514,6 +7550,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     let effectiveArticleDesc = "";
     let articleBodySnippets = "";
     const pickedImages: { main?: string; second?: string; third?: string; fourth?: string } = {};
+    const extractedPhotos: string[] = [];
     let extractedArticleMeta: ArticleExtractedMetadata | undefined = undefined;
 
     let effectiveInput = (rawInputText || "").trim();
@@ -7530,16 +7567,18 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
             articleBodySnippets = extracted.content || "";
 
             if (extracted.images && extracted.images.length > 0) {
-              pickedImages.main = `/api/proxy-image?url=${encodeURIComponent(extracted.images[0])}`;
-              if (extracted.images[1]) {
-                pickedImages.second = `/api/proxy-image?url=${encodeURIComponent(extracted.images[1])}`;
-              }
-              if (extracted.images[2]) {
-                pickedImages.third = `/api/proxy-image?url=${encodeURIComponent(extracted.images[2])}`;
-              }
-              if (extracted.images[3]) {
-                pickedImages.fourth = `/api/proxy-image?url=${encodeURIComponent(extracted.images[3])}`;
-              }
+              extracted.images.forEach((img) => {
+                if (img && typeof img === "string" && img.trim()) {
+                  const proxied = `/api/proxy-image?url=${encodeURIComponent(img.trim())}`;
+                  if (!extractedPhotos.includes(proxied)) {
+                    extractedPhotos.push(proxied);
+                  }
+                }
+              });
+              if (extractedPhotos[0]) pickedImages.main = extractedPhotos[0];
+              if (extractedPhotos[1]) pickedImages.second = extractedPhotos[1];
+              if (extractedPhotos[2]) pickedImages.third = extractedPhotos[2];
+              if (extractedPhotos[3]) pickedImages.fourth = extractedPhotos[3];
             }
 
             if (effectiveArticleTitle || effectiveArticleDesc || articleBodySnippets) {
@@ -7612,12 +7651,14 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 - NEVER use a URL, domain, or slug as a headline.
 - Do NOT add prefixes like 'Breaking News', 'Live Update', 'News Update', 'खबर अपडेट' to the headline.
 
-★ EXACTLY 4 ALTERNATIVE HEADLINES (HEADLINE OPTIONS):
-Generate EXACTLY 4 distinct, factual Hindi headline options matching the 4 editorial styles:
-1. Breaking Style: प्रभावशाली, तात्कालिक लेकिन पूरी तरह तथ्यात्मक।
-2. Factual Style: घटना और मुख्य तथ्यों को स्पष्ट करने वाली।
-3. Question/Action Style: समाचार के अनुरूप प्रशासनिक कार्रवाई या निर्णय पर केंद्रित।
-4. Public Impact Style: जनता पर प्रभाव या जनसरोकार बताने वाली।
+★ EXACTLY 5 ALTERNATIVE HEADLINES (HEADLINE OPTIONS):
+Generate EXACTLY 5 distinct, factual Hindi headline options based strictly on source facts matching the 5 editorial angles:
+- विकल्प 1 (मुख्य समाचार): खबर की सबसे महत्वपूर्ण घटना, निर्णय, घोषणा, कार्रवाई सीधे और स्पष्ट रूप में। पाठक को हेडलाइन पढ़ते ही समझ आए कि खबर किस बारे में है।
+- विकल्प 2 (सवाल उठाने वाला समाचार): जहाँ स्रोत की जानकारी उचित आधार देती हो, वहाँ खबर से संबंधित सवाल या सवालिया दृष्टिकोण (लापरवाही / प्रशासनिक विफलता / सुरक्षा)। कोई मनगढ़ंत विवाद न बनाएं।
+- विकल्प 3 (उत्सुकता पैदा करने वाला समाचार): खबर के किसी महत्वपूर्ण घटनाक्रम, वायरल वीडियो या तथ्य को सामने रखें। पाठक की उत्सुकता बढ़ाए, लेकिन भ्रामक न हो।
+- विकल्प 4 (महत्वपूर्ण तथ्य या असर): खबर में मौजूद किसी महत्वपूर्ण संख्या, निर्णय, कार्रवाई, बयान, प्रभाव या परिणाम को केंद्र में रखें।
+- विकल्प 5 (वैकल्पिक समाचार कोण): उसी खबर का दूसरा महत्वपूर्ण पहलू (जनसामान्य पर प्रभाव, प्रशासन की प्रतिक्रिया, पीड़ित पक्ष या सुधार की मांग)।
+Strictly DO NOT output style names in the headline text. No full stop (।) at the end.
 
 ★ MULTICOLOR HEADLINE HIGHLIGHTING:
 - Select 2-4 key impactful words from the headline.
@@ -7626,14 +7667,14 @@ Generate EXACTLY 4 distinct, factual Hindi headline options matching the 4 edito
 
 ★ NEWS CAPTION & 3 STYLES:
 Generate factual news captions based purely on source facts:
-- Style 1 (Detailed / summary): 3 full paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) + double newline + hashtags.
+- Style 1 (Detailed / summary): Exactly 3 full paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) + double newline + hashtags.
 - Style 2 (captionBullets): Short intro + 3-4 bullet points (•) of core facts + status paragraph + hashtags.
-- Style 3 (captionShort): 2 concise, impactful paragraphs + hashtags.
+- Style 3 (captionShort): Exactly 2 concise, impactful paragraphs + hashtags.
 
 ★ HASHTAG HIERARCHY (MANDATORY):
 1. First hashtag: ${userHashtag}
 2. Middle: 4-6 relevant location & news hashtags (e.g. #BreakingNews #HindiNews #MPNews)
-3. Last hashtag: #AiNewsMaker (always #AiNewsMaker as the final hashtag)
+3. Last hashtag: #AINewsMaker (strictly #AINewsMaker as the final hashtag)
 - NEVER use #breakingnewswala or #BNWTV.
 
 Output strictly valid JSON.`;
@@ -7653,29 +7694,30 @@ ${customPrompt ? `यूज़र का विशेष निर्देश:\
 संपादकीय निर्देश:
 1. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
 2. मुख्य हेडलाइन: ${targetMaxLines === 2 ? "8-14" : "12-22"} शब्द, बिना पूर्णविराम के।
-3. ठीक 4 हेडलाइन विकल्प बनाएं (1. ब्रेकिंग स्टाइल, 2. तथ्यात्मक स्टाइल, 3. एक्शन स्टाइल, 4. जनसरोकार स्टाइल)।
+3. ठीक 5 हेडलाइन विकल्प बनाएं (विकल्प 1: मुख्य समाचार, विकल्प 2: सवालिया समाचार कोण, विकल्प 3: उत्सुकता/घटनाक्रम, विकल्प 4: मुख्य तथ्य/कार्रवाई, विकल्प 5: वैकल्पिक कोण/जनसरोकार)।
 4. 2-4 हाईलाइट शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
-5. स्थान (location): शहर/जिला, राज्य (स्रोत अनुसार वास्तविक)।
+5. स्थान (location): जिला, राज्य (उदा. शहडोल, मध्य प्रदेश) स्रोत अनुसार वास्तविक।
 6. 3 पैराग्राफ का विस्तृत कैप्शन (summary) बनाएं।
-7. 3 कैप्शन स्टाइल दें: captionDetailed (3 पैराग्राफ), captionBullets (बुलेट पॉइंट्स), captionShort (2 पैराग्राफ)।
-8. हैशटैग: सबसे पहला ${userHashtag}, बीच में 4-6 न्यूज़ हैशटैग, सबसे अंतिम #AiNewsMaker।
+7. 3 कैप्शन स्टाइल दें: captionDetailed (ठीक 3 पैराग्राफ), captionBullets (बुलेट पॉइंट्स), captionShort (ठीक 2 पैराग्राफ)।
+8. हैशटैग: सबसे पहला ${userHashtag}, बीच में 4-6 न्यूज़ व लोकेशन हैशटैग, सबसे अंतिम #AINewsMaker।
 
 JSON Schema:
 {
   "headline": "मुख्य हिंदी हेडलाइन (बिना आदरसूचक शब्दों के)",
   "headlineOptions": [
-    "विकल्प 1 (हाई-इम्पैक्ट / ब्रेकिंग स्टाइल)",
-    "विकल्प 2 (तथ्यात्मक मुख्य तथ्य स्टाइल)",
-    "विकल्प 3 (एक्शन / फैसला स्टाइल)",
-    "विकल्प 4 (जनसरोकार / व्यापक प्रभाव स्टाइल)"
+    "विकल्प 1: मुख्य समाचार",
+    "विकल्प 2: सवाल उठाने वाला समाचार कोण",
+    "विकल्प 3: उत्सुकता पैदा करने वाला समाचार कोण",
+    "विकल्प 4: महत्वपूर्ण तथ्य या असर",
+    "विकल्प 5: वैकल्पिक समाचार कोण"
   ],
   "highlightWords": ["शब्द1", "शब्द2"],
   "formattedHeadline": "हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow]",
-  "location": "शहर/जिला, राज्य",
-  "summary": "पैराग्राफ 1...\\n\\nपैराग्राफ 2...\\n\\nपैराग्राफ 3...\\n\\n${userHashtag} #BreakingNews #HindiNews #AiNewsMaker",
-  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AiNewsMaker",
-  "captionBullets": "📌 मुख्य घटनाक्रम...\\n\\n• बिंदु 1\\n• बिंदु 2\\n• बिंदु 3\\n\\nवर्तमान स्थिति...\\n\\n${userHashtag} #BreakingNews #HindiNews #AiNewsMaker",
-  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AiNewsMaker",
+  "location": "जिला, राज्य",
+  "summary": "पैराग्राफ 1...\\n\\nपैराग्राफ 2...\\n\\nपैराग्राफ 3...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionBullets": "मुख्य घटनाक्रम...\\n\\n• बिंदु 1\\n• बिंदु 2\\n• बिंदु 3\\n\\nप्रशासनिक अमला...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "category": "अपराध / राजनीति / हादसा / प्रशासन / विकास",
   "suggestedImagePrompt": "Realistic photo prompt in English describing the actual news scene",
   "isAiGeneratedPhoto": false,
@@ -7823,7 +7865,7 @@ JSON Schema:
         parsedData.headline = cleanHeadlineText(parsedData.headline);
       }
 
-      // Guarantee exactly 4 distinct headline options
+      // Guarantee exactly 5 distinct headline options
       const cleanOptions: string[] = [];
       if (Array.isArray(parsedData.headlineOptions)) {
         for (const h of parsedData.headlineOptions) {
@@ -7837,8 +7879,8 @@ JSON Schema:
         cleanOptions.unshift(parsedData.headline);
       }
 
-      // If fewer than 4 options returned, derive remaining from facts
-      if (cleanOptions.length < 4) {
+      // If fewer than 5 options returned, derive remaining from facts
+      if (cleanOptions.length < 5) {
         const fallbackObj = createLocalNewsFallback(
           rawInputText || fetchedArticleSnippet || parsedData.headline,
           linkUrl,
@@ -7848,12 +7890,12 @@ JSON Schema:
         );
         for (const fbOpt of fallbackObj.headlineOptions) {
           const cleanFb = cleanHeadlineText(fbOpt);
-          if (cleanFb && !cleanOptions.includes(cleanFb) && cleanOptions.length < 4) {
+          if (cleanFb && !cleanOptions.includes(cleanFb) && cleanOptions.length < 5) {
             cleanOptions.push(cleanFb);
           }
         }
       }
-      parsedData.headlineOptions = cleanOptions.map((h) => cleanHeadlineText(h)).slice(0, 4);
+      parsedData.headlineOptions = cleanOptions.map((h) => cleanHeadlineText(h)).slice(0, 5);
 
       if (parsedData.formattedHeadline) {
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {
@@ -7906,6 +7948,7 @@ JSON Schema:
 
     if (parsedData) {
       parsedData.pickedImages = pickedImages;
+      parsedData.extractedArticlePhotos = extractedPhotos.length > 0 ? extractedPhotos : (pickedImages.main ? [pickedImages.main] : []);
     }
     return res.json({ success: true, data: parsedData });
   } catch (err: any) {
@@ -8004,7 +8047,7 @@ function cleanLocationField(loc: string): string {
 
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   cleaned = cleaned.replace(/\s{2,}/g, " ");
-  return cleaned;
+  return formatDistrictWithState(cleaned);
 }
 
 function cleanCategoryField(cat: string): string {
@@ -8043,7 +8086,7 @@ app.post("/api/format-static-caption", (req, res) => {
       caption: fullCaption,
       summary: formattedSummary,
       location: cleanLoc,
-      hashtags: ["#AINews", "#BreakingNews", "#HindiNews", "#AiNewsMaker"],
+      hashtags: ["#AINews", "#BreakingNews", "#HindiNews", "#AINewsMaker"],
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -8086,7 +8129,7 @@ function ensureHashtagHierarchy(summaryText: string, location: string = "", user
     filteredMiddleTags.push("#HindiNews");
   }
 
-  const finalTags = [userTag, ...filteredMiddleTags, "#AiNewsMaker"];
+  const finalTags = [userTag, ...filteredMiddleTags, "#AINewsMaker"];
   return `${bodyText}\n\n${finalTags.join(" ")}`;
 }
 

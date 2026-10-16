@@ -2374,9 +2374,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (card.layout !== 'split-v' && card.layout !== 'double' && card.layout !== 'double-h' && card.layout !== 'split-h') {
-                    onChange({ layout: 'split-v' });
+                  const targetLayout = (card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h')
+                    ? card.layout
+                    : 'split-v';
+                  const updates: Partial<NewsCardData> = { layout: targetLayout };
+                  const availablePhotos = card.extractedArticlePhotos || [];
+                  const secondPhoto = (card.images?.second && card.images.second !== card.images.main)
+                    ? card.images.second
+                    : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : card.images?.second);
+                  if (secondPhoto && secondPhoto !== card.images?.second) {
+                    updates.images = { ...card.images, second: secondPhoto };
                   }
+                  onChange(updates);
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
                   card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h'
@@ -2394,9 +2403,23 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (card.layout !== 'grid-3' && card.layout !== 'grid-3-bottom' && card.layout !== 'grid-4') {
-                    onChange({ layout: 'grid-3' });
+                  const targetLayout = (card.layout === 'grid-3-bottom' || card.layout === 'grid-4')
+                    ? card.layout
+                    : 'grid-3';
+                  const updates: Partial<NewsCardData> = { layout: targetLayout };
+                  const availablePhotos = card.extractedArticlePhotos || [];
+                  const newImages = { ...card.images };
+                  let changed = false;
+                  if ((!newImages.second || newImages.second === newImages.main) && availablePhotos[1]) {
+                    newImages.second = availablePhotos[1];
+                    changed = true;
                   }
+                  if ((!newImages.third || newImages.third === newImages.main) && availablePhotos[2]) {
+                    newImages.third = availablePhotos[2];
+                    changed = true;
+                  }
+                  if (changed) updates.images = newImages;
+                  onChange(updates);
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border col-span-2 sm:col-span-1 ${
                   card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4'
@@ -2430,7 +2453,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <button
                         key={l.id}
                         type="button"
-                        onClick={() => onChange({ layout: l.id })}
+                        onClick={() => {
+                          const updates: Partial<NewsCardData> = { layout: l.id };
+                          const availablePhotos = card.extractedArticlePhotos || [];
+                          if ((!card.images?.second || card.images.second === card.images.main) && availablePhotos[1]) {
+                            updates.images = { ...card.images, second: availablePhotos[1] };
+                          }
+                          onChange(updates);
+                        }}
                         className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
                           isSelected
                             ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm font-bold'
@@ -2463,7 +2493,22 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <button
                         key={l.id}
                         type="button"
-                        onClick={() => onChange({ layout: l.id })}
+                        onClick={() => {
+                          const updates: Partial<NewsCardData> = { layout: l.id };
+                          const availablePhotos = card.extractedArticlePhotos || [];
+                          const newImages = { ...card.images };
+                          let changed = false;
+                          if ((!newImages.second || newImages.second === newImages.main) && availablePhotos[1]) {
+                            newImages.second = availablePhotos[1];
+                            changed = true;
+                          }
+                          if ((!newImages.third || newImages.third === newImages.main) && availablePhotos[2]) {
+                            newImages.third = availablePhotos[2];
+                            changed = true;
+                          }
+                          if (changed) updates.images = newImages;
+                          onChange(updates);
+                        }}
                         className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
                           isSelected
                             ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm font-bold'

@@ -146,7 +146,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       middleTags.push('#BreakingNews', '#HindiNews');
     }
 
-    const finalTags = [userTag, ...middleTags, '#AiNewsMaker'];
+    const finalTags = [userTag, ...middleTags, '#AINewsMaker'];
     const uniqueTags = Array.from(new Set(finalTags)).join(' ');
 
     const locLine = location && location !== 'विशेष कवरेज' ? `\n\n📍 स्थान: ${location}` : '';
@@ -339,7 +339,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       if (sanitizedHeadline && !opts.includes(sanitizedHeadline)) {
         opts.unshift(sanitizedHeadline);
       }
-      setHeadlineOptions(opts);
+      setHeadlineOptions(opts.slice(0, 5));
       setSelectedHeadlineIndex(0);
       setAiPhotoVariation(0);
 
@@ -359,9 +359,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           autoResult.pickedImages = {
             main: autoFillNews.imageUrl,
             second: autoResult.pickedImages?.second,
+            third: autoResult.pickedImages?.third,
+            fourth: autoResult.pickedImages?.fourth,
           };
         } else if (data.data.pickedImages?.main) {
           autoResult.pickedImages = data.data.pickedImages;
+        }
+        if (data.data.extractedArticlePhotos) {
+          autoResult.extractedArticlePhotos = data.data.extractedArticlePhotos;
         }
         onApplyResult(autoResult);
       }
@@ -455,7 +460,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input: result.headline + (result.summary ? ' - ' + result.summary : ''),
-          customPrompt: `इस खबर के लिए 3 बिल्कुल नए, प्रभावशाली, संक्षिप्त और अलग-अलग शैली के हिंदी हेडलाइन विकल्प तैयार करें जो सख्ती से अधिकतम ${targetMaxLines} लाइन में हों।`,
+          customPrompt: `इस खबर के लिए ठीक 5 बिल्कुल नए, प्रभावशाली, संक्षिप्त और अलग-अलग समाचार कोणों (मुख्य, सवालिया, उत्सुकता, महत्वपूर्ण तथ्य, वैकल्पिक) के हिंदी हेडलाइन विकल्प तैयार करें जो सख्ती से अधिकतम ${targetMaxLines} लाइन में हों।`,
           aiProvider: newsAiProvider,
           template_id: tplConfig.template_id,
           headline_line_count: targetMaxLines,
@@ -465,7 +470,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       });
       const data = await response.json();
       if (data.success && data.data) {
-        const newOpts = data.data.headlineOptions || [data.data.headline];
+        const newOpts = (data.data.headlineOptions || [data.data.headline]).slice(0, 5);
         setHeadlineOptions(newOpts);
         setSelectedHeadlineIndex(0);
         setResult((prev) =>
@@ -482,11 +487,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     } catch (err: any) {
       console.warn('Headlines regeneration error, using local generator:', err);
       const cleanH = result.headline;
+      const baseLoc = result.location || 'मध्य प्रदेश';
       const newOpts = [
-        `बड़ी खबर: ${cleanH}`,
-        `${result.location || 'मध्य प्रदेश'}: ${cleanH}`,
-        `विशेष रिपोर्ट: ${cleanH}`,
-      ];
+        cleanH,
+        `${cleanH}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल`,
+        `${cleanH}: घटनाक्रम के बाद मौके पर क्या हुआ`,
+        `लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने जांच व कार्रवाई के दिए आदेश`,
+        `${cleanH}: आम जनता पर असर और आगामी परिणाम`,
+      ].slice(0, 5);
       setHeadlineOptions(newOpts);
       setSelectedHeadlineIndex(0);
     } finally {
@@ -1047,7 +1055,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       onClick={handleRegenerateHeadlines}
                       disabled={isRegeneratingHeadlines}
                       className="text-yellow-400 hover:text-yellow-300 text-[11px] font-bold flex items-center gap-1 bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/30 cursor-pointer disabled:opacity-50"
-                      title="पसंद न आने पर 3 बिल्कुल नए हेडलाइन विकल्प बनाएं"
+                      title="पसंद न आने पर 5 बिल्कुल नए हेडलाइन विकल्प बनाएं"
                     >
                       {isRegeneratingHeadlines ? (
                         <>
@@ -1057,14 +1065,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       ) : (
                         <>
                           <RotateCcw className="w-3 h-3" />
-                          <span>🔄 3 नए विकल्प बनाएं</span>
+                          <span>🔄 5 नए विकल्प बनाएं</span>
                         </>
                       )}
                     </button>
                   </div>
 
                   <div className="space-y-1.5">
-                    {headlineOptions.map((opt, idx) => {
+                    {headlineOptions.slice(0, 5).map((opt, idx) => {
                       const isSelected = result.headline === opt;
                       return (
                         <div

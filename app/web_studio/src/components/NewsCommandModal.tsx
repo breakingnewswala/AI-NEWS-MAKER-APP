@@ -12,7 +12,7 @@ interface NewsCommandModalProps {
   onClose: () => void;
   onApplyResult: (result: AIAnalysisResult) => void;
   autoFillNews?: { url?: string; title?: string; summary?: string; imageUrl?: string } | null;
-  initialTab?: 'link' | 'command';
+  initialTab?: 'link' | 'command' | 'manual';
   templateId?: string;
   headlineMaxLines?: number;
 }
@@ -28,7 +28,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
 }) => {
   const tplConfig = getTemplateHeadlineConfig(templateId);
   const targetMaxLines = headlineMaxLines || tplConfig.headline_max_lines;
-  const [activeTab, setActiveTab] = useState<'link' | 'command'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'link' | 'command' | 'manual'>(initialTab);
   const [inputText, setInputText] = useState<string>('');
   const [linkUrl, setLinkUrl] = useState<string>('');
   const [customPrompt, setCustomPrompt] = useState<string>('');
@@ -47,11 +47,73 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
   const [aiPhotoVariation, setAiPhotoVariation] = useState<number>(0);
   const [captionCopied, setCaptionCopied] = useState<boolean>(false);
 
+  // Manual Add News Form State
+  const [manualHeadline, setManualHeadline] = useState<string>('');
+  const [manualShortDesc, setManualShortDesc] = useState<string>('');
+  const [manualThumbnail, setManualThumbnail] = useState<string>('');
+  const [manualAdditionalPhotos, setManualAdditionalPhotos] = useState<string[]>([]);
+  const [manualFullNews, setManualFullNews] = useState<string>('');
+  const [manualLocation, setManualLocation] = useState<string>('');
+  const [manualNewsDate, setManualNewsDate] = useState<string>('');
+  const [submittingManual, setSubmittingManual] = useState<boolean>(false);
+
+  const handleSaveManualNews = async () => {
+    if (!manualHeadline.trim() || !manualShortDesc.trim()) {
+      setError('हेडलाइन और शॉर्ट डिस्क्रिप्शन आवश्यक हैं');
+      return;
+    }
+    setSubmittingManual(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/add-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          headline: manualHeadline,
+          shortDescription: manualShortDesc,
+          thumbnailPhoto: manualThumbnail,
+          additionalPhotos: manualAdditionalPhotos,
+          fullNews: manualFullNews || manualShortDesc,
+          location: manualLocation,
+          newsDate: manualNewsDate,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'मैन्युअल खबर सेव करने में त्रुटि');
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      }
+
+      onApplyResult({
+        headline: manualHeadline,
+        formattedHeadline: manualHeadline,
+        highlightWords: [],
+        summary: manualShortDesc,
+        location: manualLocation || '',
+        pickedImages: {
+          main: manualThumbnail || undefined,
+          second: manualAdditionalPhotos[0],
+          third: manualAdditionalPhotos[1],
+          fourth: manualAdditionalPhotos[2],
+        },
+      });
+
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'खबर जोड़ने में विफल');
+    } finally {
+      setSubmittingManual(false);
+    }
+  };
+
   const formatFullCaption = (headline: string, location: string, summary: string, sourceUrl?: string) => {
     let cleanSummary = (summary || '').trim();
 
     const hashtagRegex = /#[\w\u0900-\u097F]+/g;
-    const existingTags = cleanSummary.match(hashtagRegex) || [];
+    const existingTags: string[] = cleanSummary.match(hashtagRegex) || [];
     const textWithoutTags = cleanSummary.replace(hashtagRegex, '').trim();
 
     let channelUser = '';
@@ -87,8 +149,8 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     const finalTags = [userTag, ...middleTags, '#AINewsMaker'];
     const uniqueTags = Array.from(new Set(finalTags)).join(' ');
 
-    const effectiveUrl = sourceUrl || linkUrl || 'ainewsmaker.online';
-    return `🚨 ${headline}\n\n📍 स्थान: ${location || 'मध्य प्रदेश'}\n\n${textWithoutTags}\n\n🔗 पूरा समाचार देखें: ${effectiveUrl}\n\n${uniqueTags}`;
+    const locLine = location && location !== 'विशेष कवरेज' ? `\n\n📍 स्थान: ${location}` : '';
+    return `${headline}${locLine}\n\n${textWithoutTags}\n\n${uniqueTags}`;
   };
 
   const handleCopyCaption = () => {
@@ -277,7 +339,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       if (sanitizedHeadline && !opts.includes(sanitizedHeadline)) {
         opts.unshift(sanitizedHeadline);
       }
-      setHeadlineOptions(opts);
+      setHeadlineOptions(opts.slice(0, 5));
       setSelectedHeadlineIndex(0);
       setAiPhotoVariation(0);
 
@@ -297,9 +359,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           autoResult.pickedImages = {
             main: autoFillNews.imageUrl,
             second: autoResult.pickedImages?.second,
+            third: autoResult.pickedImages?.third,
+            fourth: autoResult.pickedImages?.fourth,
           };
         } else if (data.data.pickedImages?.main) {
           autoResult.pickedImages = data.data.pickedImages;
+        }
+        if (data.data.extractedArticlePhotos) {
+          autoResult.extractedArticlePhotos = data.data.extractedArticlePhotos;
         }
         onApplyResult(autoResult);
       }
@@ -393,7 +460,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input: result.headline + (result.summary ? ' - ' + result.summary : ''),
-          customPrompt: `इस खबर के लिए 3 बिल्कुल नए, प्रभावशाली, संक्षिप्त और अलग-अलग शैली के हिंदी हेडलाइन विकल्प तैयार करें जो सख्ती से अधिकतम ${targetMaxLines} लाइन में हों।`,
+          customPrompt: `इस खबर के लिए ठीक 5 बिल्कुल नए, प्रभावशाली, संक्षिप्त और अलग-अलग समाचार कोणों (मुख्य, सवालिया, उत्सुकता, महत्वपूर्ण तथ्य, वैकल्पिक) के हिंदी हेडलाइन विकल्प तैयार करें जो सख्ती से अधिकतम ${targetMaxLines} लाइन में हों।`,
           aiProvider: newsAiProvider,
           template_id: tplConfig.template_id,
           headline_line_count: targetMaxLines,
@@ -403,7 +470,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       });
       const data = await response.json();
       if (data.success && data.data) {
-        const newOpts = data.data.headlineOptions || [data.data.headline];
+        const newOpts = (data.data.headlineOptions || [data.data.headline]).slice(0, 5);
         setHeadlineOptions(newOpts);
         setSelectedHeadlineIndex(0);
         setResult((prev) =>
@@ -420,11 +487,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     } catch (err: any) {
       console.warn('Headlines regeneration error, using local generator:', err);
       const cleanH = result.headline;
+      const baseLoc = result.location || 'मध्य प्रदेश';
       const newOpts = [
-        `बड़ी खबर: ${cleanH}`,
-        `${result.location || 'मध्य प्रदेश'}: ${cleanH}`,
-        `विशेष रिपोर्ट: ${cleanH}`,
-      ];
+        cleanH,
+        `${cleanH}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल`,
+        `${cleanH}: घटनाक्रम के बाद मौके पर क्या हुआ`,
+        `लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने जांच व कार्रवाई के दिए आदेश`,
+        `${cleanH}: आम जनता पर असर और आगामी परिणाम`,
+      ].slice(0, 5);
       setHeadlineOptions(newOpts);
       setSelectedHeadlineIndex(0);
     } finally {
@@ -528,10 +598,10 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         </div>
 
         {/* Tab switch */}
-        <div className="flex border-b border-neutral-800 bg-neutral-950 px-3 pt-2 gap-2">
+        <div className="flex border-b border-neutral-800 bg-neutral-950 px-3 pt-2 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('link')}
-            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'link'
                 ? 'border-blue-400 text-blue-400'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
@@ -542,7 +612,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('command')}
-            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'command'
                 ? 'border-yellow-400 text-yellow-400'
                 : 'border-transparent text-neutral-400 hover:text-neutral-200'
@@ -551,11 +621,199 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
             <FileText className="w-3.5 h-3.5" />
             <span>2. रॉ न्यूज़ / स्क्रिप्ट (टेक्स्ट से बनाएं)</span>
           </button>
+          <button
+            onClick={() => setActiveTab('manual')}
+            className={`pb-2.5 px-3.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'manual'
+                ? 'border-emerald-400 text-emerald-400'
+                : 'border-transparent text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>3. मैन्युअल खबर जोड़ें (Add News)</span>
+          </button>
         </div>
 
         {/* Body */}
         <div className="p-4 sm:p-6 space-y-4">
-          {activeTab === 'link' ? (
+          {activeTab === 'manual' ? (
+            <div className="space-y-4 bg-neutral-950 p-4 rounded-xl border border-neutral-800">
+              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <span>➕</span>
+                <span>मैन्युअल न्यूज़ कार्ड दर्ज करें (Admin Add News):</span>
+              </h3>
+
+              {/* 1. Headline */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  1. हेडलाइन (Headline) <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={manualHeadline}
+                  onChange={(e) => setManualHeadline(e.target.value)}
+                  placeholder="मुख्य खबर की हेडलाइन दर्ज करें..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
+              {/* 2. Short Description */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  2. लघु विवरण (Short Description) <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={manualShortDesc}
+                  onChange={(e) => setManualShortDesc(e.target.value)}
+                  placeholder="खबर का 2-3 पंक्तियों में संक्षिप्त सारांश लिखें..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
+              {/* 3. Thumbnail Photo */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  3. थंबनेल फोटो (Thumbnail Photo) <span className="text-red-400">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={manualThumbnail}
+                    onChange={(e) => setManualThumbnail(e.target.value)}
+                    placeholder="इमेज URL पेस्ट करें या फ़ाइल अपलोड करें..."
+                    className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                  />
+                  <label className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white text-xs font-bold px-3 py-2.5 rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0">
+                    <span>📁 अपलोड</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) {
+                              setManualThumbnail(ev.target.result as string);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {manualThumbnail && (
+                  <img src={manualThumbnail} alt="Thumbnail preview" className="w-16 h-12 object-cover rounded border border-neutral-700 mt-1" />
+                )}
+              </div>
+
+              {/* 4. Additional Photos */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  4. अतिरिक्त फोटो (Additional Photos - ऐच्छिक)
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer flex items-center gap-1.5">
+                    <span>🖼️ फोटो अपलोड करें</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files: File[] = Array.from(e.target.files || []);
+                        files.forEach((file: File) => {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) {
+                              setManualAdditionalPhotos((prev) => [...prev, ev.target!.result as string]);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                      }}
+                    />
+                  </label>
+                  {manualAdditionalPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setManualAdditionalPhotos([])}
+                      className="text-xs text-red-400 hover:underline"
+                    >
+                      हटाएं ({manualAdditionalPhotos.length})
+                    </button>
+                  )}
+                </div>
+                {manualAdditionalPhotos.length > 0 && (
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {manualAdditionalPhotos.map((photo, pIdx) => (
+                      <img key={pIdx} src={photo} alt="" className="w-12 h-12 object-cover rounded border border-neutral-700" />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Full News */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-300">
+                  5. पूरी खबर (Full News) <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={manualFullNews}
+                  onChange={(e) => setManualFullNews(e.target.value)}
+                  placeholder="समाचार की पूरी विस्तृत रिपोर्ट दर्ज करें..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                />
+              </div>
+
+              {/* 6. Location & 7. News Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-300">6. स्थान (Location)</label>
+                  <input
+                    type="text"
+                    value={manualLocation}
+                    onChange={(e) => setManualLocation(e.target.value)}
+                    placeholder="उदा. भोपाल, मध्य प्रदेश"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-300">7. दिनांक (News Date)</label>
+                  <input
+                    type="text"
+                    value={manualNewsDate}
+                    onChange={(e) => setManualNewsDate(e.target.value)}
+                    placeholder="उदा. 09 अक्टूबर 2026"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={submittingManual}
+                onClick={handleSaveManualNews}
+                className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-black text-sm rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 transition-all"
+              >
+                {submittingManual ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>खबर सेव हो रही है...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>खबर प्रकाशित करें व स्टूडियो में खोलें</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : activeTab === 'link' ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
@@ -757,7 +1015,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
               </div>
               <button
                 type="button"
-                onClick={handleProcess}
+                onClick={() => { void handleProcess(); }}
                 disabled={loading}
                 className="px-2.5 py-1 rounded bg-red-800 hover:bg-red-700 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 cursor-pointer transition-colors"
               >
@@ -797,7 +1055,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       onClick={handleRegenerateHeadlines}
                       disabled={isRegeneratingHeadlines}
                       className="text-yellow-400 hover:text-yellow-300 text-[11px] font-bold flex items-center gap-1 bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/30 cursor-pointer disabled:opacity-50"
-                      title="पसंद न आने पर 3 बिल्कुल नए हेडलाइन विकल्प बनाएं"
+                      title="पसंद न आने पर 5 बिल्कुल नए हेडलाइन विकल्प बनाएं"
                     >
                       {isRegeneratingHeadlines ? (
                         <>
@@ -807,14 +1065,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       ) : (
                         <>
                           <RotateCcw className="w-3 h-3" />
-                          <span>🔄 3 नए विकल्प बनाएं</span>
+                          <span>🔄 5 नए विकल्प बनाएं</span>
                         </>
                       )}
                     </button>
                   </div>
 
                   <div className="space-y-1.5">
-                    {headlineOptions.map((opt, idx) => {
+                    {headlineOptions.slice(0, 5).map((opt, idx) => {
                       const isSelected = result.headline === opt;
                       return (
                         <div

@@ -36,7 +36,8 @@ export function getUserFirstHashtag(card?: NewsCardData): string {
 
 // Build hashtags strictly ensuring:
 // 1. FIRST TAG = User's Username (#<username>)
-// 2. NO #breakingnewswala or #AINewsMaker
+// 2. MIDDLE TAGS = Location & News tags (NO #breakingnewswala or #bnwtv)
+// 3. FINAL TAG = Strictly #AINewsMaker
 export function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
   const firstTag = getUserFirstHashtag(card);
 
@@ -87,7 +88,7 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
     }
   }
 
-  return [firstTag, ...uniqueMidTags].join(' ');
+  return [firstTag, ...uniqueMidTags, '#AINewsMaker'].filter(Boolean).join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({

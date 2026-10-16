@@ -1401,9 +1401,13 @@ export default function App() {
   const handleApplyAIResult = (result: AIAnalysisResult, photoData?: string) => {
     setCard((prev) => {
       const pickedMain = photoData || result.pickedImages?.main;
-      const pickedSecond = result.pickedImages?.second;
       const galleryList = result.pickedImages?.gallery || [];
-      const extractedList = galleryList.length > 0 ? galleryList : (pickedMain ? [pickedMain] : []);
+      const extractedList = (result.extractedArticlePhotos && result.extractedArticlePhotos.length > 0)
+        ? result.extractedArticlePhotos
+        : (galleryList.length > 0 ? galleryList : (pickedMain ? [pickedMain] : []));
+      const pickedSecond = result.pickedImages?.second || (extractedList[1] && extractedList[1] !== pickedMain ? extractedList[1] : undefined);
+      const pickedThird = result.pickedImages?.third || (extractedList[2] && extractedList[2] !== pickedMain && extractedList[2] !== pickedSecond ? extractedList[2] : undefined);
+      const pickedFourth = result.pickedImages?.fourth || (extractedList[3] && extractedList[3] !== pickedMain ? extractedList[3] : undefined);
 
       return {
         ...prev,
@@ -1419,6 +1423,8 @@ export default function App() {
               ...prev.images,
               main: pickedMain,
               second: pickedSecond || prev.images.second,
+              third: pickedThird || prev.images.third,
+              fourth: pickedFourth || prev.images.fourth,
             }
           : prev.images,
         // Always default to single full image for news as explicitly requested by editor

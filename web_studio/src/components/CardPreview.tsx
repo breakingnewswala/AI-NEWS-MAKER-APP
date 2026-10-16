@@ -89,14 +89,32 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
     ? getProxiedImageUrl(card.images.main)
     : FALLBACK_NEWS_BG;
-  const secondPhotoSrc = (card.images?.second && card.images.second.trim().length > 0)
-    ? getProxiedImageUrl(card.images.second)
+
+  const resolvedSecond = (card.images?.second && card.images.second.trim().length > 0 && card.images.second !== card.images.main)
+    ? card.images.second
+    : (card.extractedArticlePhotos && card.extractedArticlePhotos[1] && card.extractedArticlePhotos[1] !== card.images?.main
+        ? card.extractedArticlePhotos[1]
+        : (card.images?.second || ''));
+  const secondPhotoSrc = resolvedSecond
+    ? getProxiedImageUrl(resolvedSecond)
     : mainPhotoSrc;
-  const thirdPhotoSrc = (card.images?.third && card.images.third.trim().length > 0)
-    ? getProxiedImageUrl(card.images.third)
+
+  const resolvedThird = (card.images?.third && card.images.third.trim().length > 0 && card.images.third !== card.images.main)
+    ? card.images.third
+    : (card.extractedArticlePhotos && card.extractedArticlePhotos[2] && card.extractedArticlePhotos[2] !== card.images?.main
+        ? card.extractedArticlePhotos[2]
+        : (card.images?.third || ''));
+  const thirdPhotoSrc = resolvedThird
+    ? getProxiedImageUrl(resolvedThird)
     : mainPhotoSrc;
-  const fourthPhotoSrc = (card.images?.fourth && card.images.fourth.trim().length > 0)
-    ? getProxiedImageUrl(card.images.fourth)
+
+  const resolvedFourth = (card.images?.fourth && card.images.fourth.trim().length > 0 && card.images.fourth !== card.images.main)
+    ? card.images.fourth
+    : (card.extractedArticlePhotos && card.extractedArticlePhotos[3] && card.extractedArticlePhotos[3] !== card.images?.main
+        ? card.extractedArticlePhotos[3]
+        : (card.images?.fourth || ''));
+  const fourthPhotoSrc = resolvedFourth
+    ? getProxiedImageUrl(resolvedFourth)
     : secondPhotoSrc;
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomPlateRef = useRef<HTMLDivElement>(null);

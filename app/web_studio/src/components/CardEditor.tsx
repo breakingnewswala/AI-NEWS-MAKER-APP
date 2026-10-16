@@ -42,6 +42,7 @@ import {
   Minus,
   FolderOpen,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import {
   saveCustomFrame,
@@ -1809,21 +1810,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <span>बड़ा (48px)</span>
             </div>
           </div>
-
-          {/* Alignment: Strictly Centered & Locked for News Graphics */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-semibold">
-              <AlignCenter className="w-3.5 h-3.5 text-yellow-400" />
-              <span>अलाइनमेंट (Alignment):</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
-                🔒 Center Locked
-              </span>
-            </div>
-            <div className="flex items-center gap-2 bg-neutral-900/90 px-3 py-1.5 rounded-md border border-neutral-800 text-xs font-bold text-amber-300 justify-center">
-              <AlignCenter className="w-4 h-4 text-amber-400" />
-              <span>हेडलाइन हमेशा क्षैतिज रूप से मध्य में केंद्रित रहेगी (Centered)</span>
-            </div>
-          </div>
         </div>
 
         {/* Interactive Manual Word Highlighting System */}
@@ -2388,9 +2374,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (card.layout !== 'split-v' && card.layout !== 'double' && card.layout !== 'double-h' && card.layout !== 'split-h') {
-                    onChange({ layout: 'split-v' });
+                  const targetLayout = (card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h')
+                    ? card.layout
+                    : 'split-v';
+                  const updates: Partial<NewsCardData> = { layout: targetLayout };
+                  const availablePhotos = card.extractedArticlePhotos || [];
+                  const secondPhoto = (card.images?.second && card.images.second !== card.images.main)
+                    ? card.images.second
+                    : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : card.images?.second);
+                  if (secondPhoto && secondPhoto !== card.images?.second) {
+                    updates.images = { ...card.images, second: secondPhoto };
                   }
+                  onChange(updates);
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
                   card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h'
@@ -2408,9 +2403,23 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (card.layout !== 'grid-3' && card.layout !== 'grid-3-bottom' && card.layout !== 'grid-4') {
-                    onChange({ layout: 'grid-3' });
+                  const targetLayout = (card.layout === 'grid-3-bottom' || card.layout === 'grid-4')
+                    ? card.layout
+                    : 'grid-3';
+                  const updates: Partial<NewsCardData> = { layout: targetLayout };
+                  const availablePhotos = card.extractedArticlePhotos || [];
+                  const newImages = { ...card.images };
+                  let changed = false;
+                  if ((!newImages.second || newImages.second === newImages.main) && availablePhotos[1]) {
+                    newImages.second = availablePhotos[1];
+                    changed = true;
                   }
+                  if ((!newImages.third || newImages.third === newImages.main) && availablePhotos[2]) {
+                    newImages.third = availablePhotos[2];
+                    changed = true;
+                  }
+                  if (changed) updates.images = newImages;
+                  onChange(updates);
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border col-span-2 sm:col-span-1 ${
                   card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4'
@@ -2444,7 +2453,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <button
                         key={l.id}
                         type="button"
-                        onClick={() => onChange({ layout: l.id })}
+                        onClick={() => {
+                          const updates: Partial<NewsCardData> = { layout: l.id };
+                          const availablePhotos = card.extractedArticlePhotos || [];
+                          if ((!card.images?.second || card.images.second === card.images.main) && availablePhotos[1]) {
+                            updates.images = { ...card.images, second: availablePhotos[1] };
+                          }
+                          onChange(updates);
+                        }}
                         className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
                           isSelected
                             ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm font-bold'
@@ -2477,7 +2493,22 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <button
                         key={l.id}
                         type="button"
-                        onClick={() => onChange({ layout: l.id })}
+                        onClick={() => {
+                          const updates: Partial<NewsCardData> = { layout: l.id };
+                          const availablePhotos = card.extractedArticlePhotos || [];
+                          const newImages = { ...card.images };
+                          let changed = false;
+                          if ((!newImages.second || newImages.second === newImages.main) && availablePhotos[1]) {
+                            newImages.second = availablePhotos[1];
+                            changed = true;
+                          }
+                          if ((!newImages.third || newImages.third === newImages.main) && availablePhotos[2]) {
+                            newImages.third = availablePhotos[2];
+                            changed = true;
+                          }
+                          if (changed) updates.images = newImages;
+                          onChange(updates);
+                        }}
                         className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
                           isSelected
                             ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm font-bold'
@@ -2508,6 +2539,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </span>
                 <span className="text-[10px] text-neutral-400">
                   चयनित फोटो यहाँ लाइव प्रीव्यू होगी
+                </span>
+              </div>
+
+              {/* Step 4 Auto-Fit and Slider Instructions */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200/90 leading-relaxed flex items-start gap-2.5 shadow-sm">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>ऑटो-फिट सिस्टम:</strong> अपलोड की गई फोटो फ्रेम में अपने आप स्वतः फिट (Auto-fit) हो जाती है। यदि आप फोटो की स्थिति या आकार को एडजस्ट करना चाहते हैं, तो नीचे दिए गए <strong>ज़ूम व पोजीशनिंग स्लाइडर्स</strong> का उपयोग करें।
                 </span>
               </div>
 
@@ -2579,17 +2618,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         <p className="text-xs text-green-400 font-bold flex items-center gap-1">
                           <Check className="w-3.5 h-3.5" /> फोटो 1 सक्रिय है
                         </p>
-                        <p className="text-[11px] text-neutral-400 mt-0.5 truncate">लाइव कार्ड व डाउनलोड में यह फोटो दिखाई देगी</p>
+                        <p className="text-xs text-neutral-300 mt-0.5 font-medium truncate">लाइव कार्ड व डाउनलोड में यह फोटो दिखाई देगी</p>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-3 bg-neutral-900/40 rounded-lg border border-dashed border-neutral-800 text-center text-xs text-neutral-400">
-                      कोई फोटो चयनित नहीं है। कृपया नीचे से मुख्य फोटो अपलोड करें।
+                    <div className="p-3 bg-neutral-900/60 rounded-lg border border-dashed border-neutral-700 text-center text-xs sm:text-sm font-semibold text-neutral-200 tracking-wide font-['Noto_Sans_Devanagari']">
+                      कोई फोटो चयनित नहीं है। कृपया नीचे दिए गए बटन से मुख्य फोटो अपलोड करें।
                     </div>
                   )}
 
-                  <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-yellow-500/60 hover:border-yellow-400 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold hover:text-white bg-yellow-500/10 hover:bg-yellow-500/20 transition-all shadow-sm">
-                    <Upload className="w-3.5 h-3.5 text-yellow-400" />
+                  <label className="flex items-center justify-center gap-2 p-2.5 border-2 border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-xl cursor-pointer text-xs sm:text-sm font-black text-yellow-300 hover:text-white bg-yellow-500/15 hover:bg-yellow-500/25 transition-all shadow-sm">
+                    <Upload className="w-4 h-4 text-yellow-400" />
                     <span>{card.images.main ? 'नई फोटो अपलोड / बदलें' : 'मुख्य फोटो अपलोड करें'}</span>
                     <input
                       type="file"
@@ -2627,19 +2666,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
+                          <p className="text-xs text-green-400 font-bold truncate flex items-center gap-1">
                             <Check className="w-3 h-3 text-green-400" /> फोटो 1 सक्रिय
                           </p>
-                          <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+                          <p className="text-[11px] text-neutral-300 font-medium truncate">लाइव कार्ड पर दिख रही है</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-neutral-900/40 rounded border border-dashed border-neutral-800 text-center text-[11px] text-neutral-400">
-                        फोटो 1 खाली है
+                      <div className="p-2.5 bg-neutral-900/60 rounded border border-dashed border-neutral-700 text-center text-xs font-semibold text-neutral-200">
+                        फोटो 1 खाली है (अपलोड करें)
                       </div>
                     )}
 
-                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-500/50 hover:border-yellow-400 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold bg-yellow-500/10 hover:bg-yellow-500/20 transition-all">
+                    <label className="flex items-center justify-center gap-1.5 p-2 border-2 border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-lg cursor-pointer text-xs font-bold text-yellow-300 bg-yellow-500/15 hover:bg-yellow-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-yellow-400" />
                       <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
                       <input
@@ -2675,19 +2714,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           onError={handleThumbnailImgError}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
+                          <p className="text-xs text-green-400 font-bold truncate flex items-center gap-1">
                             <Check className="w-3 h-3 text-green-400" /> फोटो 2 सक्रिय
                           </p>
-                          <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+                          <p className="text-[11px] text-neutral-300 font-medium truncate">लाइव कार्ड पर दिख रही है</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-neutral-900/40 rounded border border-dashed border-neutral-800 text-center text-[11px] text-neutral-400">
-                        दूसरी फोटो अपलोड करें
+                      <div className="p-2.5 bg-neutral-900/60 rounded border border-dashed border-neutral-700 text-center text-xs font-semibold text-neutral-200">
+                        दूसरी फोटो खाली है (अपलोड करें)
                       </div>
                     )}
 
-                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-blue-500/50 hover:border-blue-400 rounded-lg cursor-pointer text-xs text-blue-300 font-bold bg-blue-500/10 hover:bg-blue-500/20 transition-all">
+                    <label className="flex items-center justify-center gap-1.5 p-2 border-2 border-dashed border-blue-400/80 hover:border-blue-300 rounded-lg cursor-pointer text-xs font-bold text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-blue-400" />
                       <span>{card.images.second ? 'फोटो 2 बदलें' : 'दूसरी फोटो अपलोड करें'}</span>
                       <input
@@ -3786,9 +3825,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onChange({ logoScale: 1.25, logoX: 10, logoY: 10 })}
+                      onClick={() => onChange({ logoScale: 1.25, logoX: 5.5, logoY: undefined })}
                       className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-[10px] border border-neutral-700 cursor-pointer"
-                      title="डिफ़ॉल्ट सेफ-ज़ोन (10%) पर रीसेट करें"
+                      title="डिफ़ॉल्ट सेफ-ज़ोन (5.5%) पर रीसेट करें"
                     >
                       डिफ़ॉल्ट (125%)
                     </button>
@@ -3801,7 +3840,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   max="1.8"
                   step="0.05"
                   value={card.logoScale ?? 1.25}
-                  onChange={(e) => onChange({ logoScale: parseFloat(e.target.value) })}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    onChange({ logoScale: val, logoSizePercent: Math.round(val * 100) });
+                  }}
                   className="w-full accent-yellow-400 cursor-pointer"
                 />
                 <div className="flex justify-between text-[10px] text-neutral-500 font-semibold">

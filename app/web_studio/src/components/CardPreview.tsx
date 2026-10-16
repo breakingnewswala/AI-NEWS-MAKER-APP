@@ -89,14 +89,32 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
     ? getProxiedImageUrl(card.images.main)
     : FALLBACK_NEWS_BG;
-  const secondPhotoSrc = (card.images?.second && card.images.second.trim().length > 0)
-    ? getProxiedImageUrl(card.images.second)
+
+  const resolvedSecond = (card.images?.second && card.images.second.trim().length > 0 && card.images.second !== card.images.main)
+    ? card.images.second
+    : (card.extractedArticlePhotos && card.extractedArticlePhotos[1] && card.extractedArticlePhotos[1] !== card.images?.main
+        ? card.extractedArticlePhotos[1]
+        : (card.images?.second || ''));
+  const secondPhotoSrc = resolvedSecond
+    ? getProxiedImageUrl(resolvedSecond)
     : mainPhotoSrc;
-  const thirdPhotoSrc = (card.images?.third && card.images.third.trim().length > 0)
-    ? getProxiedImageUrl(card.images.third)
+
+  const resolvedThird = (card.images?.third && card.images.third.trim().length > 0 && card.images.third !== card.images.main)
+    ? card.images.third
+    : (card.extractedArticlePhotos && card.extractedArticlePhotos[2] && card.extractedArticlePhotos[2] !== card.images?.main
+        ? card.extractedArticlePhotos[2]
+        : (card.images?.third || ''));
+  const thirdPhotoSrc = resolvedThird
+    ? getProxiedImageUrl(resolvedThird)
     : mainPhotoSrc;
-  const fourthPhotoSrc = (card.images?.fourth && card.images.fourth.trim().length > 0)
-    ? getProxiedImageUrl(card.images.fourth)
+
+  const resolvedFourth = (card.images?.fourth && card.images.fourth.trim().length > 0 && card.images.fourth !== card.images.main)
+    ? card.images.fourth
+    : (card.extractedArticlePhotos && card.extractedArticlePhotos[3] && card.extractedArticlePhotos[3] !== card.images?.main
+        ? card.extractedArticlePhotos[3]
+        : (card.images?.fourth || ''));
+  const fourthPhotoSrc = resolvedFourth
+    ? getProxiedImageUrl(resolvedFourth)
     : secondPhotoSrc;
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomPlateRef = useRef<HTMLDivElement>(null);
@@ -121,8 +139,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     logoDragStartRef.current = {
       startX: e.clientX,
       startY: e.clientY,
-      initX: card.logoX !== undefined ? card.logoX : 10,
-      initY: card.logoY !== undefined ? card.logoY : 10,
+      initX: card.logoX !== undefined ? card.logoX : 5.5,
+      initY: card.logoY !== undefined ? card.logoY : Math.max(1.5, 8.85 - (11.5 * (card.logoScale ?? 1.25)) / 2),
     };
   };
 
@@ -133,8 +151,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     logoDragStartRef.current = {
       startX: e.touches[0].clientX,
       startY: e.touches[0].clientY,
-      initX: card.logoX !== undefined ? card.logoX : 10,
-      initY: card.logoY !== undefined ? card.logoY : 10,
+      initX: card.logoX !== undefined ? card.logoX : 5.5,
+      initY: card.logoY !== undefined ? card.logoY : Math.max(1.5, 8.85 - (11.5 * (card.logoScale ?? 1.25)) / 2),
     };
   };
 
@@ -178,10 +196,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         const deltaXPercent = ((e.clientX - logoDragStartRef.current.startX) / rect.width) * 100;
         const deltaYPercent = ((e.clientY - logoDragStartRef.current.startY) / rect.height) * 100;
 
-        const SAFE_MIN_X = 10;
-        const SAFE_MIN_Y = 10;
-        const SAFE_MAX_X = 90;
-        const SAFE_MAX_Y = 90;
+        const SAFE_MIN_X = 5.0;
+        const SAFE_MIN_Y = 5.0;
+        const SAFE_MAX_X = 95.0;
+        const SAFE_MAX_Y = 60;
         const baseW = 18;
         const baseH = 11.5;
         const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
@@ -191,8 +209,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         const maxPosX = Math.max(SAFE_MIN_X, SAFE_MAX_X - lW);
         const maxPosY = Math.max(SAFE_MIN_Y, SAFE_MAX_Y - lH);
 
-        const newX = Math.max(SAFE_MIN_X, Math.min(maxPosX, Math.round(logoDragStartRef.current.initX + deltaXPercent)));
-        const newY = Math.max(SAFE_MIN_Y, Math.min(maxPosY, Math.round(logoDragStartRef.current.initY + deltaYPercent)));
+        const newX = Math.max(SAFE_MIN_X, Math.min(maxPosX, Math.round((logoDragStartRef.current.initX + deltaXPercent) * 10) / 10));
+        const newY = Math.max(SAFE_MIN_Y, Math.min(maxPosY, Math.round((logoDragStartRef.current.initY + deltaYPercent) * 10) / 10));
 
         onChange?.({
           logoX: newX,
@@ -331,9 +349,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   // Exact proportional font size & padding matching CanvasExporter 1080px canvas and exact 20px default preview size
   const previewScale = containerWidth / 1080;
-  const canvasTargetFontSize = Math.max(36, Math.min(84, Math.round((card.headlineFontSize || 20) * 2.3)));
-  const effectivePreviewFontSize = Math.max(12, Math.min(32, Math.round((card.headlineFontSize || 20) * (containerWidth > 0 ? containerWidth / 420 : 1))));
-  const effectivePaddingX = Math.max(10, Math.round(48 * previewScale));
+  const canvasTargetFontSize = Math.max(38, Math.min(84, Math.round((card.headlineFontSize || 22) * 2.3)));
+  const effectivePreviewFontSize = Math.max(14, Math.min(34, Math.round((card.headlineFontSize || 22) * (containerWidth > 0 ? containerWidth / 400 : 1.05))));
+  const effectivePaddingX = Math.max(12, Math.round(52 * previewScale));
   // Parse formatted headline with [yellow]...[/yellow] or highlightWords, preserving manual lines
   const renderFormattedHeadline = () => {
     const rawUncleaned = card.formattedHeadline || card.headline;
@@ -916,7 +934,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
 
         {/* Universal subtle watermark across photo area */}
-        {(card.showTextWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
+        {(card.showTextWatermark === true || card.showSuperBreakingWatermark === true) && (
           <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden flex flex-col justify-around select-none">
             <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
               {[...Array(6)].map((_, rIdx) => (
@@ -1077,12 +1095,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           )}
 
           {/* Top-Left Channel Logo Area: Displays login user's transparent PNG logo in designated logo area */}
-          {/* Top-Left Channel Logo Area: Clamped strictly to Inner Safe Zone (10% to 90%) and grows inward */}
+          {/* Top-Left Channel Logo Area: Positioned authentically at 5.5%, 5.5% and grows downward towards footer */}
           {card.showMasterBranding !== false && (() => {
-            const SAFE_MIN_X = 10;
-            const SAFE_MIN_Y = 10;
-            const SAFE_MAX_X = 90;
-            const SAFE_MAX_Y = 90;
+            const SAFE_MIN_X = 5.0;
+            const SAFE_MIN_Y = 1.5;
+            const SAFE_MAX_X = 92;
+            const SAFE_MAX_Y = 60;
+            const DEFAULT_X = 5.5;
 
             const baseW = 18;
             const baseH = 11.5;
@@ -1090,10 +1109,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             const lW = baseW * scale;
             const lH = baseH * scale;
 
-            let posX = card.logoX !== undefined ? card.logoX : SAFE_MIN_X;
-            let posY = card.logoY !== undefined ? card.logoY : SAFE_MIN_Y;
+            // Location Box center is 8.85% (top: 6.6%, height: 4.5% -> center = 8.85%)
+            const DEFAULT_Y = Math.max(SAFE_MIN_Y, 8.85 - lH / 2);
+
+            let posX = card.logoX !== undefined ? card.logoX : DEFAULT_X;
+            let posY = card.logoY !== undefined ? card.logoY : DEFAULT_Y;
 
             // Inward clamping: ensure logo never crosses any edge of the inner safe zone
+            // Top stays anchored so scaling expands downward towards footer
             if (posX + lW > SAFE_MAX_X) posX = Math.max(SAFE_MIN_X, SAFE_MAX_X - lW);
             if (posY + lH > SAFE_MAX_Y) posY = Math.max(SAFE_MIN_Y, SAFE_MAX_Y - lH);
             if (posX < SAFE_MIN_X) posX = SAFE_MIN_X;
@@ -1107,6 +1130,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   top: `${posY}%`,
                   width: `${lW}%`,
                   height: `${lH}%`,
+                  transformOrigin: 'top left',
                 }}
                 onMouseDown={handleLogoMouseDown}
                 onTouchStart={handleLogoTouchStart}
@@ -1172,7 +1196,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
               style={{
                 top: '61.33%',
-                height: '31.47%',
+                height: '28.52%',
                 background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
                 boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
               }}
@@ -1208,7 +1232,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </svg>
 
               {/* Headline Text: Center vertically & horizontally with balanced padding */}
-              <div className="relative z-10 w-full flex items-center justify-center pt-1.5 sm:pt-2 px-2">
+              <div className="relative z-10 w-full h-full flex items-center justify-center px-4 sm:px-6">
                 <h1
                   className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center px-2"
                   style={{
@@ -1224,12 +1248,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           )}
 
-          {/* Bottom Master Branding Footer (Bottom 0 to 7.2%):
+          {/* Bottom Master Branding Footer (Bottom 0 to 10.15%):
               Renders user's actual saved Footer with correct social media icons */}
           <div
             className="absolute inset-x-0 bottom-0 z-30 flex items-center pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
             style={{
-              height: '7.2%',
+              height: '10.15%',
               backgroundColor: card.footerBgColor || '#FFFFFF',
             }}
           >
@@ -3032,13 +3056,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               }}
             >
               <h1
-                className={`font-black tracking-normal leading-[1.34] text-[#0A0A0A] ${
-                  card.headlineAlign === 'center'
-                    ? 'text-center'
-                    : card.headlineAlign === 'left'
-                    ? 'text-left'
-                    : 'text-center sm:text-left'
-                }`}
+                className="font-black tracking-normal leading-[1.34] text-[#0A0A0A] text-center"
                 style={{
                   fontSize: `${effectivePreviewFontSize}px`,
                   fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
@@ -3122,22 +3140,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 {/* B. 2-3 Line Headline / Statement Quote */}
                 <div className="px-2 sm:px-4 py-0.5">
                   <h1
-                    className={`font-black tracking-normal leading-[1.36] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] ${
-                      card.headlineAlign === 'justify'
-                        ? 'text-justify'
-                        : card.headlineAlign === 'left'
-                        ? 'text-left'
-                        : 'text-center'
-                    }`}
+                    className="font-black tracking-normal leading-[1.36] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] text-center"
                     style={{
                       fontSize: `${effectivePreviewFontSize}px`,
                       fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
-                      textAlignLast:
-                        card.headlineAlign === 'justify'
-                          ? 'justify'
-                          : card.headlineAlign === 'left'
-                          ? 'left'
-                          : 'center',
+                      textAlignLast: 'center',
                     }}
                   >
                     {renderFormattedHeadline()}
@@ -3242,23 +3249,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             }}
           >
             <h1
-              className={`font-black tracking-normal leading-[1.38] overflow-visible drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] ${
-                card.headlineAlign === 'justify'
-                  ? 'text-justify'
-                  : card.headlineAlign === 'left'
-                  ? 'text-left'
-                  : 'text-center'
-              }`}
+              className="font-black tracking-normal leading-[1.38] overflow-visible drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] text-center"
               style={{
                 fontSize: `${effectivePreviewFontSize}px`,
                 fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
-                textJustify: 'inter-word',
-                textAlignLast:
-                  card.headlineAlign === 'justify'
-                    ? 'justify'
-                    : card.headlineAlign === 'left'
-                    ? 'left'
-                    : 'center',
+                textAlignLast: 'center',
               }}
             >
               {renderFormattedHeadline()}
