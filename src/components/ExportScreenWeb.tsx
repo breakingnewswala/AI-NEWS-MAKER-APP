@@ -58,6 +58,11 @@ export const ExportScreenWeb: React.FC<ExportScreenWebProps> = ({
   const actionAllowance = isUserActionAllowed(currentUser);
   const isActionLocked = !isAdmin && !actionAllowance.allowed;
 
+  const locClean = (card.location || 'मध्य प्रदेश').split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+  const locTag = locClean ? `#${locClean}` : '#मध्य_प्रदेश';
+  const catClean = (card.category || 'ताज़ा').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+  const catTag = catClean && catClean.toLowerCase() !== 'news' ? `#${catClean}` : '';
+
   // Auto-formatted social media caption with hashtags
   const captionText = `${card.headline || 'ताज़ा समाचार'}
 
@@ -66,7 +71,7 @@ ${card.summary || ''}
 📍 स्थान: ${card.location || 'मध्य प्रदेश'}
 📅 दिनांक: ${card.date || 'आज'}
 
-#BreakingNews #HindiNews #${(card.location || 'MP').replace(/\s+/g, '')}News #${(card.category || 'News').replace(/\s+/g, '')}`;
+#BreakingNews #HindiNews ${locTag} ${catTag} #AINewsMaker`.replace(/\s+/g, ' ').replace(/\n\s+\n/g, '\n\n').trim();
 
   const anchorScriptText = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर आ रही है ${card.location || 'मध्य प्रदेश'} से। ${card.headline || ''}। अधिकारियों द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है। आइए देखते हैं पूरी रिपोर्ट।`;
 

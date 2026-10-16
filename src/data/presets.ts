@@ -298,7 +298,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     highlightWords: ['प्रशासन का बड़ा एक्शन'],
     location: '',
     showLocation: false,
-    summary: 'निवाड़ी जिले में बेतवा नदी तट पर चल रहे अवैध रेत खनन पर खनिज विभाग और पुलिस टीम ने संयुक्त कार्रवाई करते हुए पांच डंपर और दो पोकलेन मशीनें जब्त की हैं।\n\n#ainewsmaker #Epaper #NiwariNews #BreakingNews #AINewsMaker',
+    summary: 'निवाड़ी जिले में बेतवा नदी तट पर चल रहे अवैध रेत खनन पर खनिज विभाग और पुलिस टीम ने संयुक्त कार्रवाई करते हुए पांच डंपर और दो पोकलेन मशीनें जब्त की हैं।\n\n#ainewsmaker #Epaper #निवाड़ी #BreakingNews #AINewsMaker',
     category: 'कार्रवाई',
     brandName: 'AI News Maker',
     brandTagline: 'भारत के जिलों से आपके दिलों तक',

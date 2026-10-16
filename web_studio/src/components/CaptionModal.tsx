@@ -41,11 +41,11 @@ export function getUserFirstHashtag(card?: NewsCardData): string {
 export function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
   const firstTag = getUserFirstHashtag(card);
 
-  const loc = (location || 'News')
+  const loc = (location || '')
     .split(/[\/,]/)[0]
     .trim()
     .replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
-  const locationTag = loc && loc.toLowerCase() !== 'location' && loc !== 'स्थान' ? `#${loc}News` : '#HindiNews';
+  const locationTag = loc && loc.toLowerCase() !== 'location' && loc !== 'स्थान' && loc.toLowerCase() !== 'news' ? `#${loc}` : '#HindiNews';
 
   let tagList: string[] = [];
 
@@ -57,6 +57,9 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
   // Filter out any legacy or prohibited tags
   tagList = tagList.filter((t) => {
     const lower = t.toLowerCase();
+    if (/News$/i.test(t) && !['#breakingnews', '#hindinews', '#topnews', '#latestnews'].includes(lower)) {
+      return false;
+    }
     return (
       lower !== '#breakingnewswala' &&
       lower !== '#bnwtv' &&
@@ -71,9 +74,8 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
     tagList = [
       '#BreakingNews',
       locationTag,
-      '#LatestNews',
-      '#NewsUpdate',
-      '#ViralNews',
+      '#HindiNews',
+      '#LatestUpdate',
     ];
   }
 

@@ -1785,8 +1785,9 @@ export default function App() {
     const savedProf = getSavedChannelProfile();
     const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '#reporter';
     const locLine = effectiveLoc ? `\n\n📍 स्थान: ${effectiveLoc}` : '';
-    const locTag = effectiveLoc ? `#${effectiveLoc.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News ` : '';
-    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${userTag} ${locTag}#BreakingNews #HindiNews`;
+    const cleanEffectiveLoc = effectiveLoc ? effectiveLoc.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
+    const locTag = cleanEffectiveLoc ? `#${cleanEffectiveLoc} ` : '';
+    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${userTag} ${locTag}#BreakingNews #HindiNews #AINewsMaker`.trim();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }
