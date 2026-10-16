@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0 <=22.x"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "node --max-old-space-size=2048 ./node_modules/vite/bin/vite.js build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",

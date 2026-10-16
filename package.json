@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0 <=22.x"
+  },
   "scripts": {
     "dev": "node dev.cjs",
     "start": "node dev.cjs",
