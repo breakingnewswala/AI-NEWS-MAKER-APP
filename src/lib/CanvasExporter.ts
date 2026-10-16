@@ -1686,11 +1686,10 @@ async function drawGraphic001Canvas(
   if (card.showMasterBranding !== false) {
     ctx.save();
     const safeLeft = Math.round(width * 0.05);
-    const safeTop = Math.round(height * 0.05);
+    const safeTop = Math.round(height * 0.015);
     const safeRight = Math.round(width * 0.92);
     const safeBottom = Math.round(height * 0.60);
     const defaultX = Math.round(width * 0.055);
-    const defaultY = Math.round(height * 0.055);
 
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
@@ -1711,6 +1710,10 @@ async function drawGraphic001Canvas(
 
     if (lW > safeRight - safeLeft) lW = safeRight - safeLeft;
     if (lH > safeBottom - safeTop) lH = safeBottom - safeTop;
+
+    // Location box vertical center is 8.85% (matching CardPreview)
+    const locCenterY = Math.round(height * 0.0885);
+    const defaultY = Math.max(safeTop, Math.round(locCenterY - lH / 2));
 
     const userPosX = card.logoX !== undefined ? Math.round((card.logoX / 100) * width) : defaultX;
     const userPosY = card.logoY !== undefined ? Math.round((card.logoY / 100) * height) : defaultY;

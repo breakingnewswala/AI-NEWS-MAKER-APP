@@ -22,6 +22,8 @@ import {
   Loader2,
   ExternalLink,
   Flag,
+  ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
@@ -50,6 +52,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [editTitle, setEditTitle] = useState('');
   const [editCaption, setEditCaption] = useState('');
   const [editRatio, setEditRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5' | '4:3'>('9:16');
+  const [editIsBonus, setEditIsBonus] = useState(false);
+  const [editRewardCoins, setEditRewardCoins] = useState(50);
 
   // State for Delete Confirmation Dialog
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
@@ -120,6 +124,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     setEditTitle(vid.title || '');
     setEditCaption(vid.caption || '');
     setEditRatio((vid.aspectRatio as any) || '9:16');
+    setEditIsBonus(Boolean(vid.isBonus));
+    setEditRewardCoins(vid.rewardCoins || 50);
   };
 
   const handleSaveVideoEdit = (e: React.FormEvent) => {
@@ -130,6 +136,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       title: editTitle.trim() || editingVideo.title,
       caption: editCaption.trim(),
       aspectRatio: editRatio as any,
+      isBonus: editIsBonus,
+      rewardCoins: editIsBonus ? editRewardCoins : undefined,
     };
     if (onAdminUpdateVideo) {
       onAdminUpdateVideo(updated);
@@ -138,6 +146,25 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       setActiveVideo(updated);
     }
     setEditingVideo(null);
+  };
+
+  const handleToggleBonus = (vid: VideoFeedItem) => {
+    const nextIsBonus = !vid.isBonus;
+    const updated: VideoFeedItem = {
+      ...vid,
+      isBonus: nextIsBonus,
+      rewardCoins: nextIsBonus ? (vid.rewardCoins || 50) : undefined,
+    };
+    if (onAdminUpdateVideo) {
+      onAdminUpdateVideo(updated);
+    }
+    try {
+      fetch(`${getApiBaseUrl()}/api/admin/videos/${vid.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBonus: nextIsBonus, rewardCoins: nextIsBonus ? (vid.rewardCoins || 50) : undefined }),
+      }).catch(() => {});
+    } catch {}
   };
 
   const handleConfirmDelete = () => {
@@ -185,6 +212,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
   const [adminChannel] = useState(currentUser?.channelName || 'एडमिन वायरल डेस्क');
   const [adminCategory] = useState('breaking');
+  const [adminIsBonus, setAdminIsBonus] = useState(false);
+  const [adminRewardCoins, setAdminRewardCoins] = useState(50);
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
@@ -394,6 +423,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         adminThumbnailUrl.trim() ||
         'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop',
       category: adminCategory,
+      isBonus: adminIsBonus,
+      rewardCoins: adminIsBonus ? adminRewardCoins : undefined,
     };
 
     if (onAdminAddVideo) {
@@ -418,6 +449,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       setAdminVideoUrl('');
       setAdminThumbnailUrl('');
       setAdminVideoFile(null);
+      setAdminIsBonus(false);
       setPublishSuccess(false);
       setIsAdminPanelOpen(false);
     }, 1500);
@@ -433,10 +465,22 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     });
   }, [videos]);
 
-  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '16:9' | '4:3' | '1:1' | '4:5'>('all');
+  const ratioOptions = [
+    { id: 'all', label: 'सभी अनुपात' },
+    { id: '9:16', label: '9:16 — वर्टिकल' },
+    { id: '16:9', label: '16:9 — लैंडस्केप' },
+    { id: '1:1', label: '1:1 — वर्गाकार' },
+    { id: '4:5', label: '4:5 — पोर्ट्रेट' },
+  ];
 
-  const filteredVideos = useMemo(() => {
+  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '16:9' | '4:3' | '1:1' | '4:5'>('all');
+  const [isBonusOnlyFilter, setIsBonusOnlyFilter] = useState<boolean>(false);
+  const [isRatioDropdownOpen, setIsRatioDropdownOpen] = useState<boolean>(false);
+  const [inlinePlayingId, setInlinePlayingId] = useState<string | null>(null);
+
+  const bonusVideos = useMemo(() => {
     return activeVideos.filter((v) => {
+      if (!v.isBonus) return false;
       if (selectedRatioFilter !== 'all' && v.aspectRatio !== selectedRatioFilter) {
         return false;
       }
@@ -444,12 +488,226 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     });
   }, [activeVideos, selectedRatioFilter]);
 
+  const filteredVideos = useMemo(() => {
+    return activeVideos.filter((v) => {
+      if (isBonusOnlyFilter && !v.isBonus) {
+        return false;
+      }
+      if (selectedRatioFilter !== 'all' && v.aspectRatio !== selectedRatioFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [activeVideos, selectedRatioFilter, isBonusOnlyFilter]);
+
   // Role-based Admin check: Super Admin and Admin have access to video upload controls
   const isAdmin =
     isEffectiveAdmin(currentUser) ||
     isUserSuperAdmin(currentUser) ||
     currentUser?.role === 'admin' ||
     currentUser?.role === 'superadmin';
+
+  const getAspectRatioClass = (ratio?: string) => {
+    switch (ratio) {
+      case '9:16':
+        return 'aspect-[9/16] max-h-[520px]';
+      case '16:9':
+        return 'aspect-video max-h-[380px]';
+      case '1:1':
+        return 'aspect-square max-h-[420px]';
+      case '4:5':
+        return 'aspect-[4/5] max-h-[480px]';
+      case '4:3':
+        return 'aspect-[4/3] max-h-[400px]';
+      default:
+        return 'aspect-video max-h-[380px]';
+    }
+  };
+
+  const renderVideoCard = (vid: VideoFeedItem, isHorizontal = false) => {
+    const isPlaying = inlinePlayingId === vid.id;
+    const ratioClass = getAspectRatioClass(vid.aspectRatio);
+
+    return (
+      <div
+        key={vid.id}
+        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all flex flex-col justify-between group ${
+          vid.isBonus
+            ? 'border-amber-500/50 hover:border-amber-400 shadow-lg shadow-amber-950/20 ring-1 ring-amber-500/30'
+            : 'border-slate-800 hover:border-slate-700'
+        } ${isHorizontal ? 'w-64 sm:w-72 shrink-0 snap-start' : 'hover:shadow-xl'}`}
+      >
+        <div>
+          {/* Card Media Container with exact aspect ratio */}
+          <div className={`relative w-full ${ratioClass} bg-black overflow-hidden flex items-center justify-center`}>
+            {isPlaying ? (
+              <div className="relative w-full h-full bg-black flex items-center justify-center">
+                <video
+                  src={vid.videoUrl}
+                  autoPlay
+                  controls
+                  playsInline
+                  className="w-full h-full object-contain"
+                  onError={() => {
+                    setVideoPlaybackError(true);
+                    setActiveVideo(vid);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setInlinePlayingId(null);
+                  }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/80 hover:bg-black text-white rounded-full z-20 text-xs font-bold cursor-pointer"
+                  title="वीडियो बंद करें"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => setInlinePlayingId(vid.id)}
+                className="w-full h-full relative cursor-pointer group"
+              >
+                <img
+                  src={vid.thumbnailUrl}
+                  alt={vid.title}
+                  onError={(e) => {
+                    e.currentTarget.src =
+                      'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop';
+                  }}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+                />
+                <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                    <Play className="w-5 h-5 ml-1 fill-white" />
+                  </div>
+                </div>
+
+                <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-amber-400" />
+                  {vid.duration}
+                </div>
+
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
+                  <span className="px-2.5 py-0.5 bg-red-600/90 backdrop-blur-sm text-white text-[10px] font-black rounded uppercase">
+                    {vid.aspectRatio || 'वीडियो'}
+                  </span>
+                  {vid.isBonus && (
+                    <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded flex items-center gap-1 shadow-md">
+                      <Sparkles className="w-2.5 h-2.5 fill-current" />
+                      बोनस
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span className="flex items-center gap-1.5 font-medium text-amber-400">
+                <Eye className="w-3.5 h-3.5" />
+                {vid.views}
+              </span>
+              {vid.isBonus && (
+                <span className="text-[10px] text-amber-300 font-bold bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                  +{vid.rewardCoins || 50} कॉइन्स
+                </span>
+              )}
+            </div>
+
+            <h3
+              onClick={() => setInlinePlayingId(vid.id)}
+              className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
+            >
+              {vid.title}
+            </h3>
+
+            {vid.caption && (
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                {vid.caption}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Admin Editing Controls (Edit Info, Caption, Ratio, Toggle Bonus & Delete) */}
+        {isAdmin && (
+          <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => startEditingVideo(vid)}
+                className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95"
+                title="वीडियो, कैप्शन व आस्पेक्ट रेशियो संपादित करें"
+              >
+                <Edit3 className="w-3 h-3 text-amber-400" />
+                <span>एडिट</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleBonus(vid)}
+                className={`px-2 py-1 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95 border ${
+                  vid.isBonus
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+                }`}
+                title="बोनस वीडियो स्थिति बदलें"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>{vid.isBonus ? 'बोनस: चालू' : 'बोनस: बंद'}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDeletingVideoId(vid.id)}
+              className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95"
+              title="वीडियो डिलीट करें"
+            >
+              <Trash2 className="w-3 h-3 text-red-400" />
+              <span>हटाएं</span>
+            </button>
+          </div>
+        )}
+
+        {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + वीडियो देखें + रिपोर्ट करें */}
+        <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenStudioWithVideo(vid)}
+            className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+            <span>वीडियो स्टूडियो</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setInlinePlayingId(vid.id)}
+            className={`py-2.5 px-3.5 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 border transition-colors cursor-pointer active:scale-95 shrink-0 ${
+              isPlaying
+                ? 'bg-red-600 text-white border-red-500'
+                : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-700'
+            }`}
+          >
+            <Play className="w-3.5 h-3.5 fill-current text-amber-400" />
+            <span>{isPlaying ? 'चल रहा है' : 'देखें'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setReportingVideo(vid)}
+            className="py-2.5 px-3 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700 rounded-xl transition-colors cursor-pointer active:scale-95 shrink-0"
+            title="इस वीडियो की रिपोर्ट करें"
+          >
+            <Flag className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-24">
@@ -471,12 +729,83 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Admin Video Upload Button - Available directly for Super Admin & Admin */}
+            {/* Total Videos Count */}
+            <span className="px-3 py-1.5 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full flex items-center gap-1.5">
+              <Flame className="w-3.5 h-3.5 text-red-500" />
+              {activeVideos.length} वीडियो
+            </span>
+
+            {/* Ratio Filter Dropdown (Part Q) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsRatioDropdownOpen(!isRatioDropdownOpen)}
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-amber-400 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md transition"
+                title="अनुपात फ़िल्टर"
+              >
+                <span>{ratioOptions.find((o) => o.id === selectedRatioFilter)?.label || 'सभी अनुपात'}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-amber-400 transition-transform ${isRatioDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isRatioDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-40 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                  {ratioOptions.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedRatioFilter(opt.id as any);
+                        setIsRatioDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                        selectedRatioFilter === opt.id
+                          ? 'bg-amber-400 text-slate-950 font-black'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {selectedRatioFilter === opt.id && <Check className="w-3.5 h-3.5 text-slate-950" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Bonus Videos Filter Button (Part Q & S) */}
+            <button
+              type="button"
+              onClick={() => setIsBonusOnlyFilter(!isBonusOnlyFilter)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 border transition cursor-pointer active:scale-95 ${
+                isBonusOnlyFilter
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 border-amber-300 shadow-lg font-black scale-105'
+                  : 'bg-slate-900 hover:bg-slate-800 text-amber-300 border-amber-500/40 hover:border-amber-400'
+              }`}
+              title="केवल बोनस वीडियो दिखाएं"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>बोनस वीडियो</span>
+            </button>
+
+            {/* Refresh Button with Icon & Label (Part F) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+                }
+              }}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+              title="वीडियो फ़ीड रिफ्रेश करें"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+              <span>↻ रिफ्रेश</span>
+            </button>
+
+            {/* Admin Video Upload Button */}
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
-                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
               >
                 <PlusCircle className="w-4 h-4 text-slate-950" />
                 <span>वीडियो अपलोड</span>
@@ -485,48 +814,39 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
             {/* 4-Day Auto-Delete Tag - ADMIN ONLY */}
             {isAdmin && (
-              <span className="hidden md:inline-flex px-2.5 py-1 bg-amber-950/70 border border-amber-600/40 text-amber-300 text-[11px] font-bold rounded-lg items-center gap-1">
+              <span className="hidden lg:inline-flex px-2.5 py-1 bg-amber-950/70 border border-amber-600/40 text-amber-300 text-[11px] font-bold rounded-lg items-center gap-1">
                 <Calendar className="w-3 h-3 text-amber-400" />
-                4-दिन ऑटो-डिलीट सक्रिय
+                4-दिन ऑटो-डिलीट
               </span>
             )}
-
-            <span className="px-3 py-1.5 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full flex items-center gap-1.5">
-              <Flame className="w-3.5 h-3.5 text-red-500" />
-              {filteredVideos.length} वीडियो
-            </span>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 space-y-5">
-        {/* Frame Filter Buttons Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {[
-            { id: 'all', label: 'सभी' },
-            { id: '9:16', label: '9:16' },
-            { id: '16:9', label: '16:9' },
-            { id: '1:1', label: '1:1' },
-            { id: '4:5', label: '4:5' },
-          ].map((f) => {
-            const isSelected = selectedRatioFilter === f.id;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setSelectedRatioFilter(f.id as any)}
-                className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 border ${
-                  isSelected
-                    ? 'bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 text-slate-950 border-amber-300 shadow-lg font-black scale-105 ring-2 ring-amber-400/50'
-                    : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <span>{f.label}</span>
-                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-              </button>
-            );
-          })}
-        </div>
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 space-y-6">
+        {/* Bonus Videos Horizontal Scrolling Section (Part S) */}
+        {!isBonusOnlyFilter && bonusVideos.length > 0 && (
+          <div className="space-y-3 bg-gradient-to-r from-amber-950/30 via-slate-900/60 to-slate-950 border border-amber-500/30 rounded-2xl p-4 sm:p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-amber-500 text-slate-950 rounded-lg">
+                  <Sparkles className="w-4 h-4 fill-current" />
+                </div>
+                <h3 className="text-base font-black text-amber-300 flex items-center gap-2">
+                  बोनस वीडियो
+                  <span className="text-[11px] px-2 py-0.5 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full font-bold">
+                    {bonusVideos.length} वीडियो
+                  </span>
+                </h3>
+              </div>
+              <span className="text-xs text-slate-400 hidden sm:inline">← स्लाइड करें →</span>
+            </div>
+
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-amber-500/40 scrollbar-track-slate-900 snap-x">
+              {bonusVideos.map((bVid) => renderVideoCard(bVid, true))}
+            </div>
+          </div>
+        )}
 
         {/* 7-Step Admin Video Upload Panel */}
         {isAdmin && isAdminPanelOpen && (
@@ -755,6 +1075,26 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
+              {/* Bonus Video Toggle */}
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="admin-is-bonus" className="text-xs font-black text-amber-400 flex items-center gap-2 cursor-pointer">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>बोनस वीडियो के रूप में प्रकाशित करें (Bonus Video):</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="admin-is-bonus"
+                      checked={adminIsBonus}
+                      onChange={(e) => setAdminIsBonus(e.target.checked)}
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-300">{adminIsBonus ? 'हाँ' : 'नहीं'}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Step 6: Active Publish Button & Live Validation Checklist */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
                 <div className="text-xs font-black text-amber-400 flex items-center gap-2">
@@ -979,125 +1319,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredVideos.map((vid) => (
-              <div
-                key={vid.id}
-                className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all hover:shadow-xl flex flex-col justify-between group"
-              >
-                <div>
-                  {/* Thumbnail with Play Overlay */}
-                  <div
-                    onClick={() => setActiveVideo(vid)}
-                    className="relative h-48 w-full bg-slate-950 cursor-pointer overflow-hidden group"
-                  >
-                    <img
-                      src={vid.thumbnailUrl}
-                      alt={vid.title}
-                      onError={(e) => {
-                        e.currentTarget.src =
-                          'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop';
-                      }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
-                    />
-                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                      <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                        <Play className="w-5 h-5 ml-1 fill-white" />
-                      </div>
-                    </div>
-
-                    <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-amber-400" />
-                      {vid.duration}
-                    </div>
-
-                    <div className="absolute top-3 left-3 px-2.5 py-0.5 bg-red-600/90 backdrop-blur-sm text-white text-[10px] font-black rounded uppercase">
-                      {vid.aspectRatio ? `${vid.aspectRatio}` : 'वीडियो'}
-                    </div>
-                  </div>
-
-                  <div className="p-4 space-y-2">
-                    <div className="flex items-center text-xs text-slate-400">
-                      <span className="flex items-center gap-1.5 font-medium text-amber-400">
-                        <Eye className="w-3.5 h-3.5" />
-                        {vid.views}
-                      </span>
-                    </div>
-
-                    <h3
-                      onClick={() => setActiveVideo(vid)}
-                      className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
-                    >
-                      {vid.title}
-                    </h3>
-
-                    {vid.caption && (
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                        {vid.caption}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Admin Editing Controls (Edit Info, Caption, Ratio & Delete) */}
-                {isAdmin && (
-                  <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => startEditingVideo(vid)}
-                        className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95"
-                        title="वीडियो, कैप्शन व आस्पेक्ट रेशियो संपादित करें"
-                      >
-                        <Edit3 className="w-3 h-3 text-amber-400" />
-                        <span>एडिट (Edit)</span>
-                      </button>
-                      <span className="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 bg-slate-900 rounded border border-slate-800">
-                        {vid.aspectRatio || '4:5'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setDeletingVideoId(vid.id)}
-                      className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95"
-                      title="वीडियो डिलीट करें"
-                    >
-                      <Trash2 className="w-3 h-3 text-red-400" />
-                      <span>हटाएं</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + वीडियो देखें */}
-                <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onOpenStudioWithVideo(vid)}
-                    className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                    <span>वीडियो स्टूडियो में ले जाएँ</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveVideo(vid)}
-                    className="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer active:scale-95 shrink-0"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current text-amber-400" />
-                    <span>वीडियो देखें</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setReportingVideo(vid)}
-                    className="py-2.5 px-3 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700 rounded-xl transition-colors cursor-pointer active:scale-95 shrink-0"
-                    title="इस वीडियो की रिपोर्ट करें"
-                  >
-                    <Flag className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+            {filteredVideos.map((vid) => renderVideoCard(vid, false))}
           </div>
         )}
       </div>
@@ -1160,6 +1382,23 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                       {r}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                <label htmlFor="edit-is-bonus" className="text-xs font-bold text-amber-300 flex items-center gap-2 cursor-pointer">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>बोनस वीडियो स्थिति (Bonus Video):</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-is-bonus"
+                    checked={editIsBonus}
+                    onChange={(e) => setEditIsBonus(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-300">{editIsBonus ? 'सक्रिय' : 'अक्रिय'}</span>
                 </div>
               </div>
 

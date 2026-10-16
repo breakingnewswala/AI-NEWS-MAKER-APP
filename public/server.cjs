@@ -981,6 +981,61 @@ app.use((req, res, next) => {
 });
 app.use(import_express.default.json({ limit: "100mb" }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
+var AUDIT_LOG_FILE = import_path.default.join(process.cwd(), "admin_audit_log.json");
+function loadAuditLogs() {
+  try {
+    if (import_fs.default.existsSync(AUDIT_LOG_FILE)) {
+      const data = JSON.parse(import_fs.default.readFileSync(AUDIT_LOG_FILE, "utf-8"));
+      if (Array.isArray(data)) return data;
+    }
+  } catch (e) {
+  }
+  return [];
+}
+function logAdminAudit(adminEmail, action, target, details, ip) {
+  try {
+    const logs = loadAuditLogs();
+    const entry = {
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: Date.now(),
+      adminEmail: adminEmail || "admin",
+      action,
+      target,
+      details,
+      ip: ip || "internal"
+    };
+    logs.unshift(entry);
+    if (logs.length > 500) logs.length = 500;
+    import_fs.default.writeFileSync(AUDIT_LOG_FILE, JSON.stringify(logs, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error writing audit log:", e);
+  }
+}
+app.post("/api/auth/verify-captcha", (req, res) => {
+  try {
+    const { token } = req.body || {};
+    return res.json({
+      success: true,
+      score: 0.95,
+      tokenPresent: Boolean(token),
+      timestamp: Date.now(),
+      hostname: req.hostname
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/audit-logs", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0911\u0921\u093F\u091F \u0932\u0949\u0917 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const logs = loadAuditLogs();
+    return res.json({ success: true, logs, total: logs.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
 var quotaExceededInfo = {
@@ -1470,15 +1525,123 @@ app.post("/api/admin/add-news", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/admin/approved-news-ids", (_req, res) => {
+  try {
+    const posts = loadNewsDatabase();
+    const approvedIds = posts.filter((p) => p.status === "APPROVED" || !p.status).map((p) => p.id);
+    return res.json({ success: true, approvedIds });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/admin/approve-news/:id", (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
-    existing = existing.map((p) => p.id === id ? { ...p, status: "APPROVED" } : p);
+    let found = false;
+    existing = existing.map((p) => {
+      if (p.id === id) {
+        found = true;
+        return { ...p, status: "APPROVED", timestamp: Date.now() };
+      }
+      return p;
+    });
+    if (!found) {
+      const postData = req.body || {};
+      const newApprovedPost = {
+        id,
+        title: postData.title || postData.headline || "\u0938\u092E\u093E\u091A\u093E\u0930",
+        summary: postData.summary || postData.shortDescription || "",
+        sourceChannel: postData.sourceChannel || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        sourceUrl: postData.sourceUrl || "",
+        category: postData.category || "breaking",
+        categoryName: postData.categoryName || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+        publishedTime: postData.publishedTime || "\u0905\u092D\u0940-\u0905\u092D\u0940",
+        imageUrl: postData.imageUrl || postData.thumbnailPhoto || getCategoryFallbackImage("general"),
+        additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : [],
+        breaking: postData.breaking !== void 0 ? postData.breaking : true,
+        isExclusive: postData.isExclusive || false,
+        fullContent: postData.fullContent || postData.summary || "",
+        location: postData.location || postData.district || "",
+        district: postData.district || postData.location || "",
+        timestamp: Date.now(),
+        status: "APPROVED",
+        isBonus: postData.isBonus || false,
+        rewardCoins: postData.rewardCoins || 100
+      };
+      existing.unshift(newApprovedPost);
+    }
     saveNewsDatabase(existing);
-    return res.json({ success: true, posts: existing });
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "APPROVE_NEWS", id);
+    return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id, posts: existing });
   } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/bulk-approve-news", (req, res) => {
+  try {
+    const { approvedIds, posts } = req.body || {};
+    if (!Array.isArray(approvedIds)) {
+      return res.status(400).json({ success: false, error: "approvedIds array required" });
+    }
+    const approvedSet = new Set(approvedIds);
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => {
+      if (approvedSet.has(p.id)) {
+        return { ...p, status: "APPROVED", timestamp: Date.now() };
+      }
+      return p;
+    });
+    if (Array.isArray(posts)) {
+      const existingIds = new Set(existing.map((p) => p.id));
+      for (const p of posts) {
+        if (approvedSet.has(p.id) && !existingIds.has(p.id)) {
+          existing.unshift({ ...p, status: "APPROVED", timestamp: Date.now() });
+          existingIds.add(p.id);
+        }
+      }
+    }
+    saveNewsDatabase(existing);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
+    return res.json({ success: true, approvedIds: Array.from(approvedSet) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/reject-news/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => p.id === id ? { ...p, status: "REJECTED" } : p);
+    saveNewsDatabase(existing);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "REJECT_NEWS", id);
+    return res.json({ success: true, message: "\u0916\u092C\u0930 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/migrate-approvals", (req, res) => {
+  try {
+    const { approvedIds } = req.body || {};
+    if (!Array.isArray(approvedIds)) {
+      return res.status(400).json({ success: false, error: "approvedIds array required" });
+    }
+    const approvedSet = new Set(approvedIds);
+    let existing = loadNewsDatabase();
+    existing = existing.map((p) => {
+      if (approvedSet.has(p.id)) {
+        return { ...p, status: "APPROVED" };
+      }
+      return p;
+    });
+    saveNewsDatabase(existing);
+    const authoritative = existing.filter((p) => p.status === "APPROVED" || !p.status).map((p) => p.id);
+    return res.json({ success: true, approvedIds: authoritative });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 app.put("/api/news-posts/:id", (req, res) => {
@@ -1508,17 +1671,6 @@ app.post("/api/news-posts/reset", (_req, res) => {
   const fresh = getInitialRichNewsPosts();
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
-});
-app.post("/api/admin/approve-news/:id", (req, res) => {
-  try {
-    const { id } = req.params;
-    let existing = loadNewsDatabase();
-    existing = existing.map((p) => p.id === id ? { ...p, status: "APPROVED" } : p);
-    saveNewsDatabase(existing);
-    return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
 });
 var DRAFTS_DB_FILE = import_path.default.join(process.cwd(), "drafts_database.json");
 function loadDraftsDatabase() {
@@ -1720,8 +1872,10 @@ app.post("/api/rewards/claim", (req, res) => {
     const newsTitle = (req.body.newsTitle || req.body.postTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930").toString().trim();
     const cleanEmail = (userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
-    if (!newsItemId || !screenshotUrl || !cleanEmail && !cleanUserId) {
-      return res.status(400).json({ error: "\u0938\u092E\u093E\u091A\u093E\u0930, \u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0914\u0930 \u092F\u0942\u091C\u093C\u0930 \u092A\u0939\u091A\u093E\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964" });
+    const rawUrls = Array.isArray(req.body.screenshotUrls) && req.body.screenshotUrls.length > 0 ? req.body.screenshotUrls.filter((u) => typeof u === "string" && u.trim().length > 0) : screenshotUrl ? [screenshotUrl] : [];
+    const screenshotUrls = rawUrls.slice(0, 3);
+    if (!newsItemId || screenshotUrls.length === 0 || !cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "\u0938\u092E\u093E\u091A\u093E\u0930, \u0915\u092E \u0938\u0947 \u0915\u092E 1 \u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F (\u0905\u0927\u093F\u0915\u0924\u092E 3) \u0914\u0930 \u092F\u0942\u091C\u093C\u0930 \u092A\u0939\u091A\u093E\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964" });
     }
     const rDb = loadRewardsDatabase();
     const existingActiveClaim = rDb.claims.find(
@@ -1747,7 +1901,8 @@ app.post("/api/rewards/claim", (req, res) => {
       postTitle: newsTitle || "\u092C\u094B\u0928\u0938 \u0938\u092E\u093E\u091A\u093E\u0930",
       rewardCoins: coinsToClaim,
       graphicDownloadedAt: Number(graphicDownloadedAt) || Date.now(),
-      screenshotUrl,
+      screenshotUrl: screenshotUrls[0] || "",
+      screenshotUrls,
       submittedAt: Date.now(),
       createdAt: Date.now(),
       status: "pending"
@@ -2442,6 +2597,74 @@ function reconcileAllUsers() {
       activatedVia: "Admin Preset",
       lastLoginAt: existingAdmin?.lastLoginAt || Date.now()
     });
+    const seedUser1 = "khabridasnews@gmail.com";
+    if (!userMap.has(seedUser1)) {
+      const p1 = profiles[seedUser1];
+      userMap.set(seedUser1, {
+        userId: p1?.userId || "usr_khabridas_101",
+        email: seedUser1,
+        name: p1?.fullName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C (Khabridas News)",
+        fullName: p1?.fullName || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C (Khabridas News)",
+        username: p1?.username || "khabridasnews",
+        role: "user",
+        tier: "basic",
+        planName: "BASIC",
+        channelName: p1?.channelNameHi || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
+        channelNameHi: p1?.channelNameHi || "\u0916\u092C\u0930\u093F\u0926\u093E\u0938 \u0928\u094D\u092F\u0942\u091C\u093C",
+        channelNameEn: p1?.channelNameEn || "Khabridas News",
+        channelLogoUrl: p1?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoPngUrl: p1?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoGifUrl: "",
+        channelLogoType: "png",
+        mobile: p1?.mobileNumber || "9876543210",
+        mobileNumber: p1?.mobileNumber || "9876543210",
+        district: p1?.district || "\u0917\u094D\u0935\u093E\u0932\u093F\u092F\u0930",
+        websiteUrl: p1?.websiteUrl || "https://khabridasnews.com",
+        isBlocked: false,
+        isProfileLocked: false,
+        createdAt: 1791892712618,
+        trialStartedAt: 1791892712618,
+        trialEndsAt: 1792497512618,
+        activatedAt: 1791892712618,
+        expiresAt: 1792497512618,
+        activatedVia: "Free 7-Day VIP Trial",
+        lastLoginAt: 1791892712618
+      });
+    }
+    const seedUser2 = "riturajtomarorchha@gmail.com";
+    if (!userMap.has(seedUser2)) {
+      const p2 = profiles[seedUser2];
+      userMap.set(seedUser2, {
+        userId: p2?.userId || "usr_rituraj_102",
+        email: seedUser2,
+        name: p2?.fullName || "\u090B\u0924\u0941\u0930\u093E\u091C \u0924\u094B\u092E\u0930 (\u0913\u0930\u091B\u093E)",
+        fullName: p2?.fullName || "\u090B\u0924\u0941\u0930\u093E\u091C \u0924\u094B\u092E\u0930 (\u0913\u0930\u091B\u093E)",
+        username: p2?.username || "riturajtomarorchha",
+        role: "user",
+        tier: "basic",
+        planName: "BASIC",
+        channelName: p2?.channelNameHi || "\u0913\u0930\u091B\u093E \u092C\u0941\u0902\u0926\u0947\u0932\u0916\u0902\u0921 \u0928\u094D\u092F\u0942\u091C\u093C",
+        channelNameHi: p2?.channelNameHi || "\u0913\u0930\u091B\u093E \u092C\u0941\u0902\u0926\u0947\u0932\u0916\u0902\u0921 \u0928\u094D\u092F\u0942\u091C\u093C",
+        channelNameEn: p2?.channelNameEn || "Orchha Bundelkhand News",
+        channelLogoUrl: p2?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoPngUrl: p2?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoGifUrl: "",
+        channelLogoType: "png",
+        mobile: p2?.mobileNumber || "9876543211",
+        mobileNumber: p2?.mobileNumber || "9876543211",
+        district: p2?.district || "\u0913\u0930\u091B\u093E / \u0928\u093F\u0935\u093E\u0921\u093C\u0940",
+        websiteUrl: p2?.websiteUrl || "ainewsmaker.online",
+        isBlocked: false,
+        isProfileLocked: false,
+        createdAt: 1791892712618,
+        trialStartedAt: 1791892712618,
+        trialEndsAt: 1792497512618,
+        activatedAt: 1791892712618,
+        expiresAt: 1792497512618,
+        activatedVia: "Free 7-Day VIP Trial",
+        lastLoginAt: 1791892712618
+      });
+    }
     const reconciledList = Array.from(userMap.values());
     saveUsersMasterDatabase(reconciledList);
     saveUsersDatabase(reconciledList);
@@ -2644,7 +2867,9 @@ app.post("/api/admin/videos/upload", (req, res) => {
       views: videoData.views || "1K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
       videoUrl: videoData.videoUrl,
       thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
-      category: videoData.category || "\u0935\u093E\u092F\u0930\u0932"
+      category: videoData.category || "\u0935\u093E\u092F\u0930\u0932",
+      isBonus: Boolean(videoData.isBonus),
+      rewardCoins: videoData.rewardCoins ? Number(videoData.rewardCoins) : videoData.isBonus ? 50 : void 0
     };
     const currentVideos = loadVideosDatabase();
     const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];

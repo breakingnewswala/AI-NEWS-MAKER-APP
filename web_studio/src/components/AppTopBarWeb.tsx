@@ -280,7 +280,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-            {/* Install PWA Button on Web */}
+            {/* Install PWA Button on Web - Visible on Mobile and Desktop */}
             <button
               type="button"
               onClick={() => {
@@ -288,10 +288,10 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   window.dispatchEvent(new CustomEvent('open_pwa_install_modal'));
                 }
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 shrink-0"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 shrink-0"
               title="वेब ऐप को होम स्क्रीन पर जोड़ें"
             >
-              <Smartphone className="w-3.5 h-3.5 text-slate-950" />
+              <Smartphone className="w-3.5 h-3.5 text-slate-950 shrink-0" />
               <span>ऐप जोड़ें</span>
             </button>
 
@@ -299,10 +299,11 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             {!isControlPanel && currentTab !== 'studio' && currentTab !== 'newsroom' && (
               <button
                 onClick={handleRefreshClick}
-                className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
+                className="px-2.5 py-1.5 text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 font-bold shrink-0"
                 title="फ़ीड रीफ्रेश करें"
               >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                <span>↻ रिफ्रेश</span>
               </button>
             )}
 

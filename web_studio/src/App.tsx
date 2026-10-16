@@ -1222,7 +1222,7 @@ export default function App() {
       customLogoUrl: savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
       logoScale: 1.25,
       logoX: 5.5,
-      logoY: 5.5,
+      logoY: undefined,
       brandName: savedProfile?.channelNameHi || '',
       brandTagline: savedProfile?.channelNameEn || '',
       channelNameHi: savedProfile?.channelNameHi || '',
@@ -1263,13 +1263,29 @@ export default function App() {
       localStorage.removeItem('studio_active_news_photos');
       localStorage.removeItem('ai_tools_raw_url');
       localStorage.removeItem('ai_tools_raw_news');
+      localStorage.removeItem('selected_raw_news_id');
+      localStorage.removeItem('ai_tools_generated_headlines');
+      localStorage.removeItem('studio_autofill_news_item');
     } catch (e) {
       // ignore
     }
 
+    setAutoFillNews(null);
+
+    // Dispatch studio reset event so InlineAiNewsTools clears its internal state & URL
+    window.dispatchEvent(new CustomEvent('ai_news_studio_reset'));
+
     setActiveStep(1);
     showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
   };
+
+  useEffect(() => {
+    const handleResetRequest = () => {
+      handleResetCard();
+    };
+    window.addEventListener('ai_news_studio_reset_request', handleResetRequest);
+    return () => window.removeEventListener('ai_news_studio_reset_request', handleResetRequest);
+  }, []);
 
   const handleSaveDraft = () => {
     try {
@@ -1485,6 +1501,11 @@ export default function App() {
 
       if (card.sourceNewsId) {
         markNewsGraphicCreated(currentUser?.email, card.sourceNewsId);
+        window.dispatchEvent(
+          new CustomEvent('ai_news_bonus_graphic_downloaded', {
+            detail: { newsId: card.sourceNewsId },
+          })
+        );
       }
 
       showToast(`✅ ${fmt === 'jpeg' ? 'JPG' : 'PNG'} 1080x1350 न्यूज़ कार्ड सफलतापूर्वक डाउनलोड हो गया!`);

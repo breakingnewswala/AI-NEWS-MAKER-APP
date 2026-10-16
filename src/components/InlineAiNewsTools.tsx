@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Link as LinkIcon,
@@ -86,6 +86,41 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
   const isExecutingRef = React.useRef<boolean>(false);
   const lastTriggerPayloadRef = React.useRef<string>('');
+  const currentAbortControllerRef = React.useRef<AbortController | null>(null);
+  const isResetRef = React.useRef<boolean>(false);
+
+  // Listen for studio reset event from App.tsx
+  useEffect(() => {
+    const handleStudioReset = () => {
+      if (currentAbortControllerRef.current) {
+        currentAbortControllerRef.current.abort();
+        currentAbortControllerRef.current = null;
+      }
+      isExecutingRef.current = false;
+      isResetRef.current = true;
+      setLoading(false);
+      setLinkUrl('');
+      setInputText('');
+      setCustomPrompt('');
+      setResult(null);
+      setHeadlineOptions([]);
+      setSelectedHeadlineIndex(0);
+      setGeneratedAiImageUrl(null);
+      setError(null);
+      setAiPhotoPrompt('');
+      lastTriggerPayloadRef.current = '';
+      try {
+        localStorage.removeItem('ai_tools_raw_url');
+        localStorage.removeItem('ai_tools_raw_news');
+        localStorage.removeItem('selected_raw_news_id');
+        localStorage.removeItem('ai_tools_generated_headlines');
+        localStorage.removeItem('studio_autofill_news_item');
+        localStorage.removeItem('studio_active_news_photos');
+      } catch {}
+    };
+    window.addEventListener('ai_news_studio_reset', handleStudioReset);
+    return () => window.removeEventListener('ai_news_studio_reset', handleStudioReset);
+  }, []);
 
   const normalizeInputUrl = (u: string): string => {
     const trimmed = (u || '').trim();
@@ -354,6 +389,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     try {
       const controller = new AbortController();
+      currentAbortControllerRef.current = controller;
+      isResetRef.current = false;
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
@@ -373,6 +410,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+
+      if (isResetRef.current) {
+        return;
+      }
 
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -1514,8 +1555,32 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             <button
               type="button"
               onClick={() => {
+                if (currentAbortControllerRef.current) {
+                  currentAbortControllerRef.current.abort();
+                  currentAbortControllerRef.current = null;
+                }
+                isExecutingRef.current = false;
+                isResetRef.current = true;
+                setLoading(false);
+                setLinkUrl('');
+                setInputText('');
+                setCustomPrompt('');
                 setResult(null);
                 setHeadlineOptions([]);
+                setSelectedHeadlineIndex(0);
+                setGeneratedAiImageUrl(null);
+                setError(null);
+                setAiPhotoPrompt('');
+                lastTriggerPayloadRef.current = '';
+                try {
+                  localStorage.removeItem('ai_tools_raw_url');
+                  localStorage.removeItem('ai_tools_raw_news');
+                  localStorage.removeItem('selected_raw_news_id');
+                  localStorage.removeItem('ai_tools_generated_headlines');
+                  localStorage.removeItem('studio_autofill_news_item');
+                  localStorage.removeItem('studio_active_news_photos');
+                } catch {}
+                window.dispatchEvent(new CustomEvent('ai_news_studio_reset_request'));
               }}
               className="w-full py-2 text-neutral-400 hover:text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
             >

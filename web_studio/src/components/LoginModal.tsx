@@ -566,135 +566,40 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
           )}
 
-          {/* SIGN IN FORM */}
+          {/* SIGN IN FORM (Google Login Sole User-Facing Auth per Part B) */}
           {authMode === 'login' && (
-            <form onSubmit={(e) => handleLogin(e)} className="space-y-3.5">
-              {isAdminMode ? (
-                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 font-bold flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-amber-400" />
-                    <span>एडमिन कंट्रोल पैनल लॉगिन (Email/Password)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsAdminMode(false)}
-                    className="text-[10px] text-neutral-400 hover:text-white underline cursor-pointer"
-                  >
-                    सामान्य यूज़र
-                  </button>
+            <div className="space-y-4 py-2">
+              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center text-slate-950 mx-auto shadow-lg">
+                  <Lock className="w-6 h-6 text-slate-950" />
                 </div>
-              ) : (
-                <p className="text-xs text-neutral-400 text-center">
-                  एडमिन या रिपोर्टर के रूप में डैशबोर्ड खोलने हेतु क्रेडेंशियल्स डालें:
+                <h3 className="text-sm font-black text-white">
+                  Google खाते से सुरक्षित लॉगिन करें
+                </h3>
+                <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                  एडमिन एवं यूज़र्स के लिए त्वरित व सुरक्षित 1-क्लिक एक्सेस। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।
                 </p>
-              )}
-
-              {/* Username / Email */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-300 mb-1 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>{isAdminMode ? 'एडमिन ईमेल / यूज़रनेम:' : 'यूज़रनेम / रिपोर्टर आईडी:'}</span>
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={isAdminMode ? 'admin@breakingnewswala.com' : 'उदा. admin या reporter'}
-                  autoComplete="username"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-yellow-400 focus:outline-none transition-colors"
-                />
               </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-xs font-semibold text-neutral-300 mb-1 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>पासवर्ड:</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="अपना पासवर्ड दर्ज करें"
-                    autoComplete="current-password"
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white placeholder-neutral-500 focus:border-yellow-400 focus:outline-none transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
-                    title={showPassword ? 'पासवर्ड छुपाएं' : 'पासवर्ड देखें'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Login Submit Button */}
               <button
-                type="submit"
+                type="button"
+                onClick={handleGoogleLogin}
                 disabled={loading}
-                className="w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-300 text-neutral-950 font-black text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer mt-2 disabled:opacity-50"
+                className="w-full py-3.5 px-4 bg-white hover:bg-neutral-100 text-neutral-900 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-3 transition-all cursor-pointer transform active:scale-95"
               >
-                <LogIn className="w-4 h-4" />
-                <span>{loading ? 'सत्यापन हो रहा है...' : (isAdminMode ? 'एडमिन पैनल में लॉगिन करें' : 'डैशबोर्ड में लॉगिन करें')}</span>
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>Google से जारी रखें (Continue with Google)</span>
               </button>
 
-              {/* Google Login for Normal Users (Hidden in Admin Mode) */}
-              {!isAdminMode && (
-                <>
-                  <div className="relative my-3">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-neutral-800" />
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <span className="bg-neutral-900 px-3 text-neutral-400 font-medium">या (OR)</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleGoogleLogin}
-                    disabled={loading}
-                    className="w-full py-2.5 px-4 bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-xs sm:text-sm rounded-xl shadow flex items-center justify-center gap-2.5 transition-all cursor-pointer transform active:scale-95"
-                  >
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                    </svg>
-                    <span>Google से लॉगिन करें (Continue with Google)</span>
-                  </button>
-                </>
-              )}
-
-              {/* Fast One-Click Demo Logins */}
-              <div className="pt-2 border-t border-neutral-800 space-y-1.5">
-                <span className="text-[11px] text-neutral-400 font-bold block text-center">
-                  त्वरित 1-क्लिक टेस्ट लॉगिन:
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleLogin(undefined, 'admin', 'news123')}
-                    className="py-2 px-2 bg-neutral-950 hover:bg-neutral-800 border border-amber-500/50 rounded-lg text-xs font-bold text-amber-300 flex items-center justify-center gap-1 cursor-pointer transition-all"
-                  >
-                    <Crown className="w-3.5 h-3.5 text-amber-400" />
-                    <span>👑 एडमिन लॉगिन</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLogin(undefined, 'reporter', 'news2026')}
-                    className="py-2 px-2 bg-neutral-950 hover:bg-neutral-800 border border-emerald-500/50 rounded-lg text-xs font-bold text-emerald-300 flex items-center justify-center gap-1 cursor-pointer transition-all"
-                  >
-                    <User className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>👤 रिपोर्टर लॉगिन</span>
-                  </button>
-                </div>
-              </div>
-            </form>
+              <p className="text-[11px] text-neutral-400 text-center">
+                🔒 आपका डेटा पूरी तरह सुरक्षित है और Google Authentication द्वारा सत्यापित है।
+              </p>
+            </div>
           )}
 
           {/* SIGN UP FORM */}

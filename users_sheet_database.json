@@ -30,5 +30,37 @@
     "expiresAt": 2107057518060,
     "activatedVia": "Admin Preset",
     "username": "breakingnewswala"
+  },
+  {
+    "userId": "usr_khabridas_101",
+    "email": "khabridasnews@gmail.com",
+    "name": "खबरिदास न्यूज़ (Khabridas News)",
+    "role": "user",
+    "tier": "basic",
+    "planName": "BASIC",
+    "channelName": "खबरिदास न्यूज़",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "mobile": "9876543210",
+    "isProfileLocked": false,
+    "activatedAt": 1791892712618,
+    "expiresAt": 1792497512618,
+    "activatedVia": "Free 7-Day VIP Trial",
+    "username": "khabridasnews"
+  },
+  {
+    "userId": "usr_rituraj_102",
+    "email": "riturajtomarorchha@gmail.com",
+    "name": "ऋतुराज तोमर (ओरछा)",
+    "role": "user",
+    "tier": "basic",
+    "planName": "BASIC",
+    "channelName": "ओरछा बुंदेलखंड न्यूज़",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "mobile": "9876543211",
+    "isProfileLocked": false,
+    "activatedAt": 1791892712618,
+    "expiresAt": 1792497512618,
+    "activatedVia": "Free 7-Day VIP Trial",
+    "username": "riturajtomarorchha"
   }
 ]

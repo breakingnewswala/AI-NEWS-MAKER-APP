@@ -44,3 +44,4 @@ backups/
 
 *.zip
 backup_pre_repair/
+scratch/

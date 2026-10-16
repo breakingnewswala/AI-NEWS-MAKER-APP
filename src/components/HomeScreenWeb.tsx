@@ -267,9 +267,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Dynamic Unified Categories (Single Source of Truth from CategoryManager)
   const [feedCategories, setFeedCategories] = useState<CategoryItem[]>(() => getActiveCategories());
 
-  // Admin Channel & Pending News Filter State (Visible to Admin/SuperAdmin)
+  // Admin Channel & Filter States (Visible to Admin/SuperAdmin)
   const [adminFilterChannel, setAdminFilterChannel] = useState<string>('');
   const [adminPendingOnly, setAdminPendingOnly] = useState<boolean>(false);
+  const [adminPublishedOnly, setAdminPublishedOnly] = useState<boolean>(false);
+  const [adminBonusOnly, setAdminBonusOnly] = useState<boolean>(false);
+  const [confirmRemoveHighlightPost, setConfirmRemoveHighlightPost] = useState<NewsFeedPost | null>(null);
+  const [removedHighlightIds, setRemovedHighlightIds] = useState<Set<string>>(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_removed_highlight_news_ids_v1') : null;
+      if (raw) return new Set(JSON.parse(raw));
+    } catch {}
+    return new Set();
+  });
+
+  // Bonus Claim Modal State (1 to 3 screenshots)
+  const [bonusClaimPost, setBonusClaimPost] = useState<NewsFeedPost | null>(null);
+  const [bonusClaimScreenshots, setBonusClaimScreenshots] = useState<string[]>([]);
+  const [bonusClaimSubmitting, setBonusClaimSubmitting] = useState<boolean>(false);
+  const [bonusClaimError, setBonusClaimError] = useState<string>('');
+  const [bonusClaimSuccess, setBonusClaimSuccess] = useState<string>('');
+
   const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
@@ -429,6 +447,100 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   };
 
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const remainingSlots = 3 - bonusClaimScreenshots.length;
+    if (remainingSlots <= 0) {
+      setBonusClaimError('अधिकतम 3 स्क्रीनशॉट ही अपलोड किए जा सकते हैं।');
+      return;
+    }
+    const toProcess = (Array.from(files) as File[]).slice(0, remainingSlots);
+    toProcess.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const result = evt.target?.result as string;
+        if (result) {
+          setBonusClaimScreenshots((prev) => {
+            if (prev.length >= 3) return prev;
+            return [...prev, result];
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const handleRemoveScreenshot = (index: number) => {
+    setBonusClaimScreenshots((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitBonusClaim = async () => {
+    if (!bonusClaimPost) return;
+    if (bonusClaimScreenshots.length === 0) {
+      setBonusClaimError('कृपया कम से कम 1 स्क्रीनशॉट अपलोड करें।');
+      return;
+    }
+    if (!currentUser?.email) {
+      setBonusClaimError('कृपया क्लेम करने से पहले लॉगिन करें।');
+      return;
+    }
+    setBonusClaimSubmitting(true);
+    setBonusClaimError('');
+    setBonusClaimSuccess('');
+    try {
+      const payload = {
+        userId: currentUser.email,
+        userEmail: currentUser.email,
+        userName: currentUser.name || currentUser.username || 'यूज़र',
+        newsItemId: bonusClaimPost.id,
+        newsTitle: bonusClaimPost.title,
+        rewardCoins: bonusClaimPost.rewardCoins || 100,
+        screenshotUrls: bonusClaimScreenshots,
+        screenshotUrl: bonusClaimScreenshots[0],
+        graphicDownloadedAt: Date.now(),
+      };
+      const res = await fetch(getApiUrl('/api/rewards/claim'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && !data.error) {
+        setBonusClaimSuccess('✅ आपका बोनस क्लेम सफलतापूर्वक सबमिट हो गया! एडमिन अनुमोदन के पश्चात कॉइन्स जुड़ेंगे।');
+        setTimeout(() => {
+          setBonusClaimPost(null);
+          setBonusClaimScreenshots([]);
+          setBonusClaimSuccess('');
+        }, 2000);
+      } else {
+        setBonusClaimError(data.error || 'क्लेम सबमिट करने में विफल। पुनः प्रयास करें।');
+      }
+    } catch {
+      setBonusClaimError('नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।');
+    } finally {
+      setBonusClaimSubmitting(false);
+    }
+  };
+
+  const handleConfirmRemoveHighlight = () => {
+    if (!confirmRemoveHighlightPost) return;
+    const postId = confirmRemoveHighlightPost.id;
+    setRemovedHighlightIds((prev) => {
+      const updated = new Set(prev);
+      updated.add(postId);
+      try {
+        localStorage.setItem('app_removed_highlight_news_ids_v1', JSON.stringify(Array.from(updated)));
+      } catch {}
+      return updated;
+    });
+    if (onToggleHighlightNews) {
+      onToggleHighlightNews(postId);
+    }
+    setConfirmRemoveHighlightPost(null);
+  };
+
   const [defaultThumbnailIds, setDefaultThumbnailIds] = useState<Set<string>>(() => {
     try {
       const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
@@ -548,6 +660,23 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     return rawList;
   }, [posts, activeRssPosts]);
 
+  // Bonus News Graphic Download Listener: triggers bonus claim popup
+  useEffect(() => {
+    const handleBonusGraphicDownloaded = (e: any) => {
+      const newsId = e.detail?.newsId;
+      if (!newsId) return;
+      const target = combinedPosts.find((p) => p.id === newsId);
+      if (target && target.isBonus) {
+        setBonusClaimPost(target);
+        setBonusClaimScreenshots([]);
+        setBonusClaimError('');
+        setBonusClaimSuccess('');
+      }
+    };
+    window.addEventListener('ai_news_bonus_graphic_downloaded', handleBonusGraphicDownloaded);
+    return () => window.removeEventListener('ai_news_bonus_graphic_downloaded', handleBonusGraphicDownloaded);
+  }, [combinedPosts]);
+
   const toggleSelectNews = (id: string) => {
     setSelectedNewsIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -589,7 +718,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     return combinedPosts.filter((p) => p.id && p.id.startsWith('rss-') && !isRssPostApproved(p, approvedRssIds)).length;
   }, [combinedPosts, approvedRssIds]);
 
-  // Filter posts from combined feed (Admin Date, Channel, Pending News & Dynamic Category Filters)
+  const publishedCount = useMemo(() => {
+    return combinedPosts.filter((p) => isRssPostApproved(p, approvedRssIds)).length;
+  }, [combinedPosts, approvedRssIds]);
+
+  const bonusCount = useMemo(() => {
+    return combinedPosts.filter((p) => p.isBonus && (canModerate || isRssPostApproved(p, approvedRssIds))).length;
+  }, [combinedPosts, canModerate, approvedRssIds]);
+
+  // Filter posts from combined feed (Admin Date, Channel, Pending News, Published News, Bonus News & Dynamic Category Filters)
   const filteredPosts = useMemo(() => {
     return combinedPosts.filter((p) => {
       // 1. Normal users cannot see unapproved RSS items (web- links & regular posts bypass directly)
@@ -600,6 +737,20 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       // 2. Admin Pending News Filter: show ONLY unapproved RSS items
       if (canModerate && adminPendingOnly) {
         if (!p.id || !p.id.startsWith('rss-') || isRssPostApproved(p, approvedRssIds)) {
+          return false;
+        }
+      }
+
+      // 2b. Admin Published News Filter: show ONLY published/approved items
+      if (canModerate && adminPublishedOnly) {
+        if (p.id && p.id.startsWith('rss-') && !isRssPostApproved(p, approvedRssIds)) {
+          return false;
+        }
+      }
+
+      // 2c. Admin Bonus News Filter: show ONLY bonus news
+      if (canModerate && adminBonusOnly) {
+        if (!p.isBonus) {
           return false;
         }
       }
@@ -622,16 +773,20 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const postCatName = (p.categoryName || '').toLowerCase();
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
-  }, [combinedPosts, canModerate, adminPendingOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
+  }, [combinedPosts, canModerate, adminPendingOnly, adminPublishedOnly, adminBonusOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
 
   const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
     ? visiblePosts.filter((p) => p.breaking)
     : visiblePosts.slice(0, 6);
 
-  // Identify highlights (exclusive / breaking) for Notification Board Carousel (up to 9 items for multi-item view)
-  const highlightPosts = filteredPosts.filter((p) => p.isExclusive || p.breaking).length > 0
-    ? filteredPosts.filter((p) => p.isExclusive || p.breaking).slice(0, 9)
-    : (filteredPosts.length > 0 ? filteredPosts.slice(0, 9) : visiblePosts.slice(0, 9));
+  // Identify highlights (exclusive / breaking) for Notification Board Carousel (up to 9 items for multi-item view, excluding admin removed highlights)
+  const highlightPosts = useMemo(() => {
+    const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
+    const exclusiveOrBreaking = unremovedFiltered.filter((p) => p.isExclusive || p.breaking);
+    if (exclusiveOrBreaking.length > 0) return exclusiveOrBreaking.slice(0, 9);
+    if (unremovedFiltered.length > 0) return unremovedFiltered.slice(0, 9);
+    return visiblePosts.filter((p) => !removedHighlightIds.has(p.id)).slice(0, 9);
+  }, [filteredPosts, visiblePosts, removedHighlightIds]);
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -765,10 +920,43 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 )}
               </div>
 
-              {/* 3. RSS Pending Approval Toggle */}
+              {/* 3. Published News Toggle */}
               <button
                 type="button"
-                onClick={() => setAdminPendingOnly(!adminPendingOnly)}
+                onClick={() => {
+                  setAdminPublishedOnly(!adminPublishedOnly);
+                  if (!adminPublishedOnly) setAdminPendingOnly(false);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  adminPublishedOnly
+                    ? 'bg-emerald-600 text-white font-black shadow-md'
+                    : 'bg-slate-950 text-emerald-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span>✅ प्रकाशित खबरें ({publishedCount})</span>
+              </button>
+
+              {/* 4. Bonus News Toggle */}
+              <button
+                type="button"
+                onClick={() => setAdminBonusOnly(!adminBonusOnly)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  adminBonusOnly
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                    : 'bg-slate-950 text-amber-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <Coins className="w-3.5 h-3.5 text-amber-400" />
+                <span>बोनस खबरें ({bonusCount})</span>
+              </button>
+
+              {/* 5. RSS Pending Approval Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminPendingOnly(!adminPendingOnly);
+                  if (!adminPendingOnly) setAdminPublishedOnly(false);
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                   adminPendingOnly
                     ? 'bg-amber-500 text-slate-950 font-black shadow-md'
@@ -922,7 +1110,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="flex items-center gap-2 min-w-0">
                 <Megaphone className="w-5 h-5 text-amber-400 animate-pulse shrink-0" />
                 <span className="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide truncate">
-                  विशेष नोटिफिकेशन बोर्ड (HIGHLIGHTS)
+                  विशेष नोटिफिकेशन बोर्ड (प्रमुख खबरें)
                 </span>
               </div>
 
@@ -1010,6 +1198,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.isExclusive ? 'एक्सक्लूसिव' : post.breaking ? 'सुपर ब्रेकिंग' : 'खास खबर'}
                         </span>
                       </div>
+
+                      {/* Admin Remove from Highlights Button */}
+                      {canModerate && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmRemoveHighlightPost(post);
+                          }}
+                          className="absolute top-2 left-2 p-1 bg-black/80 hover:bg-red-600 text-slate-300 hover:text-white rounded-md transition-colors border border-slate-700 shadow z-10 cursor-pointer"
+                          title="प्रमुख खबरों (Highlights) से हटाएं"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
                       {/* Bottom Info on Image */}
                       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-white">
@@ -1100,7 +1303,22 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span className="text-[9px] text-amber-200">ग्राफिक बनाकर क्लेम करें</span>
                       </div>
                     )}
-                    {isNewsGraphicCreated(currentUser?.email, post.id) && (
+                    {post.isBonus && isNewsGraphicCreated(currentUser?.email, post.id) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBonusClaimPost(post);
+                          setBonusClaimScreenshots([]);
+                          setBonusClaimError('');
+                          setBonusClaimSuccess('');
+                        }}
+                        className="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Coins className="w-3.5 h-3.5 text-amber-300" />
+                        <span>अपना बोनस क्लेम करें ({post.rewardCoins || 100} Coins)</span>
+                      </button>
+                    )}
+                    {isNewsGraphicCreated(currentUser?.email, post.id) && !post.isBonus && (
                       <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
                         ✓ इस खबर का ग्राफिक बनाया जा चुका है
                       </span>
@@ -1536,7 +1754,22 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span className="text-[9px] text-amber-200">ग्राफिक बनाकर क्लेम करें</span>
                       </div>
                     )}
-                    {isNewsGraphicCreated(currentUser?.email, post.id) && (
+                    {post.isBonus && isNewsGraphicCreated(currentUser?.email, post.id) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBonusClaimPost(post);
+                          setBonusClaimScreenshots([]);
+                          setBonusClaimError('');
+                          setBonusClaimSuccess('');
+                        }}
+                        className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Coins className="w-4 h-4 text-amber-300" />
+                        <span>अपना बोनस क्लेम करें ({post.rewardCoins || 100} Coins)</span>
+                      </button>
+                    )}
+                    {isNewsGraphicCreated(currentUser?.email, post.id) && !post.isBonus && (
                       <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
                         ✓ इस खबर का ग्राफिक बनाया जा चुका है
                       </span>
@@ -2404,6 +2637,215 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
               >
                 समझ गया
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Remove from Highlights */}
+      {confirmRemoveHighlightPost && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="text-sm font-bold text-white">प्रमुख खबरों (Highlights) से हटाएं</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveHighlightPost(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              क्या आप वाकई इस खबर को विशेष नोटिफिकेशन बोर्ड (प्रमुख खबरें) से हटाना चाहते हैं?
+            </p>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-semibold text-amber-300">
+              {confirmRemoveHighlightPost.title}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveHighlightPost(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveHighlight}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black shadow-md transition cursor-pointer"
+              >
+                हाँ, हटाएं
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bonus Reward Claim Modal (1 to 3 screenshots) */}
+      {bonusClaimPost && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border-2 border-emerald-500/80 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-amber-400 shrink-0" />
+                <h3 className="text-sm sm:text-base font-black text-white">
+                  बोनस रिवॉर्ड क्लेम करें
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setBonusClaimPost(null);
+                  setBonusClaimScreenshots([]);
+                  setBonusClaimError('');
+                  setBonusClaimSuccess('');
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Selected Bonus Post Summary */}
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                चयनित बोनस खबर:
+              </span>
+              <p className="text-xs font-bold text-white line-clamp-2">
+                {bonusClaimPost.title}
+              </p>
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <span className="text-slate-400">रिवॉर्ड राशि:</span>
+                <span className="font-black text-yellow-400 flex items-center gap-1">
+                  <Coins className="w-4 h-4" />
+                  {bonusClaimPost.rewardCoins || 100} Coins
+                </span>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-xs text-emerald-200 space-y-1">
+              <p className="font-bold flex items-center gap-1">
+                <span>📸 स्क्रीनशॉट अपलोड करें (1 से 3 फ़ाइलें)</span>
+              </p>
+              <p className="text-[11px] text-slate-300">
+                सोशल मीडिया (Facebook, Instagram, WhatsApp, आदि) पर अपनी पोस्ट का स्क्रीनशॉट जोड़ें।
+              </p>
+            </div>
+
+            {/* Screenshot Grid & Upload Button */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2.5">
+                {bonusClaimScreenshots.map((url, idx) => (
+                  <div
+                    key={idx}
+                    className="relative aspect-square rounded-xl overflow-hidden border-2 border-emerald-500/50 bg-slate-950 group"
+                  >
+                    <img
+                      src={url}
+                      alt={`स्क्रीनशॉट ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-bold text-emerald-300">
+                      #{idx + 1}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveScreenshot(idx)}
+                      className="absolute top-1 right-1 p-1 bg-rose-600/90 hover:bg-rose-600 text-white rounded-md transition shadow cursor-pointer"
+                      title="स्क्रीनशॉट हटाएं"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+
+                {bonusClaimScreenshots.length < 3 && (
+                  <label className="relative aspect-square rounded-xl border-2 border-dashed border-slate-700 hover:border-emerald-500/70 bg-slate-950/60 flex flex-col items-center justify-center p-2 text-center cursor-pointer transition group">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleScreenshotUpload}
+                      className="hidden"
+                    />
+                    <Upload className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition mb-1" />
+                    <span className="text-[10px] font-bold text-slate-300 group-hover:text-white">
+                      + फोटो जोड़ें
+                    </span>
+                    <span className="text-[9px] text-slate-500">
+                      ({bonusClaimScreenshots.length}/3)
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              {bonusClaimScreenshots.length > 0 && (
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>चयनित स्क्रीनशॉट: <strong className="text-white">{bonusClaimScreenshots.length} / 3</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => setBonusClaimScreenshots([])}
+                    className="text-rose-400 hover:text-rose-300 text-[10px] font-bold underline cursor-pointer"
+                  >
+                    सभी हटाएं
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Error & Success Messages */}
+            {bonusClaimError && (
+              <div className="p-2.5 bg-rose-950/60 border border-rose-500/50 rounded-xl text-rose-300 text-xs font-bold">
+                ⚠️ {bonusClaimError}
+              </div>
+            )}
+            {bonusClaimSuccess && (
+              <div className="p-2.5 bg-emerald-950/60 border border-emerald-500/50 rounded-xl text-emerald-300 text-xs font-bold">
+                {bonusClaimSuccess}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setBonusClaimPost(null);
+                  setBonusClaimScreenshots([]);
+                  setBonusClaimError('');
+                  setBonusClaimSuccess('');
+                }}
+                disabled={bonusClaimSubmitting}
+                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitBonusClaim}
+                disabled={bonusClaimSubmitting || bonusClaimScreenshots.length === 0}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bonusClaimSubmitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>सबमिट हो रहा है...</span>
+                  </>
+                ) : (
+                  <>
+                    <Coins className="w-4 h-4 text-amber-300" />
+                    <span>रिवॉर्ड क्लेम सबमिट करें ({bonusClaimScreenshots.length} स्क्रीनशॉट)</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

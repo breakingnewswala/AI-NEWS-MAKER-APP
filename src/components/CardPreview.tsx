@@ -122,7 +122,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       startX: e.clientX,
       startY: e.clientY,
       initX: card.logoX !== undefined ? card.logoX : 5.5,
-      initY: card.logoY !== undefined ? card.logoY : 5.5,
+      initY: card.logoY !== undefined ? card.logoY : Math.max(1.5, 8.85 - (11.5 * (card.logoScale ?? 1.25)) / 2),
     };
   };
 
@@ -134,7 +134,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       startX: e.touches[0].clientX,
       startY: e.touches[0].clientY,
       initX: card.logoX !== undefined ? card.logoX : 5.5,
-      initY: card.logoY !== undefined ? card.logoY : 5.5,
+      initY: card.logoY !== undefined ? card.logoY : Math.max(1.5, 8.85 - (11.5 * (card.logoScale ?? 1.25)) / 2),
     };
   };
 
@@ -1080,17 +1080,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           {/* Top-Left Channel Logo Area: Positioned authentically at 5.5%, 5.5% and grows downward towards footer */}
           {card.showMasterBranding !== false && (() => {
             const SAFE_MIN_X = 5.0;
-            const SAFE_MIN_Y = 5.0;
+            const SAFE_MIN_Y = 1.5;
             const SAFE_MAX_X = 92;
             const SAFE_MAX_Y = 60;
             const DEFAULT_X = 5.5;
-            const DEFAULT_Y = 5.5;
 
             const baseW = 18;
             const baseH = 11.5;
             const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
             const lW = baseW * scale;
             const lH = baseH * scale;
+
+            // Location Box center is 8.85% (top: 6.6%, height: 4.5% -> center = 8.85%)
+            const DEFAULT_Y = Math.max(SAFE_MIN_Y, 8.85 - lH / 2);
 
             let posX = card.logoX !== undefined ? card.logoX : DEFAULT_X;
             let posY = card.logoY !== undefined ? card.logoY : DEFAULT_Y;
