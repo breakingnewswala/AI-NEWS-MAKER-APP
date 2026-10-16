@@ -642,6 +642,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [isLoadingTargetBalance, setIsLoadingTargetBalance] = useState<boolean>(false);
 
   // Reload data on events
+  // Reload data on events & Auto-sync users in real-time
   useEffect(() => {
     const handlePlansUpdated = () => setPlans(getPlansCatalog());
     const handlePromoUpdated = () => setPromoCodes(getPromoCodes());
@@ -649,12 +650,37 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     window.addEventListener('ai_news_plans_updated', handlePlansUpdated);
     window.addEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
     window.addEventListener('ai_news_plan_users_changed', handleUsersUpdated);
+
+    // Initial background sync
+    handleSyncUsers();
+
+    // 10-second real-time synchronization interval
+    const interval = setInterval(() => {
+      handleSyncUsers();
+    }, 10000);
+
+    // Sync immediately when tab becomes visible
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleSyncUsers();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       window.removeEventListener('ai_news_plans_updated', handlePlansUpdated);
       window.removeEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
       window.removeEventListener('ai_news_plan_users_changed', handleUsersUpdated);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
+
+  useEffect(() => {
+    if (subTab === 'users') {
+      handleSyncUsers();
+    }
+  }, [subTab]);
 
   // Quick Auto-Generator for unique promo code string
   const handleAutoGenerateCode = (tier: UserPlanTier) => {
@@ -2276,18 +2302,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 फिलहाल कोई यूज़र रिकॉर्ड नहीं है। नए यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="w-full">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/50">
-                      <th className="p-3">User & Account Info</th>
-                      <th className="p-3">रोल नियंत्रण</th>
-                      <th className="p-3">चैनल व लोगो</th>
-                      <th className="p-3">वर्तमान प्लान</th>
-                      <th className="p-3">7-दिवसीय फ्री ट्रायल</th>
-                      <th className="p-3">खाता स्थिति</th>
-                      <th className="p-3">प्रोफाइल लॉक</th>
-                      <th className="p-3 text-right">नियंत्रण व एक्शन</th>
+                    <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/60">
+                      <th className="p-3 w-[36%]">यूज़र व अकाउंट विवरण (User & Role)</th>
+                      <th className="p-3 w-[28%]">वर्तमान प्लान व वैधता (Plan & Validity)</th>
+                      <th className="p-3 w-[36%] text-right">खाता स्थिति, कॉइन्स व एक्शन</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -2322,10 +2343,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                         return (
                           <tr key={u.userId || u.email} className={`hover:bg-slate-800/40 transition-colors ${isBlocked ? 'bg-rose-950/15' : ''}`}>
-                            {/* User & Account */}
-                            <td className="p-3">
-                              <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>{u.name || u.fullName || u.username || 'यूज़र'}</span>
+                            {/* 1. User & Account Info + Role (Combined in Column 1) */}
+                            <td className="p-3 align-top">
+                              <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                                <span className="text-sm">{u.name || u.fullName || u.username || 'यूज़र'}</span>
                                 {isSuper ? (
                                   <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
                                     👑 Super Admin
@@ -2345,183 +2366,166 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[11px] text-slate-400 font-mono mt-0.5">{u.email}</div>
+                              <div className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">{u.email}</div>
                               {u.mobile && (
                                 <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
                               )}
-                              <div className="text-[10px] text-amber-300 font-bold flex items-center gap-1 mt-0.5">
-                                <Coins className="w-3 h-3 text-amber-400 shrink-0" />
-                                <span>{(u as any).coinBalance ?? (u as any).coins ?? 0} कॉइन्स</span>
+                              <div className="text-[10.5px] text-slate-300 mt-1 flex items-center gap-1">
+                                <span className="text-slate-500">📺</span>
+                                <span className="font-bold text-slate-200 truncate">{u.channelName || 'चैनल नाम नहीं'}</span>
+                                {u.websiteUrl && (
+                                  <span className="text-slate-500 text-[9.5px] font-mono">({u.websiteUrl})</span>
+                                )}
                               </div>
-                              <div className="text-[9px] text-slate-500 mt-0.5">
-                                पंजीकृत: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('hi-IN') : 'सक्रिय'}
-                              </div>
-                            </td>
 
-                            {/* Role Changer */}
-                            <td className="p-3">
-                              <select
-                                value={u.role === 'superadmin' ? 'superadmin' : (u.role === 'admin' ? 'admin' : 'user')}
-                                disabled={isSuper}
-                                onChange={(e) => {
-                                  const newRole = e.target.value as any;
-                                  adminUpdateUserRecord(u.email, { role: newRole });
-                                  adminUpdateCloudUser(u.userId, { role: newRole });
-                                  setPlanUsers(getPlanUsers());
-                                }}
-                                className="bg-slate-950 border border-slate-700 text-amber-300 disabled:opacity-50 rounded-lg px-2 py-1 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
-                              >
-                                <option value="superadmin">👑 सुपर एडमिन</option>
-                                <option value="admin">🛡️ एडमिन</option>
-                                <option value="user">👤 रिपोर्टर / यूज़र</option>
-                              </select>
-                            </td>
-
-                            {/* Channel & Logo */}
-                            <td className="p-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-700 p-0.5 flex items-center justify-center overflow-hidden shrink-0">
-                                  {u.channelLogoUrl ? (
-                                    <img
-                                      src={u.channelLogoUrl}
-                                      alt="Logo"
-                                      className="w-full h-full object-contain"
-                                      onError={(e) => {
-                                        (e.currentTarget as HTMLElement).style.display = 'none';
-                                      }}
-                                    />
-                                  ) : (
-                                    <span className="text-[9px] font-mono text-slate-500 font-bold text-center leading-tight">
-                                      लोगो नहीं
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="font-bold text-slate-200 truncate max-w-[120px]">
-                                    {u.channelName || 'चैनल नाम नहीं'}
-                                  </div>
-                                  <div className="text-[10px] text-slate-500 truncate max-w-[120px]">
-                                    🌐 {u.websiteUrl || 'ainewsmaker.online'}
-                                  </div>
-                                </div>
+                              {/* Inline Role Selector inside Column 1 */}
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <span className="text-[10px] text-slate-400 font-semibold">रोल:</span>
+                                {isSuper ? (
+                                  <span className="text-[10px] font-bold text-amber-300">सुपर एडमिन (फिक्स्ड)</span>
+                                ) : (
+                                  <select
+                                    value={u.role === 'admin' ? 'admin' : 'user'}
+                                    disabled={isSuper}
+                                    onChange={(e) => {
+                                      const newRole = e.target.value as any;
+                                      adminUpdateUserRecord(u.email, { role: newRole });
+                                      adminUpdateCloudUser(u.userId, { role: newRole });
+                                      setPlanUsers(getPlanUsers());
+                                    }}
+                                    className="bg-slate-950 border border-slate-700 text-amber-300 rounded px-1.5 py-0.5 text-[10px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                                  >
+                                    <option value="admin">🛡️ एडमिन</option>
+                                    <option value="user">👤 रिपोर्टर / यूज़र</option>
+                                  </select>
+                                )}
+                                <span className="text-[9px] text-slate-500 ml-auto">
+                                  पंजीकृत: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('hi-IN') : 'सक्रिय'}
+                                </span>
                               </div>
                             </td>
 
-                            {/* Current Plan */}
-                            <td className="p-3">
+                            {/* 2. Current Plan & Trial Status (Combined in Column 2) */}
+                            <td className="p-3 align-top">
                               <div className="space-y-1.5">
-                                <div>{getTierBadge(u.tier || 'basic')}</div>
-                                <select
-                                  value={u.tier || 'basic'}
-                                  disabled={isSuper}
-                                  onChange={(e) => {
-                                    const newTier = e.target.value as UserPlanTier;
-                                    adminUpdateUserRecord(u.email, { tier: newTier });
-                                    adminUpdateCloudUser(u.userId, { tier: newTier });
-                                    setPlanUsers(getPlanUsers());
-                                  }}
-                                  className="bg-slate-950 border border-slate-700 text-white disabled:opacity-50 rounded-lg px-1.5 py-0.5 text-[11px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
-                                >
-                                  <option value="basic">BASIC</option>
-                                  <option value="advanced">ADVANCE</option>
-                                  <option value="professional">PRO</option>
-                                  <option value="ultra">VIP DESK</option>
-                                </select>
-                              </div>
-                            </td>
-
-                            {/* 7-Day Trial Status */}
-                            <td className="p-3">
-                              {isSuper || (u.tier && u.tier !== 'basic') ? (
-                                <div className="space-y-0.5">
-                                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold rounded flex items-center gap-1 w-max">
-                                    ⭐ सशुल्क / पेड प्लान
-                                  </span>
-                                  <div className="text-[10px] text-slate-400 font-mono">
-                                    वैध: {u.expiresAt ? new Date(u.expiresAt).toLocaleDateString('hi-IN') : 'स्थायी'}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  {isExpired ? (
-                                    <span className="px-2 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold rounded flex items-center gap-1 w-max">
-                                      🔒 7-दिन ट्रायल समाप्त
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold rounded flex items-center gap-1 w-max">
-                                      ⏱️ {u.daysRemaining ?? 7} दिन {u.hoursRemaining ?? 0} घंटे शेष
-                                    </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <div>{getTierBadge(u.tier || 'basic')}</div>
+                                  {!isSuper && (
+                                    <select
+                                      value={u.tier || 'basic'}
+                                      onChange={(e) => {
+                                        const newTier = e.target.value as UserPlanTier;
+                                        adminUpdateUserRecord(u.email, { tier: newTier });
+                                        adminUpdateCloudUser(u.userId, { tier: newTier });
+                                        setPlanUsers(getPlanUsers());
+                                      }}
+                                      className="bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-0.5 text-[10px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
+                                    >
+                                      <option value="basic">BASIC</option>
+                                      <option value="advanced">ADVANCE</option>
+                                      <option value="professional">PRO</option>
+                                      <option value="ultra">VIP DESK</option>
+                                    </select>
                                   )}
-                                  <div className="text-[9px] text-slate-400 font-mono leading-tight">
-                                    प्रारंभ: {trialStart ? new Date(trialStart).toLocaleDateString('hi-IN') : '-'}<br />
-                                    समाप्ति: {trialEnds ? new Date(trialEnds).toLocaleDateString('hi-IN') : '-'}
-                                  </div>
                                 </div>
-                              )}
-                            </td>
 
-                            {/* Account Status (Active vs Blocked) */}
-                            <td className="p-3">
-                              {isBlocked ? (
-                                <div className="space-y-0.5">
-                                  <span className="px-2 py-1 bg-rose-950/80 text-rose-300 border border-rose-600 rounded-lg text-[10px] font-black flex items-center gap-1 w-max">
-                                    <Ban className="w-3 h-3 text-rose-400" />
-                                    <span>🔴 ब्लॉक किया गया</span>
-                                  </span>
-                                  {u.blockedBy && (
-                                    <div className="text-[9px] text-rose-400/80">
-                                      द्वारा: {u.blockedBy}
+                                {/* Plan / Trial Validity underneath */}
+                                <div className="pt-0.5">
+                                  {isSuper || (u.tier && u.tier !== 'basic') ? (
+                                    <div className="space-y-0.5">
+                                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9.5px] font-bold rounded flex items-center gap-1 w-max">
+                                        ⭐ सशुल्क / पेड प्लान
+                                      </span>
+                                      <div className="text-[10px] text-slate-400 font-mono">
+                                        वैधता: {u.expiresAt ? new Date(u.expiresAt).toLocaleDateString('hi-IN') : 'स्थायी (Lifetime)'}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {isExpired ? (
+                                        <span className="px-2 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9.5px] font-bold rounded flex items-center gap-1 w-max">
+                                          🔒 7-दिन ट्रायल समाप्त
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9.5px] font-bold rounded flex items-center gap-1 w-max">
+                                          ⏱️ {u.daysRemaining ?? 7} दिन {u.hoursRemaining ?? 0} घंटे शेष
+                                        </span>
+                                      )}
+                                      <div className="text-[9px] text-slate-400 font-mono leading-tight">
+                                        प्रारंभ: {trialStart ? new Date(trialStart).toLocaleDateString('hi-IN') : '-'}<br />
+                                        समाप्ति: {trialEnds ? new Date(trialEnds).toLocaleDateString('hi-IN') : '-'}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
-                              ) : (
-                                <span className="px-2 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-600 rounded-lg text-[10px] font-black flex items-center gap-1 w-max">
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                  <span>🟢 सक्रिय (Active)</span>
-                                </span>
-                              )}
+                              </div>
                             </td>
 
-                            {/* Profile Lock Status */}
-                            <td className="p-3">
-                              {isSuper ? (
-                                <span
-                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-amber-500/60 bg-amber-950/60 text-amber-300 flex items-center gap-1 w-max select-none shadow-xs"
-                                  title="मास्टर / सुपर एडमिन प्रोफाइल स्थायी रूप से सुरक्षित व लॉक है"
-                                >
-                                  <Lock className="w-3 h-3 text-amber-400" />
-                                  <span>🔒 स्थायी लॉक</span>
-                                </span>
-                              ) : (
+                            {/* 3. Status, Coins & Actions (Expanded & Consolidated in Column 3) */}
+                            <td className="p-3 align-top text-right">
+                              {/* Row 1: Account Status & Profile Lock Badges */}
+                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                {isBlocked ? (
+                                  <span className="px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-600 rounded-lg text-[9.5px] font-black flex items-center gap-1">
+                                    <Ban className="w-3 h-3 text-rose-400" />
+                                    <span>🔴 ब्लॉक</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-600 rounded-lg text-[9.5px] font-black flex items-center gap-1">
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span>🟢 सक्रिय</span>
+                                  </span>
+                                )}
+
+                                {isSuper ? (
+                                  <span
+                                    className="px-2 py-0.5 rounded-lg text-[9.5px] font-bold border border-amber-500/60 bg-amber-950/60 text-amber-300 flex items-center gap-1 select-none"
+                                    title="मास्टर / सुपर एडमिन प्रोफाइल स्थायी रूप से सुरक्षित व लॉक है"
+                                  >
+                                    <Lock className="w-2.5 h-2.5 text-amber-400" />
+                                    <span>🔒 स्थायी लॉक</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newLockState = !u.isLocked;
+                                      adminUpdateUserRecord(u.email, { isLocked: newLockState });
+                                      adminUpdateCloudUser(u.userId, { isLocked: newLockState });
+                                      setPlanUsers(getPlanUsers());
+                                    }}
+                                    className={`px-2 py-0.5 rounded-lg text-[9.5px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                                      u.isLocked !== false
+                                        ? 'bg-amber-950/60 border-amber-600/80 text-amber-300 hover:bg-amber-900/60'
+                                        : 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60'
+                                    }`}
+                                    title={u.isLocked !== false ? 'क्लिक करके अनलॉक करें' : 'क्लिक करके सुरक्षित लॉक करें'}
+                                  >
+                                    {u.isLocked !== false ? <Lock className="w-2.5 h-2.5" /> : <Unlock className="w-2.5 h-2.5" />}
+                                    <span>{u.isLocked !== false ? 'लॉक्ड' : 'अनलॉक्ड'}</span>
+                                  </button>
+                                )}
+
+                                <div className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold rounded-lg flex items-center gap-1">
+                                  <Coins className="w-3 h-3 text-amber-400" />
+                                  <span>{(u as any).coinBalance ?? (u as any).coins ?? 0} कॉइन्स</span>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Action Buttons */}
+                              <div className="flex items-center justify-end gap-1.5 flex-wrap mt-2">
+                                {/* Coin Credit Action Button */}
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    const newLockState = !u.isLocked;
-                                    adminUpdateUserRecord(u.email, { isLocked: newLockState });
-                                    adminUpdateCloudUser(u.userId, { isLocked: newLockState });
-                                    setPlanUsers(getPlanUsers());
-                                  }}
-                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
-                                    u.isLocked !== false
-                                      ? 'bg-amber-950/60 border-amber-600/80 text-amber-300 hover:bg-amber-900/60'
-                                      : 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60'
-                                  }`}
-                                  title={
-                                    u.isLocked !== false
-                                      ? 'क्लिक करके इस विशिष्ट यूज़र को अनलॉक करें'
-                                      : 'क्लिक करके इस विशिष्ट यूज़र को सुरक्षित लॉक करें'
-                                  }
+                                  onClick={() => handleOpenCoinCreditDialog(u)}
+                                  className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                  title="यूज़र को कॉइन क्रेडिट करें"
                                 >
-                                  {u.isLocked !== false ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                  <span>{u.isLocked !== false ? '🔒 लॉक्ड' : '🔓 अनलॉक्ड'}</span>
+                                  <Coins className="w-3 h-3 text-amber-400" />
+                                  <span>कॉइन जोड़ें</span>
                                 </button>
-                              )}
-                            </td>
 
-                            {/* Actions Column: Block / Unblock, Edit Branding, Coin Credit, Delete */}
-                            <td className="p-3 text-right">
-                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                {/* Block / Unblock Button */}
+                                {/* Block / Unblock Toggle */}
                                 {isBlocked ? (
                                   <button
                                     type="button"
@@ -2537,10 +2541,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                     type="button"
                                     onClick={() => handleToggleBlockUser(u)}
                                     disabled={isSuper}
-                                    className="px-2 py-1 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/80 text-amber-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                    className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/80 text-rose-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
                                     title={isSuper ? "सुपर एडमिन को ब्लॉक नहीं किया जा सकता" : "खाते को तुरंत ब्लॉक करें"}
                                   >
-                                    <Ban className="w-3 h-3 text-amber-400" />
+                                    <Ban className="w-3 h-3 text-rose-400" />
                                     <span>ब्लॉक</span>
                                   </button>
                                 )}
@@ -2550,21 +2554,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                   type="button"
                                   onClick={() => handleOpenBrandingEditor(u)}
                                   className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
-                                  title="ब्रांडिंग विवरण संपादित करें"
+                                  title="ब्रांडिंग व लोगो संपादित करें"
                                 >
                                   <Edit2 className="w-3 h-3" />
                                   <span>ब्रांडिंग</span>
-                                </button>
-
-                                {/* Coin Credit Action Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenCoinCreditDialog(u)}
-                                  className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
-                                  title="यूज़र को कॉइन क्रेडिट करें"
-                                >
-                                  <Coins className="w-3 h-3 text-amber-400" />
-                                  <span>कॉइन जोड़ें</span>
                                 </button>
 
                                 {/* Delete User Button */}
@@ -2578,7 +2571,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                       setPlanUsers(getPlanUsers());
                                     }
                                   }}
-                                  className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/60 text-rose-300 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                  className="px-2 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-700/50 text-rose-300 disabled:opacity-20 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
                                   title={isSuper ? "सुपर एडमिन को हटाया नहीं जा सकता" : "यूज़र प्रोफाइल व डेटाबेस हटाएं"}
                                 >
                                   <Trash2 className="w-3 h-3 text-rose-400" />

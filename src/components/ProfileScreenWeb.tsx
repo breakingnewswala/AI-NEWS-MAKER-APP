@@ -158,13 +158,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
-      const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
+      const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+      const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+      const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+      const defaultAdminLogo = isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+
       if (cleanEmail) {
         const specific = localStorage.getItem(`user_profile_${cleanEmail}`);
         if (specific) {
           const parsed = JSON.parse(specific);
           return {
             ...DEFAULT_PROFILE,
+            channelLogoUrl: parsed.channelLogoUrl || defaultAdminLogo,
+            channelLogoPngUrl: parsed.channelLogoPngUrl || parsed.channelLogoUrl || defaultAdminLogo,
+            channelNameHi: parsed.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
+            channelNameEn: parsed.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
             ...parsed,
             socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
           };
@@ -175,36 +183,53 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         const parsed = JSON.parse(saved);
         return {
           ...DEFAULT_PROFILE,
+          channelLogoUrl: parsed.channelLogoUrl || defaultAdminLogo,
+          channelLogoPngUrl: parsed.channelLogoPngUrl || parsed.channelLogoUrl || defaultAdminLogo,
+          channelNameHi: parsed.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
+          channelNameEn: parsed.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
           ...parsed,
           socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
         };
       }
     } catch {}
+    const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+    const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+    const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+    const defaultAdminLogo = isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+
     return {
       ...DEFAULT_PROFILE,
-      fullName: currentUser?.name || '',
-      channelNameHi: localStorage.getItem('app_channel_name') || '',
-      channelNameEn: localStorage.getItem('app_channel_name_en') || '',
-      username: currentUser?.username || '',
+      fullName: currentUser?.name || (isAinewsAdmin ? 'सुपर एडमिन (Super Admin)' : (isBnwAdmin ? 'मुख्य संपादक' : '')),
+      channelNameHi: isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : (localStorage.getItem('app_channel_name') || '')),
+      channelNameEn: isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : (localStorage.getItem('app_channel_name_en') || '')),
+      channelLogoUrl: defaultAdminLogo,
+      channelLogoPngUrl: defaultAdminLogo,
+      username: currentUser?.username || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'breakingnewswala' : '')),
     };
   });
 
   // Fetch Cloud Saved User Profile on Mount or User Change
   useEffect(() => {
-    const cleanEmail = currentUser?.email ? currentUser.email.toLowerCase().trim() : null;
+    const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
     if (!cleanEmail) return;
+    const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+    const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+    const defaultAdminLogo = isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+
     fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`))
       .then((res) => res.json())
       .then((data) => {
         if (data && data.success && data.profile) {
           const cloudP = data.profile;
           setChannelProfile((prev) => {
+            const resolvedLogo = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || defaultAdminLogo;
             const merged = {
               ...prev,
               fullName: cloudP.fullName || cloudP.name || prev.fullName,
-              channelNameHi: cloudP.channelNameHi || cloudP.channelName || prev.channelNameHi,
-              channelNameEn: cloudP.channelNameEn || prev.channelNameEn,
-              channelLogoUrl: cloudP.channelLogoUrl || prev.channelLogoUrl,
+              channelNameHi: cloudP.channelNameHi || cloudP.channelName || prev.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
+              channelNameEn: cloudP.channelNameEn || prev.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
+              channelLogoUrl: resolvedLogo,
+              channelLogoPngUrl: resolvedLogo,
               username: cloudP.username || prev.username,
               mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
               whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
@@ -2599,16 +2624,22 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           const rawUsername = channelProfile.username || currentUser?.username || '';
           const displayUsername = rawUsername ? (rawUsername.startsWith('@') ? rawUsername : `@${rawUsername}`) : '';
           const displayLocation = reporterDistrict || channelProfile.location || currentUser?.district || '';
-          const displayEmail = currentUser?.email || (effectiveUser?.email && !effectiveUser.email.includes('editor@ainewsmaker') ? effectiveUser.email : '');
+          const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+          const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+          const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+          const effectiveAvatarLogo =
+            channelProfile.channelLogoPngUrl ||
+            (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) ||
+            (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : ''));
 
           return (
             <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
                 {/* User Avatar / Channel Logo */}
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
-                  {channelProfile.channelLogoUrl ? (
+                  {effectiveAvatarLogo ? (
                     <img
-                      src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
+                      src={effectiveAvatarLogo}
                       alt={displayUserName}
                       className="w-full h-full object-contain rounded-xl"
                     />
