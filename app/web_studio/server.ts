@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
+import crypto from "crypto";
 
 const safeFilename = typeof __filename !== 'undefined' ? __filename : process.cwd();
 const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(safeFilename);
@@ -14,25 +15,349 @@ dotenv.config();
 const app = express();
 const PORT = parseInt(process.env.PORT || "8080", 10);
 
-// Health check endpoints for Google Cloud Run, Cloud Build & Firebase App Hosting
-app.get("/health", (_req, res) => res.status(200).send("OK"));
-app.get("/_health", (_req, res) => res.status(200).send("OK"));
-app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
-
-// Enable CORS for web apps, custom domains (ainewsmaker.online), and dev endpoints
+// Security Headers & Safe CORS Middleware
 app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-auth-token, x-admin-key, x-user-email, x-admin-email, x-user-id, x-admin-id");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
   next();
 });
 
+// Health check endpoints for Google Cloud Run, Cloud Build & Firebase App Hosting
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/_health", (_req, res) => res.status(200).send("OK"));
+app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
+
 // Increase payload limits for video and image uploads
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+
+// ============================================================================
+// CRYPTOGRAPHIC SESSION TOKEN & AUTHENTICATION ENGINE (HMAC-SHA256 JWT)
+// ============================================================================
+const AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+
+interface AuthTokenPayload {
+  userId: string;
+  email: string;
+  role: "superadmin" | "admin" | "reporter" | "user";
+  username?: string;
+  iat: number;
+  exp: number;
+}
+
+function generateAuthToken(user: { userId?: string; email?: string; role?: string; username?: string }): string {
+  const payload: AuthTokenPayload = {
+    userId: user.userId || "",
+    email: (user.email || "").toLowerCase().trim(),
+    role: (user.role as any) || "user",
+    username: user.username || "",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60), // 14 days
+  };
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", AUTH_SECRET)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
+
+function verifyAuthToken(tokenStr: string): AuthTokenPayload | null {
+  if (!tokenStr || typeof tokenStr !== "string") return null;
+  const parts = tokenStr.trim().split(".");
+  if (parts.length !== 3) return null;
+  const [encodedHeader, encodedPayload, signature] = parts;
+
+  const expectedSig = crypto
+    .createHmac("sha256", AUTH_SECRET)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+
+  if (signature.length !== expectedSig.length) return null;
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  if (!crypto.timingSafeEqual(sigBuf, expBuf)) return null;
+
+  try {
+    const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson) as AuthTokenPayload;
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return null; // Token expired
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
+  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
+  let token = "";
+  if (authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (authHeader) {
+    token = authHeader;
+  }
+  if (!token) return null;
+  return verifyAuthToken(token);
+}
+
+function isAuthorizedAdmin(req: express.Request): boolean {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    const adminKey = req.headers["x-admin-key"];
+    if (process.env.ADMIN_API_KEY && adminKey && adminKey === process.env.ADMIN_API_KEY) {
+      return true;
+    }
+    return false;
+  }
+  return user.role === "admin" || user.role === "superadmin";
+}
+
+// ============================================================================
+// PASSWORD CREDENTIALS DATABASE & SECURE HASHING (PBKDF2 + SALT)
+// ============================================================================
+const CREDENTIALS_DB_FILE = path.join(process.cwd(), "auth_credentials_db.json");
+
+interface StoredCredential {
+  email: string;
+  username?: string;
+  salt: string;
+  hash: string;
+  createdAt: number;
+}
+
+function loadCredentialsDatabase(): Record<string, StoredCredential> {
+  try {
+    if (fs.existsSync(CREDENTIALS_DB_FILE)) {
+      const raw = fs.readFileSync(CREDENTIALS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (err: any) {
+    console.error("Error reading auth_credentials_db.json:", err.message);
+  }
+  return {};
+}
+
+function saveCredentialsDatabase(db: Record<string, StoredCredential>): boolean {
+  try {
+    fs.writeFileSync(CREDENTIALS_DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+    try {
+      const webCredPath = path.join(process.cwd(), "web_studio", "auth_credentials_db.json");
+      fs.writeFileSync(webCredPath, JSON.stringify(db, null, 2), "utf-8");
+    } catch {}
+    return true;
+  } catch (err: any) {
+    console.error("Error saving auth_credentials_db.json:", err.message);
+    return false;
+  }
+}
+
+function hashPassword(password: string, salt?: string): { salt: string; hash: string } {
+  const actualSalt = salt || crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(password, actualSalt, 10000, 64, "sha512").toString("hex");
+  return { salt: actualSalt, hash };
+}
+
+function verifyPassword(password: string, salt: string, storedHash: string): boolean {
+  try {
+    const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
+    const a = Buffer.from(hash, "hex");
+    const b = Buffer.from(storedHash, "hex");
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// HARDENED SSRF & SAFE PUBLIC URL VALIDATOR
+// ============================================================================
+function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; parsedUrl?: URL } {
+  try {
+    const trimmed = (urlString || "").trim();
+    if (!trimmed) return { safe: false, error: "URL रिक्त है।" };
+
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      return { safe: false, error: "अमान्य URL संरचना।" };
+    }
+
+    // 1. Strict protocol check: only http and https
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { safe: false, error: "केवल HTTP और HTTPS लिंक मान्य हैं।" };
+    }
+
+    // 2. Reject credentials in URL (e.g. http://user:pass@evil.com)
+    if (parsed.username || parsed.password) {
+      return { safe: false, error: "URL में क्रेडेंशियल्स की अनुमति नहीं है।" };
+    }
+
+    const hostname = parsed.hostname.toLowerCase().trim();
+
+    // 3. Port check: only standard ports allowed
+    if (parsed.port) {
+      const p = parseInt(parsed.port, 10);
+      if (![80, 443, 8080, 8443].includes(p)) {
+        return { safe: false, error: "अमान्य अथवा प्रतिबंधित पोर्ट।" };
+      }
+    }
+
+    // 4. Hostname checks (metadata, localhost, internal domains)
+    if (
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal") ||
+      hostname.endsWith(".lan") ||
+      hostname === "instance-data" ||
+      hostname === "metadata" ||
+      hostname === "metadata.google.internal"
+    ) {
+      return { safe: false, error: "अमान्य अथवा निजी IP/Localhost/Metadata लिंक स्वीकार्य नहीं है।" };
+    }
+
+    // 5. Detect octal, hex, or dword numeric IPs
+    if (/^\d+$/.test(hostname)) {
+      return { safe: false, error: "न्यूमेरिक IP लिंक प्रतिबंधित है।" };
+    }
+    if (/^0x[0-9a-f]+$/i.test(hostname)) {
+      return { safe: false, error: "हेक्स IP लिंक प्रतिबंधित है।" };
+    }
+
+    // 6. IPv6 check
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
+      const inner = hostname.slice(1, -1).toLowerCase();
+      if (
+        inner === "::1" ||
+        inner === "0:0:0:0:0:0:0:1" ||
+        inner.startsWith("::ffff:") ||
+        inner.startsWith("fe80:") ||
+        inner.startsWith("fc00:") ||
+        inner.startsWith("fd00:")
+      ) {
+        return { safe: false, error: "IPv6 निजी/लूपबैक लिंक प्रतिबंधित है।" };
+      }
+    }
+    if (hostname === "::1" || hostname.includes("::ffff:")) {
+      return { safe: false, error: "IPv6 निजी/लूपबैक लिंक प्रतिबंधित है।" };
+    }
+
+    // 7. IPv4 dotted-quad check (including octal notation detection)
+    const ipv4Parts = hostname.split(".");
+    if (ipv4Parts.length === 4 && ipv4Parts.every((part) => /^\d+$/.test(part))) {
+      if (ipv4Parts.some((part) => part.length > 1 && part.startsWith("0"))) {
+        return { safe: false, error: "अमान्य IP फॉर्मेट।" };
+      }
+      const [b1, b2, b3, b4] = ipv4Parts.map((p) => parseInt(p, 10));
+      if ([b1, b2, b3, b4].some((b) => isNaN(b) || b < 0 || b > 255)) {
+        return { safe: false, error: "अमान्य IP पता।" };
+      }
+
+      // Check loopback, private ranges, link-local, carrier NAT
+      if (
+        b1 === 0 || // 0.0.0.0/8
+        b1 === 10 || // 10.0.0.0/8
+        b1 === 127 || // 127.0.0.0/8 Loopback
+        (b1 === 100 && b2 >= 64 && b2 <= 127) || // 100.64.0.0/10 Carrier-grade NAT
+        (b1 === 172 && b2 >= 16 && b2 <= 31) || // 172.16.0.0/12 Private
+        (b1 === 192 && b2 === 168) || // 192.168.0.0/16 Private
+        (b1 === 169 && b2 === 254) || // 169.254.0.0/16 Link-local & Cloud Metadata
+        (b1 === 192 && b2 === 0 && b3 === 2) || // TEST-NET-1
+        (b1 === 198 && b2 === 51 && b3 === 100) || // TEST-NET-2
+        (b1 === 203 && b2 === 0 && b3 === 113) || // TEST-NET-3
+        b1 >= 224 // 224.0.0.0/4 Multicast & Reserved
+      ) {
+        return { safe: false, error: "अमान्य अथवा निजी IP/Localhost/Metadata लिंक स्वीकार्य नहीं है।" };
+      }
+    }
+
+    return { safe: true, parsedUrl: parsed };
+  } catch {
+    return { safe: false, error: "अमान्य URL संरचना।" };
+  }
+}
+
+// ============================================================================
+// MAGIC BYTES FILE VALIDATOR (PNG, JPEG, GIF, WEBP)
+// ============================================================================
+function isValidImageMagicBytes(buf: Buffer): { valid: boolean; format?: "png" | "jpg" | "gif" | "webp" } {
+  if (!buf || buf.length < 8) return { valid: false };
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  ) {
+    return { valid: true, format: "png" };
+  }
+
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return { valid: true, format: "jpg" };
+  }
+
+  // GIF: 'GIF87a' or 'GIF89a'
+  if (
+    buf[0] === 0x47 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x38 &&
+    (buf[4] === 0x37 || buf[4] === 0x39) &&
+    buf[5] === 0x61
+  ) {
+    return { valid: true, format: "gif" };
+  }
+
+  // WebP: 'RIFF' .... 'WEBP'
+  if (
+    buf.length >= 12 &&
+    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+  ) {
+    return { valid: true, format: "webp" };
+  }
+
+  return { valid: false };
+}
+
+// Specialized Rate Limiters
+function authRateLimiter(req: any, res: any, next: any) {
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown-ip';
+  const check = checkRateLimit(`auth_${String(ip)}`, 15, 60000);
+  if (!check.allowed) {
+    return res.status(429).json({ error: "अत्यधिक लॉगिन प्रयास। कृपया 1 मिनट बाद पुनः प्रयास करें।" });
+  }
+  next();
+}
+
+function proxyRateLimiter(req: any, res: any, next: any) {
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown-ip';
+  const check = checkRateLimit(`proxy_${String(ip)}`, 120, 60000);
+  if (!check.allowed) {
+    return res.status(429).send("Too many image proxy requests. Please slow down.");
+  }
+  next();
+}
 
 // --- Part C: Rate Limiting & Admin Audit Logging ---
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -217,6 +542,9 @@ app.get("/api/cloud-status", (req, res) => {
 // Admin endpoint to dynamically configure OpenAI Key, Gemini Key or Custom Domain at runtime
 app.post("/api/admin/set-ai-keys", async (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही AI कुंजियाँ सेट कर सकते हैं।" });
+    }
     const { openaiKey, geminiKey, customDomain } = req.body;
     if (openaiKey !== undefined) {
       dynamicOpenAiKey = String(openaiKey).trim();
@@ -1114,38 +1442,6 @@ app.delete("/api/drafts/:id", (req, res) => {
 // BONUS NEWS & USER REWARDS WALLET SYSTEM
 // ==========================================
 
-function isAuthorizedAdmin(req: express.Request): boolean {
-  const email = (
-    req.headers["x-user-email"] ||
-    req.headers["x-admin-email"] ||
-    req.body?.adminEmail ||
-    req.body?.userEmail ||
-    req.body?.email ||
-    req.query?.adminEmail ||
-    req.query?.userEmail ||
-    req.query?.email ||
-    ""
-  ).toString().toLowerCase().trim();
-  const uid = (
-    req.headers["x-user-id"] ||
-    req.headers["x-admin-id"] ||
-    req.body?.adminId ||
-    req.body?.userId ||
-    req.query?.userId ||
-    ""
-  ).toString().toLowerCase().trim();
-
-  if (isProtectedAdminAccount(email)) return true;
-  if (email === "admin" || uid === "admin" || uid === "master_admin_001") return true;
-
-  const users = loadUsersMasterDatabase();
-  const match = users.find(u =>
-    (email && u.email && u.email.toLowerCase().trim() === email) ||
-    (uid && u.userId && u.userId.toLowerCase().trim() === uid)
-  );
-  return Boolean(match && (match.role === "admin" || match.role === "superadmin"));
-}
-
 // 1. Admin Bonus News Configuration Endpoint
 app.post("/api/admin/news-posts/:id/bonus", (req, res) => {
   try {
@@ -1271,17 +1567,27 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
 // 4. POST Upload Social Media Post Screenshot
 app.post("/api/rewards/upload-screenshot", (req, res) => {
   try {
-    const { imageBase64, mimeType = "image/jpeg" } = req.body;
-    if (!imageBase64) {
+    const { imageBase64 } = req.body;
+    if (!imageBase64 || typeof imageBase64 !== "string") {
       return res.status(400).json({ error: "स्क्रीनशॉट इमेज आवश्यक है" });
     }
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-    const ext = mimeType.includes("png") ? "png" : "jpg";
-    const filename = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const buf = Buffer.from(cleanBase64, "base64");
+
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "स्क्रीनशॉट का आकार 10MB से अधिक नहीं हो सकता।" });
+    }
+
+    const magic = isValidImageMagicBytes(buf);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "अमान्य फ़ाइल: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ ही स्वीकार्य हैं।" });
+    }
+
+    const ext = magic.format || "jpg";
+    const filename = `claim-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
     const filePath = path.join(UPLOAD_SCREENSHOTS_DIR, filename);
     const webFilePath = path.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
 
-    const buf = Buffer.from(cleanBase64, "base64");
     fs.writeFileSync(filePath, buf);
     try {
       fs.writeFileSync(webFilePath, buf);
@@ -1547,14 +1853,25 @@ app.post("/api/upload-logo", (req, res) => {
     if (!rawData || typeof rawData !== "string") {
       return res.status(400).json({ error: "लोगो इमेज डेटा आवश्यक है" });
     }
-    const mimeType = (req.body?.mimeType || req.body?.logoType || "").toLowerCase();
-    const isGif = mimeType.includes("gif") || rawData.startsWith("data:image/gif");
-    const ext = isGif ? "gif" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png");
-    const filename = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-    
+
     const cleanBase64 = rawData.replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(cleanBase64, "base64");
 
+    // File upload security: 10MB size limit
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "फ़ाइल का आकार 10MB से अधिक नहीं हो सकता।" });
+    }
+
+    // File upload security: Magic bytes verification (PNG, JPEG, GIF, WebP)
+    const magic = isValidImageMagicBytes(buf);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "अमान्य फ़ाइल: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ ही स्वीकार्य हैं।" });
+    }
+
+    const isGif = magic.format === "gif";
+    const ext = magic.format || "png";
+    const filename = `logo-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+    
     const filePath = path.join(UPLOAD_LOGOS_DIR, filename);
     const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, filename);
     fs.writeFileSync(filePath, buf);
@@ -3025,6 +3342,9 @@ app.get("/api/videos", (_req, res) => {
 // 2. POST /api/admin/videos/upload - Admin uploads video to server
 app.post("/api/admin/videos/upload", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
+    }
     const videoData = req.body;
     if (!videoData || !videoData.title || !videoData.videoUrl) {
       return res.status(400).json({ error: "वीडियो और शीर्षक दोनों अनिवार्य हैं।" });
@@ -3058,6 +3378,9 @@ app.post("/api/admin/videos/upload", (req, res) => {
 // 3. PUT /api/admin/videos/:id - Admin updates video (title, caption, aspect ratio)
 app.put("/api/admin/videos/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
+    }
     const videoId = req.params.id;
     const updates = req.body;
     const currentVideos = loadVideosDatabase();
@@ -3080,6 +3403,9 @@ app.put("/api/admin/videos/:id", (req, res) => {
 // 4. DELETE /api/admin/videos/:id - Admin permanently deletes video (never reappears)
 app.delete("/api/admin/videos/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
+    }
     const videoId = req.params.id;
     saveDeletedVideoId(videoId); // mark permanently deleted
     const currentVideos = loadVideosDatabase();
@@ -3132,8 +3458,11 @@ app.get("/api/check-username", (req, res) => {
 });
 
 // GET /api/users & GET /api/admin/users
-app.get(["/api/users", "/api/admin/users"], (_req, res) => {
+app.get(["/api/users", "/api/admin/users"], (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र सूची देख सकते हैं।" });
+    }
     const now = Date.now();
     const users = loadUsersMasterDatabase();
     const rDb = loadRewardsDatabase();
@@ -3160,16 +3489,32 @@ app.get(["/api/users", "/api/admin/users"], (_req, res) => {
 // POST /api/users/sync & POST /api/admin/register-user
 app.post(["/api/users/sync", "/api/admin/register-user"], (req, res) => {
   try {
-    const profile = req.body;
+    const profile = { ...req.body };
     if (!profile || (!profile.email && !profile.userId)) {
       return res.status(400).json({ error: "ईमेल या आईडी अनिवार्य है" });
     }
+
+    // Mass-assignment protection: Only authorized admins can assign privileged roles or change subscription status
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin) {
+      delete profile.role;
+      delete profile.tier;
+      delete profile.planName;
+      delete profile.isProfileLocked;
+      delete profile.isBlocked;
+      delete profile.activatedVia;
+      delete profile.expiresAt;
+      delete profile.trialEndsAt;
+      delete profile.trialStartedAt;
+      delete profile.activatedAt;
+    }
+
     const saved = registerOrUpdateUserAuthoritative(profile);
     const users = loadUsersMasterDatabase().map(u => ({
       ...u,
       ...computeTrialFields(u, Date.now()),
     }));
-    return res.json({ success: true, user: saved, users, totalUsers: users.length });
+    return res.json({ success: true, user: saved, users: isAdmin ? users : [], totalUsers: users.length });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -4391,14 +4736,24 @@ app.post("/api/user-profile", (req, res) => {
     }
     const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
+    const isAdmin = isAuthorizedAdmin(req);
 
     // Prevent regular user profiles from overwriting global admin master branding
     const isMasterAdminEmail = (profile.email && (profile.email.toLowerCase() === 'admin.ainewsmaker@gmail.com' || profile.email.toLowerCase() === 'breakingnewswala.com@gmail.com'));
-    if (cleanId === 'admin' && profile.role !== 'admin' && profile.role !== 'superadmin' && !isMasterAdminEmail) {
-      return res.status(403).json({ error: "अनधिकृत: एडमिन प्रोफाइल केवल मास्टर एडमिन द्वारा ही संशोधित की जा सकती है" });
+    if ((cleanId === 'admin' || isMasterAdminEmail) && !isAdmin) {
+      return res.status(403).json({ error: "अनधिकृत: एडमिन प्रोफाइल केवल अधिकृत मास्टर एडमिन द्वारा ही संशोधित की जा सकती है" });
     }
 
     const existing: any = allProfiles[cleanId] || {};
+
+    // Non-admin callers cannot escalate their role or tier
+    const safeRole = isAdmin
+      ? (profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"))
+      : (existing.role || (isMasterAdminEmail ? "admin" : "reporter"));
+    const safeTier = isAdmin
+      ? (profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"))
+      : (existing.tier || (isMasterAdminEmail ? "ultra" : "basic"));
+
     const updated: StoredUserProfile = {
       ...existing,
       ...profile,
@@ -4406,7 +4761,8 @@ app.post("/api/user-profile", (req, res) => {
       uid: profile.uid || profile.userId || existing.uid || cleanId,
       username: profile.username || existing.username || "",
       fullName: profile.fullName || profile.name || existing.fullName || "",
-      role: profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"),
+      role: safeRole,
+      tier: safeTier,
       email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
@@ -4420,7 +4776,6 @@ app.post("/api/user-profile", (req, res) => {
       socialIcons: profile.socialIcons || existing.socialIcons,
       customHeaderPng: profile.customHeaderPng !== undefined ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng,
-      tier: profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"),
       updatedAt: Date.now(),
     };
     allProfiles[cleanId] = updated;
@@ -4628,7 +4983,7 @@ app.delete("/api/custom-frames/:id", (req, res) => {
 });
 
 // --- SECURE AUTHENTICATION ENDPOINT ---
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", authRateLimiter, (req, res) => {
   try {
     const { identifier, password, googleUid, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
@@ -4675,9 +5030,14 @@ app.post("/api/auth/login", (req, res) => {
         isProfileLocked: !isAdmin && !isSuper,
       };
 
-      // Authoritative sync: user immediately appears in real-time in Users Manager
       const savedUser = registerOrUpdateUserAuthoritative(userPayload);
-      return res.json({ success: true, user: savedUser });
+      const token = generateAuthToken({
+        userId: savedUser.userId || googleUid,
+        email: savedUser.email || cleanId,
+        role: savedUser.role || "user",
+        username: savedUser.username,
+      });
+      return res.json({ success: true, user: savedUser, token });
     }
 
     // 2. Direct Credentials
@@ -4685,44 +5045,62 @@ app.post("/api/auth/login", (req, res) => {
       return res.status(400).json({ error: "कृपया यूज़रनेम/ईमेल और पासवर्ड दर्ज करें" });
     }
 
-    const isMaster =
-      cleanId === "admin.ainewsmaker@gmail.com" ||
-      cleanId === "breakingnewswala.com@gmail.com" ||
-      cleanId === "admin" ||
-      cleanId === "superadmin";
+    const creds = loadCredentialsDatabase();
+    let targetEmail = cleanId;
+    if (cleanId === "admin" || cleanId === "superadmin") {
+      targetEmail = "admin.ainewsmaker@gmail.com";
+    }
+
+    let credEntry = creds[targetEmail];
+    if (!credEntry) {
+      credEntry = Object.values(creds).find(
+        (c) => (c.username && c.username.toLowerCase() === cleanId) || (c.email && c.email.toLowerCase() === cleanId)
+      );
+    }
+
+    let isPasswordValid = false;
+    if (credEntry && credEntry.salt && credEntry.hash) {
+      isPasswordValid = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+    }
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "अमान्य यूज़रनेम या पासवर्ड" });
+    }
 
     const allProfiles = loadProfilesDatabase();
     const match = Object.values(allProfiles).find(
-      (p) => (p.email && p.email.toLowerCase() === cleanId) || (p.username && p.username.toLowerCase() === cleanId)
+      (p) => (p.email && p.email.toLowerCase() === targetEmail) || (p.username && p.username.toLowerCase() === cleanId)
     );
 
-    if (match) {
-      return res.json({ success: true, user: match });
-    }
+    const user = match || {
+      username: credEntry?.username || cleanId,
+      fullName: targetEmail.includes("admin") ? "सुपर एडमिन (Super Admin)" : "यूज़र",
+      name: targetEmail.includes("admin") ? "सुपर एडमिन (Super Admin)" : "यूज़र",
+      role: targetEmail.includes("admin") ? "superadmin" : "user",
+      email: targetEmail,
+      userId: `user_${Date.now()}`,
+      tier: targetEmail.includes("admin") ? "ultra" : "basic",
+    };
 
-    if (isMaster) {
-      const masterUser = {
-        username: "admin",
-        fullName: "मुख्य संपादक (Chief Editor)",
-        name: "मुख्य संपादक (Chief Editor)",
-        role: "admin",
-        district: "सेंट्रल डेस्क",
-        email: "admin.ainewsmaker@gmail.com",
-        userId: "master_admin_001",
-        tier: "ultra",
-        channelNameHi: "",
-        channelNameEn: "",
-        channelLogoUrl: "",
-        websiteUrl: "",
-        mobileNumber: "",
-      };
-      return res.json({ success: true, user: masterUser });
-    }
+    const token = generateAuthToken({
+      userId: user.userId || user.uid,
+      email: user.email || targetEmail,
+      role: user.role || "user",
+      username: user.username,
+    });
 
-    return res.status(401).json({ error: "अमान्य यूज़रनेम या पासवर्ड" });
+    return res.json({ success: true, user, token });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({ authenticated: false, error: "अनधिकृत: मान्य सत्र टोकन नहीं मिला" });
+  }
+  return res.json({ authenticated: true, user });
 });
 
 // --- SUPPORT INBOX CLOUD DATABASE (support_requests_database.json) ---
@@ -4779,9 +5157,9 @@ function saveSupportRequestsDatabase(requests: StoredSupportRequest[]): boolean 
 }
 
 app.get("/api/support/requests", (req, res) => {
-  const { userId, role } = req.query;
+  const { userId, userEmail } = req.query;
   const all = loadSupportRequestsDatabase();
-  const isAdmin = role === "admin" || role === "superadmin";
+  const isAdmin = isAuthorizedAdmin(req);
   const now = Date.now();
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -4789,12 +5167,16 @@ app.get("/api/support/requests", (req, res) => {
     return res.json({ success: true, requests: all });
   }
 
-  const cleanId = String(userId || '').toLowerCase().trim();
+  const authUser = getAuthenticatedUser(req);
+  const cleanId = String(authUser?.userId || authUser?.email || userId || userEmail || '').toLowerCase().trim();
+  if (!cleanId) {
+    return res.json({ success: true, requests: [] });
+  }
+
   const userRequests = all.filter(
     (r) =>
-      (!cleanId ||
-        (r.userId && r.userId.toLowerCase().trim() === cleanId) ||
-        (r.userEmail && r.userEmail.toLowerCase().trim() === cleanId)) &&
+      ((r.userId && r.userId.toLowerCase().trim() === cleanId) ||
+       (r.userEmail && r.userEmail.toLowerCase().trim() === cleanId)) &&
       // 30-day retention filter for regular users
       (now - (Number(r.createdAt) || now) <= THIRTY_DAYS_MS)
   );
@@ -4809,18 +5191,24 @@ app.post("/api/support/requests", (req, res) => {
 
     let finalAttachmentUrl = data.attachmentUrl || "";
     if (data.attachmentDataUrl && typeof data.attachmentDataUrl === "string" && data.attachmentDataUrl.startsWith("data:")) {
-      const match = data.attachmentDataUrl.match(/^data:image\/(\w+);base64,/);
-      const ext = match ? match[1] : "png";
-      const filename = `support_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
       const base64Data = data.attachmentDataUrl.replace(/^data:image\/\w+;base64,/, "");
       const buf = Buffer.from(base64Data, "base64");
+      if (buf.length > 10 * 1024 * 1024) {
+        return res.status(413).json({ error: "संलग्नक का आकार 10MB से अधिक नहीं हो सकता।" });
+      }
+      const magic = isValidImageMagicBytes(buf);
+      if (!magic.valid) {
+        return res.status(400).json({ error: "अमान्य संलग्नक: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ स्वीकार्य हैं।" });
+      }
+      const ext = magic.format || "png";
+      const filename = `support_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
       fs.writeFileSync(path.join(UPLOAD_SUPPORT_DIR, filename), buf);
       try { fs.writeFileSync(path.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf); } catch {}
       finalAttachmentUrl = `/uploads/support/${filename}`;
     }
 
     const newRequest: StoredSupportRequest = {
-      id: data.id || `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: data.id || `inq_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
       userId: data.userId || "",
       userName: data.userName || "अनाम यूज़र",
       userEmail: (data.userEmail || "").replace(/\s+/g, "").toLowerCase().trim(),
@@ -4829,9 +5217,9 @@ app.post("/api/support/requests", (req, res) => {
       voiceTranscript: data.voiceTranscript || "",
       attachmentUrl: finalAttachmentUrl,
       attachmentName: data.attachmentName || "",
-      status: data.status || "pending",
-      createdAt: data.createdAt || Date.now(),
-      adminResponse: data.adminResponse || "",
+      status: "pending",
+      createdAt: Date.now(),
+      adminResponse: "",
       updatedAt: Date.now(),
       reportType: data.reportType || "general",
       targetId: data.targetId || "",
@@ -4851,6 +5239,9 @@ app.post("/api/support/requests", (req, res) => {
 
 app.patch("/api/support/requests/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही सपोर्ट अनुरोध का उत्तर दे सकते हैं।" });
+    }
     const { id } = req.params;
     const { status, adminResponse } = req.body;
     const all = loadSupportRequestsDatabase();
@@ -4873,6 +5264,9 @@ app.patch("/api/support/requests/:id", (req, res) => {
 
 app.delete("/api/support/requests/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही सपोर्ट अनुरोध हटा सकते हैं।" });
+    }
     const { id } = req.params;
     let all = loadSupportRequestsDatabase();
     all = all.filter((r) => r.id !== id);
@@ -4925,13 +5319,19 @@ function saveRawNewsDatabase(items: StoredRawNews[]): boolean {
   }
 }
 
-app.get("/api/admin/raw-news", (_req, res) => {
+app.get("/api/admin/raw-news", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+  }
   const all = loadRawNewsDatabase();
   return res.json({ success: true, rawNews: all });
 });
 
 app.post("/api/admin/raw-news", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+    }
     const payload = req.body;
     if (!payload || (!payload.headline && !payload.rawText)) {
       return res.status(400).json({ error: "कम से कम रॉ न्यूज़ टेक्स्ट या हेडलाइन आवश्यक है" });
@@ -5000,6 +5400,9 @@ app.post("/api/admin/raw-news", (req, res) => {
 
 app.put("/api/admin/raw-news/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+    }
     const { id } = req.params;
     const updates = req.body;
     const all = loadRawNewsDatabase();
@@ -5052,6 +5455,9 @@ app.put("/api/admin/raw-news/:id", (req, res) => {
 
 app.delete("/api/admin/raw-news/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+    }
     const { id } = req.params;
     let all = loadRawNewsDatabase();
     all = all.filter((r) => r.id !== id);
@@ -5308,6 +5714,9 @@ app.post("/api/logo-change-requests/:id/reject", (req, res) => {
 // 5. POST /api/admin/videos/upload-file - Uploads real video file and saves to /uploads/videos
 app.post("/api/admin/videos/upload-file", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो अपलोड कर सकते हैं।" });
+    }
     const { videoData, filename = "video.mp4" } = req.body;
     if (!videoData || typeof videoData !== "string") {
       return res.status(400).json({ error: "वीडियो डेटा अनिवार्य है।" });
@@ -5323,7 +5732,7 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
       ext = "m4v";
     }
 
-    const savedFilename = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const savedFilename = `video_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
@@ -5342,21 +5751,28 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
 // 6. POST /api/admin/videos/upload-thumbnail - Uploads thumbnail image and saves to /uploads/thumbnails
 app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
   try {
-    const { imageData, filename = "thumbnail.jpg" } = req.body;
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही थंबनेल अपलोड कर सकते हैं।" });
+    }
+    const { imageData } = req.body;
     if (!imageData || typeof imageData !== "string") {
       return res.status(400).json({ error: "थंबनेल इमेज डेटा अनिवार्य है।" });
     }
 
-    let ext = "jpg";
-    if (filename.toLowerCase().endsWith(".png") || imageData.startsWith("data:image/png")) {
-      ext = "png";
-    } else if (filename.toLowerCase().endsWith(".webp") || imageData.startsWith("data:image/webp")) {
-      ext = "webp";
-    }
-
-    const savedFilename = `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "थंबनेल का आकार 10MB से अधिक नहीं हो सकता।" });
+    }
+
+    const magic = isValidImageMagicBytes(buffer);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "अमान्य फ़ाइल: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ स्वीकार्य हैं।" });
+    }
+
+    const ext = magic.format || "jpg";
+    const savedFilename = `thumb_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
 
     const filePath = path.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
     const webFilePath = path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
@@ -5609,7 +6025,7 @@ const getTwilioAuthHeader = () => {
   return `Basic ${Buffer.from(`${authUser}:${authSecret}`).toString("base64")}`;
 };
 
-const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+const otpStore = new Map<string, { otp: string; expiresAt: number; attempts: number }>();
 
 app.get("/api/twilio/status", (_req, res) => {
   return res.json({
@@ -5721,14 +6137,16 @@ app.post("/api/twilio/send-whatsapp", async (req, res) => {
   }
 });
 
-app.post("/api/twilio/send-otp", async (req, res) => {
+app.post("/api/twilio/send-otp", authRateLimiter, async (req, res) => {
   try {
     const { mobile } = req.body;
     if (!mobile) return res.status(400).json({ success: false, error: "Mobile number is required" });
     const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-    console.log(`[Twilio OTP Generated for +91${cleanNum}]: ${otp}`);
+    if (cleanNum.length !== 10) {
+      return res.status(400).json({ success: false, error: "कृपया 10 अंकों का मान्य मोबाइल नंबर दर्ज करें।" });
+    }
+    const otp = crypto.randomInt(100000, 999999).toString();
+    otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0 });
 
     // If Twilio credentials are active, send SMS directly
     if (TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)) {
@@ -5757,16 +6175,15 @@ app.post("/api/twilio/send-otp", async (req, res) => {
 
     return res.json({
       success: true,
-      message: `OTP +91${cleanNum} पर भेज दिया गया है`,
+      message: `OTP +91${cleanNum} पर सुरक्षित रूप से भेज दिया गया है`,
       expiresInSeconds: 300,
-      debugOtp: process.env.NODE_ENV !== "production" ? otp : undefined,
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 
-app.post("/api/twilio/verify-otp", (req, res) => {
+app.post("/api/twilio/verify-otp", authRateLimiter, (req, res) => {
   try {
     const { mobile, otp } = req.body;
     if (!mobile || !otp) return res.status(400).json({ success: false, error: "Mobile and OTP are required" });
@@ -5779,7 +6196,15 @@ app.post("/api/twilio/verify-otp", (req, res) => {
       otpStore.delete(cleanNum);
       return res.json({ success: false, valid: false, message: "OTP की वैधता समाप्त हो गई है" });
     }
-    if (record.otp === String(otp).trim() || String(otp).trim() === "123456") {
+
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts > 5) {
+      otpStore.delete(cleanNum);
+      return res.status(429).json({ success: false, valid: false, message: "अत्यधिक असफल प्रयास। OTP निरस्त कर दिया गया है, कृपया नया OTP प्राप्त करें।" });
+    }
+
+    const inputOtp = String(otp).trim();
+    if (record.otp === inputOtp) {
       otpStore.delete(cleanNum);
       return res.json({ success: true, valid: true, message: "OTP सफलतापूर्वक सत्यापित!" });
     }
@@ -5904,7 +6329,7 @@ app.get("/account-deletion", serveAccountDeletionHtml);
 app.get("/privacy/delete-account", serveAccountDeletionHtml);
 
 // Image proxy endpoint to bypass CORS when loading news site images onto HTML5 Canvas
-app.get("/api/proxy-image", async (req, res) => {
+app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
   try {
     let imageUrl = req.query.url as string;
     if (!imageUrl) {
@@ -5917,27 +6342,49 @@ app.get("/api/proxy-image", async (req, res) => {
       imageUrl = decodeURIComponent(parts[parts.length - 1]);
     }
 
+    // SSRF Validation: block loopback, RFC1918 private IPs, cloud metadata, non-http(s) protocols
+    const urlValidation = isSafePublicUrl(imageUrl);
+    if (!urlValidation.safe) {
+      return res.status(403).json({ error: "प्रतिबंधित लिंक (SSRF Protection): " + (urlValidation.error || "अमान्य URL") });
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const response = await fetch(imageUrl, {
+      signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
       },
-    });
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
     }
 
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    const contentType = response.headers.get("content-type") || "";
+    // Only allow legitimate image types, reject text/html, application/json, scripts
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      return res.status(415).send("Invalid content type: only images are allowed.");
+    }
+
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // Limit maximum image size to 10MB to prevent memory exhaustion
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).send("Image size exceeds 10MB limit.");
+    }
 
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Access-Control-Allow-Origin", "*");
     return res.send(buffer);
   } catch (err: any) {
-    console.error("Error proxying image:", err);
+    if (err.name === 'AbortError') {
+      return res.status(504).send("Image fetch timed out.");
+    }
     return res.status(500).send("Error proxying image");
   }
 });
@@ -5964,10 +6411,9 @@ function getGeminiClient(): GoogleGenAI {
 
 // Server-side OpenAI initialization (lazy loading)
 let openaiClient: OpenAI | null = null;
-const DEFAULT_OPENAI_KEY = "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";
 
 function getOpenAIClient(): OpenAI {
-  const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || DEFAULT_OPENAI_KEY;
+  const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || "";
   if (!apiKey || apiKey.trim() === "" || apiKey === "MY_OPENAI_API_KEY") {
     throw new Error(
       "OPENAI_API_KEY सेट नहीं है। कृपया 'क्लाउड व API सेटिंग्स' (या .env) में जाकर 'OPENAI_API_KEY' दर्ज करें, अथवा 'Gemini AI' विकल्प चुनें।"
@@ -6131,8 +6577,10 @@ function getTemplateConfig(templateId?: string): TemplateConfig {
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
   "gemini-flash-latest",
+  "gemini-1.5-flash",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -6243,46 +6691,7 @@ function isInvalidUrlHeadline(text: string): boolean {
 // -------------------------------------------------------------
 // SSRF & Safe Public URL Validator
 // -------------------------------------------------------------
-function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; parsedUrl?: URL } {
-  try {
-    const trimmed = (urlString || "").trim();
-    if (!trimmed) return { safe: false, error: "URL रिक्त है।" };
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return { safe: false, error: "केवल HTTP और HTTPS लिंक मान्य हैं।" };
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    // Block localhost, loopback, private hostnames
-    if (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "::1" ||
-      hostname.endsWith(".localhost") ||
-      hostname.endsWith(".local")
-    ) {
-      return { safe: false, error: "अमान्य अथवा निजी IP/Localhost लिंक स्वीकार्य नहीं है।" };
-    }
-    // Block private IPv4 ranges (10.x, 192.168.x, 172.16-31.x, 169.254.x, 127.x, 0.x)
-    const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipv4Match) {
-      const b1 = parseInt(ipv4Match[1], 10);
-      const b2 = parseInt(ipv4Match[2], 10);
-      if (
-        b1 === 0 ||
-        b1 === 10 ||
-        b1 === 127 ||
-        (b1 === 172 && b2 >= 16 && b2 <= 31) ||
-        (b1 === 192 && b2 === 168) ||
-        (b1 === 169 && b2 === 254)
-      ) {
-        return { safe: false, error: "अमान्य अथवा निजी IP/Localhost लिंक स्वीकार्य नहीं है।" };
-      }
-    }
-    return { safe: true, parsedUrl: parsed };
-  } catch {
-    return { safe: false, error: "अमान्य URL संरचना।" };
-  }
-}
+// isSafePublicUrl defined at top
 
 interface ArticleExtractedMetadata {
   title?: string;
@@ -6418,7 +6827,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
       .trim();
     if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
       if (
-        !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|IST|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़/i.test(pClean)
+        !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|\bIST\b|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+/i.test(pClean)
       ) {
         extractedParagraphs.push(pClean);
         if (extractedParagraphs.join("\n\n").length >= 3500) break;
@@ -6508,7 +6917,14 @@ function parseArticleHtml(html: string, pageUrl: string): {
       !src.includes("icon") &&
       !src.includes("avatar") &&
       !src.includes("banner") &&
-      !src.includes("tracking")
+      !src.includes("tracking") &&
+      !src.includes("sticker") &&
+      !src.includes("badge") &&
+      !src.includes("/cat/") &&
+      !src.includes("category") &&
+      !src.includes("mera-shehar") &&
+      !src.includes("pixel") &&
+      !src.includes("placeholder")
     ) {
       const resolved = resolveUrl(src, pageUrl);
       if (resolved && !foundImages.includes(resolved)) {
@@ -7060,8 +7476,9 @@ export function formatAsJournalisticHeadline(raw: string): string {
   // 4. Transform declarative closing verb phrases into journalistic headline nouns/action tags
   h = h
     .replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, ' पर रोक')
-    .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
-    .replace(/(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' तय')
+    .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली|को\s*मंजूरी\s*दी\s*है)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
+    .replace(/(?:का\s+)?(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' तय')
+    .replace(/(?:का\s+)?(?:निर्णय\s*लिया\s*गया|फैसला\s*लिया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का निर्णय')
     .replace(/(?:लागू\s*किए\s*गए\s*हैं|लागू\s*किया\s*गया|लागू\s*होगा)(?:\s*हैं|\s*है)?$/u, ' लागू')
     .replace(/(?:\s*अतिरिक्त)?\s*(?:सहायता|छूट|राहत)\s*(?:दी\s*जाएगी|मिलेगी|का\s*प्रावधान)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
     .replace(/(?:दी\s*जाएगी|छूट\s*मिलेगी|प्रावधान\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
@@ -7085,12 +7502,12 @@ export function formatAsJournalisticHeadline(raw: string): string {
     .replace(/\s+(?:रहा\s*है|रही\s*है|रहे\s*हैं|रहा\s*था|रही\s*थी|रहे\s*थे|हो\s*रहा\s*है|हो\s*रही\s*है)$/u, '')
     .replace(/\s+(?:हैं|है|था|थी|थे)$/u, '');
 
-  // 6. Strip trailing prepositions/connectives that leave an incomplete sentence fragment
-  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक)$/u, '');
+  // 6. Strip trailing prepositions/connectives/fragments that leave an incomplete sentence fragment
+  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u, '');
 
-  // 7. Clean duplicate particles like "की की", "को को"
+  // 7. Clean duplicate particles like "की की", "को को", "का का"
   h = h
-    .replace(/(?:^|[^\p{L}\p{M}])(को|की|का|के|में|पर|से|ने)\s+\1(?=[^\p{L}\p{M}]|$)/gu, ' $1 ')
+    .replace(/\b(का|के|की|को|में|पर|से|ने)\s+\1\b/gu, '$1')
     .replace(/\s+/g, ' ');
 
   // 8. Final cleanup of any punctuation marks at end
@@ -7099,9 +7516,10 @@ export function formatAsJournalisticHeadline(raw: string): string {
   return h;
 }
 
-function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
-  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
-  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
+export function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
+  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी']);
+  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   if (words1.size === 0 || words2.size === 0) return 0;
   let common = 0;
   for (const w of words1) {
@@ -7111,8 +7529,126 @@ function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
 }
 
 /**
+ * Ensures clean, substantive paragraph structure for captions.
+ * - detailed: exactly 3 substantive paragraphs separated by \n\n
+ * - short: exactly 2 substantive paragraphs separated by \n\n
+ * - bullet: intro + 3-4 bullets (•) + status paragraph
+ */
+export function cleanCaptionParagraphs(
+  caption: string,
+  mode: 'detailed' | 'short' | 'bullet' = 'detailed'
+): string {
+  if (!caption) return '';
+  // Extract and strip hashtags
+  const hashtagRegex = /#[\w\u0900-\u097F]+/g;
+  const rawTags = caption.match(hashtagRegex) || [];
+  const bodyOnly = caption.replace(hashtagRegex, '').trim();
+
+  // Strip leading English SEO metadata if prepended
+  const cleanBody = bodyOnly
+    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
+    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
+    .trim();
+
+  // Clean tags: purge #BhopalNews or english-suffixed location tags
+  const cleanTags: string[] = [];
+  for (const t of rawTags) {
+    if (
+      /News$/i.test(t) &&
+      !['#BreakingNews', '#HindiNews', '#TopNews', '#LatestNews'].some((k) => k.toLowerCase() === t.toLowerCase())
+    ) {
+      continue;
+    }
+    const lower = t.toLowerCase();
+    if (lower === '#breakingnewswala' || lower === '#bnwtv') continue;
+    if (!cleanTags.includes(t)) cleanTags.push(t);
+  }
+  if (!cleanTags.some((t) => t.toLowerCase() === '#breakingnews')) cleanTags.push('#BreakingNews');
+  if (!cleanTags.some((t) => t.toLowerCase() === '#hindinews')) cleanTags.push('#HindiNews');
+  if (!cleanTags.some((t) => t.toLowerCase() === '#ainewsmaker')) cleanTags.push('#AINewsMaker');
+
+  const tagsString = cleanTags.join(' ');
+
+  if (mode === 'bullet') {
+    const lines = cleanBody.split('\n').map((l) => l.trim()).filter(Boolean);
+    const bullets = lines.filter((l) => l.startsWith('•') || l.startsWith('-') || l.startsWith('*'));
+    const nonBullets = lines.filter((l) => !l.startsWith('•') && !l.startsWith('-') && !l.startsWith('*'));
+    const intro = nonBullets[0] || 'मुख्य समाचार के महत्वपूर्ण तथ्य:';
+    const outro = nonBullets.slice(1).join(' ') || 'मामले में प्रशासनिक स्तर पर अग्रिम कार्रवाई जारी है।';
+    const bulletText = bullets.length >= 3 ? bullets.slice(0, 5).join('\n') : (
+      lines.slice(0, 4).map((l) => (l.startsWith('•') ? l : `• ${l}`)).join('\n')
+    );
+    return `${intro}\n\n${bulletText}\n\n${outro}\n\n${tagsString}`.trim();
+  }
+
+  // Paragraph splitting
+  let paragraphs = cleanBody
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 20);
+
+  // If text was single giant block, split by Devanagari full stops
+  if (paragraphs.length < (mode === 'detailed' ? 3 : 2)) {
+    const allSentences = cleanBody
+      .split(/[।\n]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 15);
+
+    if (allSentences.length >= 6 && mode === 'detailed') {
+      const p1 = `${allSentences.slice(0, 2).join('। ')}।`;
+      const p2 = `${allSentences.slice(2, 4).join('। ')}।`;
+      const p3 = `${allSentences.slice(4).join('। ')}।`;
+      paragraphs = [p1, p2, p3];
+    } else if (allSentences.length >= 4) {
+      if (mode === 'detailed') {
+        const p1 = `${allSentences.slice(0, 2).join('। ')}।`;
+        const p2 = `${allSentences.slice(2, 3).join('। ')}।`;
+        const p3 = `${allSentences.slice(3).join('। ')}।`;
+        paragraphs = [p1, p2, p3];
+      } else {
+        const p1 = `${allSentences.slice(0, 2).join('। ')}।`;
+        const p2 = `${allSentences.slice(2).join('। ')}।`;
+        paragraphs = [p1, p2];
+      }
+    } else if (allSentences.length >= 2) {
+      if (mode === 'detailed') {
+        paragraphs = [
+          `${allSentences[0]}।`,
+          `${allSentences[1]}।`,
+          `मामले को लेकर अग्रिम दिशा-निर्देश जारी किए गए हैं और स्थिति पर नजर रखी जा रही है।`
+        ];
+      } else {
+        paragraphs = [
+          `${allSentences[0]}।`,
+          `${allSentences.slice(1).join('। ')}।`
+        ];
+      }
+    }
+  }
+
+  if (mode === 'detailed') {
+    while (paragraphs.length < 3) {
+      if (paragraphs.length === 1) {
+        paragraphs.push('घटनाक्रम को लेकर सभी पक्षों से जानकारी एकत्रित की जा रही है और आवश्यक समीक्षा जारी है।');
+      } else {
+        paragraphs.push('संबंधित अधिकारियों द्वारा मामले में अग्रिम कार्रवाई और आवश्यक दिशा-निर्देश सुनिश्चित किए जा रहे हैं।');
+      }
+    }
+    paragraphs = paragraphs.slice(0, 3);
+  } else {
+    while (paragraphs.length < 2) {
+      paragraphs.push('संबंधित विभाग द्वारा मामले में आवश्यक दिशा-निर्देश जारी कर कार्रवाई की जा रही है।');
+    }
+    paragraphs = paragraphs.slice(0, 2);
+  }
+
+  const finalBody = paragraphs.join('\n\n');
+  return `${finalBody}\n\n${tagsString}`.trim();
+}
+
+/**
  * Generates exactly 5 publishable, distinct journalistic headlines in pure Hindi.
- * Guaranteed: zero full stops, zero incomplete sentence cuts, dynamic extraction from facts.
+ * Guaranteed: zero full stops, zero colon-swapping, zero incomplete sentence cuts, dynamic extraction from facts.
  */
 export function generate5JournalisticHeadlines(
   baseTitle: string,
@@ -7122,76 +7658,95 @@ export function generate5JournalisticHeadlines(
   const options: string[] = [];
   const locClean = location && location !== 'विशेष कवरेज' ? location.split(',')[0].trim() : '';
 
-  const addIfValid = (text: string) => {
+  const addIfValid = (text: string): boolean => {
+    if (!text) return false;
     const formatted = formatAsJournalisticHeadline(text);
-    if (!formatted || formatted.length < 14) return;
-    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return;
+    if (!formatted || formatted.length < 16 || formatted.length > 95) return false;
+    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return false;
+    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u.test(formatted)) return false;
     for (const opt of options) {
-      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.8) {
-        return;
+      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.65) {
+        return false;
       }
     }
     options.push(formatted);
+    return true;
   };
 
   // 1. Process base title: Convert into active title
   const cleanTitle = formatAsJournalisticHeadline(baseTitle);
   addIfValid(cleanTitle);
 
-  // 2. Structured title combinations (if baseTitle had multiple parts)
+  // 2. Extract clauses from baseTitle without colon-swapping
   const rawParts = baseTitle
-    .split(/[:|–—,]+/)
+    .split(/[:|–—]+/)
     .map((p) => p.trim())
-    .filter((p) => p.length >= 8);
+    .filter((p) => p.length >= 10);
 
-  if (rawParts.length >= 2) {
-    const part0 = formatAsJournalisticHeadline(rawParts[0]);
-    const part1 = formatAsJournalisticHeadline(rawParts[1]);
-    if (part0 && part1) {
-      addIfValid(`${part1}: ${part0}`);
-    }
+  for (const part of rawParts) {
+    if (options.length >= 5) break;
+    addIfValid(part);
   }
 
-  // 3. Extract facts from body sentences (numbers, metrics, regulations, actions)
+  // 3. Extract candidate clauses from body sentences (sub-clause parsing)
+  const allClauses: string[] = [];
   for (const sent of sentences) {
-    if (options.length >= 5) break;
-
-    const hasNumbers = /\d+/.test(sent);
-    const hasKeyAction = /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा/u.test(sent);
-
-    if (hasNumbers || hasKeyAction) {
-      const clauses = sent.split(/[,;।\n]+/).map((c) => c.trim()).filter((c) => c.length >= 12);
-      for (const clause of clauses) {
-        if (options.length >= 5) break;
-        const candidate = formatAsJournalisticHeadline(clause);
-        if (candidate.length >= 15 && candidate.length <= 80) {
-          addIfValid(candidate);
+    const puncClauses = sent.split(/[,;।\n|–—]+/).map((s) => s.trim()).filter(Boolean);
+    for (const c of puncClauses) {
+      if (c.length <= 85) {
+        allClauses.push(c);
+      } else {
+        const subClauses = c.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत)\s+/).map((s) => s.trim()).filter(Boolean);
+        if (subClauses.length > 1) {
+          allClauses.push(...subClauses);
+        } else {
+          const phraseSubs = c.split(/\s+(?:के लिए|को लेकर|की अध्यक्षता में)\s+/).map((s) => s.trim()).filter(Boolean);
+          if (phraseSubs.length > 1) {
+            allClauses.push(...phraseSubs);
+          } else {
+            allClauses.push(c);
+          }
         }
       }
     }
   }
 
-  // 4. Create Location-Anchored Headline
-  if (options.length < 5 && locClean) {
-    if (!cleanTitle.includes(locClean)) {
-      addIfValid(`${locClean}: ${cleanTitle}`);
+  // Priority pass: clauses with numbers or key news actions
+  for (const clause of allClauses) {
+    if (options.length >= 5) break;
+    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल/u.test(clause)) {
+      addIfValid(clause);
     }
   }
 
-  // 5. Create "बड़ा फैसला / नए नियम" perspective if still under 5
-  if (options.length < 5 && rawParts.length > 0) {
-    addIfValid(`बड़ा फैसला: ${formatAsJournalisticHeadline(rawParts[0])}`);
-  }
-  if (options.length < 5 && rawParts.length > 1) {
-    addIfValid(`नई गाइडलाइन: ${formatAsJournalisticHeadline(rawParts[1])}`);
+  // Secondary pass: remaining clauses
+  for (const clause of allClauses) {
+    if (options.length >= 5) break;
+    addIfValid(clause);
   }
 
-  // 6. Remaining sentences if still under 5
-  for (const sent of sentences) {
-    if (options.length >= 5) break;
-    const candidate = formatAsJournalisticHeadline(sent);
-    if (candidate.length >= 15 && candidate.length <= 80) {
-      addIfValid(candidate);
+  // Fallback location anchor
+  if (options.length < 5 && locClean && options.length > 0) {
+    const firstOpt = options[0];
+    if (!firstOpt.includes(locClean)) {
+      addIfValid(`${locClean}: ${firstOpt}`);
+    }
+  }
+
+  // Fallback synthesis if still < 5: derive substantive journalistic variants
+  let idx = 0;
+  while (options.length < 5 && idx < options.length) {
+    const opt = options[idx++];
+    if (opt.includes('को मंजूरी') && !options.some((o) => o.includes('पर लगी मुहर'))) {
+      addIfValid(opt.replace('को मंजूरी', 'पर लगी मुहर'));
+    } else if (opt.includes('की मंजूरी') && !options.some((o) => o.includes('हुई स्वीकृत'))) {
+      addIfValid(opt.replace('की मंजूरी', 'हुई स्वीकृत'));
+    } else if (opt.includes('का निर्णय') && !options.some((o) => o.includes('की तैयारी'))) {
+      addIfValid(opt.replace('का निर्णय', 'की तैयारी'));
+    } else if (opt.includes('तय') && !options.some((o) => o.includes('का लक्ष्य तय'))) {
+      addIfValid(opt.replace('तय', 'का लक्ष्य तय'));
+    } else if (opt.includes('बिछाई जाएगी') && !options.some((o) => o.includes('बिछाने की तैयारी'))) {
+      addIfValid(opt.replace('बिछाई जाएगी', 'बिछाने की तैयारी'));
     }
   }
 
@@ -7440,27 +7995,19 @@ function createLocalNewsFallback(
       .trim();
   }
 
-  // If title is still empty, reconstruct from URL slug
+  // If title is still empty, reconstruct from content or clean neutral fallback
   const targetUrl = linkUrl || articleMeta?.linkUrl;
-  if (!extractedTitle && targetUrl) {
-    const slugWords = extractSlugKeywords(targetUrl);
-    if (slugWords.length > 0) {
-      const slugLower = slugWords.join(" ").toLowerCase();
-      if (slugLower.includes("trump") && slugLower.includes("green card")) {
-        extractedTitle = "ट्रम्प ने ग्रीन कार्ड प्रोसेस पर लगाई रोक, आईटी कंपनियों व पेशेवरों पर बड़ा असर";
-      } else if (slugLower.includes("accident") || slugLower.includes("crash")) {
-        extractedTitle = "सड़क हादसे में बड़ा नुकसान, मौके पर प्रशासनिक अमला व बचाव दल रवाना";
-      } else if (slugLower.includes("housing") || slugLower.includes("flat") || slugLower.includes("industrial") || slugLower.includes("policy")) {
-        extractedTitle = "औद्योगिक क्षेत्रों में आवास नीति के नए नियम लागू, जमीन की कीमतें और विकास मानक तय";
-      } else if (slugLower.includes("metro") || slugLower.includes("train") || slugLower.includes("rail")) {
-        extractedTitle = "मेट्रो रेल प्रोजेक्ट को लेकर बड़ा अपडेट, आगामी ट्रायल रन और रूट की तैयारी तेज";
-      } else if (slugLower.includes("crime") || slugLower.includes("police") || slugLower.includes("murder") || slugLower.includes("arrest")) {
-        extractedTitle = "गंभीर मामले में पुलिस का बड़ा एक्शन, मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार";
-      } else if (slugLower.includes("election") || slugLower.includes("bjp") || slugLower.includes("congress") || slugLower.includes("minister")) {
-        extractedTitle = "सियासी गलियारों में बड़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज";
-      } else {
-        extractedTitle = "महत्वपूर्ण मामले को लेकर बड़ा फैसला, उच्च स्तर पर समीक्षा और नए दिशा-निर्देश जारी";
+  if (!extractedTitle) {
+    if (extractedContent) {
+      const firstSent = extractedContent.split(/[।\n]+|\.\s+/)[0]?.trim();
+      if (firstSent && firstSent.length >= 12) {
+        extractedTitle = formatAsJournalisticHeadline(firstSent);
       }
+    } else if (extractedDesc) {
+      extractedTitle = formatAsJournalisticHeadline(extractedDesc);
+    }
+    if (!extractedTitle) {
+      extractedTitle = "ताज़ा समाचार महत्वपूर्ण अपडेट";
     }
   }
 
@@ -7565,80 +8112,9 @@ function createLocalNewsFallback(
     return cleanHeadlineText(s);
   };
 
-  const calculateHeadlineSimilarity = (h1: string, h2: string): number => {
-    const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
-    const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
-    if (words1.size === 0 || words2.size === 0) return 0;
-    let common = 0;
-    for (const w of words1) {
-      if (words2.has(w)) common++;
-    }
-    return (2 * common) / (words1.size + words2.size);
-  };
-
-  const headlineOptions: string[] = [];
-  const addIfDistinct = (cand: string) => {
-    const cleaned = cleanHeadlineText(cand);
-    if (!cleaned || cleaned.length < 14) return;
-    for (const existing of headlineOptions) {
-      if (existing === cleaned || calculateHeadlineSimilarity(existing, cleaned) > 0.82) {
-        return;
-      }
-    }
-    headlineOptions.push(cleaned);
-  };
-
-  // 1. Primary cleaned headline
-  addIfDistinct(baseTitle);
-
-  // 2. If title has parts separated by colon or dash, generate clean editorial combinations
-  if (titleParts.length >= 2) {
-    if (titleParts[0].length >= 12 && titleParts[1].length >= 12) {
-      addIfDistinct(`${titleParts[1]}: ${titleParts[0]}`);
-    }
-    addIfDistinct(titleParts[0]);
-    addIfDistinct(titleParts[1]);
-  }
-
-  // 3. Derive distinct headlines from the extracted article sentences
-  for (const s of articleSentences) {
-    if (headlineOptions.length >= 5) break;
-    addIfDistinct(turnSentenceToHeadline(s));
-  }
-
-  // 4. Try incorporating detected location if not already present
-  if (headlineOptions.length < 5 && detectedLocation && detectedLocation !== "विशेष कवरेज") {
-    const locClean = detectedLocation.split(",")[0].trim();
-    if (!baseTitle.includes(locClean) && locClean.length > 2) {
-      addIfDistinct(`${locClean}: ${baseTitle}`);
-    }
-  }
-
-  // 5. If still fewer than 5, create distinct phrasing using story clauses
-  if (headlineOptions.length < 5) {
-    const words = baseTitle.split(/\s+/).filter(Boolean);
-    if (words.length >= 6) {
-      const mid = Math.floor(words.length / 2);
-      const partA = words.slice(0, mid).join(" ");
-      const partB = words.slice(mid).join(" ");
-      addIfDistinct(`${partB}: ${partA}`);
-    }
-  }
-
-  // Ensure we have at least 1 headline
+  const headlineOptions = generate5JournalisticHeadlines(baseTitle, articleSentences, detectedLocation);
   if (headlineOptions.length === 0) {
     headlineOptions.push(baseTitle || "ताज़ा समाचार अपडेट");
-  }
-
-  // Ensure exactly 5 options without generic administrative templates
-  while (headlineOptions.length < 5) {
-    const seed = headlineOptions[0];
-    const cand = `${seed} - ताज़ा अपडेट`;
-    if (!headlineOptions.includes(cand)) {
-      headlineOptions.push(cand);
-    } else {
-      break;
-    }
   }
 
   const headline = headlineOptions[0];
@@ -8116,12 +8592,14 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 - NO naive colon appending (DO NOT simply append ": प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल" or ": आम जनता पर असर..." to the title). Every headline option must be a crafted, distinct, standalone journalistic headline.
 
 ★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINE OPTIONS (NO FIXED TEMPLATES):
-Generate EXACTLY 5 publishable, natural, impactful Hindi headline options directly derived from the core facts of the news:
-- CRITICAL: Headlines must be punchy title/action phrases, NEVER plain declarative narrative sentences from article body ending in verbs like 'नहीं बनेंगे', 'किए गए', 'दी जाएगी', 'हुआ'. Transform narrative verbs into title nouns (e.g. write 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
-- Each option must represent a genuinely different editorial angle or focus on a distinct factual element of the story (e.g. key decision/event, major public impact, key quote/accusation, quantitative milestone/rule, or future implication).
-- All 5 options must be complete, professional, broadcast-ready news headlines in pure Devanagari Hindi.
-- DO NOT force options into generic predetermined formulas or fixed sentence patterns.
-- NO question-mark headlines unless the story itself is an investigative piece or unresolved mystery.
+Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derived from the verified facts of the news:
+- You are acting as an experienced senior Hindi news editor. Read the actual facts first, then write 5 independent, useful news headlines.
+- DO NOT force options into fixed predetermined categories or artificial formulaic boxes (no mandatory breaking, factual, question/action, public interest, or second angle templates).
+- UI labels will ONLY display "विकल्प 1", "विकल्प 2", "विकल्प 3", "विकल्प 4", "विकल्प 5" without any extra category labels.
+- Each headline must be a standard, natural news title focusing on real verified facts (decisions, regulations, exemptions, numbers, actions, public impact, or verified background).
+- If the news story has fewer distinct angles, provide 5 factually accurate, differently phrased journalistic titles without inventing unverified facts.
+- CRITICAL: Headlines must be punchy title/action phrases, NEVER plain declarative narrative sentences ending in verbs like 'नहीं बनेंगे', 'किए गए', 'दी जाएगी', 'हुआ'. Transform narrative verbs into title nouns (e.g. write 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
+- Absolutely ZERO Latin-alphabet English characters [A-Za-z] in headlines (no "Bhopal News", "Indore News", "Breaking News", "Latest Update", website names or tracking parameters).
 - NO clickbait or artificial curiosity phrases like "सामने आए चौंकाने वाले तथ्य" unless strictly justified by extraordinary facts.
 - NO generic administrative filler like "प्रशासनिक अमला मौके की निगरानी में जुटा" or "लापरवाही पर सख्त संज्ञान".
 - STRICTLY DO NOT output prefixes like "विकल्प 1:", "विकल्प 2:", "Option 1:" in the headline text. Provide pure headline strings.
@@ -8134,9 +8612,9 @@ Generate EXACTLY 5 publishable, natural, impactful Hindi headline options direct
 
 ★ NEWS CAPTION & 3 STYLES (PURE HINDI ONLY):
 All captions must be pure Devanagari Hindi. No English meta-descriptions.
-- Style 1 (Detailed / summary): Exactly 3 full paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) + double newline + hashtags.
+- Style 1 (Detailed / summary): Exactly 3 substantive paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) separated by \n\n + double newline + hashtags.
 - Style 2 (captionBullets): Short intro + 3-4 bullet points (•) of core facts + status paragraph + hashtags.
-- Style 3 (captionShort): Exactly 2 concise, impactful paragraphs + hashtags.
+- Style 3 (captionShort): Exactly 2 concise, impactful paragraphs separated by \n\n + hashtags.
 
 ★ HASHTAG HIERARCHY (MANDATORY):
 1. First hashtag: ${userHashtag}
@@ -8162,7 +8640,7 @@ ${customPrompt ? `यूज़र का विशेष निर्देश:\
 1. हेडलाइन व कैप्शन में 100% शुद्ध देवनागरी हिंदी का प्रयोग करें। हेडलाइन में [yellow]...[/yellow] टैग के अलावा एक भी अंग्रेजी अक्षर [A-Za-z] न हो।
 2. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
 3. किसी भी हेडलाइन में शहर का सफ़िक्स (जैसे - Bhopal News) या वेबसाइट स्क्रैपिंग टेक्स्ट (जैसे कॉपी लिंक, फाइल फोटो) न हो।
-4. ठीक 5 बिल्कुल अलग-अलग, स्वतंत्र और तथ्य-आधारित हेडलाइन विकल्प दें। हर विकल्प पेशेवर शीर्षक (Title Format) में हो, कोई साधारण वर्णनात्मक वाक्य नहीं (जैसे 'नहीं बनेंगे' की जगह 'पर रोक', 'दी जाएगी' की जगह 'का ऐलान')। कोई घिसे-पिटे प्रशासनिक या सवालिया सांचे न थोपें।
+4. ठीक 5 स्वतंत्र, स्वाभाविक और तथ्य-आधारित हेडलाइन विकल्प दें। कोई पूर्व-निर्धारित श्रेणी या कृत्रिम ढांचा न थोपें। हर विकल्प पेशेवर समाचार शीर्षक (Title Format) में हो, कोई साधारण वर्णनात्मक वाक्य नहीं (जैसे 'नहीं बनेंगे' की जगह 'पर रोक', 'दी जाएगी' की जगह 'का ऐलान')।
 5. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें।
 6. मुख्य हेडलाइन: ${targetMaxLines === 2 ? "8-14" : "12-22"} शब्द, बिना किसी पूर्णविराम (।) या डॉट (.) के।
 7. 2-4 हाईलाइट शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
@@ -8174,11 +8652,11 @@ JSON Schema:
 {
   "headline": "मुख्य हिंदी हेडलाइन (बिना आदरसूचक शब्दों के, 100% शुद्ध देवनागरी हिंदी)",
   "headlineOptions": [
-    "खबर का मुख्य निर्णय या घटनाक्रम",
-    "जनसामान्य या संबंधित वर्ग पर प्रत्यक्ष प्रभाव",
-    "खबर में मौजूद मुख्य तथ्य, आंकड़ा या नियम",
-    "संबंधित पक्ष का बयान, रुख या कार्रवाई",
-    "भविष्य का परिणाम, अगला कदम या दूसरा समाचार कोण"
+    "खबर का मुख्य तथ्यात्मक शीर्षक विकल्प 1 (शुद्ध हिंदी)",
+    "खबर का दूसरा उपयोगी तथ्यात्मक शीर्षक विकल्प 2 (शुद्ध हिंदी)",
+    "खबर का तीसरा उपयोगी तथ्यात्मक शीर्षक विकल्प 3 (शुद्ध हिंदी)",
+    "खबर का चौथा उपयोगी तथ्यात्मक शीर्षक विकल्प 4 (शुद्ध हिंदी)",
+    "खबर का पाँचवाँ उपयोगी तथ्यात्मक शीर्षक विकल्प 5 (शुद्ध हिंदी)"
   ],
   "highlightWords": ["शब्द1", "शब्द2"],
   "formattedHeadline": "हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow]",
@@ -8232,12 +8710,20 @@ JSON Schema:
         parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines, extractedArticleMeta, channelUsername);
       }
     } else {
-      if (!process.env.GEMINI_API_KEY) {
+      const activeGeminiKey = (req.body.geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
+      if (!activeGeminiKey) {
         console.log("No GEMINI_API_KEY set, generating instant local draft for news command");
         const fallbackSource = effectiveInput || fetchedArticleSnippet || "ताज़ा समाचार अपडेट";
         parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines, extractedArticleMeta, channelUsername);
       } else {
-        const ai = getGeminiClient();
+        const ai = new GoogleGenAI({
+          apiKey: activeGeminiKey,
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build",
+            },
+          },
+        });
         try {
           const response = await generateWithFallbackAndRetry(
             ai,
@@ -8334,21 +8820,45 @@ JSON Schema:
         parsedData.headline = formatAsJournalisticHeadline(cleanHeadlineText(parsedData.headline));
       }
 
-      // Guarantee exactly 5 distinct headline options
+      // Guarantee exactly 5 distinct headline options with strict semantic deduplication
       const cleanOptions: string[] = [];
+      const addOptionIfValid = (candidate: string) => {
+        const s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || "")));
+        if (!s || isInvalidUrlHeadline(s) || s.length < 14) return;
+        const cleanNoPunct = s.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+        if (cleanOptions.includes(cleanNoPunct)) return;
+        const isDuplicate = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, cleanNoPunct) >= 0.65);
+        if (!isDuplicate) {
+          cleanOptions.push(cleanNoPunct);
+        }
+      };
+
+      if (parsedData.headline) {
+        addOptionIfValid(parsedData.headline);
+      }
       if (Array.isArray(parsedData.headlineOptions)) {
         for (const h of parsedData.headlineOptions) {
-          const s = formatAsJournalisticHeadline(cleanHeadlineText(String(h || "")));
-          if (s && !isInvalidUrlHeadline(s) && !cleanOptions.includes(s)) {
-            cleanOptions.push(s);
-          }
+          addOptionIfValid(h);
         }
-      }
-      if (parsedData.headline && !cleanOptions.includes(parsedData.headline)) {
-        cleanOptions.unshift(parsedData.headline);
       }
 
       // If fewer than 5 options returned, derive remaining from facts
+      if (cleanOptions.length < 5) {
+        const factSentences = (fetchedArticleSnippet || rawInputText || parsedData.summary || "")
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 15);
+        const derivedOptions = generate5JournalisticHeadlines(
+          parsedData.headline || rawInputText || "महत्वपूर्ण समाचार अपडेट",
+          factSentences,
+          parsedData.location
+        );
+        for (const dOpt of derivedOptions) {
+          if (cleanOptions.length >= 5) break;
+          addOptionIfValid(dOpt);
+        }
+      }
+
       if (cleanOptions.length < 5) {
         const fallbackObj = createLocalNewsFallback(
           rawInputText || fetchedArticleSnippet || parsedData.headline,
@@ -8358,13 +8868,14 @@ JSON Schema:
           channelUsername
         );
         for (const fbOpt of fallbackObj.headlineOptions) {
-          const cleanFb = formatAsJournalisticHeadline(cleanHeadlineText(fbOpt));
-          if (cleanFb && !cleanOptions.includes(cleanFb) && cleanOptions.length < 5) {
-            cleanOptions.push(cleanFb);
-          }
+          if (cleanOptions.length >= 5) break;
+          addOptionIfValid(fbOpt);
         }
       }
-      parsedData.headlineOptions = cleanOptions.map((h) => formatAsJournalisticHeadline(cleanHeadlineText(h))).slice(0, 5);
+      parsedData.headlineOptions = cleanOptions.slice(0, 5);
+      if (parsedData.headlineOptions.length > 0) {
+        parsedData.headline = parsedData.headlineOptions[0];
+      }
 
       if (parsedData.formattedHeadline) {
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {
@@ -8390,39 +8901,43 @@ JSON Schema:
         if (!parsedData.captionShort) parsedData.captionShort = variants.captionShort;
       }
 
-      // Purge any scraping artifacts or English SEO snippets and guarantee pure Hindi captions
+      // Purge any scraping artifacts or English SEO snippets and guarantee exact paragraph structure
       if (parsedData.captionDetailed) {
-        parsedData.captionDetailed = sanitizeCaptionText(
+        const sanitized = sanitizeCaptionText(
           parsedData.captionDetailed,
           parsedData.headline,
           parsedData.location,
           channelUsername
         );
+        parsedData.captionDetailed = cleanCaptionParagraphs(sanitized, 'detailed');
       }
       if (parsedData.captionBullets) {
-        parsedData.captionBullets = sanitizeCaptionText(
+        const sanitized = sanitizeCaptionText(
           parsedData.captionBullets,
           parsedData.headline,
           parsedData.location,
           channelUsername
         );
+        parsedData.captionBullets = cleanCaptionParagraphs(sanitized, 'bullet');
       }
       if (parsedData.captionShort) {
-        parsedData.captionShort = sanitizeCaptionText(
+        const sanitized = sanitizeCaptionText(
           parsedData.captionShort,
           parsedData.headline,
           parsedData.location,
           channelUsername
         );
+        parsedData.captionShort = cleanCaptionParagraphs(sanitized, 'short');
       }
 
       if (parsedData.summary) {
-        parsedData.summary = sanitizeCaptionText(
+        const sanitized = sanitizeCaptionText(
           parsedData.summary,
           parsedData.headline,
           parsedData.location,
           channelUsername
         );
+        parsedData.summary = cleanCaptionParagraphs(sanitized, 'detailed');
       } else {
         parsedData.summary = parsedData.captionDetailed;
       }
@@ -8771,7 +9286,7 @@ function createEpaperLocalFallback(rawInput: string, city: string = "", reporter
     epaperPhotoCaption: "घटनास्थल पर पहुंचकर जांच पड़ताल करती प्रशासनिक टीम।",
     epaperPhotoCaption2: "दस्तावेजों की जांच करते अधिकारी।",
     epaperPhotoCaption3: "मौके पर उपस्थित ग्रामीण व प्रत्यक्षदर्शी।",
-    summary: `${detectedCity} में बड़ी कार्रवाई की खबर। पूरी रिपोर्ट ई-पेपर एडिशन में पढ़ें।\n\n#AINews #Epaper #${detectedCity}News #HindiNews #AINewsMaker`,
+    summary: `${detectedCity} में बड़ी कार्रवाई की खबर। पूरी रिपोर्ट ई-पेपर एडिशन में पढ़ें।\n\n#AINews #Epaper #${detectedCity} #HindiNews #AINewsMaker`,
     category: "प्रशासन",
   };
 }
@@ -8866,7 +9381,7 @@ ${reporterName ? `यूज़र द्वारा निर्दिष्ट
    - epaperPhotoCaption3: तीसरी फोटो का 1 लाइन संक्षिप्त विवरण।
 10. **प्रोमोशनल संदेश (epaperPromoTagline)**: बायलाइन में दाईं ओर दिखने वाली पंक्ति (उदा: "📢 अब आप भी भेजें अपनी खबर हम तक: 96698-02408")।
 11. **नेता / अधिकारी का बयान कॉल-आउट (epaperQuoteText व epaperQuoteSpeaker)**: यदि प्रेस नोट में किसी मंत्री, विधायक, कलेक्टर, एसपी, अधिकारी या नेता का कोई बयान, चेतावनी या प्रतिक्रिया हो, तो उसे यहाँ 1-2 वाक्यों में निकालें (उदा: "दोषियों को बख्शा नहीं जाएगा, हर बिंदु पर सख्त कार्रवाई होगी")। epaperQuoteSpeaker में उनका नाम व पद (उदा: "डॉ. महेंद्र सिंह, प्रभारी") लिखें।
-12. **सोशल मीडिया समरी (summary)**: Instagram और Facebook के लिए 2 पैराग्राफ का विस्तृत विवरण, अंत में अनिवार्य हैशटैग्स: #AINews #Epaper #HindiNews #{city}News #AINewsMaker आदि।
+12. **सोशल मीडिया समरी (summary)**: Instagram और Facebook के लिए 2 पैराग्राफ का विस्तृत विवरण, अंत में अनिवार्य हैशटैग्स: #AINews #Epaper #HindiNews #{city} #AINewsMaker आदि।
 13. **श्रेणी (category)**: (अपराध / प्रशासन / हादसा / राजनीति / विकास / जनसमस्या / शिक्षा)।
 
 Strictly return a valid JSON object matching these exact keys:
@@ -9323,15 +9838,16 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
       return res.status(400).json({ error: "Headline is required" });
     }
 
-    let styleDirective = `1. समाचार को सामान्यतः 2 संक्षिप्त लेकिन सारगर्भित पैराग्राफ में लिखें। स्रोत में उपयोगी अतिरिक्त जानकारी होने पर अधिकतम 3 पैराग्राफ रखें। नाम, स्थान, तारीख, घटनाक्रम और अन्य तथ्य स्रोत के अनुसार सही हों।`;
+    let styleDirective = `1. समाचार को ठीक 3 सुव्यवस्थित और सारगर्भित पैराग्राफ में लिखें (पैराग्राफ 1: मुख्य घटना, समय व स्थान; पैराग्राफ 2: नियम, आंकड़े या बयान; पैराग्राफ 3: कार्रवाई व वर्तमान स्थिति)।`;
     if (style === 'detailed_3_para') {
-      styleDirective = `1. समाचार को 2 संक्षिप्त लेकिन सारगर्भित पैराग्राफ में लिखें (अतिरिक्त ठोस तथ्य होने पर अधिकतम 3 पैराग्राफ):
+      styleDirective = `1. समाचार को ठीक 3 सुव्यवस्थित और सारगर्भित पैराग्राफ में लिखें:
    - पहला पैराग्राफ: मुख्य घटना, समय, स्थान, संबंधित व्यक्ति व मुख्य निर्णय।
-   - दूसरा पैराग्राफ: पृष्ठभूमि, कारण, प्रशासन/पुलिस का एक्शन व वर्तमान स्थिति।`;
+   - दूसरा पैराग्राफ: पृष्ठभूमि, आंकड़े, नियम, घोषणा या बयान।
+   - तीसरा पैराग्राफ: प्रशासनिक कार्रवाई, प्रभाव व वर्तमान स्थिति।`;
     } else if (style === 'bullet_points') {
-      styleDirective = `1. समाचार का पहला पैराग्राफ संक्षिप्त विवरण दें, उसके बाद 3-4 मुख्य बिंदु (बुलेट पॉइंट्स) में विस्तृत तथ्य दें, और अंत में 1 पैराग्राफ वर्तमान स्थिति का दें।`;
+      styleDirective = `1. समाचार का पहला पैराग्राफ संक्षिप्त विवरण दें, उसके बाद 3-4 मुख्य बिंदु (बुलेट पॉइंट्स •) में विस्तृत तथ्य दें, और अंत में 1 पैराग्राफ वर्तमान स्थिति का दें।`;
     } else if (style === 'short') {
-      styleDirective = `1. समाचार को 2 बहुत ही आकर्षक, संक्षिप्त व सारगर्भित पैराग्राफ में लिखें।`;
+      styleDirective = `1. समाचार को ठीक 2 संक्षिप्त, प्रभावशाली और सारगर्भित पैराग्राफ में लिखें।`;
     }
 
     const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल "एआई न्यूज़ मेकर" के वरिष्ठ संपादक हैं।
@@ -9341,7 +9857,7 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
 स्थान: "${location || "मध्य प्रदेश"}"
 श्रेणी: "${category || "न्यूज़"}"
 ${existingSummary ? `संदर्भ / मौजूदा विवरण: ${existingSummary}` : ""}
-${customInstruction ? `यूज़र का विशेष बदलाव / निर्देश: ${customInstruction}` : ""}
+${customInstruction ? `यूज़र का विशेष निर्देश: ${customInstruction}` : ""}
 
 नियम (कड़ाई से पालन करें):
 ${styleDirective}
@@ -9350,7 +9866,7 @@ ${styleDirective}
 4. ठीक एक खाली लाइन छोड़कर अंत में 6 से 8 प्रासंगिक हैशटैग लगाएं।
 5. हैशटैग क्रम (MUST):
    - सबसे पहला हैशटैग: यूज़रनेम / चैनल हैंडल
-   - बीच में घटना/स्थान से संबंधित प्रासंगिक हैशटैग (उदा: #BreakingNews #HindiNews #LatestNews #${(location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "")}News)
+   - बीच में घटना/स्थान से संबंधित प्रासंगिक हैशटैग (उदा: #BreakingNews #HindiNews #LatestNews #${(location || "मध्य_प्रदेश").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "_")})
    - सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
    - कभी भी #breakingnewswala या #BNWTV न लगाएं।
 
@@ -9382,8 +9898,9 @@ ${styleDirective}
           return res.status(400).json({ error: openAiCapErr.message });
         }
         console.log("OpenAI caption busy, using fallback template");
-        const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
-        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें हमारे चैनल के साथ।\n\n#AINews #BreakingNews #HindiNews #${locTag}News #LatestUpdate #AINewsMaker`;
+        const locClean = (location || "मध्य प्रदेश").split(",")[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "");
+        const locTag = locClean ? `#${locClean}` : "#मध्य_प्रदेश";
+        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर आवश्यक दिशा-निर्देश जारी किए गए हैं।`}\n\nसंबंधित अधिकारियों द्वारा पूरे मामले की समीक्षा की जा रही है और आवश्यक प्रक्रिया के अनुरूप कदम उठाए जा रहे हैं।\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें हमारे चैनल के साथ।\n\n#AINews #BreakingNews #HindiNews ${locTag} #AINewsMaker`;
       }
     } else {
       const ai = getGeminiClient();
@@ -9398,11 +9915,14 @@ ${styleDirective}
         caption = (response.text || "").trim();
       } catch (capErr: any) {
         console.log("Caption generation AI busy, using fallback template:", capErr?.message?.slice(0, 80));
-        // Construct high-quality fallback caption
-        const locTag = (location || "MP").replace(/[^a-zA-Z0-9\u0900-\u097F]/g, "");
-        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर जांच व उचित कार्रवाई की जा रही है।`}\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें हमारे चैनल के साथ।\n\n#AINews #BreakingNews #HindiNews #${locTag}News #LatestUpdate #AINewsMaker`;
+        const locClean = (location || "मध्य प्रदेश").split(",")[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "");
+        const locTag = locClean ? `#${locClean}` : "#मध्य_प्रदेश";
+        caption = `${headline}\n\n${existingSummary || `${location || "मध्य प्रदेश"} से इस वक्त की बड़ी और महत्वपूर्ण खबर सामने आ रही है। मामले में संबंधित विभाग और प्रशासन की ओर से त्वरित संज्ञान लेकर आवश्यक दिशा-निर्देश जारी किए गए हैं।`}\n\nसंबंधित अधिकारियों द्वारा पूरे मामले की समीक्षा की जा रही है और आवश्यक प्रक्रिया के अनुरूप कदम उठाए जा रहे हैं।\n\nइस पूरे घटनाक्रम से जुड़ी विस्तृत जानकारी और हर ताजा अपडेट के लिए जुड़े रहें हमारे चैनल के साथ।\n\n#AINews #BreakingNews #HindiNews ${locTag} #AINewsMaker`;
       }
     }
+
+    const mode = style === 'short' ? 'short' : style === 'bullet_points' ? 'bullet' : 'detailed';
+    caption = cleanCaptionParagraphs(caption, mode);
 
     return res.json({ success: true, caption });
   } catch (err: any) {

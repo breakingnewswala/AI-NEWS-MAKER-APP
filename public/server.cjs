@@ -979,25 +979,228 @@ var import_fs = __toESM(require("fs"), 1);
 var import_genai = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
+var import_crypto = __toESM(require("crypto"), 1);
 var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
 var app = (0, import_express.default)();
 var PORT = parseInt(process.env.PORT || "8080", 10);
-app.get("/health", (_req, res) => res.status(200).send("OK"));
-app.get("/_health", (_req, res) => res.status(200).send("OK"));
-app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
 app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-auth-token, x-admin-key, x-user-email, x-admin-email, x-user-id, x-admin-id");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
   next();
 });
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/_health", (_req, res) => res.status(200).send("OK"));
+app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
 app.use(import_express.default.json({ limit: "100mb" }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
+var AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+function generateAuthToken(user) {
+  const payload = {
+    userId: user.userId || "",
+    email: (user.email || "").toLowerCase().trim(),
+    role: user.role || "user",
+    username: user.username || "",
+    iat: Math.floor(Date.now() / 1e3),
+    exp: Math.floor(Date.now() / 1e3) + 14 * 24 * 60 * 60
+    // 14 days
+  };
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = import_crypto.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
+function verifyAuthToken(tokenStr) {
+  if (!tokenStr || typeof tokenStr !== "string") return null;
+  const parts = tokenStr.trim().split(".");
+  if (parts.length !== 3) return null;
+  const [encodedHeader, encodedPayload, signature] = parts;
+  const expectedSig = import_crypto.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+  if (signature.length !== expectedSig.length) return null;
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  if (!import_crypto.default.timingSafeEqual(sigBuf, expBuf)) return null;
+  try {
+    const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+function getAuthenticatedUser(req) {
+  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
+  let token = "";
+  if (authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (authHeader) {
+    token = authHeader;
+  }
+  if (!token) return null;
+  return verifyAuthToken(token);
+}
+function isAuthorizedAdmin(req) {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    const adminKey = req.headers["x-admin-key"];
+    if (process.env.ADMIN_API_KEY && adminKey && adminKey === process.env.ADMIN_API_KEY) {
+      return true;
+    }
+    return false;
+  }
+  return user.role === "admin" || user.role === "superadmin";
+}
+var CREDENTIALS_DB_FILE = import_path.default.join(process.cwd(), "auth_credentials_db.json");
+function loadCredentialsDatabase() {
+  try {
+    if (import_fs.default.existsSync(CREDENTIALS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(CREDENTIALS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error("Error reading auth_credentials_db.json:", err.message);
+  }
+  return {};
+}
+function verifyPassword(password, salt, storedHash) {
+  try {
+    const hash = import_crypto.default.pbkdf2Sync(password, salt, 1e4, 64, "sha512").toString("hex");
+    const a = Buffer.from(hash, "hex");
+    const b = Buffer.from(storedHash, "hex");
+    if (a.length !== b.length) return false;
+    return import_crypto.default.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+function isSafePublicUrl(urlString) {
+  try {
+    const trimmed = (urlString || "").trim();
+    if (!trimmed) return { safe: false, error: "URL \u0930\u093F\u0915\u094D\u0924 \u0939\u0948\u0964" };
+    let parsed;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F URL \u0938\u0902\u0930\u091A\u0928\u093E\u0964" };
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { safe: false, error: "\u0915\u0947\u0935\u0932 HTTP \u0914\u0930 HTTPS \u0932\u093F\u0902\u0915 \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0902\u0964" };
+    }
+    if (parsed.username || parsed.password) {
+      return { safe: false, error: "URL \u092E\u0947\u0902 \u0915\u094D\u0930\u0947\u0921\u0947\u0902\u0936\u093F\u092F\u0932\u094D\u0938 \u0915\u0940 \u0905\u0928\u0941\u092E\u0924\u093F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" };
+    }
+    const hostname = parsed.hostname.toLowerCase().trim();
+    if (parsed.port) {
+      const p = parseInt(parsed.port, 10);
+      if (![80, 443, 8080, 8443].includes(p)) {
+        return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u092A\u094B\u0930\u094D\u091F\u0964" };
+      }
+    }
+    if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname.endsWith(".internal") || hostname.endsWith(".lan") || hostname === "instance-data" || hostname === "metadata" || hostname === "metadata.google.internal") {
+      return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0928\u093F\u091C\u0940 IP/Localhost/Metadata \u0932\u093F\u0902\u0915 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" };
+    }
+    if (/^\d+$/.test(hostname)) {
+      return { safe: false, error: "\u0928\u094D\u092F\u0942\u092E\u0947\u0930\u093F\u0915 IP \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0939\u0948\u0964" };
+    }
+    if (/^0x[0-9a-f]+$/i.test(hostname)) {
+      return { safe: false, error: "\u0939\u0947\u0915\u094D\u0938 IP \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0939\u0948\u0964" };
+    }
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
+      const inner = hostname.slice(1, -1).toLowerCase();
+      if (inner === "::1" || inner === "0:0:0:0:0:0:0:1" || inner.startsWith("::ffff:") || inner.startsWith("fe80:") || inner.startsWith("fc00:") || inner.startsWith("fd00:")) {
+        return { safe: false, error: "IPv6 \u0928\u093F\u091C\u0940/\u0932\u0942\u092A\u092C\u0948\u0915 \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0939\u0948\u0964" };
+      }
+    }
+    if (hostname === "::1" || hostname.includes("::ffff:")) {
+      return { safe: false, error: "IPv6 \u0928\u093F\u091C\u0940/\u0932\u0942\u092A\u092C\u0948\u0915 \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0939\u0948\u0964" };
+    }
+    const ipv4Parts = hostname.split(".");
+    if (ipv4Parts.length === 4 && ipv4Parts.every((part) => /^\d+$/.test(part))) {
+      if (ipv4Parts.some((part) => part.length > 1 && part.startsWith("0"))) {
+        return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F IP \u092B\u0949\u0930\u094D\u092E\u0947\u091F\u0964" };
+      }
+      const [b1, b2, b3, b4] = ipv4Parts.map((p) => parseInt(p, 10));
+      if ([b1, b2, b3, b4].some((b) => isNaN(b) || b < 0 || b > 255)) {
+        return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F IP \u092A\u0924\u093E\u0964" };
+      }
+      if (b1 === 0 || // 0.0.0.0/8
+      b1 === 10 || // 10.0.0.0/8
+      b1 === 127 || // 127.0.0.0/8 Loopback
+      b1 === 100 && b2 >= 64 && b2 <= 127 || // 100.64.0.0/10 Carrier-grade NAT
+      b1 === 172 && b2 >= 16 && b2 <= 31 || // 172.16.0.0/12 Private
+      b1 === 192 && b2 === 168 || // 192.168.0.0/16 Private
+      b1 === 169 && b2 === 254 || // 169.254.0.0/16 Link-local & Cloud Metadata
+      b1 === 192 && b2 === 0 && b3 === 2 || // TEST-NET-1
+      b1 === 198 && b2 === 51 && b3 === 100 || // TEST-NET-2
+      b1 === 203 && b2 === 0 && b3 === 113 || // TEST-NET-3
+      b1 >= 224) {
+        return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0928\u093F\u091C\u0940 IP/Localhost/Metadata \u0932\u093F\u0902\u0915 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" };
+      }
+    }
+    return { safe: true, parsedUrl: parsed };
+  } catch {
+    return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F URL \u0938\u0902\u0930\u091A\u0928\u093E\u0964" };
+  }
+}
+function isValidImageMagicBytes(buf) {
+  if (!buf || buf.length < 8) return { valid: false };
+  if (buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71 && buf[4] === 13 && buf[5] === 10 && buf[6] === 26 && buf[7] === 10) {
+    return { valid: true, format: "png" };
+  }
+  if (buf[0] === 255 && buf[1] === 216 && buf[2] === 255) {
+    return { valid: true, format: "jpg" };
+  }
+  if (buf[0] === 71 && buf[1] === 73 && buf[2] === 70 && buf[3] === 56 && (buf[4] === 55 || buf[4] === 57) && buf[5] === 97) {
+    return { valid: true, format: "gif" };
+  }
+  if (buf.length >= 12 && buf[0] === 82 && buf[1] === 73 && buf[2] === 70 && buf[3] === 70 && buf[8] === 87 && buf[9] === 69 && buf[10] === 66 && buf[11] === 80) {
+    return { valid: true, format: "webp" };
+  }
+  return { valid: false };
+}
+function authRateLimiter(req, res, next) {
+  const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown-ip";
+  const check = checkRateLimit(`auth_${String(ip)}`, 15, 6e4);
+  if (!check.allowed) {
+    return res.status(429).json({ error: "\u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0932\u0949\u0917\u093F\u0928 \u092A\u094D\u0930\u092F\u093E\u0938\u0964 \u0915\u0943\u092A\u092F\u093E 1 \u092E\u093F\u0928\u091F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964" });
+  }
+  next();
+}
+function proxyRateLimiter(req, res, next) {
+  const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown-ip";
+  const check = checkRateLimit(`proxy_${String(ip)}`, 120, 6e4);
+  if (!check.allowed) {
+    return res.status(429).send("Too many image proxy requests. Please slow down.");
+  }
+  next();
+}
+var rateLimitMap = /* @__PURE__ */ new Map();
+function checkRateLimit(ip, limit = 60, windowMs = 6e4) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: limit - 1 };
+  }
+  if (entry.count >= limit) {
+    return { allowed: false, remaining: 0 };
+  }
+  entry.count++;
+  return { allowed: true, remaining: limit - entry.count };
+}
 var AUDIT_LOG_FILE = import_path.default.join(process.cwd(), "admin_audit_log.json");
 function loadAuditLogs() {
   try {
@@ -1115,6 +1318,9 @@ app.get("/api/cloud-status", (req, res) => {
 });
 app.post("/api/admin/set-ai-keys", async (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 AI \u0915\u0941\u0902\u091C\u093F\u092F\u093E\u0901 \u0938\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { openaiKey, geminiKey, customDomain } = req.body;
     if (openaiKey !== void 0) {
       dynamicOpenAiKey = String(openaiKey).trim();
@@ -1768,17 +1974,6 @@ app.delete("/api/drafts/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-function isAuthorizedAdmin(req) {
-  const email = (req.headers["x-user-email"] || req.headers["x-admin-email"] || req.body?.adminEmail || req.body?.userEmail || req.body?.email || req.query?.adminEmail || req.query?.userEmail || req.query?.email || "").toString().toLowerCase().trim();
-  const uid = (req.headers["x-user-id"] || req.headers["x-admin-id"] || req.body?.adminId || req.body?.userId || req.query?.userId || "").toString().toLowerCase().trim();
-  if (isProtectedAdminAccount(email)) return true;
-  if (email === "admin" || uid === "admin" || uid === "master_admin_001") return true;
-  const users = loadUsersMasterDatabase();
-  const match = users.find(
-    (u) => email && u.email && u.email.toLowerCase().trim() === email || uid && u.userId && u.userId.toLowerCase().trim() === uid
-  );
-  return Boolean(match && (match.role === "admin" || match.role === "superadmin"));
-}
 app.post("/api/admin/news-posts/:id/bonus", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
@@ -1875,16 +2070,23 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
 });
 app.post("/api/rewards/upload-screenshot", (req, res) => {
   try {
-    const { imageBase64, mimeType = "image/jpeg" } = req.body;
-    if (!imageBase64) {
+    const { imageBase64 } = req.body;
+    if (!imageBase64 || typeof imageBase64 !== "string") {
       return res.status(400).json({ error: "\u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0907\u092E\u0947\u091C \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-    const ext = mimeType.includes("png") ? "png" : "jpg";
-    const filename = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const buf = Buffer.from(cleanBase64, "base64");
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "\u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0915\u093E \u0906\u0915\u093E\u0930 10MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964" });
+    }
+    const magic = isValidImageMagicBytes(buf);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0939\u0940 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+    }
+    const ext = magic.format || "jpg";
+    const filename = `claim-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const filePath = import_path.default.join(UPLOAD_SCREENSHOTS_DIR, filename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
-    const buf = Buffer.from(cleanBase64, "base64");
     import_fs.default.writeFileSync(filePath, buf);
     try {
       import_fs.default.writeFileSync(webFilePath, buf);
@@ -2101,12 +2303,18 @@ app.post("/api/upload-logo", (req, res) => {
     if (!rawData || typeof rawData !== "string") {
       return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
-    const mimeType = (req.body?.mimeType || req.body?.logoType || "").toLowerCase();
-    const isGif = mimeType.includes("gif") || rawData.startsWith("data:image/gif");
-    const ext = isGif ? "gif" : mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
-    const filename = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
     const cleanBase64 = rawData.replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(cleanBase64, "base64");
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "\u092B\u093C\u093E\u0907\u0932 \u0915\u093E \u0906\u0915\u093E\u0930 10MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964" });
+    }
+    const magic = isValidImageMagicBytes(buf);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0939\u0940 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+    }
+    const isGif = magic.format === "gif";
+    const ext = magic.format || "png";
+    const filename = `logo-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
     import_fs.default.writeFileSync(filePath, buf);
@@ -3317,6 +3525,9 @@ app.get("/api/videos", (_req, res) => {
 });
 app.post("/api/admin/videos/upload", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
     const videoData = req.body;
     if (!videoData || !videoData.title || !videoData.videoUrl) {
       return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0926\u094B\u0928\u094B\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
@@ -3347,6 +3558,9 @@ app.post("/api/admin/videos/upload", (req, res) => {
 });
 app.put("/api/admin/videos/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
     const videoId = req.params.id;
     const updates = req.body;
     const currentVideos = loadVideosDatabase();
@@ -3368,6 +3582,9 @@ app.put("/api/admin/videos/:id", (req, res) => {
 });
 app.delete("/api/admin/videos/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
     const videoId = req.params.id;
     saveDeletedVideoId(videoId);
     const currentVideos = loadVideosDatabase();
@@ -3412,8 +3629,11 @@ app.get("/api/check-username", (req, res) => {
     return res.status(500).json({ available: false, error: err.message });
   }
 });
-app.get(["/api/users", "/api/admin/users"], (_req, res) => {
+app.get(["/api/users", "/api/admin/users"], (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0942\u091A\u0940 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const now = Date.now();
     const users = loadUsersMasterDatabase();
     const rDb = loadRewardsDatabase();
@@ -3438,16 +3658,29 @@ app.get(["/api/users", "/api/admin/users"], (_req, res) => {
 });
 app.post(["/api/users/sync", "/api/admin/register-user"], (req, res) => {
   try {
-    const profile = req.body;
+    const profile = { ...req.body };
     if (!profile || !profile.email && !profile.userId) {
       return res.status(400).json({ error: "\u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    }
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin) {
+      delete profile.role;
+      delete profile.tier;
+      delete profile.planName;
+      delete profile.isProfileLocked;
+      delete profile.isBlocked;
+      delete profile.activatedVia;
+      delete profile.expiresAt;
+      delete profile.trialEndsAt;
+      delete profile.trialStartedAt;
+      delete profile.activatedAt;
     }
     const saved = registerOrUpdateUserAuthoritative(profile);
     const users = loadUsersMasterDatabase().map((u) => ({
       ...u,
       ...computeTrialFields(u, Date.now())
     }));
-    return res.json({ success: true, user: saved, users, totalUsers: users.length });
+    return res.json({ success: true, user: saved, users: isAdmin ? users : [], totalUsers: users.length });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -4440,11 +4673,14 @@ app.post("/api/user-profile", (req, res) => {
     }
     const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
+    const isAdmin = isAuthorizedAdmin(req);
     const isMasterAdminEmail = profile.email && (profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || profile.email.toLowerCase() === "breakingnewswala.com@gmail.com");
-    if (cleanId === "admin" && profile.role !== "admin" && profile.role !== "superadmin" && !isMasterAdminEmail) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
+    if ((cleanId === "admin" || isMasterAdminEmail) && !isAdmin) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
     const existing = allProfiles[cleanId] || {};
+    const safeRole = isAdmin ? profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter") : existing.role || (isMasterAdminEmail ? "admin" : "reporter");
+    const safeTier = isAdmin ? profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic") : existing.tier || (isMasterAdminEmail ? "ultra" : "basic");
     const updated = {
       ...existing,
       ...profile,
@@ -4452,7 +4688,8 @@ app.post("/api/user-profile", (req, res) => {
       uid: profile.uid || profile.userId || existing.uid || cleanId,
       username: profile.username || existing.username || "",
       fullName: profile.fullName || profile.name || existing.fullName || "",
-      role: profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"),
+      role: safeRole,
+      tier: safeTier,
       email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
@@ -4466,7 +4703,6 @@ app.post("/api/user-profile", (req, res) => {
       socialIcons: profile.socialIcons || existing.socialIcons,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
-      tier: profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"),
       updatedAt: Date.now()
     };
     allProfiles[cleanId] = updated;
@@ -4630,7 +4866,7 @@ app.delete("/api/custom-frames/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", authRateLimiter, (req, res) => {
   try {
     const { identifier, password, googleUid, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
@@ -4673,41 +4909,65 @@ app.post("/api/auth/login", (req, res) => {
         isProfileLocked: !isAdmin && !isSuper
       };
       const savedUser = registerOrUpdateUserAuthoritative(userPayload);
-      return res.json({ success: true, user: savedUser });
+      const token2 = generateAuthToken({
+        userId: savedUser.userId || googleUid,
+        email: savedUser.email || cleanId,
+        role: savedUser.role || "user",
+        username: savedUser.username
+      });
+      return res.json({ success: true, user: savedUser, token: token2 });
     }
     if (!cleanId || !password) {
       return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E/\u0908\u092E\u0947\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902" });
     }
-    const isMaster = cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "admin" || cleanId === "superadmin";
+    const creds = loadCredentialsDatabase();
+    let targetEmail = cleanId;
+    if (cleanId === "admin" || cleanId === "superadmin") {
+      targetEmail = "admin.ainewsmaker@gmail.com";
+    }
+    let credEntry = creds[targetEmail];
+    if (!credEntry) {
+      credEntry = Object.values(creds).find(
+        (c) => c.username && c.username.toLowerCase() === cleanId || c.email && c.email.toLowerCase() === cleanId
+      );
+    }
+    let isPasswordValid = false;
+    if (credEntry && credEntry.salt && credEntry.hash) {
+      isPasswordValid = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+    }
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921" });
+    }
     const allProfiles = loadProfilesDatabase();
     const match = Object.values(allProfiles).find(
-      (p) => p.email && p.email.toLowerCase() === cleanId || p.username && p.username.toLowerCase() === cleanId
+      (p) => p.email && p.email.toLowerCase() === targetEmail || p.username && p.username.toLowerCase() === cleanId
     );
-    if (match) {
-      return res.json({ success: true, user: match });
-    }
-    if (isMaster) {
-      const masterUser = {
-        username: "admin",
-        fullName: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor)",
-        name: "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor)",
-        role: "admin",
-        district: "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
-        email: "admin.ainewsmaker@gmail.com",
-        userId: "master_admin_001",
-        tier: "ultra",
-        channelNameHi: "",
-        channelNameEn: "",
-        channelLogoUrl: "",
-        websiteUrl: "",
-        mobileNumber: ""
-      };
-      return res.json({ success: true, user: masterUser });
-    }
-    return res.status(401).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921" });
+    const user = match || {
+      username: credEntry?.username || cleanId,
+      fullName: targetEmail.includes("admin") ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : "\u092F\u0942\u091C\u093C\u0930",
+      name: targetEmail.includes("admin") ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : "\u092F\u0942\u091C\u093C\u0930",
+      role: targetEmail.includes("admin") ? "superadmin" : "user",
+      email: targetEmail,
+      userId: `user_${Date.now()}`,
+      tier: targetEmail.includes("admin") ? "ultra" : "basic"
+    };
+    const token = generateAuthToken({
+      userId: user.userId || user.uid,
+      email: user.email || targetEmail,
+      role: user.role || "user",
+      username: user.username
+    });
+    return res.json({ success: true, user, token });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
+});
+app.get("/api/auth/me", (req, res) => {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({ authenticated: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u092E\u093E\u0928\u094D\u092F \u0938\u0924\u094D\u0930 \u091F\u094B\u0915\u0928 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+  }
+  return res.json({ authenticated: true, user });
 });
 var SUPPORT_DB_FILE = import_path.default.join(process.cwd(), "support_requests_database.json");
 var UPLOAD_SUPPORT_DIR = import_path.default.join(process.cwd(), "public", "uploads", "support");
@@ -4739,17 +4999,21 @@ function saveSupportRequestsDatabase(requests) {
   }
 }
 app.get("/api/support/requests", (req, res) => {
-  const { userId, role } = req.query;
+  const { userId, userEmail } = req.query;
   const all = loadSupportRequestsDatabase();
-  const isAdmin = role === "admin" || role === "superadmin";
+  const isAdmin = isAuthorizedAdmin(req);
   const now = Date.now();
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1e3;
   if (isAdmin) {
     return res.json({ success: true, requests: all });
   }
-  const cleanId = String(userId || "").toLowerCase().trim();
+  const authUser = getAuthenticatedUser(req);
+  const cleanId = String(authUser?.userId || authUser?.email || userId || userEmail || "").toLowerCase().trim();
+  if (!cleanId) {
+    return res.json({ success: true, requests: [] });
+  }
   const userRequests = all.filter(
-    (r) => (!cleanId || r.userId && r.userId.toLowerCase().trim() === cleanId || r.userEmail && r.userEmail.toLowerCase().trim() === cleanId) && // 30-day retention filter for regular users
+    (r) => (r.userId && r.userId.toLowerCase().trim() === cleanId || r.userEmail && r.userEmail.toLowerCase().trim() === cleanId) && // 30-day retention filter for regular users
     now - (Number(r.createdAt) || now) <= THIRTY_DAYS_MS
   );
   return res.json({ success: true, requests: userRequests });
@@ -4760,11 +5024,17 @@ app.post("/api/support/requests", (req, res) => {
     if (!data) return res.status(400).json({ error: "No data provided" });
     let finalAttachmentUrl = data.attachmentUrl || "";
     if (data.attachmentDataUrl && typeof data.attachmentDataUrl === "string" && data.attachmentDataUrl.startsWith("data:")) {
-      const match = data.attachmentDataUrl.match(/^data:image\/(\w+);base64,/);
-      const ext = match ? match[1] : "png";
-      const filename = `support_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
       const base64Data = data.attachmentDataUrl.replace(/^data:image\/\w+;base64,/, "");
       const buf = Buffer.from(base64Data, "base64");
+      if (buf.length > 10 * 1024 * 1024) {
+        return res.status(413).json({ error: "\u0938\u0902\u0932\u0917\u094D\u0928\u0915 \u0915\u093E \u0906\u0915\u093E\u0930 10MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964" });
+      }
+      const magic = isValidImageMagicBytes(buf);
+      if (!magic.valid) {
+        return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0938\u0902\u0932\u0917\u094D\u0928\u0915: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+      }
+      const ext = magic.format || "png";
+      const filename = `support_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
       import_fs.default.writeFileSync(import_path.default.join(UPLOAD_SUPPORT_DIR, filename), buf);
       try {
         import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf);
@@ -4773,7 +5043,7 @@ app.post("/api/support/requests", (req, res) => {
       finalAttachmentUrl = `/uploads/support/${filename}`;
     }
     const newRequest = {
-      id: data.id || `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: data.id || `inq_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}`,
       userId: data.userId || "",
       userName: data.userName || "\u0905\u0928\u093E\u092E \u092F\u0942\u091C\u093C\u0930",
       userEmail: (data.userEmail || "").replace(/\s+/g, "").toLowerCase().trim(),
@@ -4782,9 +5052,9 @@ app.post("/api/support/requests", (req, res) => {
       voiceTranscript: data.voiceTranscript || "",
       attachmentUrl: finalAttachmentUrl,
       attachmentName: data.attachmentName || "",
-      status: data.status || "pending",
-      createdAt: data.createdAt || Date.now(),
-      adminResponse: data.adminResponse || "",
+      status: "pending",
+      createdAt: Date.now(),
+      adminResponse: "",
       updatedAt: Date.now(),
       reportType: data.reportType || "general",
       targetId: data.targetId || "",
@@ -4801,6 +5071,9 @@ app.post("/api/support/requests", (req, res) => {
 });
 app.patch("/api/support/requests/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0938\u092A\u094B\u0930\u094D\u091F \u0905\u0928\u0941\u0930\u094B\u0927 \u0915\u093E \u0909\u0924\u094D\u0924\u0930 \u0926\u0947 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { id } = req.params;
     const { status, adminResponse } = req.body;
     const all = loadSupportRequestsDatabase();
@@ -4822,6 +5095,9 @@ app.patch("/api/support/requests/:id", (req, res) => {
 });
 app.delete("/api/support/requests/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0938\u092A\u094B\u0930\u094D\u091F \u0905\u0928\u0941\u0930\u094B\u0927 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { id } = req.params;
     let all = loadSupportRequestsDatabase();
     all = all.filter((r) => r.id !== id);
@@ -4853,12 +5129,18 @@ function saveRawNewsDatabase(items) {
     return false;
   }
 }
-app.get("/api/admin/raw-news", (_req, res) => {
+app.get("/api/admin/raw-news", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+  }
   const all = loadRawNewsDatabase();
   return res.json({ success: true, rawNews: all });
 });
 app.post("/api/admin/raw-news", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
     const payload = req.body;
     if (!payload || !payload.headline && !payload.rawText) {
       return res.status(400).json({ error: "\u0915\u092E \u0938\u0947 \u0915\u092E \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092F\u093E \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
@@ -4916,6 +5198,9 @@ app.post("/api/admin/raw-news", (req, res) => {
 });
 app.put("/api/admin/raw-news/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
     const { id } = req.params;
     const updates = req.body;
     const all = loadRawNewsDatabase();
@@ -4961,6 +5246,9 @@ app.put("/api/admin/raw-news/:id", (req, res) => {
 });
 app.delete("/api/admin/raw-news/:id", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
     const { id } = req.params;
     let all = loadRawNewsDatabase();
     all = all.filter((r) => r.id !== id);
@@ -5167,6 +5455,9 @@ app.post("/api/logo-change-requests/:id/reject", (req, res) => {
 });
 app.post("/api/admin/videos/upload-file", (req, res) => {
   try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u0905\u092A\u0932\u094B\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { videoData, filename = "video.mp4" } = req.body;
     if (!videoData || typeof videoData !== "string") {
       return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0921\u0947\u091F\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
@@ -5179,7 +5470,7 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
     } else if (filename.toLowerCase().endsWith(".m4v") || videoData.startsWith("data:video/x-m4v")) {
       ext = "m4v";
     }
-    const savedFilename = `video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const savedFilename = `video_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
     const filePath = import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
@@ -5197,19 +5488,24 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
 });
 app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
   try {
-    const { imageData, filename = "thumbnail.jpg" } = req.body;
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0925\u0902\u092C\u0928\u0947\u0932 \u0905\u092A\u0932\u094B\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const { imageData } = req.body;
     if (!imageData || typeof imageData !== "string") {
       return res.status(400).json({ error: "\u0925\u0902\u092C\u0928\u0947\u0932 \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
     }
-    let ext = "jpg";
-    if (filename.toLowerCase().endsWith(".png") || imageData.startsWith("data:image/png")) {
-      ext = "png";
-    } else if (filename.toLowerCase().endsWith(".webp") || imageData.startsWith("data:image/webp")) {
-      ext = "webp";
-    }
-    const savedFilename = `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "\u0925\u0902\u092C\u0928\u0947\u0932 \u0915\u093E \u0906\u0915\u093E\u0930 10MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964" });
+    }
+    const magic = isValidImageMagicBytes(buffer);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+    }
+    const ext = magic.format || "jpg";
+    const savedFilename = `thumb_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const filePath = import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
     import_fs.default.writeFileSync(filePath, buffer);
@@ -5519,14 +5815,16 @@ app.post("/api/twilio/send-whatsapp", async (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/twilio/send-otp", async (req, res) => {
+app.post("/api/twilio/send-otp", authRateLimiter, async (req, res) => {
   try {
     const { mobile } = req.body;
     if (!mobile) return res.status(400).json({ success: false, error: "Mobile number is required" });
     const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
-    const otp = Math.floor(1e5 + Math.random() * 9e5).toString();
-    otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1e3 });
-    console.log(`[Twilio OTP Generated for +91${cleanNum}]: ${otp}`);
+    if (cleanNum.length !== 10) {
+      return res.status(400).json({ success: false, error: "\u0915\u0943\u092A\u092F\u093E 10 \u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u092E\u093E\u0928\u094D\u092F \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
+    }
+    const otp = import_crypto.default.randomInt(1e5, 999999).toString();
+    otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1e3, attempts: 0 });
     if (TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)) {
       try {
         const fullTo = `+91${cleanNum}`;
@@ -5550,15 +5848,14 @@ app.post("/api/twilio/send-otp", async (req, res) => {
     }
     return res.json({
       success: true,
-      message: `OTP +91${cleanNum} \u092A\u0930 \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948`,
-      expiresInSeconds: 300,
-      debugOtp: process.env.NODE_ENV !== "production" ? otp : void 0
+      message: `OTP +91${cleanNum} \u092A\u0930 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0930\u0942\u092A \u0938\u0947 \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948`,
+      expiresInSeconds: 300
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/twilio/verify-otp", (req, res) => {
+app.post("/api/twilio/verify-otp", authRateLimiter, (req, res) => {
   try {
     const { mobile, otp } = req.body;
     if (!mobile || !otp) return res.status(400).json({ success: false, error: "Mobile and OTP are required" });
@@ -5571,7 +5868,13 @@ app.post("/api/twilio/verify-otp", (req, res) => {
       otpStore.delete(cleanNum);
       return res.json({ success: false, valid: false, message: "OTP \u0915\u0940 \u0935\u0948\u0927\u0924\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u0908 \u0939\u0948" });
     }
-    if (record.otp === String(otp).trim() || String(otp).trim() === "123456") {
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts > 5) {
+      otpStore.delete(cleanNum);
+      return res.status(429).json({ success: false, valid: false, message: "\u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0905\u0938\u092B\u0932 \u092A\u094D\u0930\u092F\u093E\u0938\u0964 OTP \u0928\u093F\u0930\u0938\u094D\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948, \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E OTP \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902\u0964" });
+    }
+    const inputOtp = String(otp).trim();
+    if (record.otp === inputOtp) {
       otpStore.delete(cleanNum);
       return res.json({ success: true, valid: true, message: "OTP \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924!" });
     }
@@ -5671,7 +5974,7 @@ var serveAccountDeletionHtml = (_req, res) => {
 app.get("/delete-account", serveAccountDeletionHtml);
 app.get("/account-deletion", serveAccountDeletionHtml);
 app.get("/privacy/delete-account", serveAccountDeletionHtml);
-app.get("/api/proxy-image", async (req, res) => {
+app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
   try {
     let imageUrl = req.query.url;
     if (!imageUrl) {
@@ -5681,24 +5984,39 @@ app.get("/api/proxy-image", async (req, res) => {
       const parts = imageUrl.split("/api/proxy-image?url=");
       imageUrl = decodeURIComponent(parts[parts.length - 1]);
     }
+    const urlValidation = isSafePublicUrl(imageUrl);
+    if (!urlValidation.safe) {
+      return res.status(403).json({ error: "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0932\u093F\u0902\u0915 (SSRF Protection): " + (urlValidation.error || "\u0905\u092E\u093E\u0928\u094D\u092F URL") });
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8e3);
     const response = await fetch(imageUrl, {
+      signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
       }
-    });
+    }).finally(() => clearTimeout(timeoutId));
     if (!response.ok) {
       return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
     }
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      return res.status(415).send("Invalid content type: only images are allowed.");
+    }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(413).send("Image size exceeds 10MB limit.");
+    }
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Access-Control-Allow-Origin", "*");
     return res.send(buffer);
   } catch (err) {
-    console.error("Error proxying image:", err);
+    if (err.name === "AbortError") {
+      return res.status(504).send("Image fetch timed out.");
+    }
     return res.status(500).send("Error proxying image");
   }
 });
@@ -5721,9 +6039,8 @@ function getGeminiClient() {
   return aiClient;
 }
 var openaiClient = null;
-var DEFAULT_OPENAI_KEY = "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";
 function getOpenAIClient() {
-  const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || DEFAULT_OPENAI_KEY;
+  const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || "";
   if (!apiKey || apiKey.trim() === "" || apiKey === "MY_OPENAI_API_KEY") {
     throw new Error(
       "OPENAI_API_KEY \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E '\u0915\u094D\u0932\u093E\u0909\u0921 \u0935 API \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938' (\u092F\u093E .env) \u092E\u0947\u0902 \u091C\u093E\u0915\u0930 'OPENAI_API_KEY' \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902, \u0905\u0925\u0935\u093E 'Gemini AI' \u0935\u093F\u0915\u0932\u094D\u092A \u091A\u0941\u0928\u0947\u0902\u0964"
@@ -5916,31 +6233,6 @@ function isInvalidUrlHeadline(text) {
   if (!text || typeof text !== "string") return true;
   const l = text.toLowerCase().trim();
   return l.startsWith("http://") || l.startsWith("https://") || l.startsWith("www.") || l.includes("http://") || l.includes("https://") || l.includes(".com") || l.includes(".in") || l.includes(".org") || l.includes(".net") || l.includes("url to reference") || l.includes("url:") || l.includes("ainewsmaker.online") || l.includes("breakingnewswala.com");
-}
-function isSafePublicUrl(urlString) {
-  try {
-    const trimmed = (urlString || "").trim();
-    if (!trimmed) return { safe: false, error: "URL \u0930\u093F\u0915\u094D\u0924 \u0939\u0948\u0964" };
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return { safe: false, error: "\u0915\u0947\u0935\u0932 HTTP \u0914\u0930 HTTPS \u0932\u093F\u0902\u0915 \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0902\u0964" };
-    }
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
-      return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0928\u093F\u091C\u0940 IP/Localhost \u0932\u093F\u0902\u0915 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" };
-    }
-    const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipv4Match) {
-      const b1 = parseInt(ipv4Match[1], 10);
-      const b2 = parseInt(ipv4Match[2], 10);
-      if (b1 === 0 || b1 === 10 || b1 === 127 || b1 === 172 && b2 >= 16 && b2 <= 31 || b1 === 192 && b2 === 168 || b1 === 169 && b2 === 254) {
-        return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0928\u093F\u091C\u0940 IP/Localhost \u0932\u093F\u0902\u0915 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" };
-      }
-    }
-    return { safe: true, parsedUrl: parsed };
-  } catch {
-    return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F URL \u0938\u0902\u0930\u091A\u0928\u093E\u0964" };
-  }
 }
 function cleanHtmlEntities(str) {
   if (!str) return "";
@@ -8845,4 +9137,3 @@ startServer().catch((err) => {
   generate5JournalisticHeadlines,
   matchDistrictAlias
 });
-//# sourceMappingURL=server.cjs.map

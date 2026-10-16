@@ -16,7 +16,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1792147524766
+    "updatedAt": 1792183505574
   },
   "breakingnewswala.com@gmail.com": {
     "username": "breakingnewswala",
@@ -35,7 +35,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "breakingnewswala.com",
-    "updatedAt": 1792147524768
+    "updatedAt": 1792183505575
   },
   "khabridasnews@gmail.com": {
     "username": "khabridasnews",
@@ -54,7 +54,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9876543210",
     "websiteUrl": "https://khabridasnews.com",
-    "updatedAt": 1792147524769
+    "updatedAt": 1792183505576
   },
   "riturajtomarorchha@gmail.com": {
     "username": "riturajtomarorchha",
@@ -73,7 +73,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9876543211",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1792147524770
+    "updatedAt": 1792183505578
   },
   "digital.anmolsandesh@gmail.com": {
     "username": "anmolsandesh",
@@ -92,6 +92,29 @@
     "channelLogoType": "png",
     "mobileNumber": "9425000998",
     "websiteUrl": "anmolsandesh.com",
-    "updatedAt": 1792147524771
+    "updatedAt": 1792183505579
+  },
+  "regular_user_1792183548728@test.com": {
+    "username": "reporter",
+    "fullName": "यूज़र",
+    "role": "reporter",
+    "userId": "user_test_1792183548728",
+    "uid": "user_test_1792183548728",
+    "tier": "basic",
+    "email": "regular_user_1792183548728@test.com",
+    "district": "",
+    "channelNameHi": "",
+    "channelNameEn": "",
+    "channelLogoUrl": "",
+    "channelLogoType": "png",
+    "mobileNumber": "",
+    "websiteUrl": "",
+    "socialIcons": {
+      "youtube": false,
+      "facebook": false,
+      "instagram": false,
+      "whatsapp": false
+    },
+    "updatedAt": 1792183548732
   }
 }

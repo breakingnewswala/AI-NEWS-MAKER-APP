@@ -6,17 +6,24 @@ const path = require('path');
 const PORT = 8089;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
-async function request(method, path, body = null) {
+let globalAdminToken = '';
+
+async function request(method, path, body = null, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
+    const headers = {
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    };
+    if (path.includes('/api/admin') && !headers.Authorization && globalAdminToken) {
+      headers.Authorization = `Bearer ${globalAdminToken}`;
+    }
     const options = {
       method,
       hostname: url.hostname,
       port: url.port,
       path: url.pathname + url.search,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
     };
     const req = http.request(options, (res) => {
       let data = '';
@@ -89,6 +96,16 @@ async function runAllTests() {
     throw new Error('Test server failed to respond on port ' + PORT);
   }
   console.log('  ✅ Test server is active and responding.\n');
+
+  // Authenticate as Master Admin to obtain JWT token for admin actions
+  const loginRes = await request('POST', '/api/auth/login', {
+    identifier: 'admin.ainewsmaker@gmail.com',
+    password: 'Admin@AINewsMaker2026!',
+  });
+  if (loginRes.body && loginRes.body.token) {
+    globalAdminToken = loginRes.body.token;
+    console.log('  🔑 Obtained Master Admin JWT token for automated suite.\n');
+  }
 
   let passedTests = 0;
   let totalTests = 0;
