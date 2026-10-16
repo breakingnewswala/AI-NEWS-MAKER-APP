@@ -2238,6 +2238,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                     👤 Reporter
                                   </span>
                                 )}
+                                {(u as any).profileIncomplete && (
+                                  <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[9px] font-semibold rounded">
+                                    ⚠️ सेटअप अधूरा
+                                  </span>
+                                )}
                               </div>
                               <div className="text-[11px] text-slate-400 font-mono mt-0.5">{u.email}</div>
                               {u.mobile && (
@@ -2251,7 +2256,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             {/* Role Changer */}
                             <td className="p-3">
                               <select
-                                value={u.role || 'user'}
+                                value={u.role === 'superadmin' ? 'superadmin' : (u.role === 'admin' ? 'admin' : 'user')}
                                 disabled={isSuper}
                                 onChange={(e) => {
                                   const newRole = e.target.value as any;

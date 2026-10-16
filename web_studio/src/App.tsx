@@ -455,6 +455,17 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveNews();
+    const interval = setInterval(fetchLiveNews, 12000); // 12-second real-time polling for news
+    const handleNewsApproved = () => {
+      fetchLiveNews();
+    };
+    window.addEventListener('ai_news_approved', handleNewsApproved);
+    window.addEventListener('ai_news_feed_refresh_needed', handleNewsApproved);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('ai_news_approved', handleNewsApproved);
+      window.removeEventListener('ai_news_feed_refresh_needed', handleNewsApproved);
+    };
   }, []);
 
   const syncPostsToServer = (updatedPosts: NewsFeedPost[]) => {
@@ -518,7 +529,16 @@ export default function App() {
   useEffect(() => {
     fetchLiveVideos();
     const interval = setInterval(fetchLiveVideos, 15000); // 15-second real-time polling
-    return () => clearInterval(interval);
+    const handleVideoEvent = () => {
+      fetchLiveVideos();
+    };
+    window.addEventListener('ai_video_uploaded', handleVideoEvent);
+    window.addEventListener('ai_video_feed_refresh_needed', handleVideoEvent);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('ai_video_uploaded', handleVideoEvent);
+      window.removeEventListener('ai_video_feed_refresh_needed', handleVideoEvent);
+    };
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 

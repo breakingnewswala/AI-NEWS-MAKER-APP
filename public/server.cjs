@@ -2056,6 +2056,227 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.post("/api/wallet/claim-welcome-reward", (req, res) => {
+  try {
+    const { email, userId, rewardType } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    if (rewardType !== "graphic" && rewardType !== "video") {
+      return res.status(400).json({ error: "Invalid rewardType. Must be 'graphic' or 'video'." });
+    }
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.welcomeRewards) {
+      rDb.welcomeRewards = {};
+    }
+    if (!rDb.welcomeRewards[walletKey]) {
+      rDb.welcomeRewards[walletKey] = {};
+    }
+    const userRewards = rDb.welcomeRewards[walletKey];
+    const isClaimed = rewardType === "graphic" ? Boolean(userRewards.graphicClaimed) : Boolean(userRewards.videoClaimed);
+    if (isClaimed) {
+      return res.json({
+        success: true,
+        alreadyClaimed: true,
+        rewardCoins: 0,
+        wallet: rDb.wallets[walletKey],
+        message: rewardType === "graphic" ? "\u092A\u094D\u0930\u0925\u092E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" : "\u092A\u094D\u0930\u0925\u092E \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+      });
+    }
+    const rewardCoins = 500;
+    rDb.wallets[walletKey].coinBalance += rewardCoins;
+    rDb.wallets[walletKey].totalEarnedCoins += rewardCoins;
+    if (rewardType === "graphic") {
+      userRewards.graphicClaimed = true;
+    } else {
+      userRewards.videoClaimed = true;
+    }
+    const txId = `tx-welcome-${rewardType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: rewardType === "graphic" ? "\u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921: \u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 (500 \u0915\u0949\u0907\u0928)" : "\u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921: \u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 (500 \u0915\u0949\u0907\u0928)",
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: rewardCoins,
+      amount: rewardCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system"
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      claimed: true,
+      rewardCoins,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `\u092C\u0927\u093E\u0908! \u092A\u094D\u0930\u0925\u092E ${rewardType === "graphic" ? "\u0917\u094D\u0930\u093E\u092B\u093F\u0915" : "\u0935\u0940\u0921\u093F\u092F\u094B"} \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092A\u0930 500 \u0935\u0947\u0932\u0915\u092E \u0915\u0949\u0907\u0928\u094D\u0938 \u0906\u092A\u0915\u0947 \u0935\u0949\u0932\u0947\u091F \u092E\u0947\u0902 \u091C\u0941\u0921\u093C \u0917\u090F \u0939\u0948\u0902!`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/wallet/unlock-item", (req, res) => {
+  try {
+    const { email, userId, itemId, itemType = "news", coinValue, coinCost, itemTitle, title } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const cleanItemId = (itemId || "").toString().trim();
+    const rawVal = coinValue !== void 0 ? coinValue : coinCost;
+    const requiredCoins = Number(rawVal);
+    if (!cleanItemId || !cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "itemId and user identification required" });
+    }
+    if (!Number.isInteger(requiredCoins) || requiredCoins <= 0) {
+      return res.status(400).json({ error: "Invalid coinValue. Must be a positive integer." });
+    }
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.unlockedItems) {
+      rDb.unlockedItems = {};
+    }
+    if (!rDb.unlockedItems[walletKey]) {
+      rDb.unlockedItems[walletKey] = [];
+    }
+    if (rDb.unlockedItems[walletKey].includes(cleanItemId)) {
+      return res.json({
+        success: true,
+        alreadyUnlocked: true,
+        wallet: rDb.wallets[walletKey],
+        message: "\u092F\u0939 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0905\u0928\u0932\u0949\u0915 \u0939\u0948\u0964"
+      });
+    }
+    const currentBalance = rDb.wallets[walletKey].coinBalance;
+    if (currentBalance < requiredCoins) {
+      return res.status(400).json({
+        success: false,
+        error: `\u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0915\u0949\u0907\u0928 \u092C\u0948\u0932\u0947\u0902\u0938! \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F ${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902, \u091C\u092C\u0915\u093F \u0906\u092A\u0915\u0947 \u092A\u093E\u0938 ${currentBalance} \u0915\u0949\u0907\u0928\u094D\u0938 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964`,
+        required: requiredCoins,
+        available: currentBalance
+      });
+    }
+    rDb.wallets[walletKey].coinBalance -= requiredCoins;
+    rDb.unlockedItems[walletKey].push(cleanItemId);
+    const txId = `tx-unlock-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const chosenTitle = itemTitle || title || cleanItemId;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      newsItemId: cleanItemId,
+      newsTitle: chosenTitle,
+      description: `\u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0905\u0928\u0932\u0949\u0915 (${itemType === "video" ? "\u0935\u0940\u0921\u093F\u092F\u094B" : "\u0938\u092E\u093E\u091A\u093E\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915"}): ${chosenTitle} (-${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938)`,
+      transactionType: "debit",
+      type: "debit",
+      coinAmount: -requiredCoins,
+      amount: -requiredCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system"
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      unlocked: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `\u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u0928\u0932\u0949\u0915 \u0939\u094B \u0917\u0908! ${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E\u091F\u0947 \u0917\u090F\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/wallet/unlocked-items", (req, res) => {
+  try {
+    const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
+    const walletKey = email || userId;
+    if (!walletKey) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    const rDb = loadRewardsDatabase();
+    const unlocked = rDb.unlockedItems?.[walletKey] || [];
+    const welcome = rDb.welcomeRewards?.[walletKey] || { graphicClaimed: false, videoClaimed: false };
+    return res.json({ success: true, unlockedItems: unlocked, welcomeRewards: welcome });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u0949\u0907\u0928 \u0935\u0948\u0932\u094D\u092F\u0942 \u0938\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { id } = req.params;
+    const { coinValue, coinCost, restrictedPlans } = req.body || {};
+    let posts = loadNewsDatabase();
+    const idx = posts.findIndex((p) => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0938\u092E\u093E\u091A\u093E\u0930 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const rawVal = coinValue !== void 0 ? coinValue : coinCost;
+    const parsedCoinValue = Number(rawVal);
+    const finalCoins = Number.isInteger(parsedCoinValue) && parsedCoinValue > 0 ? parsedCoinValue : void 0;
+    posts[idx] = {
+      ...posts[idx],
+      coinValue: finalCoins,
+      coinCost: finalCoins,
+      restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : []
+    };
+    saveNewsDatabase(posts);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
+    return res.json({ success: true, post: posts[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/videos/:id/coin-value", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u0949\u0907\u0928 \u0935\u0948\u0932\u094D\u092F\u0942 \u0938\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { id } = req.params;
+    const { coinValue, coinCost, restrictedPlans } = req.body || {};
+    let videos = loadVideosDatabase();
+    const idx = videos.findIndex((v) => v.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const rawVal = coinValue !== void 0 ? coinValue : coinCost;
+    const parsedCoinValue = Number(rawVal);
+    const finalCoins = Number.isInteger(parsedCoinValue) && parsedCoinValue > 0 ? parsedCoinValue : void 0;
+    videos[idx] = {
+      ...videos[idx],
+      coinValue: finalCoins,
+      coinCost: finalCoins,
+      restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : []
+    };
+    saveVideosDatabase(videos);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
+    return res.json({ success: true, video: videos[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 var CHANNELS_DB_FILE = import_path.default.join(process.cwd(), "restricted_channels_db.json");
 var DEFAULT_SEED_CHANNELS = [
   { id: "res_aajtak", channelName: "\u0906\u091C \u0924\u0915 (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },

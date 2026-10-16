@@ -1512,6 +1512,262 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
   }
 });
 
+// 10. POST /api/wallet/claim-welcome-reward - 500 Coins for 1st graphic, 500 for 1st video
+app.post("/api/wallet/claim-welcome-reward", (req, res) => {
+  try {
+    const { email, userId, rewardType } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    if (rewardType !== "graphic" && rewardType !== "video") {
+      return res.status(400).json({ error: "Invalid rewardType. Must be 'graphic' or 'video'." });
+    }
+
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.welcomeRewards) {
+      rDb.welcomeRewards = {};
+    }
+    if (!rDb.welcomeRewards[walletKey]) {
+      rDb.welcomeRewards[walletKey] = {};
+    }
+
+    const userRewards = rDb.welcomeRewards[walletKey];
+    const isClaimed = rewardType === "graphic" ? Boolean(userRewards.graphicClaimed) : Boolean(userRewards.videoClaimed);
+
+    if (isClaimed) {
+      return res.json({
+        success: true,
+        alreadyClaimed: true,
+        rewardCoins: 0,
+        wallet: rDb.wallets[walletKey],
+        message: rewardType === "graphic"
+          ? "प्रथम ग्राफिक डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
+          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
+      });
+    }
+
+    // Award 500 coins atomically
+    const rewardCoins = 500;
+    rDb.wallets[walletKey].coinBalance += rewardCoins;
+    rDb.wallets[walletKey].totalEarnedCoins += rewardCoins;
+
+    if (rewardType === "graphic") {
+      userRewards.graphicClaimed = true;
+    } else {
+      userRewards.videoClaimed = true;
+    }
+
+    const txId = `tx-welcome-${rewardType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: rewardType === "graphic"
+        ? "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)"
+        : "वेलकम रिवॉर्ड: प्रथम सफल वीडियो डाउनलोड (500 कॉइन)",
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: rewardCoins,
+      amount: rewardCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system",
+    } as any;
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      claimed: true,
+      rewardCoins,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `बधाई! प्रथम ${rewardType === "graphic" ? "ग्राफिक" : "वीडियो"} डाउनलोड पर 500 वेलकम कॉइन्स आपके वॉलेट में जुड़ गए हैं!`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 11. POST /api/wallet/unlock-item - Atomically deducts configured coinValue to unlock restricted story or video
+app.post("/api/wallet/unlock-item", (req, res) => {
+  try {
+    const { email, userId, itemId, itemType = "news", coinValue, coinCost, itemTitle, title } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const cleanItemId = (itemId || "").toString().trim();
+    const rawVal = coinValue !== undefined ? coinValue : coinCost;
+    const requiredCoins = Number(rawVal);
+
+    if (!cleanItemId || (!cleanEmail && !cleanUserId)) {
+      return res.status(400).json({ error: "itemId and user identification required" });
+    }
+    if (!Number.isInteger(requiredCoins) || requiredCoins <= 0) {
+      return res.status(400).json({ error: "Invalid coinValue. Must be a positive integer." });
+    }
+
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.unlockedItems) {
+      rDb.unlockedItems = {};
+    }
+    if (!rDb.unlockedItems[walletKey]) {
+      rDb.unlockedItems[walletKey] = [];
+    }
+
+    // Check if already unlocked
+    if (rDb.unlockedItems[walletKey].includes(cleanItemId)) {
+      return res.json({
+        success: true,
+        alreadyUnlocked: true,
+        wallet: rDb.wallets[walletKey],
+        message: "यह सामग्री पहले से अनलॉक है।"
+      });
+    }
+
+    // Check sufficient balance
+    const currentBalance = rDb.wallets[walletKey].coinBalance;
+    if (currentBalance < requiredCoins) {
+      return res.status(400).json({
+        success: false,
+        error: `अपर्याप्त कॉइन बैलेंस! अनलॉक करने के लिए ${requiredCoins} कॉइन्स आवश्यक हैं, जबकि आपके पास ${currentBalance} कॉइन्स उपलब्ध हैं।`,
+        required: requiredCoins,
+        available: currentBalance,
+      });
+    }
+
+    // Atomically deduct coins
+    rDb.wallets[walletKey].coinBalance -= requiredCoins;
+    rDb.unlockedItems[walletKey].push(cleanItemId);
+
+    const txId = `tx-unlock-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const chosenTitle = itemTitle || title || cleanItemId;
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      newsItemId: cleanItemId,
+      newsTitle: chosenTitle,
+      description: `सामग्री अनलॉक (${itemType === 'video' ? 'वीडियो' : 'समाचार ग्राफिक'}): ${chosenTitle} (-${requiredCoins} कॉइन्स)`,
+      transactionType: "debit",
+      type: "debit",
+      coinAmount: -requiredCoins,
+      amount: -requiredCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system",
+    } as any;
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      unlocked: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `सामग्री सफलतापूर्वक अनलॉक हो गई! ${requiredCoins} कॉइन्स काटे गए।`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 12. GET /api/wallet/unlocked-items - Retrieve user's unlocked items and welcome reward status
+app.get("/api/wallet/unlocked-items", (req, res) => {
+  try {
+    const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
+    const walletKey = email || userId;
+    if (!walletKey) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    const rDb = loadRewardsDatabase();
+    const unlocked = rDb.unlockedItems?.[walletKey] || [];
+    const welcome = rDb.welcomeRewards?.[walletKey] || { graphicClaimed: false, videoClaimed: false };
+    return res.json({ success: true, unlockedItems: unlocked, welcomeRewards: welcome });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 13. Admin POST /api/admin/news-posts/:id/coin-value - Configure Coin Value & Restricted Plans for News
+app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन वैल्यू सेट कर सकते हैं" });
+    }
+    const { id } = req.params;
+    const { coinValue, coinCost, restrictedPlans } = req.body || {};
+    let posts = loadNewsDatabase();
+    const idx = posts.findIndex(p => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "समाचार नहीं मिला" });
+    }
+    const rawVal = coinValue !== undefined ? coinValue : coinCost;
+    const parsedCoinValue = Number(rawVal);
+    const finalCoins = Number.isInteger(parsedCoinValue) && parsedCoinValue > 0 ? parsedCoinValue : undefined;
+    posts[idx] = {
+      ...posts[idx],
+      coinValue: finalCoins,
+      coinCost: finalCoins,
+      restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : [],
+    };
+    saveNewsDatabase(posts);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
+    return res.json({ success: true, post: posts[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 14. Admin POST /api/admin/videos/:id/coin-value - Configure Coin Value & Restricted Plans for Video
+app.post("/api/admin/videos/:id/coin-value", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन वैल्यू सेट कर सकते हैं" });
+    }
+    const { id } = req.params;
+    const { coinValue, coinCost, restrictedPlans } = req.body || {};
+    let videos = loadVideosDatabase();
+    const idx = videos.findIndex(v => v.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "वीडियो नहीं मिला" });
+    }
+    const rawVal = coinValue !== undefined ? coinValue : coinCost;
+    const parsedCoinValue = Number(rawVal);
+    const finalCoins = Number.isInteger(parsedCoinValue) && parsedCoinValue > 0 ? parsedCoinValue : undefined;
+    videos[idx] = {
+      ...videos[idx],
+      coinValue: finalCoins,
+      coinCost: finalCoins,
+      restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : [],
+    };
+    saveVideosDatabase(videos);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
+    return res.json({ success: true, video: videos[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // --- 2. CHANNEL LIST MANAGER DATABASE (restricted_channels_db.json) ---
 const CHANNELS_DB_FILE = path.join(process.cwd(), "restricted_channels_db.json");
 

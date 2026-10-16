@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
-import { isEffectiveAdmin } from '../lib/userPlanManager';
+import { isEffectiveAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
 
 // Social Media Brand Icons for Story Feature (Part H)
@@ -288,6 +288,189 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [bonusClaimError, setBonusClaimError] = useState<string>('');
   const [bonusClaimSuccess, setBonusClaimSuccess] = useState<string>('');
 
+  // Persisted claimed bonus news IDs (button turns RED and says "बोनस क्लेम किया जा चुका")
+  const [claimedBonusNewsIds, setClaimedBonusNewsIds] = useState<Set<string>>(() => {
+    try {
+      const email = currentUser?.email || 'guest';
+      const saved = localStorage.getItem(`app_claimed_bonus_news_ids_${email}`);
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {}
+    return new Set();
+  });
+
+  // Unlocked monetized news posts via coins
+  const [unlockedNewsIds, setUnlockedNewsIds] = useState<Set<string>>(() => {
+    try {
+      const email = currentUser?.email || 'guest';
+      const saved = localStorage.getItem(`app_unlocked_news_ids_${email}`);
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {}
+    return new Set();
+  });
+
+  const [isUnlockingPostId, setIsUnlockingPostId] = useState<string | null>(null);
+
+  // Admin Coin Value Configuration state
+  const [coinConfigPost, setCoinConfigPost] = useState<NewsFeedPost | null>(null);
+  const [coinConfigCost, setCoinConfigCost] = useState<number>(50);
+  const [coinConfigPlans, setCoinConfigPlans] = useState<string[]>(['Basic']);
+  const [coinConfigSaving, setCoinConfigSaving] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const fetchWalletAndUnlocks = async () => {
+      try {
+        const wRes = await fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(currentUser.email)}`));
+        if (wRes.ok) {
+          const wData = await wRes.json();
+          if (wData.claims && Array.isArray(wData.claims)) {
+            const activeClaims = wData.claims
+              .filter((c: any) => c.status === 'pending' || c.status === 'approved')
+              .map((c: any) => c.newsItemId || c.postId)
+              .filter(Boolean);
+            setClaimedBonusNewsIds((prev) => {
+              const updated = new Set([...Array.from(prev), ...activeClaims]);
+              try {
+                localStorage.setItem(`app_claimed_bonus_news_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
+              } catch {}
+              return updated;
+            });
+          }
+        }
+      } catch {}
+
+      try {
+        const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email)}`));
+        if (uRes.ok) {
+          const uData = await uRes.json();
+          if (uData.items && Array.isArray(uData.items)) {
+            const newsUnlocked = uData.items.filter((it: any) => it.itemType === 'news').map((it: any) => it.itemId);
+            setUnlockedNewsIds((prev) => {
+              const updated = new Set([...Array.from(prev), ...newsUnlocked]);
+              try {
+                localStorage.setItem(`app_unlocked_news_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
+              } catch {}
+              return updated;
+            });
+          }
+        }
+      } catch {}
+    };
+    fetchWalletAndUnlocks();
+  }, [currentUser?.email]);
+
+  const markBonusNewsClaimed = (newsId: string) => {
+    setClaimedBonusNewsIds((prev) => {
+      const updated = new Set(prev);
+      updated.add(newsId);
+      try {
+        const email = currentUser?.email || 'guest';
+        localStorage.setItem(`app_claimed_bonus_news_ids_${email}`, JSON.stringify(Array.from(updated)));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const isPostRestricted = (post: NewsFeedPost) => {
+    if (canModerate) return false;
+    if (!post.coinCost || post.coinCost <= 0) return false;
+    if (!Array.isArray(post.restrictedPlans) || post.restrictedPlans.length === 0) return false;
+    const sub = getUserSubscription(currentUser?.email);
+    const userPlan = (sub?.tier || 'basic').toLowerCase();
+    const userPlanName = (sub?.planName || 'BASIC').toLowerCase();
+    const isRestricted = post.restrictedPlans.some((p: string) => {
+      const cleanP = p.toLowerCase();
+      return cleanP === userPlan || cleanP === userPlanName ||
+        (cleanP === 'basic' && userPlan === 'basic') ||
+        (cleanP === 'advance' && (userPlan === 'advanced' || userPlan === 'advance')) ||
+        (cleanP === 'pro' && (userPlan === 'professional' || userPlan === 'pro')) ||
+        (cleanP === 'vip desk' && (userPlan === 'ultra' || userPlan === 'vip' || userPlan === 'vip desk'));
+    });
+    if (!isRestricted) return false;
+    return !unlockedNewsIds.has(post.id);
+  };
+
+  const handleUnlockNewsPost = async (post: NewsFeedPost) => {
+    if (!currentUser?.email) {
+      alert('कृपया पहले लॉगिन करें।');
+      return;
+    }
+    const cost = post.coinCost || 0;
+    if (cost <= 0) {
+      onOpenStudioWithNews(post);
+      return;
+    }
+    const confirmUnlock = window.confirm(`क्या आप ${cost} कॉइन खर्च करके इस खबर से ग्राफिक बनाना चाहते हैं?`);
+    if (!confirmUnlock) return;
+
+    setIsUnlockingPostId(post.id);
+    try {
+      const res = await fetch(getApiUrl('/api/wallet/unlock-item'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.email,
+          itemId: post.id,
+          itemType: 'news',
+          coinCost: cost,
+          title: post.title,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUnlockedNewsIds((prev) => {
+          const updated = new Set(prev);
+          updated.add(post.id);
+          try {
+            localStorage.setItem(`app_unlocked_news_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
+          } catch {}
+          return updated;
+        });
+        window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+        alert(`🎉 बधाई! ${cost} कॉइन में यह खबर अनलॉक हो गई।`);
+        onOpenStudioWithNews(post);
+      } else {
+        alert(data.error || 'अनलॉक विफल रहा। कृपया पर्याप्त कॉइन बैलेंस सुनिश्चित करें।');
+      }
+    } catch {
+      alert('नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।');
+    } finally {
+      setIsUnlockingPostId(null);
+    }
+  };
+
+  const handleSaveCoinConfig = async () => {
+    if (!coinConfigPost) return;
+    const cost = Math.max(0, Math.floor(Number(coinConfigCost) || 0));
+    setCoinConfigSaving(true);
+    try {
+      const res = await fetch(getApiUrl(`/api/admin/news-posts/${encodeURIComponent(coinConfigPost.id)}/coin-value`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          coinCost: cost,
+          restrictedPlans: coinConfigPlans,
+        }),
+      });
+      if (res.ok) {
+        if (onEditNews) {
+          onEditNews({
+            ...coinConfigPost,
+            coinCost: cost,
+            restrictedPlans: coinConfigPlans,
+          });
+        }
+        setCoinConfigPost(null);
+      } else {
+        alert('कॉइन वैल्यू सेव करने में विफल।');
+      }
+    } catch {
+      alert('नेटवर्क त्रुटि।');
+    } finally {
+      setCoinConfigSaving(false);
+    }
+  };
+
   const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
@@ -479,7 +662,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const handleSubmitBonusClaim = async () => {
     if (!bonusClaimPost) return;
     if (bonusClaimScreenshots.length === 0) {
-      setBonusClaimError('कृपया कम से कम 1 स्क्रीनशॉट अपलोड करें।');
+      setBonusClaimError('कम से कम 1 और अधिकतम 3 स्क्रीनशॉट अपलोड करना अनिवार्य है (0 स्क्रीनशॉट की अनुमति नहीं है)।');
       return;
     }
     if (!currentUser?.email) {
@@ -509,6 +692,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const data = await res.json();
       if (res.ok && !data.error) {
         setBonusClaimSuccess('✅ आपका बोनस क्लेम सफलतापूर्वक सबमिट हो गया! एडमिन अनुमोदन के पश्चात कॉइन्स जुड़ेंगे।');
+        markBonusNewsClaimed(bonusClaimPost.id);
         setTimeout(() => {
           setBonusClaimPost(null);
           setBonusClaimScreenshots([]);
@@ -1257,7 +1441,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                approveRssPost(post.id);
+                                approveRssPost(post.id, post);
                                 setApprovedRssIds(getApprovedRssIds());
                               }}
                               className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
@@ -1272,13 +1456,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
 
                     {/* Headline */}
-                    <h3
-                      onClick={() => onOpenStudioWithNews(post)}
-                      className="text-sm sm:text-base font-bold text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2 mb-1.5"
-                      title="क्लिक करके स्टूडियो में कार्ड बनाएं"
-                    >
-                      {cleanViewerHeadline(post.title)}
-                    </h3>
+                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                      <h3
+                        onClick={() => {
+                          if (isPostRestricted(post)) {
+                            handleUnlockNewsPost(post);
+                          } else {
+                            onOpenStudioWithNews(post);
+                          }
+                        }}
+                        className="text-sm sm:text-base font-bold text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
+                        title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                      >
+                        {cleanViewerHeadline(post.title)}
+                      </h3>
+                      {post.coinCost && post.coinCost > 0 && (
+                        <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
+                          <Coins className="w-2.5 h-2.5 text-amber-400" />
+                          <span>{post.coinCost} कॉइन</span>
+                        </span>
+                      )}
+                    </div>
 
                     {/* Summary - In-place expansion per Part F */}
                     <p
@@ -1304,19 +1502,30 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                     )}
                     {post.isBonus && isNewsGraphicCreated(currentUser?.email, post.id) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBonusClaimPost(post);
-                          setBonusClaimScreenshots([]);
-                          setBonusClaimError('');
-                          setBonusClaimSuccess('');
-                        }}
-                        className="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                      >
-                        <Coins className="w-3.5 h-3.5 text-amber-300" />
-                        <span>अपना बोनस क्लेम करें ({post.rewardCoins || 100} Coins)</span>
-                      </button>
+                      claimedBonusNewsIds.has(post.id) ? (
+                        <button
+                          disabled
+                          type="button"
+                          className="w-full py-1.5 px-3 bg-red-600 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-not-allowed opacity-90"
+                        >
+                          <Check className="w-3.5 h-3.5 text-white" />
+                          <span>बोनस क्लेम किया जा चुका</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBonusClaimPost(post);
+                            setBonusClaimScreenshots([]);
+                            setBonusClaimError('');
+                            setBonusClaimSuccess('');
+                          }}
+                          className="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        >
+                          <Coins className="w-3.5 h-3.5 text-amber-300" />
+                          <span>अपना बोनस क्लेम करें ({post.rewardCoins || 100} Coins)</span>
+                        </button>
+                      )
                     )}
                     {isNewsGraphicCreated(currentUser?.email, post.id) && !post.isBonus && (
                       <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
@@ -1344,19 +1553,31 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </span>
                       </button>
 
-                      {/* 2. खबर से ग्राफिक बनाएं */}
-                      <button
-                        type="button"
-                        onClick={() => onOpenStudioWithNews(post)}
-                        className={`flex-1 py-1.5 px-2 ${
-                          isNewsGraphicCreated(currentUser?.email, post.id)
-                            ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500'
-                            : 'bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500'
-                        } text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer whitespace-nowrap`}
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-                        <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
-                      </button>
+                      {/* 2. खबर से ग्राफिक बनाएं / कॉइन अनलॉक */}
+                      {isPostRestricted(post) ? (
+                        <button
+                          type="button"
+                          disabled={isUnlockingPostId === post.id}
+                          onClick={() => handleUnlockNewsPost(post)}
+                          className="flex-1 py-1.5 px-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer whitespace-nowrap"
+                        >
+                          <Coins className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                          <span>{isUnlockingPostId === post.id ? 'अनलॉक हो रहा है...' : `${post.coinCost} कॉइन में इस खबर से ग्राफिक बनाएँ`}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onOpenStudioWithNews(post)}
+                          className={`flex-1 py-1.5 px-2 ${
+                            isNewsGraphicCreated(currentUser?.email, post.id)
+                              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500'
+                              : 'bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500'
+                          } text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer whitespace-nowrap`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                          <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
+                        </button>
+                      )}
 
                       {/* 3. रिपोर्ट करें - Hidden for Admin per Part G */}
                       {!canModerate && (
@@ -1592,6 +1813,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span>{post.isBonus ? 'बोनस सक्रिय' : 'बोनस'}</span>
                         </button>
 
+                        {/* 2.6 Coin Value Config Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCoinConfigPost(post);
+                            setCoinConfigCost(post.coinCost || 50);
+                            setCoinConfigPlans(post.restrictedPlans || ['Basic']);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition cursor-pointer ${
+                            post.coinCost && post.coinCost > 0
+                              ? 'bg-amber-400 text-slate-950 shadow-sm'
+                              : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+                          }`}
+                          title="कॉइन वैल्यू और रिस्ट्रिक्टेड प्लान्स कॉन्फ़िगर करें"
+                        >
+                          <Coins className="w-3 h-3 text-amber-400" />
+                          <span>{post.coinCost && post.coinCost > 0 ? `${post.coinCost} कॉइन` : 'कॉइन सेट करें'}</span>
+                        </button>
+
                         {/* 3. Edit Button */}
                         <button
                           type="button"
@@ -1671,13 +1911,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           चैनल: {cleanViewerChannel(post.sourceChannel)}
                         </div>
                       )}
-                      <h4
-                        onClick={() => onOpenStudioWithNews(post)}
-                        className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
-                        title="क्लिक करके स्टूडियो में कार्ड बनाएं"
-                      >
-                        {cleanViewerHeadline(post.title)}
-                      </h4>
+                      <div className="flex items-start justify-between gap-1">
+                        <h4
+                          onClick={() => {
+                            if (isPostRestricted(post)) {
+                              handleUnlockNewsPost(post);
+                            } else {
+                              onOpenStudioWithNews(post);
+                            }
+                          }}
+                          className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
+                          title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                        >
+                          {cleanViewerHeadline(post.title)}
+                        </h4>
+                        {post.coinCost && post.coinCost > 0 && (
+                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
+                            <Coins className="w-2.5 h-2.5 text-amber-400" />
+                            <span>{post.coinCost} कॉइन</span>
+                          </span>
+                        )}
+                      </div>
 
                       {/* Summary - In-place expansion per Part F */}
                       <p
@@ -1731,7 +1985,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            approveRssPost(post.id);
+                            approveRssPost(post.id, post);
                             setApprovedRssIds(getApprovedRssIds());
                           }}
                           className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
@@ -1755,19 +2009,30 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                     )}
                     {post.isBonus && isNewsGraphicCreated(currentUser?.email, post.id) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBonusClaimPost(post);
-                          setBonusClaimScreenshots([]);
-                          setBonusClaimError('');
-                          setBonusClaimSuccess('');
-                        }}
-                        className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                      >
-                        <Coins className="w-4 h-4 text-amber-300" />
-                        <span>अपना बोनस क्लेम करें ({post.rewardCoins || 100} Coins)</span>
-                      </button>
+                      claimedBonusNewsIds.has(post.id) ? (
+                        <button
+                          disabled
+                          type="button"
+                          className="w-full py-2 px-3 bg-red-600 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-not-allowed opacity-90"
+                        >
+                          <Check className="w-4 h-4 text-white" />
+                          <span>बोनस क्लेम किया जा चुका</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBonusClaimPost(post);
+                            setBonusClaimScreenshots([]);
+                            setBonusClaimError('');
+                            setBonusClaimSuccess('');
+                          }}
+                          className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        >
+                          <Coins className="w-4 h-4 text-amber-300" />
+                          <span>अपना बोनस क्लेम करें ({post.rewardCoins || 100} Coins)</span>
+                        </button>
+                      )
                     )}
                     {isNewsGraphicCreated(currentUser?.email, post.id) && !post.isBonus && (
                       <span className="text-[10px] text-emerald-400 font-bold text-center bg-emerald-950/60 border border-emerald-500/30 rounded py-0.5 px-1">
@@ -1775,17 +2040,29 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </span>
                     )}
                     <div className="flex items-center justify-between gap-2">
-                      <button
-                        onClick={() => onOpenStudioWithNews(post)}
-                        className={`flex-1 py-2 px-3 ${
-                          isNewsGraphicCreated(currentUser?.email, post.id)
-                            ? 'bg-gradient-to-r from-emerald-600/30 to-teal-600/30 border-emerald-500/40 text-emerald-300 hover:text-white'
-                            : 'bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white'
-                        } border font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98`}
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
-                      </button>
+                      {isPostRestricted(post) ? (
+                        <button
+                          type="button"
+                          disabled={isUnlockingPostId === post.id}
+                          onClick={() => handleUnlockNewsPost(post)}
+                          className="flex-1 py-2 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+                        >
+                          <Coins className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                          <span>{isUnlockingPostId === post.id ? 'अनलॉक हो रहा है...' : `${post.coinCost} कॉइन में इस खबर से ग्राफिक बनाएँ`}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onOpenStudioWithNews(post)}
+                          className={`flex-1 py-2 px-3 ${
+                            isNewsGraphicCreated(currentUser?.email, post.id)
+                              ? 'bg-gradient-to-r from-emerald-600/30 to-teal-600/30 border-emerald-500/40 text-emerald-300 hover:text-white'
+                              : 'bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white'
+                          } border font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
+                        </button>
+                      )}
 
                       <button
                         onClick={() =>
@@ -2734,10 +3011,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             {/* Instructions */}
             <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-xs text-emerald-200 space-y-1">
               <p className="font-bold flex items-center gap-1">
-                <span>📸 स्क्रीनशॉट अपलोड करें (1 से 3 फ़ाइलें)</span>
+                <span>📸 स्क्रीनशॉट अपलोड करें (1 से 3 फ़ाइलें अनिवार्य)</span>
               </p>
-              <p className="text-[11px] text-slate-300">
-                सोशल मीडिया (Facebook, Instagram, WhatsApp, आदि) पर अपनी पोस्ट का स्क्रीनशॉट जोड़ें।
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                कम से कम 1 और अधिकतम 3 स्क्रीनशॉट अपलोड करना अनिवार्य है (0 स्क्रीनशॉट की अनुमति नहीं है)। सोशल मीडिया (Facebook, Instagram, WhatsApp, आदि) पर अपनी पोस्ट का स्क्रीनशॉट जोड़ें।
               </p>
             </div>
 
@@ -2846,6 +3123,111 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     <span>रिवॉर्ड क्लेम सबमिट करें ({bonusClaimScreenshots.length} स्क्रीनशॉट)</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Coin Value & Restricted Plans Modal */}
+      {coinConfigPost && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-amber-400 shrink-0" />
+                <h3 className="text-sm sm:text-base font-black text-white">
+                  खबर के लिए कॉइन वैल्यू सेट करें
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCoinConfigPost(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">चयनित खबर:</span>
+              <p className="text-xs font-bold text-white line-clamp-2">{coinConfigPost.title}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  आवश्यक कॉइन्स (Coin Value):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={coinConfigCost}
+                  onChange={(e) => setCoinConfigCost(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-amber-400 font-bold"
+                  placeholder="जैसे: 50 या 100"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  0 दर्ज करने पर यह खबर सभी के लिए निःशुल्क रहेगी।
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                  किन प्लान्स के यूज़र्स से कॉइन लिए जाएँ (Restricted Plans):
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Basic', 'Advance', 'Pro', 'VIP Desk'] as const).map((plan) => {
+                    const isChecked = coinConfigPlans.includes(plan);
+                    return (
+                      <label
+                        key={plan}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold cursor-pointer transition ${
+                          isChecked
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCoinConfigPlans((prev) => [...prev, plan]);
+                            } else {
+                              setCoinConfigPlans((prev) => prev.filter((p) => p !== plan));
+                            }
+                          }}
+                          className="accent-amber-500 w-3.5 h-3.5 rounded"
+                        />
+                        <span>{plan}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  चयनित प्लान के यूज़र्स को ग्राफिक बनाने से पहले कॉइन देने होंगे।
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setCoinConfigPost(null)}
+                className="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                disabled={coinConfigSaving}
+                onClick={handleSaveCoinConfig}
+                className="py-2 px-5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-4 h-4 text-slate-950" />
+                <span>{coinConfigSaving ? 'सेव हो रहा है...' : 'सेव करें'}</span>
               </button>
             </div>
           </div>

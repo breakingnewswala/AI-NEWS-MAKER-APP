@@ -187,7 +187,7 @@ export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>)
   return false;
 }
 
-export async function approveRssPost(postId: string): Promise<boolean> {
+export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
     const approved = getApprovedRssIds();
@@ -196,14 +196,20 @@ export async function approveRssPost(postId: string): Promise<boolean> {
 
     // Update locally cached synced RSS posts
     const cached = getActiveRssNewsPosts();
+    const target = postData || cached.find((p) => p.id === postId);
     const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'APPROVED' as const } : p));
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
 
-    // Call server with verified API URL and Admin headers
+    // Call server with verified API URL, Admin headers and full post data
     const url = getApiUrl(`/api/admin/approve-news/${encodeURIComponent(postId)}`);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
     const res = await fetch(url, {
       method: 'POST',
-      headers: getAdminAuthHeaders(),
+      headers,
+      body: JSON.stringify(target || {}),
     });
 
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));

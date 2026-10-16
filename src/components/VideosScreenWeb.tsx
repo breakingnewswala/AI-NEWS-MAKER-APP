@@ -24,10 +24,13 @@ import {
   Flag,
   ChevronDown,
   RefreshCw,
+  Coins,
+  Download,
+  Lock,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
-import { isEffectiveAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
+import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
 
 interface VideosScreenWebProps {
@@ -54,6 +57,194 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [editRatio, setEditRatio] = useState<'9:16' | '16:9' | '1:1' | '4:5' | '4:3'>('9:16');
   const [editIsBonus, setEditIsBonus] = useState(false);
   const [editRewardCoins, setEditRewardCoins] = useState(50);
+
+  // Unlocked video items via coins
+  const [unlockedVideoIds, setUnlockedVideoIds] = useState<Set<string>>(() => {
+    try {
+      const email = currentUser?.email || 'guest';
+      const saved = localStorage.getItem(`app_unlocked_video_ids_${email}`);
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {}
+    return new Set();
+  });
+
+  const [isUnlockingVideoId, setIsUnlockingVideoId] = useState<string | null>(null);
+
+  // Admin Coin Value Configuration state for video
+  const [coinConfigVideo, setCoinConfigVideo] = useState<VideoFeedItem | null>(null);
+  const [videoCoinCost, setVideoCoinCost] = useState<number>(50);
+  const [videoCoinPlans, setVideoCoinPlans] = useState<string[]>(['Basic']);
+  const [videoCoinSaving, setVideoCoinSaving] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const fetchUnlocked = async () => {
+      try {
+        const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email)}`));
+        if (uRes.ok) {
+          const uData = await uRes.json();
+          if (uData.items && Array.isArray(uData.items)) {
+            const videoUnlocked = uData.items.filter((it: any) => it.itemType === 'video').map((it: any) => it.itemId);
+            setUnlockedVideoIds((prev) => {
+              const updated = new Set([...Array.from(prev), ...videoUnlocked]);
+              try {
+                localStorage.setItem(`app_unlocked_video_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
+              } catch {}
+              return updated;
+            });
+          }
+        }
+      } catch {}
+    };
+    fetchUnlocked();
+  }, [currentUser?.email]);
+
+  const isVideoRestricted = (vid: VideoFeedItem) => {
+    if (isAdmin) return false;
+    const cost = vid.coinCost || vid.coinValue || 0;
+    if (cost <= 0) return false;
+    if (!Array.isArray(vid.restrictedPlans) || vid.restrictedPlans.length === 0) return false;
+    const sub = getUserSubscription(currentUser?.email);
+    const userPlan = (sub?.tier || 'basic').toLowerCase();
+    const userPlanName = (sub?.planName || 'BASIC').toLowerCase();
+    const isRestricted = vid.restrictedPlans.some((p: string) => {
+      const cleanP = p.toLowerCase();
+      return cleanP === userPlan || cleanP === userPlanName ||
+        (cleanP === 'basic' && userPlan === 'basic') ||
+        (cleanP === 'advance' && (userPlan === 'advanced' || userPlan === 'advance')) ||
+        (cleanP === 'pro' && (userPlan === 'professional' || userPlan === 'pro')) ||
+        (cleanP === 'vip desk' && (userPlan === 'ultra' || userPlan === 'vip' || userPlan === 'vip desk'));
+    });
+    if (!isRestricted) return false;
+    return !unlockedVideoIds.has(vid.id);
+  };
+
+  const handleUnlockVideo = async (vid: VideoFeedItem) => {
+    if (!currentUser?.email) {
+      alert('कृपया पहले लॉगिन करें।');
+      return;
+    }
+    const cost = vid.coinCost || vid.coinValue || 0;
+    if (cost <= 0) {
+      setInlinePlayingId(vid.id);
+      return;
+    }
+    const confirmUnlock = window.confirm(`क्या आप ${cost} कॉइन खर्च करके यह वीडियो अनलॉक करना चाहते हैं?`);
+    if (!confirmUnlock) return;
+
+    setIsUnlockingVideoId(vid.id);
+    try {
+      const res = await fetch(getApiUrl('/api/wallet/unlock-item'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.email,
+          itemId: vid.id,
+          itemType: 'video',
+          coinCost: cost,
+          coinValue: cost,
+          title: vid.title,
+          itemTitle: vid.title,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUnlockedVideoIds((prev) => {
+          const updated = new Set(prev);
+          updated.add(vid.id);
+          try {
+            localStorage.setItem(`app_unlocked_video_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
+          } catch {}
+          return updated;
+        });
+        window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+        alert(`🎉 बधाई! ${cost} कॉइन में वीडियो अनलॉक हो गया।`);
+        setInlinePlayingId(vid.id);
+      } else {
+        alert(data.error || 'अनलॉक विफल रहा। कृपया पर्याप्त कॉइन बैलेंस सुनिश्चित करें।');
+      }
+    } catch {
+      alert('नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।');
+    } finally {
+      setIsUnlockingVideoId(null);
+    }
+  };
+
+  const handleSaveVideoCoinConfig = async () => {
+    if (!coinConfigVideo) return;
+    const cost = Math.max(0, Math.floor(Number(videoCoinCost) || 0));
+    setVideoCoinSaving(true);
+    try {
+      const res = await fetch(getApiUrl(`/api/admin/videos/${encodeURIComponent(coinConfigVideo.id)}/coin-value`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': currentUser?.email || '',
+        },
+        body: JSON.stringify({
+          coinCost: cost,
+          coinValue: cost,
+          restrictedPlans: videoCoinPlans,
+        }),
+      });
+      if (res.ok) {
+        if (onAdminUpdateVideo) {
+          onAdminUpdateVideo({
+            ...coinConfigVideo,
+            coinCost: cost,
+            coinValue: cost,
+            restrictedPlans: videoCoinPlans,
+          });
+        }
+        setCoinConfigVideo(null);
+      } else {
+        alert('कॉइन वैल्यू सेव करने में विफल।');
+      }
+    } catch {
+      alert('नेटवर्क त्रुटि।');
+    } finally {
+      setVideoCoinSaving(false);
+    }
+  };
+
+  const handleDownloadVideo = async (vid: VideoFeedItem) => {
+    try {
+      // 1. Download video file via anchor
+      const a = document.createElement('a');
+      a.href = vid.videoUrl;
+      a.download = `${vid.title || 'video'}.mp4`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (a.parentNode) document.body.removeChild(a);
+      }, 500);
+
+      // 2. Trigger welcome reward for 1st video download (500 coins)
+      if (currentUser?.email) {
+        fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            rewardType: 'video',
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data && data.awarded) {
+              window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+              setTimeout(() => {
+                alert('🎉 बधाई! पहले वीडियो डाउनलोड पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
+              }, 600);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Video download trigger error:', err);
+    }
+  };
 
   // State for Delete Confirmation Dialog
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
@@ -535,7 +726,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           vid.isBonus
             ? 'border-amber-500/50 hover:border-amber-400 shadow-lg shadow-amber-950/20 ring-1 ring-amber-500/30'
             : 'border-slate-800 hover:border-slate-700'
-        } ${isHorizontal ? 'w-64 sm:w-72 shrink-0 snap-start' : 'hover:shadow-xl'}`}
+        } ${isHorizontal ? 'w-64 sm:w-72 shrink-0 snap-start' : 'break-inside-avoid mb-6 w-full hover:shadow-xl'}`}
       >
         <div>
           {/* Card Media Container with exact aspect ratio */}
@@ -600,6 +791,12 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                       बोनस
                     </span>
                   )}
+                  {((vid.coinCost && vid.coinCost > 0) || (vid.coinValue && vid.coinValue > 0)) && (
+                    <span className="px-2 py-0.5 bg-amber-500/90 text-slate-950 text-[10px] font-black rounded flex items-center gap-1 shadow-md">
+                      <Coins className="w-2.5 h-2.5 text-slate-950 fill-current" />
+                      {vid.coinCost || vid.coinValue} कॉइन्स
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -633,7 +830,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
         </div>
 
-        {/* Admin Editing Controls (Edit Info, Caption, Ratio, Toggle Bonus & Delete) */}
+        {/* Admin Editing Controls (Edit Info, Caption, Ratio, Coin Value, Toggle Bonus & Delete) */}
         {isAdmin && (
           <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -645,6 +842,19 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               >
                 <Edit3 className="w-3 h-3 text-amber-400" />
                 <span>एडिट</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCoinConfigVideo(vid);
+                  setVideoCoinCost(vid.coinCost || vid.coinValue || 50);
+                  setVideoCoinPlans(vid.restrictedPlans && vid.restrictedPlans.length > 0 ? vid.restrictedPlans : ['Basic']);
+                }}
+                className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95"
+                title="कॉइन वैल्यू व रेस्ट्रिक्टेड प्लान सेट करें"
+              >
+                <Coins className="w-3 h-3 text-amber-400" />
+                <span>कॉइन ({vid.coinCost || vid.coinValue || 0})</span>
               </button>
               <button
                 type="button"
@@ -672,15 +882,40 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
         )}
 
-        {/* Action Buttons: वीडियो स्टूडियो में ले जाएँ + वीडियो देखें + रिपोर्ट करें */}
+        {/* Action Buttons: वीडियो अनलॉक / वीडियो स्टूडियो + डाउनलोड + वीडियो देखें + रिपोर्ट करें */}
         <div className="p-4 pt-0 border-t border-slate-800/60 mt-3 flex items-center gap-2">
+          {isVideoRestricted(vid) ? (
+            <button
+              type="button"
+              disabled={isUnlockingVideoId === vid.id}
+              onClick={() => handleUnlockVideo(vid)}
+              className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              {isUnlockingVideoId === vid.id ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Lock className="w-3.5 h-3.5" />
+              )}
+              <span>{vid.coinCost || vid.coinValue} कॉइन में वीडियो अनलॉक करें</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpenStudioWithVideo(vid)}
+              className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+              <span>वीडियो स्टूडियो</span>
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() => onOpenStudioWithVideo(vid)}
-            className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+            onClick={() => handleDownloadVideo(vid)}
+            className="py-2.5 px-3 bg-slate-800 hover:bg-emerald-950/60 hover:text-emerald-400 text-slate-300 border border-slate-700 rounded-xl transition-colors cursor-pointer active:scale-95 shrink-0"
+            title="वीडियो डाउनलोड करें (500 वेलकम कॉइन)"
           >
-            <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-            <span>वीडियो स्टूडियो</span>
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
           </button>
 
           <button
@@ -1318,7 +1553,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
             {filteredVideos.map((vid) => renderVideoCard(vid, false))}
           </div>
         )}
@@ -1558,6 +1793,111 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Coin Value & Restricted Plans Modal for Video */}
+      {coinConfigVideo && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-amber-400 shrink-0" />
+                <h3 className="text-sm sm:text-base font-black text-white">
+                  वीडियो के लिए कॉइन वैल्यू सेट करें
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCoinConfigVideo(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">चयनित वीडियो:</span>
+              <p className="text-xs font-bold text-white line-clamp-2">{coinConfigVideo.title}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  आवश्यक कॉइन्स (Coin Value):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={videoCoinCost}
+                  onChange={(e) => setVideoCoinCost(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-amber-400 font-bold"
+                  placeholder="जैसे: 50 या 100"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  0 दर्ज करने पर यह वीडियो सभी के लिए निःशुल्क रहेगा।
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                  किन प्लान्स के यूज़र्स से कॉइन लिए जाएँ (Restricted Plans):
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Basic', 'Advance', 'Pro', 'VIP Desk'] as const).map((plan) => {
+                    const isChecked = videoCoinPlans.includes(plan);
+                    return (
+                      <label
+                        key={plan}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold cursor-pointer transition ${
+                          isChecked
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setVideoCoinPlans((prev) => [...prev, plan]);
+                            } else {
+                              setVideoCoinPlans((prev) => prev.filter((p) => p !== plan));
+                            }
+                          }}
+                          className="accent-amber-500 w-3.5 h-3.5 rounded"
+                        />
+                        <span>{plan}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  चयनित प्लान के यूज़र्स को वीडियो देखने/स्टूडियो में खोलने से पहले कॉइन देने होंगे।
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setCoinConfigVideo(null)}
+                className="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                disabled={videoCoinSaving}
+                onClick={handleSaveVideoCoinConfig}
+                className="py-2 px-5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-4 h-4 text-slate-950" />
+                <span>{videoCoinSaving ? 'सेव हो रहा है...' : 'सेव करें'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

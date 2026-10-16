@@ -13,8 +13,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
   {
     id: 'preset-graphic-1',
     title: 'Basic Graphic — Default',
-    headline: 'यहाँ आपकी न्यूज़ की\nहेडलाइन की दूसरी लाइन\nयहाँ तीसरी लाइन आएगी',
-    formattedHeadline: 'यहाँ आपकी न्यूज़ की\nहेडलाइन की दूसरी लाइन\nयहाँ तीसरी लाइन आएगी',
+    headline: '',
+    formattedHeadline: '',
     highlightWords: [],
     headlineAlign: 'center',
     location: '',
@@ -42,7 +42,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     darkOverlayOpacity: 0,
     showDate: false,
     dateStr: '',
-    showLocation: false,
+    showLocation: true,
     showMasterBranding: true,
   },
   {

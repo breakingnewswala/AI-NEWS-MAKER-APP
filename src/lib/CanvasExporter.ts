@@ -6647,6 +6647,35 @@ export function downloadCanvas(
         }
       };
 
+function triggerGraphicWelcomeReward() {
+  if (typeof window === 'undefined') return;
+  try {
+    let email = '';
+    const rawSession = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+    if (rawSession) {
+      const u = JSON.parse(rawSession);
+      email = u.email || '';
+    }
+    if (!email) return;
+
+    fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, rewardType: 'graphic' }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.awarded) {
+          window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+          setTimeout(() => {
+            alert('🎉 बधाई! पहले ग्राफिक डाउनलोड पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
+          }, 500);
+        }
+      })
+      .catch(() => {});
+  } catch {}
+}
+
       // 1. Android Native Bridge integration (saves directly into Android MediaStore / Pictures Gallery)
       if (
         typeof window !== 'undefined' &&
@@ -6657,6 +6686,7 @@ export function downloadCanvas(
           const dataUrl = getSafeDataUrl();
           if (dataUrl) {
             (window as any).AndroidBridge.downloadImage(dataUrl, cleanFilename);
+            triggerGraphicWelcomeReward();
             resolve(true);
             return;
           }
@@ -6685,6 +6715,7 @@ export function downloadCanvas(
                     document.body.removeChild(link);
                   }
                   URL.revokeObjectURL(objectUrl);
+                  triggerGraphicWelcomeReward();
                   resolve(true);
                 }, 400);
               } else {
@@ -6718,6 +6749,7 @@ export function downloadCanvas(
               if (link.parentNode) {
                 document.body.removeChild(link);
               }
+              triggerGraphicWelcomeReward();
               resolve(true);
             }, 300);
             return;
@@ -6725,6 +6757,7 @@ export function downloadCanvas(
         } catch (fallbackErr) {
           console.warn('Direct fallback failed:', fallbackErr);
         }
+        triggerGraphicWelcomeReward();
         resolve(true);
       }
     } catch (err) {

@@ -357,6 +357,8 @@ interface ServerRewardsDatabase {
   transactions: ServerWalletTransaction[];
   downloadEvents: ServerDownloadEvent[];
   wallets: Record<string, { coinBalance: number; pendingCoins: number; totalEarnedCoins: number }>;
+  welcomeRewards?: Record<string, { graphicClaimed?: boolean; videoClaimed?: boolean }>;
+  unlockedItems?: Record<string, string[]>;
 }
 
 function loadRewardsDatabase(): ServerRewardsDatabase {
@@ -369,12 +371,14 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
         transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
         downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
         wallets: parsed.wallets && typeof parsed.wallets === 'object' ? parsed.wallets : {},
+        welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === 'object' ? parsed.welcomeRewards : {},
+        unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === 'object' ? parsed.unlockedItems : {},
       };
     }
   } catch (err: any) {
     console.error("Error reading rewards_database.json:", err.message);
   }
-  return { claims: [], transactions: [], downloadEvents: [], wallets: {} };
+  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {} };
 }
 
 function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
@@ -865,19 +869,32 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
     const { id } = req.params;
     let existing = loadNewsDatabase();
     let found = false;
+    let approvedTitle = "";
     existing = existing.map((p) => {
       if (p.id === id) {
         found = true;
-        return { ...p, status: "APPROVED" as const, timestamp: Date.now() };
+        const postData = req.body || {};
+        const updatedTitle = postData.title || p.title;
+        approvedTitle = updatedTitle;
+        return {
+          ...p,
+          title: updatedTitle,
+          summary: postData.summary || p.summary,
+          imageUrl: postData.imageUrl || p.imageUrl,
+          sourceChannel: postData.sourceChannel || p.sourceChannel,
+          status: "APPROVED" as const,
+          timestamp: Date.now()
+        };
       }
       return p;
     });
 
     if (!found) {
       const postData = req.body || {};
+      approvedTitle = postData.title || postData.headline || "समाचार";
       const newApprovedPost: StoredNewsPost = {
         id,
-        title: postData.title || postData.headline || "समाचार",
+        title: approvedTitle,
         summary: postData.summary || postData.shortDescription || "",
         sourceChannel: postData.sourceChannel || "एआई न्यूज़ मेकर",
         sourceUrl: postData.sourceUrl || "",
@@ -900,6 +917,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
     }
 
     saveNewsDatabase(existing);
+    broadcastNewsPublishedNotification(id, approvedTitle);
     const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "खबर स्वीकृत हो गई", id, posts: existing });
@@ -1512,6 +1530,288 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
   }
 });
 
+// 9. POST /api/upload-logo - Downscaled & compressed logo upload endpoint
+app.post("/api/upload-logo", (req, res) => {
+  try {
+    const { imageBase64, mimeType = "image/png" } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ error: "लोगो इमेज डेटा आवश्यक है" });
+    }
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const ext = mimeType.includes("gif") ? "gif" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png");
+    const filename = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const filePath = path.join(UPLOAD_LOGOS_DIR, filename);
+    const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, filename);
+
+    const buf = Buffer.from(cleanBase64, "base64");
+    fs.writeFileSync(filePath, buf);
+    try {
+      fs.writeFileSync(webFilePath, buf);
+    } catch {}
+
+    const url = `/uploads/logos/${filename}`;
+    return res.json({ success: true, url });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 10. POST /api/wallet/claim-welcome-reward - 500 Coins for 1st graphic, 500 for 1st video
+app.post("/api/wallet/claim-welcome-reward", (req, res) => {
+  try {
+    const { email, userId, rewardType } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    if (rewardType !== "graphic" && rewardType !== "video") {
+      return res.status(400).json({ error: "Invalid rewardType. Must be 'graphic' or 'video'." });
+    }
+
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.welcomeRewards) {
+      rDb.welcomeRewards = {};
+    }
+    if (!rDb.welcomeRewards[walletKey]) {
+      rDb.welcomeRewards[walletKey] = {};
+    }
+
+    const userRewards = rDb.welcomeRewards[walletKey];
+    const isClaimed = rewardType === "graphic" ? Boolean(userRewards.graphicClaimed) : Boolean(userRewards.videoClaimed);
+
+    if (isClaimed) {
+      return res.json({
+        success: true,
+        alreadyClaimed: true,
+        rewardCoins: 0,
+        wallet: rDb.wallets[walletKey],
+        message: rewardType === "graphic"
+          ? "प्रथम ग्राफिक डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
+          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है。"
+      });
+    }
+
+    // Award 500 coins atomically
+    const rewardCoins = 500;
+    rDb.wallets[walletKey].coinBalance += rewardCoins;
+    rDb.wallets[walletKey].totalEarnedCoins += rewardCoins;
+
+    if (rewardType === "graphic") {
+      userRewards.graphicClaimed = true;
+    } else {
+      userRewards.videoClaimed = true;
+    }
+
+    const txId = `tx-welcome-${rewardType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: rewardType === "graphic"
+        ? "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)"
+        : "वेलकम रिवॉर्ड: प्रथम सफल वीडियो डाउनलोड (500 कॉइन)",
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: rewardCoins,
+      amount: rewardCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system",
+    } as any;
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      claimed: true,
+      rewardCoins,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `बधाई! प्रथम ${rewardType === "graphic" ? "ग्राफिक" : "वीडियो"} डाउनलोड पर 500 वेलकम कॉइन्स आपके वॉलेट में जुड़ गए हैं!`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 11. POST /api/wallet/unlock-item - Atomically deducts configured coinValue to unlock restricted story or video
+app.post("/api/wallet/unlock-item", (req, res) => {
+  try {
+    const { email, userId, itemId, itemType = "news", coinValue, coinCost, itemTitle, title } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const cleanItemId = (itemId || "").toString().trim();
+    const rawVal = coinValue !== undefined ? coinValue : coinCost;
+    const requiredCoins = Number(rawVal);
+
+    if (!cleanItemId || (!cleanEmail && !cleanUserId)) {
+      return res.status(400).json({ error: "itemId and user identification required" });
+    }
+    if (!Number.isInteger(requiredCoins) || requiredCoins <= 0) {
+      return res.status(400).json({ error: "Invalid coinValue. Must be a positive integer." });
+    }
+
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.unlockedItems) {
+      rDb.unlockedItems = {};
+    }
+    if (!rDb.unlockedItems[walletKey]) {
+      rDb.unlockedItems[walletKey] = [];
+    }
+
+    // Check if already unlocked
+    if (rDb.unlockedItems[walletKey].includes(cleanItemId)) {
+      return res.json({
+        success: true,
+        alreadyUnlocked: true,
+        wallet: rDb.wallets[walletKey],
+        message: "यह सामग्री पहले से अनलॉक है।"
+      });
+    }
+
+    // Check sufficient balance
+    const currentBalance = rDb.wallets[walletKey].coinBalance;
+    if (currentBalance < requiredCoins) {
+      return res.status(400).json({
+        success: false,
+        error: `अपर्याप्त कॉइन बैलेंस! अनलॉक करने के लिए ${requiredCoins} कॉइन्स आवश्यक हैं, जबकि आपके पास ${currentBalance} कॉइन्स उपलब्ध हैं।`,
+        required: requiredCoins,
+        available: currentBalance,
+      });
+    }
+
+    // Atomically deduct coins
+    rDb.wallets[walletKey].coinBalance -= requiredCoins;
+    rDb.unlockedItems[walletKey].push(cleanItemId);
+
+    const txId = `tx-unlock-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const chosenTitle = itemTitle || title || cleanItemId;
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      newsItemId: cleanItemId,
+      newsTitle: chosenTitle,
+      description: `सामग्री अनलॉक (${itemType === 'video' ? 'वीडियो' : 'समाचार ग्राफिक'}): ${chosenTitle} (-${requiredCoins} कॉइन्स)`,
+      transactionType: "debit",
+      type: "debit",
+      coinAmount: -requiredCoins,
+      amount: -requiredCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system",
+    } as any;
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      unlocked: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `सामग्री सफलतापूर्वक अनलॉक हो गई! ${requiredCoins} कॉइन्स काटे गए।`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 12. GET /api/wallet/unlocked-items - Retrieve user's unlocked items and welcome reward status
+app.get("/api/wallet/unlocked-items", (req, res) => {
+  try {
+    const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
+    const walletKey = email || userId;
+    if (!walletKey) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    const rDb = loadRewardsDatabase();
+    const unlocked = rDb.unlockedItems?.[walletKey] || [];
+    const welcome = rDb.welcomeRewards?.[walletKey] || { graphicClaimed: false, videoClaimed: false };
+    return res.json({ success: true, unlockedItems: unlocked, welcomeRewards: welcome });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 13. Admin POST /api/admin/news-posts/:id/coin-value - Configure Coin Value & Restricted Plans for News
+app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन वैल्यू सेट कर सकते हैं" });
+    }
+    const { id } = req.params;
+    const { coinValue, coinCost, restrictedPlans } = req.body || {};
+    let posts = loadNewsDatabase();
+    const idx = posts.findIndex(p => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "समाचार नहीं मिला" });
+    }
+    const rawVal = coinValue !== undefined ? coinValue : coinCost;
+    const parsedCoinValue = Number(rawVal);
+    const finalCoins = Number.isInteger(parsedCoinValue) && parsedCoinValue > 0 ? parsedCoinValue : undefined;
+    posts[idx] = {
+      ...posts[idx],
+      coinValue: finalCoins,
+      coinCost: finalCoins,
+      restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : [],
+    };
+    saveNewsDatabase(posts);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
+    return res.json({ success: true, post: posts[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 14. Admin POST /api/admin/videos/:id/coin-value - Configure Coin Value & Restricted Plans for Video
+app.post("/api/admin/videos/:id/coin-value", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन वैल्यू सेट कर सकते हैं" });
+    }
+    const { id } = req.params;
+    const { coinValue, coinCost, restrictedPlans } = req.body || {};
+    let videos = loadVideosDatabase();
+    const idx = videos.findIndex(v => v.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "वीडियो नहीं मिला" });
+    }
+    const rawVal = coinValue !== undefined ? coinValue : coinCost;
+    const parsedCoinValue = Number(rawVal);
+    const finalCoins = Number.isInteger(parsedCoinValue) && parsedCoinValue > 0 ? parsedCoinValue : undefined;
+    videos[idx] = {
+      ...videos[idx],
+      coinValue: finalCoins,
+      coinCost: finalCoins,
+      restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : [],
+    };
+    saveVideosDatabase(videos);
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
+    return res.json({ success: true, video: videos[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // --- 2. CHANNEL LIST MANAGER DATABASE (restricted_channels_db.json) ---
 const CHANNELS_DB_FILE = path.join(process.cwd(), "restricted_channels_db.json");
 
@@ -1794,6 +2094,54 @@ function saveNotificationsDatabase(notifs: StoredNotification[]): boolean {
   }
 }
 
+function broadcastNewsPublishedNotification(newsId: string, title: string) {
+  try {
+    const notifs = loadNotificationsDatabase();
+    const notifId = `notif_news_${newsId}`;
+    if (!notifs.some(n => n.id === notifId)) {
+      notifs.unshift({
+        id: notifId,
+        title: '📰 नई समाचार स्वीकृत व प्रकाशित',
+        message: (title && title !== 'समाचार' ? title : 'नया समाचार मुख्य होम फ़ीड में प्रकाशित कर दिया गया है।'),
+        time: 'अभी',
+        timestamp: Date.now(),
+        unread: true,
+        type: 'news',
+        targetUserEmail: 'all',
+        linkTab: 'home',
+      } as any);
+      if (notifs.length > 200) notifs.length = 200;
+      saveNotificationsDatabase(notifs);
+    }
+  } catch (e) {
+    console.error('Error broadcasting news notification:', e);
+  }
+}
+
+function broadcastVideoPublishedNotification(videoId: string, title: string) {
+  try {
+    const notifs = loadNotificationsDatabase();
+    const notifId = `notif_video_${videoId}`;
+    if (!notifs.some(n => n.id === notifId)) {
+      notifs.unshift({
+        id: notifId,
+        title: '🎬 नया वीडियो व रील्स जारी',
+        message: (title || 'नया वीडियो वीडियो एंड रील्स सेक्शन में जारी हो गया है।'),
+        time: 'अभी',
+        timestamp: Date.now(),
+        unread: true,
+        type: 'video',
+        targetUserEmail: 'all',
+        linkTab: 'videos',
+      } as any);
+      if (notifs.length > 200) notifs.length = 200;
+      saveNotificationsDatabase(notifs);
+    }
+  } catch (e) {
+    console.error('Error broadcasting video notification:', e);
+  }
+}
+
 function computeTrialFields(u: AuthoritativeUser, now = Date.now()) {
   const isSuper = u.role === 'superadmin' || isProtectedAdminAccount(u.email);
   if (isSuper || (u.tier && u.tier !== 'basic')) {
@@ -1937,13 +2285,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
   const idx = users.findIndex(u => {
     const uEmail = (u.email || '').toLowerCase().trim();
     const uUserId = (u.userId || '').toLowerCase().trim();
-    const uPhone = (u.mobileNumber || u.mobile || '').toString().replace(/[^0-9]/g, '').slice(-10);
     return (
       (cleanEmail && uEmail && uEmail === cleanEmail) ||
       (cleanEmail && uEmail && uEmail.replace(/\s+/g, '') === cleanEmail.replace(/\s+/g, '')) ||
       (cleanUserId && uUserId && uUserId === cleanUserId) ||
-      (cleanUserId && uEmail && uEmail === cleanUserId) ||
-      (rawMobile.length === 10 && uPhone.length === 10 && uPhone === rawMobile)
+      (cleanUserId && uEmail && uEmail === cleanUserId)
     );
   });
 
@@ -2274,6 +2620,41 @@ function reconcileAllUsers() {
       });
     }
 
+    const seedUser3 = 'digital.anmolsandesh@gmail.com';
+    if (!userMap.has(seedUser3)) {
+      const p3 = profiles[seedUser3];
+      userMap.set(seedUser3, {
+        userId: p3?.userId || 'usr_anmolsandesh_103',
+        email: seedUser3,
+        name: p3?.fullName || 'Anmol Sandesh',
+        fullName: p3?.fullName || 'Anmol Sandesh',
+        username: p3?.username || 'anmolsandesh',
+        role: 'user',
+        tier: 'basic',
+        planName: 'BASIC',
+        channelName: p3?.channelNameHi || 'अनमोल संदेश',
+        channelNameHi: p3?.channelNameHi || 'अनमोल संदेश',
+        channelNameEn: p3?.channelNameEn || 'Anmol Sandesh',
+        channelLogoUrl: p3?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
+        channelLogoPngUrl: p3?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
+        channelLogoGifUrl: '',
+        channelLogoType: 'png',
+        mobile: p3?.mobileNumber || '9425000998',
+        mobileNumber: p3?.mobileNumber || '9425000998',
+        district: p3?.district || 'सेंट्रल डेस्क',
+        websiteUrl: p3?.websiteUrl || 'anmolsandesh.com',
+        isBlocked: false,
+        isProfileLocked: false,
+        createdAt: 1791892712618,
+        trialStartedAt: 1791892712618,
+        trialEndsAt: 1792497512618,
+        activatedAt: 1791892712618,
+        expiresAt: 1792497512618,
+        activatedVia: 'Free 7-Day VIP Trial',
+        lastLoginAt: 1791892712618,
+      });
+    }
+
     const reconciledList = Array.from(userMap.values());
     saveUsersMasterDatabase(reconciledList);
     saveUsersDatabase(reconciledList);
@@ -2534,6 +2915,7 @@ app.post("/api/admin/videos/upload", (req, res) => {
     // Prepend so users see it immediately in real-time
     const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];
     saveVideosDatabase(updated);
+    broadcastVideoPublishedNotification(newVideo.id, newVideo.title);
     return res.json({ success: true, video: newVideo, total: updated.length });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

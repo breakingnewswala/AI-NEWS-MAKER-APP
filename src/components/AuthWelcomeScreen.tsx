@@ -50,6 +50,7 @@ import {
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { getApiUrl } from '../lib/apiConfig';
+import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -201,15 +202,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         username,
         mobileNumber: primaryMobileNumber,
         graphicContactNumber,
-        channelLogoUrl: detailChannelLogoUrl,
-        channelLogoGifUrl: detailChannelLogoGifUrl,
+        channelLogoUrl: (detailChannelLogoUrl && detailChannelLogoUrl.startsWith('data:image/') && detailChannelLogoUrl.length > 50000) ? '' : detailChannelLogoUrl,
+        channelLogoGifUrl: (detailChannelLogoGifUrl && detailChannelLogoGifUrl.startsWith('data:image/') && detailChannelLogoGifUrl.length > 50000) ? '' : detailChannelLogoGifUrl,
         channelLogoType: detailChannelLogoType,
         websiteUrl,
         otpVerified,
         acceptedTerms,
       };
       try {
-        localStorage.setItem(`onboarding_draft_${activeEmail}`, JSON.stringify(draftObj));
+        safeLocalStorageSet(`onboarding_draft_${activeEmail}`, JSON.stringify(draftObj));
       } catch {}
     }
   }, [
@@ -426,8 +427,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           whatsapp: true,
         },
         username: serverProfile?.username || parsedProfile?.username || knownProfile?.username || (isAdmin ? 'breakingnewswala' : (isSuper ? 'admin.ainewsmaker' : '')),
-        mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
-        whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
+        mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || (isAdmin ? '9669802408' : ''),
+        whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || (isAdmin ? '9669802408' : ''),
         showMobileNumber: true,
         websiteUrl: serverProfile?.websiteUrl || parsedProfile?.websiteUrl || knownProfile?.websiteUrl || 'ainewsmaker.online',
       };
@@ -444,16 +445,16 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       if (isAdmin) {
         setAdminSystemMode('admin');
       } else {
-        localStorage.setItem('is_channel_profile_locked', 'true');
+        safeLocalStorageSet('is_channel_profile_locked', 'true');
         finalProfile.isLocked = true;
       }
 
-      localStorage.setItem('reporter_auth_session', JSON.stringify(googleUser));
-      localStorage.setItem('user_channel_profile', JSON.stringify(finalProfile));
-      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
-      localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
-      localStorage.setItem('is_onboarding_completed', 'true');
-      localStorage.removeItem('auth_current_step');
+      safeLocalStorageSet('reporter_auth_session', JSON.stringify(googleUser));
+      safeLocalStorageSet('user_channel_profile', JSON.stringify(finalProfile));
+      safeLocalStorageSet(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+      safeLocalStorageSet(`onboarding_completed_${cleanEmail}`, 'true');
+      safeLocalStorageSet('is_onboarding_completed', 'true');
+      safeLocalStorageRemove('auth_current_step');
 
       registerOrUpdateUser({
         email: cleanEmail,
@@ -493,7 +494,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
-    // NEW Google user: Send to Step 2 (First-Time Onboarding/Profile Setup)
+    // NEW Google user or incomplete profile: Register immediately in Users Manager & Send to Step 2
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       try {
         Notification.requestPermission().catch(() => {});
@@ -507,16 +508,54 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     } catch {}
 
     const pendingUser: ReporterUser = {
-      username: draftData?.username || '',
-      name: draftData?.fullName || name || '',
+      username: draftData?.username || cleanEmail.split('@')[0],
+      name: draftData?.fullName || name || cleanEmail.split('@')[0],
       role: 'user',
-      district: draftData?.district || '',
+      district: draftData?.district || 'पेंडिंग प्रोफ़ाइल',
       email: cleanEmail,
       avatarUrl: picture, // Google avatar is NOT channel logo
     };
 
     setTempRegisteredUser(pendingUser);
     setIsGoogleLoggedIn(true);
+
+    // Persist pending session so page refresh or tab re-opening stays smoothly in Step 2
+    safeLocalStorageSet('reporter_auth_session', JSON.stringify(pendingUser));
+    safeLocalStorageSet('auth_current_step', '2');
+
+    // Register immediately so Users Manager shows this genuine user with incomplete status!
+    registerOrUpdateUser({
+      email: cleanEmail,
+      username: pendingUser.username,
+      name: pendingUser.name,
+      mobile: draftData?.mobileNumber || '',
+      channelName: draftData?.channelNameHi || 'सेटअप अधूरा (Incomplete)',
+      channelLogoUrl: draftData?.channelLogoUrl || '',
+      tier: 'basic',
+      role: 'user',
+      isLocked: true,
+      profileIncomplete: true,
+    });
+
+    try {
+      fetch(getApiUrl('/api/users/sync'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: cleanEmail,
+          email: cleanEmail,
+          username: pendingUser.username,
+          name: pendingUser.name,
+          fullName: pendingUser.name,
+          mobile: draftData?.mobileNumber || '',
+          channelName: draftData?.channelNameHi || 'सेटअप अधूरा (Incomplete)',
+          channelLogoUrl: draftData?.channelLogoUrl || '',
+          tier: 'basic',
+          role: 'user',
+          profileIncomplete: true,
+        }),
+      }).catch(() => {});
+    } catch {}
 
     setDetailFullName(draftData?.fullName || name || '');
     setReportingDistrict(draftData?.district || '');
@@ -743,7 +782,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
       // Lock channel details and logo for normal users (One-Time Setup Rule)
       if (!isAdm) {
-        localStorage.setItem("is_channel_profile_locked", "true");
+        safeLocalStorageSet("is_channel_profile_locked", "true");
       }
 
       const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
@@ -751,11 +790,35 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
       const cleanSavedUsername = (username || '').replace(/^@+/, '').trim();
 
+      // Compress channel logo if base64 to prevent localStorage QuotaExceededError
+      let processedLogo = detailChannelLogoUrl || "";
+      if (processedLogo && processedLogo.startsWith('data:image/')) {
+        try {
+          processedLogo = await compressImageBase64(processedLogo, 300, 300, 0.85);
+          try {
+            const upRes = await fetch(getApiUrl('/api/upload-logo'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageBase64: processedLogo, email: activeEmail }),
+            });
+            if (upRes.ok) {
+              const upData = await upRes.json();
+              if (upData?.url) {
+                processedLogo = upData.url;
+              }
+            }
+          } catch {}
+        } catch (compErr) {
+          console.warn('Logo compression error:', compErr);
+        }
+      }
+
       const finalProfile: ChannelProfile = {
         fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
         channelNameHi: detailChannelNameHi.trim() || "AI News Maker App",
         channelNameEn: detailChannelNameEn.trim() || "AI News Maker",
-        channelLogoUrl: detailChannelLogoUrl || "",
+        channelLogoUrl: processedLogo || "",
+        channelLogoPngUrl: processedLogo || "",
         channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
         channelLogoType: detailChannelLogoType,
         socialIcons,
@@ -776,15 +839,17 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         avatarUrl: currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl,
       };
 
-      localStorage.setItem("user_channel_profile", JSON.stringify(finalProfile));
-      localStorage.setItem("reporter_auth_session", JSON.stringify(updatedUser));
-      localStorage.setItem("is_onboarding_completed", "true");
+      safeLocalStorageSet("user_channel_profile", JSON.stringify(finalProfile));
+      safeLocalStorageSet("reporter_auth_session", JSON.stringify(updatedUser));
+      safeLocalStorageSet("is_onboarding_completed", "true");
+      safeLocalStorageRemove("auth_current_step");
+
       if (updatedUser.email) {
         const cleanEmail = updatedUser.email.toLowerCase().trim();
-        localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
-        localStorage.setItem(`terms_accepted_${cleanEmail}`, "true");
-        localStorage.setItem(`onboarding_completed_${cleanEmail}`, "true");
-        localStorage.removeItem(`onboarding_draft_${cleanEmail}`);
+        safeLocalStorageSet(`user_profile_${cleanEmail}`, JSON.stringify(finalProfile));
+        safeLocalStorageSet(`terms_accepted_${cleanEmail}`, "true");
+        safeLocalStorageSet(`onboarding_completed_${cleanEmail}`, "true");
+        safeLocalStorageRemove(`onboarding_draft_${cleanEmail}`);
 
         // Sync permanently to backend /api/user-profile and /api/users/sync
         try {
@@ -809,6 +874,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             websiteUrl: finalProfile.websiteUrl,
             socialIcons: finalProfile.socialIcons,
             tier: isAdm ? 'ultra' : 'basic',
+            profileIncomplete: false,
           };
           await Promise.allSettled([
             fetch(getApiUrl('/api/user-profile'), {
@@ -827,7 +893,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         }
       }
 
-      // Register or update in Admin directory with username explicitly preserved
+      // Register or update in Admin directory with profileIncomplete: false
       registerOrUpdateUser({
         email: updatedUser.email,
         name: updatedUser.name,
@@ -838,9 +904,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         tier: isAdm ? "ultra" : "basic",
         role: updatedUser.role,
         isLocked: !isAdm,
+        profileIncomplete: false,
       });
 
-      onCompleteDetails(finalProfile, updatedUser);
+      try {
+        onCompleteDetails(finalProfile, updatedUser);
+      } catch (cbErr) {
+        console.error('Error in onCompleteDetails callback:', cbErr);
+      }
     } catch (err: any) {
       console.error('Error completing setup:', err);
       setStep2ErrorMsg(err?.message || 'प्रोफ़ाइल सहेजने में त्रुटि हुई। कृपया पुनः प्रयास करें।');

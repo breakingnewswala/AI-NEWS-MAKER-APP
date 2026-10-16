@@ -337,7 +337,7 @@ export function getTemplateHeadlineConfig(templateId?: string): TemplateConfig &
 
 export const DEFAULT_TEMPLATE_PLAN_CONFIGS: Record<string, TemplatePlanConfig> = {
   graphic_001: {
-    allowedPlans: ['BASIC'],
+    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
     isActive: true,
     version: 'v1.0',
   },
@@ -428,6 +428,8 @@ export function isTemplateAvailableForUserPlan(
   isAdmin: boolean = false
 ): boolean {
   if (isAdmin) return true;
+  // Primary Graphic Template (graphic_001) is available for all four user categories (Basic to VIP Desk)
+  if (templateId === 'graphic_001') return true;
   if (templateId === 'custom-png') {
     const userCat = normalizeUserPlanTier(userPlanTier);
     return userCat === 'PRO' || userCat === 'VIP DESK';

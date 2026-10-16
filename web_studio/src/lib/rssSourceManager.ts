@@ -57,7 +57,7 @@ export function getAdminRssSources(): AdminRssSource[] {
 
 export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
   try {
-    const res = await fetch('/api/admin/rss-sources');
+    const res = await fetch(getApiUrl('/api/admin/rss-sources'));
     if (res.ok) {
       const data = await res.json();
       if (data && data.success && Array.isArray(data.sources)) {
@@ -87,11 +87,12 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
   }
 
   // Persist permanently to backend database
-  fetch('/api/admin/rss-sources', {
+  fetch(getApiUrl('/api/admin/rss-sources'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-user-role': 'admin',
+      ...getAdminAuthHeaders(),
     },
     body: JSON.stringify({ sources: cleaned, userRole: 'admin' }),
   })
@@ -143,11 +144,12 @@ export function toggleAdminRssSource(id: string): AdminRssSource[] {
 export function deleteAdminRssSource(id: string): AdminRssSource[] {
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
-  fetch(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`, {
+  fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
       'x-user-role': 'admin',
+      ...getAdminAuthHeaders(),
     },
     body: JSON.stringify({ userRole: 'admin' }),
   }).catch(() => {});
@@ -157,10 +159,15 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
   return list;
 }
 
+import { getApiUrl, getAuthHeaders } from './apiConfig';
 import type { NewsFeedPost } from '../data/newsFeedData';
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
 const STORAGE_KEY_APPROVED_RSS_IDS = 'ai_news_approved_rss_post_ids_v1';
+
+export function getAdminAuthHeaders(): Record<string, string> {
+  return getAuthHeaders();
+}
 
 export function getApprovedRssIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -173,55 +180,128 @@ export function getApprovedRssIds(): Set<string> {
 
 export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
   if (!post) return false;
-  // Non-RSS items (e.g. manual news, web- links) are considered approved
-  if (!post.id || !post.id.startsWith('rss-')) return true;
   if (post.status === 'APPROVED') return true;
-  const set = approvedIds || getApprovedRssIds();
-  return set.has(post.id);
+  if (post.status === 'REJECTED') return false;
+  if (approvedIds && post.id && approvedIds.has(post.id)) return true;
+  if (!post.id?.startsWith('rss-') && post.status !== 'PENDING_APPROVAL') return true;
+  return false;
 }
 
-export function approveRssPost(postId: string): void {
-  if (typeof window === 'undefined') return;
+export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
   try {
     const approved = getApprovedRssIds();
     approved.add(postId);
     localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
 
     // Update locally cached synced RSS posts
-    const cached = getSyncedRssNewsPostsRaw();
+    const cached = getActiveRssNewsPosts();
+    const target = postData || cached.find((p) => p.id === postId);
     const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'APPROVED' as const } : p));
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
 
-    // Call server to persist approval in news database
-    fetch(`/api/admin/approve-news/${encodeURIComponent(postId)}`, { method: 'POST' }).catch(() => {
-      fetch(`/api/news-posts/${encodeURIComponent(postId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'APPROVED' }),
-      }).catch(() => {});
+    // Call server with verified API URL, Admin headers and full post data
+    const url = getApiUrl(`/api/admin/approve-news/${encodeURIComponent(postId)}`);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(target || {}),
     });
 
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+    return res.ok;
   } catch (e) {
     console.error('Error approving RSS post:', e);
+    return false;
   }
 }
 
-export function getSyncedRssNewsPostsRaw(): NewsFeedPost[] {
+export async function rejectRssPost(postId: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const approved = getApprovedRssIds();
+    approved.delete(postId);
+    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+
+    const cached = getActiveRssNewsPosts();
+    const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'REJECTED' as const } : p));
+    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+
+    const url = getApiUrl(`/api/admin/reject-news/${encodeURIComponent(postId)}`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+    });
+
+    window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+    return res.ok;
+  } catch (e) {
+    console.error('Error rejecting RSS post:', e);
+    return false;
+  }
+}
+
+export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
+  if (typeof window === 'undefined') return new Set();
+  const localApproved = getApprovedRssIds();
+  const adminHeaders = getAdminAuthHeaders();
+
+  // If client has local approved IDs and admin Bearer token, migrate them safely to server
+  if (localApproved.size > 0 && adminHeaders['Authorization']) {
+    try {
+      const url = getApiUrl('/api/admin/migrate-approvals');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({ approvedIds: Array.from(localApproved) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.approvedIds)) {
+          const authoritative = new Set<string>(data.approvedIds);
+          localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
+          return authoritative;
+        }
+      }
+    } catch {}
+  }
+
+  // Fetch authoritative approved IDs from server
+  try {
+    const url = getApiUrl('/api/admin/approved-news-ids');
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.approvedIds)) {
+        const authoritative = new Set<string>(data.approvedIds);
+        localApproved.forEach((id) => authoritative.add(id));
+        localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
+        return authoritative;
+      }
+    }
+  } catch {}
+
+  return localApproved;
+}
+
+export function getActiveRssNewsPosts(): NewsFeedPost[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
   } catch {}
   return [];
-}
-
-export function getActiveRssNewsPosts(): NewsFeedPost[] {
-  return getSyncedRssNewsPostsRaw();
 }
 
 export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
@@ -238,7 +318,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
       }
       return {
         ...p,
-        status: 'APPROVED' as const,
+        status: (p.status || 'APPROVED') as any,
       };
     });
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(normalized));
@@ -249,12 +329,17 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
 
 export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {
   try {
-    const res = await fetch('/api/admin/rss-sync', { method: 'POST' });
+    const syncUrl = getApiUrl('/api/admin/rss-sync');
+    const res = await fetch(syncUrl, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+    });
     if (res.ok) {
       const data = await res.json();
       // Fetch latest production posts from /api/news-posts to update active synced feed
       try {
-        const postsRes = await fetch('/api/news-posts');
+        const postsUrl = getApiUrl('/api/news-posts');
+        const postsRes = await fetch(postsUrl);
         if (postsRes.ok) {
           const rawPosts = await postsRes.json();
           const postsList = Array.isArray(rawPosts) ? rawPosts : (rawPosts?.posts || []);
@@ -267,7 +352,6 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
         }
       } catch {}
 
-
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
         window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
@@ -275,10 +359,10 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
       return { success: true, totalNewItems: data.count || data.totalNewItems || 0 };
     }
   } catch (err: any) {
+    console.warn('Live RSS sync error:', err);
     return { success: false, error: err?.message || 'सिंक त्रुटि' };
   }
-
-  return { success: true, totalNewItems: 0 };
+  return { success: false, error: 'सिंक विफल रहा' };
 }
 
 
@@ -345,17 +429,4 @@ export function deleteSavedNewsChannel(channelName: string): string[] {
     window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: updated }));
   }
   return updated;
-}
-
-export async function syncAndMigrateLocalApprovals(): Promise<void> {
-  if (typeof window === 'undefined') return;
-  try {
-    const approvedIds = Array.from(getApprovedRssIds());
-    if (approvedIds.length === 0) return;
-    await fetch('/api/admin/bulk-approve-news', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: approvedIds }),
-    }).catch(() => {});
-  } catch {}
 }

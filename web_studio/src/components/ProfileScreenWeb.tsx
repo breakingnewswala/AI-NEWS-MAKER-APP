@@ -2683,10 +2683,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
-                        <span>🪙</span>
-                        <span>{walletData?.coinBalance ?? 0} Coins</span>
-                      </span>
                       {subscription.hasActivePaidPlan ? (
                         <span className="px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-xs">
                           सक्रिय
@@ -2700,23 +2696,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         <span className="px-2 py-0.5 bg-emerald-950/90 border border-emerald-700 text-emerald-400 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                           <span>सक्रिय</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Wallet Quick Summary in Trial Box */}
-                  <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-2 flex items-center justify-between text-xs">
-                    <span className="text-slate-300 font-bold flex items-center gap-1">
-                      <span>🪙</span>
-                      <span>रिवॉर्ड्स वॉलेट:</span>
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-black text-amber-300 text-xs sm:text-sm">{walletData?.coinBalance ?? 0}</span>
-                      <span className="text-[10px] text-slate-400">कॉइन्स</span>
-                      {walletData?.pendingCoins > 0 && (
-                        <span className="text-[9.5px] text-yellow-300 bg-yellow-950/80 px-1.5 py-0.5 rounded border border-yellow-700/60 font-bold">
-                          +{walletData.pendingCoins} पेंडिंग
                         </span>
                       )}
                     </div>
@@ -2955,7 +2934,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               )}
             </div>
 
-            {/* OPTION 3: रिवॉर्ड्स व पॉइंट्स वॉलेट (Rewards & Points Wallet) */}
+            {/* OPTION 3: रिवॉर्ड्स व पॉइंट्स वॉलेट (Rewards & Points Wallet - Non-Admin Users Only) */}
+            {!isAdmin && (
             <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'rewards_wallet' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
@@ -2964,12 +2944,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                    <span>3</span>
+                    <span>🪙</span>
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm sm:text-base font-black text-white block truncate">
-                        3. रिवॉर्ड्स व पॉइंट्स वॉलेट
+                      <span className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 truncate">
+                        <Coins className="w-4 h-4 text-amber-400 shrink-0 inline" />
+                        <span>3. रिवॉर्ड्स व पॉइंट्स वॉलेट</span>
                       </span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
                         Rewards Wallet
@@ -3083,27 +3064,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
 
                   {/* 3. HOW TO CLAIM DIRECTLY */}
-                  <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/40 border border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="space-y-1 text-center sm:text-left">
-                      <h4 className="text-sm font-black text-white flex items-center justify-center sm:justify-start gap-2">
+                  <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/40 border border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-lg">
+                    <div className="space-y-1.5 text-left">
+                      <h4 className="text-sm font-black text-white flex items-center gap-2">
                         <Coins className="w-4 h-4 text-amber-400" />
                         <span>बोनस रिवॉर्ड क्लेम करने की प्रक्रिया</span>
                       </h4>
-                      <p className="text-xs text-slate-300">
-                        होम फ़ीड पर उपलब्ध बोनस खबरों का ग्राफिक डाउनलोड करें और सीधे <strong>'अपना बोनस क्लेम करें'</strong> बटन पर क्लिक करके 1 से 3 स्क्रीनशॉट अपलोड करें।
+                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                        होम फीड पर उपलब्ध बोनस खबरों का ग्राफिक डाउनलोड करें और सीधे उसे अपने सोशल मीडिया पर शेयर करें। उसके पश्चात उस ग्राफिक कार्ड में ‘बोनस क्लेम’ पर क्लिक करके वहाँ स्क्रीनशॉट शेयर करें और अपना बोनस क्लेम करें।
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== 'undefined') {
-                          window.dispatchEvent(new CustomEvent('ai_news_switch_tab', { detail: { tab: 'home' } }));
-                        }
-                      }}
-                      className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition active:scale-95 shrink-0 cursor-pointer"
-                    >
-                      होम फ़ीड पर जाएं
-                    </button>
                   </div>
 
                   {/* 4. SUBMITTED CLAIMS STATUS HISTORY */}
@@ -3259,6 +3229,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* OPTION FOR PRO / VIP / ADMIN: टेम्प्लेट व कस्टम फ्रेम्स मैनेजर */}
             {canAccessTemplateManager(currentUser) && (

@@ -13,6 +13,7 @@ import {
   UserCheck,
   FileSpreadsheet,
   Smartphone,
+  Coins,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import {
@@ -104,6 +105,34 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       window.removeEventListener('ai_news_notification_permission_changed', handleUpdate);
     };
   }, [currentUser?.email]);
+
+  // Wallet Coin Balance for Non-Admin Users
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  useEffect(() => {
+    if (isAdminUser) return;
+    const fetchBalance = () => {
+      const email = currentUser?.email || '';
+      if (!email) return;
+      fetch(`/api/wallet?email=${encodeURIComponent(email)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success && data?.wallet) {
+            setWalletBalance(data.wallet.coinBalance ?? 0);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 12000);
+    const handleWalletEvent = () => fetchBalance();
+    window.addEventListener('ai_news_wallet_updated', handleWalletEvent);
+    window.addEventListener('focus', handleWalletEvent);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('ai_news_wallet_updated', handleWalletEvent);
+      window.removeEventListener('focus', handleWalletEvent);
+    };
+  }, [currentUser?.email, isAdminUser]);
 
   // Format plan name for display
   const planDisplay = React.useMemo(() => {
@@ -215,10 +244,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
                     {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
                   </span>
-                  <span className="text-slate-600">•</span>
-                  <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[9px] font-black rounded whitespace-nowrap shadow-xs">
-                    {planDisplay === 'Admin' ? 'एडमिन' : planDisplay}
-                  </span>
                 </div>
               </div>
             </div>
@@ -280,20 +305,25 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-            {/* Install PWA Button on Web - Visible on Mobile and Desktop */}
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('open_pwa_install_modal'));
-                }
-              }}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 shrink-0"
-              title="वेब ऐप को होम स्क्रीन पर जोड़ें"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-              <span>ऐप जोड़ें</span>
-            </button>
+            {/* Wallet Coin Balance Button for Non-Admin Users */}
+            {!isAdminUser && (
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigateToTab('profile');
+                  if (typeof window !== 'undefined') {
+                    window.location.hash = 'profile';
+                    window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
+                  }
+                }}
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-500/40 font-bold rounded-xl text-xs shadow-xs transition cursor-pointer shrink-0"
+                title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
+              >
+                <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="font-mono font-black">{walletBalance}</span>
+                <span className="text-[10px] hidden sm:inline">कॉइन्स</span>
+              </button>
+            )}
 
             {/* Refresh Button - Hidden on Control Panel, Studio, and Newsroom (Part H) */}
             {!isControlPanel && currentTab !== 'studio' && currentTab !== 'newsroom' && (
@@ -303,7 +333,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 title="फ़ीड रीफ्रेश करें"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-                <span>↻ रिफ्रेश</span>
+                <span>रिफ्रेश</span>
               </button>
             )}
 
