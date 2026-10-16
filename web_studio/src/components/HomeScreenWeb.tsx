@@ -344,8 +344,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email)}`));
         if (uRes.ok) {
           const uData = await uRes.json();
-          if (uData.items && Array.isArray(uData.items)) {
-            const newsUnlocked = uData.items.filter((it: any) => it.itemType === 'news').map((it: any) => it.itemId);
+          const rawItems = uData.unlockedItems || uData.unlockedList || (Array.isArray(uData.items) ? uData.items.map((it: any) => typeof it === 'string' ? it : it.itemId) : []);
+          if (Array.isArray(rawItems) && rawItems.length > 0) {
+            const newsUnlocked = rawItems.filter((id: string) => typeof id === 'string' && !id.startsWith('vid'));
             setUnlockedNewsIds((prev) => {
               const updated = new Set([...Array.from(prev), ...newsUnlocked]);
               try {
@@ -358,6 +359,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       } catch {}
     };
     fetchWalletAndUnlocks();
+
+    const handleWalletUpdated = () => fetchWalletAndUnlocks();
+    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
+    window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
+    window.addEventListener('focus', handleWalletUpdated);
+
+    return () => {
+      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
+      window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
+      window.removeEventListener('focus', handleWalletUpdated);
+    };
   }, [currentUser?.email]);
 
   const markBonusNewsClaimed = (newsId: string) => {

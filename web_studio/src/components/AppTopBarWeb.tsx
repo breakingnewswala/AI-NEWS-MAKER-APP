@@ -107,7 +107,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     };
   }, [currentUser?.email]);
 
-  // Wallet Coin Balance for Non-Admin Users
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isWalletLoading, setIsWalletLoading] = useState<boolean>(true);
