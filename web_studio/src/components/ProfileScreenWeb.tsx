@@ -2627,6 +2627,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
           const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
           const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+          const displayEmail = currentUser?.email || (effectiveUser?.email && !effectiveUser.email.includes('editor@ainewsmaker') ? effectiveUser.email : (cleanEmail && !cleanEmail.includes('editor@ainewsmaker') ? cleanEmail : ''));
           const effectiveAvatarLogo =
             channelProfile.channelLogoPngUrl ||
             (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) ||

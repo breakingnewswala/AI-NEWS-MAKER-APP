@@ -2074,23 +2074,66 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
 });
 app.post("/api/upload-logo", (req, res) => {
   try {
-    const { imageBase64, mimeType = "image/png" } = req.body || {};
-    if (!imageBase64) {
+    const rawData = req.body?.dataUrl || req.body?.imageBase64 || "";
+    if (!rawData || typeof rawData !== "string") {
       return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-    const ext = mimeType.includes("gif") ? "gif" : mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
+    const mimeType = (req.body?.mimeType || req.body?.logoType || "").toLowerCase();
+    const isGif = mimeType.includes("gif") || rawData.startsWith("data:image/gif");
+    const ext = isGif ? "gif" : mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
     const filename = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const cleanBase64 = rawData.replace(/^data:image\/\w+;base64,/, "");
+    const buf = Buffer.from(cleanBase64, "base64");
     const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
-    const buf = Buffer.from(cleanBase64, "base64");
     import_fs.default.writeFileSync(filePath, buf);
     try {
       import_fs.default.writeFileSync(webFilePath, buf);
     } catch {
     }
-    const url = `/uploads/logos/${filename}`;
-    return res.json({ success: true, url });
+    try {
+      const distLogoDir = import_path.default.join(process.cwd(), "dist", "uploads", "logos");
+      import_fs.default.mkdirSync(distLogoDir, { recursive: true });
+      import_fs.default.writeFileSync(import_path.default.join(distLogoDir, filename), buf);
+    } catch {
+    }
+    const logoUrl = `/uploads/logos/${filename}`;
+    const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
+    if (userOrEmail) {
+      const allProfiles = loadProfilesDatabase();
+      let targetKey = "";
+      if (allProfiles[userOrEmail]) {
+        targetKey = userOrEmail;
+      } else {
+        const cleanE = userOrEmail.replace(/\s+/g, "");
+        for (const k of Object.keys(allProfiles)) {
+          const p = allProfiles[k];
+          const pEmail = (p.email || "").toLowerCase().replace(/\s+/g, "");
+          const pUser = (p.username || "").toLowerCase().trim();
+          if (pEmail === cleanE || pUser === userOrEmail) {
+            targetKey = k;
+            break;
+          }
+        }
+      }
+      if (targetKey && allProfiles[targetKey]) {
+        if (isGif) {
+          allProfiles[targetKey].channelLogoGifUrl = logoUrl;
+          allProfiles[targetKey].channelLogoType = "gif";
+        } else {
+          allProfiles[targetKey].channelLogoPngUrl = logoUrl;
+          allProfiles[targetKey].channelLogoType = "png";
+          allProfiles[targetKey].channelLogoUrl = logoUrl;
+        }
+        allProfiles[targetKey].updatedAt = Date.now();
+        saveProfilesDatabase(allProfiles);
+        try {
+          registerOrUpdateUserAuthoritative(allProfiles[targetKey]);
+        } catch {
+        }
+      }
+    }
+    return res.json({ success: true, url: logoUrl, logoUrl, logoType: isGif ? "gif" : "png" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -4900,65 +4943,6 @@ app.delete("/api/admin/raw-news/:id", (req, res) => {
     all = all.filter((r) => r.id !== id);
     saveRawNewsDatabase(all);
     return res.json({ success: true, rawNews: all });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.post("/api/upload-logo", enforceUserAccessMiddleware, (req, res) => {
-  try {
-    const { dataUrl, logoType, username } = req.body;
-    if (!dataUrl || typeof dataUrl !== "string") {
-      return res.status(400).json({ error: "Missing dataUrl" });
-    }
-    const isGif = logoType === "gif" || dataUrl.startsWith("data:image/gif");
-    const ext = isGif ? "gif" : "png";
-    const filename = `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
-    const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
-    const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
-    import_fs.default.writeFileSync(filePath, buffer);
-    try {
-      import_fs.default.writeFileSync(webFilePath, buffer);
-    } catch {
-    }
-    const logoUrl = `/uploads/logos/${filename}`;
-    const userOrEmail = (username || req.body.email || "").trim().toLowerCase();
-    if (userOrEmail) {
-      const allProfiles = loadProfilesDatabase();
-      let targetKey = "";
-      if (allProfiles[userOrEmail]) {
-        targetKey = userOrEmail;
-      } else {
-        const cleanE = userOrEmail.replace(/\s+/g, "");
-        for (const k of Object.keys(allProfiles)) {
-          const p = allProfiles[k];
-          const pEmail = (p.email || "").toLowerCase().replace(/\s+/g, "");
-          const pUser = (p.username || "").toLowerCase().trim();
-          if (pEmail === cleanE || pUser === userOrEmail) {
-            targetKey = k;
-            break;
-          }
-        }
-      }
-      if (targetKey && allProfiles[targetKey]) {
-        if (isGif) {
-          allProfiles[targetKey].channelLogoGifUrl = logoUrl;
-          allProfiles[targetKey].channelLogoType = "gif";
-        } else {
-          allProfiles[targetKey].channelLogoPngUrl = logoUrl;
-          allProfiles[targetKey].channelLogoType = "png";
-          allProfiles[targetKey].channelLogoUrl = logoUrl;
-        }
-        allProfiles[targetKey].updatedAt = Date.now();
-        saveProfilesDatabase(allProfiles);
-        try {
-          registerOrUpdateUserAuthoritative(allProfiles[targetKey]);
-        } catch {
-        }
-      }
-    }
-    return res.json({ success: true, logoUrl, logoType: isGif ? "gif" : "png" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
