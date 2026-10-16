@@ -731,7 +731,14 @@ app.get("/api/news-posts", (req, res) => {
     const expiresAt = p.expiresAt || (postTime + THREE_DAYS_MS);
     if (now > expiresAt) return false;
 
-    // 3. RSS workflow: Pending Approval news is visible ONLY to Admin/Master Admin
+    // 3. Strict RSS & Web Workflow: News fetched from RSS feeds or web sources MUST be explicitly approved by Admin.
+    // If not approved, or if status is PENDING_APPROVAL / unapproved, it is strictly visible ONLY to Admin/Master Admin!
+    const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+    if (isFeedSource && p.status !== "APPROVED") {
+      if (role !== "admin" && role !== "superadmin" && !includePending) {
+        return false;
+      }
+    }
     if (p.status === "PENDING_APPROVAL" && role !== "admin" && role !== "superadmin" && !includePending) {
       return false;
     }
@@ -3777,7 +3784,7 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
       timestamp,
       fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
       location: editorial.location || "विशेष डेस्क",
-      status: "APPROVED",
+      status: "PENDING_APPROVAL",
     });
   }
 
@@ -3911,7 +3918,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       timestamp: Date.now(),
       fullContent: `${editorial.title}\n\n${editorial.summary}\n\nवेब लिंक स्रोतः ${source.url}`,
       location: editorial.location || "वेब डेस्क",
-      status: "APPROVED",
+      status: "PENDING_APPROVAL",
     }];
   } catch (err: any) {
     console.error(`Error fetching web link ${source.url}:`, err.message);

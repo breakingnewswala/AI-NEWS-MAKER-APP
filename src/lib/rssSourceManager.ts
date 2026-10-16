@@ -280,11 +280,14 @@ export function getApprovedRssIds(): Set<string> {
 
 export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
   if (!post) return false;
-  if (post.status === 'APPROVED') return true;
   if (post.status === 'REJECTED') return false;
+  if (post.status === 'APPROVED') return true;
   if (approvedIds && post.id && approvedIds.has(post.id)) return true;
-  if (!post.id?.startsWith('rss-') && post.status !== 'PENDING_APPROVAL') return true;
-  return false;
+  const isFeedSource = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
+  if (isFeedSource) {
+    return false; // RSS/Web feeds MUST be approved by Admin
+  }
+  return post.status !== 'PENDING_APPROVAL';
 }
 
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {

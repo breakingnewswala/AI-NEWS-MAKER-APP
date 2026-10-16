@@ -900,7 +900,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   }, [combinedPosts, canModerate, approvedRssIds]);
 
   const pendingRssCount = useMemo(() => {
-    return combinedPosts.filter((p) => p.id && p.id.startsWith('rss-') && !isRssPostApproved(p, approvedRssIds)).length;
+    return combinedPosts.filter((p) => p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')) && !isRssPostApproved(p, approvedRssIds)).length;
   }, [combinedPosts, approvedRssIds]);
 
   const publishedCount = useMemo(() => {
@@ -914,21 +914,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Filter posts from combined feed (Admin Date, Channel, Pending News, Published News, Bonus News & Dynamic Category Filters)
   const filteredPosts = useMemo(() => {
     return combinedPosts.filter((p) => {
-      // 1. Normal users cannot see unapproved RSS items (web- links & regular posts bypass directly)
+      // 1. Normal users cannot see unapproved RSS/Web feed items
       if (!canModerate && !isRssPostApproved(p, approvedRssIds)) {
         return false;
       }
 
-      // 2. Admin Pending News Filter: show ONLY unapproved RSS items
+      // 2. Admin Pending News Filter: show ONLY unapproved RSS/Web items
       if (canModerate && adminPendingOnly) {
-        if (!p.id || !p.id.startsWith('rss-') || isRssPostApproved(p, approvedRssIds)) {
+        if (!p.id || (!p.id.startsWith('rss-') && !p.id.startsWith('web-')) || isRssPostApproved(p, approvedRssIds)) {
           return false;
         }
       }
 
       // 2b. Admin Published News Filter: show ONLY published/approved items
       if (canModerate && adminPublishedOnly) {
-        if (p.id && p.id.startsWith('rss-') && !isRssPostApproved(p, approvedRssIds)) {
+        if (p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')) && !isRssPostApproved(p, approvedRssIds)) {
           return false;
         }
       }
@@ -1478,7 +1478,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               <span>वेबसाइट पर जाएँ</span>
                             </a>
                           )}
-                          {post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                          {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1776,8 +1776,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </label>
 
                       <div className="flex items-center gap-1 flex-wrap">
-                        {/* 0. RSS Approval Button if pending */}
-                        {post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                        {/* 0. RSS/Web Approval Button if pending */}
+                        {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1971,10 +1971,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.categoryName}
                         </span>
 
-                        {/* Pending RSS Badge */}
-                        {canModerate && post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
+                        {/* Pending RSS/Web Badge */}
+                        {canModerate && (post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                           <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
-                            ⏳ लंबित RSS
+                            ⏳ लंबित फ़ीड/RSS
                           </span>
                         )}
                       </div>

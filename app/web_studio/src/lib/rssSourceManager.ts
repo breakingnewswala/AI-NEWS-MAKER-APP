@@ -138,11 +138,14 @@ export function getApprovedRssIds(): Set<string> {
 }
 
 export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
-  // Web links and internal posts bypass the approval queue
-  if (!post.id || !post.id.startsWith('rss-')) return true;
+  if (!post) return false;
+  if (post.status === 'REJECTED') return false;
   if (post.status === 'APPROVED') return true;
   const set = approvedIds || getApprovedRssIds();
-  return set.has(post.id);
+  if (post.id && set.has(post.id)) return true;
+  const isFeedSource = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
+  if (isFeedSource) return false;
+  return post.status !== 'PENDING_APPROVAL';
 }
 
 export function approveRssPost(postId: string): void {

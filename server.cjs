@@ -1426,6 +1426,12 @@ app.get("/api/news-posts", (req, res) => {
     const postTime = p.timestamp || now;
     const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
     if (now > expiresAt) return false;
+    const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+    if (isFeedSource && p.status !== "APPROVED") {
+      if (role !== "admin" && role !== "superadmin" && !includePending) {
+        return false;
+      }
+    }
     if (p.status === "PENDING_APPROVAL" && role !== "admin" && role !== "superadmin" && !includePending) {
       return false;
     }
@@ -3947,7 +3953,7 @@ ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
       location: editorial.location || "\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915",
-      status: "APPROVED"
+      status: "PENDING_APPROVAL"
     });
   }
   return posts;
@@ -4050,7 +4056,7 @@ ${editorial.summary}
 
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
       location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915",
-      status: "APPROVED"
+      status: "PENDING_APPROVAL"
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
