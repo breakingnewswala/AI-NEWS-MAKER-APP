@@ -1,5 +1,5 @@
 import { AIAnalysisResult } from '../types';
-import { cleanHeadlineText } from './speakerUtils';
+import { cleanHeadlineText, cleanLocationField, detectDistrictAndState, formatDistrictWithState } from './speakerUtils';
 import { TemplateConfig, getGraphicTemplateConfig } from './graphicTemplatesRegistry';
 
 export type HeadlineTemplateMeta = Partial<TemplateConfig> | {
@@ -106,33 +106,22 @@ export function processNewsLocally(
     extractedContent = contentMatch[1].trim();
   }
 
-  // 3. Detect genuine location
-  const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ''}`;
-  let detectedLocation = '';
-
-  if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
-    detectedLocation = 'वाशिंगटन';
-  } else if (/संसद|सुप्रीम कोर्ट|नई दिल्ली|केंद्र सरकार|राष्ट्रपति भवन|निर्वाचन आयोग|आरबीआई|भारत सरकार|राजधानी दिल्ली|national/i.test(fullCorpus)) {
-    detectedLocation = 'नई दिल्ली';
-  } else {
-    const indianLocations = [
-      'शहडोल', 'रीवा', 'सीधी', 'सतना', 'भोपाल', 'इंदौर', 'जबलपुर', 'ग्वालियर', 'उज्जैन',
-      'सागर', 'छतरपुर', 'दमोह', 'कटनी', 'मंडला', 'डिंडोरी', 'अनूपपुर', 'उमरिया', 'सिंगरौली',
-      'निवाड़ी', 'टीकमगढ़', 'जयपुर', 'जोधपुर', 'उदयपुर', 'लखनऊ', 'वाराणसी', 'कानपुर', 'गोरखपुर',
-      'प्रयागराज', 'पटना', 'मुजफ्फरपुर', 'रांची', 'मुंबई', 'पुणे', 'नागपुर', 'अहमदाबाद', 'सूरत',
-      'चंडीगढ़', 'देहरादून', 'रायपुर', 'बिलासपुर', 'मध्य प्रदेश', 'उत्तर प्रदेश', 'बिहार', 'राजस्थान'
-    ];
-    for (const loc of indianLocations) {
-      if (fullCorpus.includes(loc)) {
-        detectedLocation = loc;
-        break;
-      }
+  // 3. Detect genuine location using district-to-state mapping
+  let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent, targetUrl);
+  if (!detectedLocation) {
+    const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ''}`;
+    if (/अमेरिका|वाशिंगटन|व्हाइट हाउस|रूस|मास्को/i.test(fullCorpus)) {
+      detectedLocation = 'वाशिंगटन';
+    } else if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट)/i.test(fullCorpus)) {
+      detectedLocation = 'नई दिल्ली';
     }
   }
+  detectedLocation = cleanLocationField(detectedLocation);
 
   // 4. Detect Category
   let category = 'ताज़ा समाचार';
   const categories: string[] = ['ताज़ा'];
+  const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ''}`;
   if (/आईटी|टेक|ग्रीन कार्ड|वीजा|कंपनियों|टाटा|विप्रो|इंफोसिस|शेयर|बाजार|सेंसेक्स|अर्थव्यवस्था|बैंक|रुपया|डॉलर|कारोबार|tech|business/i.test(fullCorpus)) {
     category = 'कारोबार';
     categories.push('बिजनेस', 'वैश्विक बाजार');
@@ -153,44 +142,78 @@ export function processNewsLocally(
     categories.push('ताज़ा समाचार');
   }
 
-  // 5. Build 4 FULL-SIZED, RICH HEADLINE OPTIONS (12-22 words each)
-  // Ensure no location or category is prepended or appended automatically
-  const baseSubject = cleanHeadlineText(extractedTitle) || 'महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला';
-  const cleanSubjectWords = baseSubject.split(/\s+/).filter(Boolean);
+  // Helper for sentence extraction with abbreviation protection
+  function extractSafeSentences(text: string): string[] {
+    if (!text) return [];
+    const cleanText = text
+      .replace(/(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]|दैनिक भास्कर[,\s]*[^\n।]+[।\n]|अमर उजाला[,\s]*[^\n।]+[।\n]|पत्रिका[,\s]*[^\n।]+[।\n])/gi, ' ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, ' ')
+      .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, ' ')
+      .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-  let opt1 = baseSubject;
-  if (cleanSubjectWords.length > 20) {
-    opt1 = cleanSubjectWords.slice(0, 18).join(' ');
+    const safe = cleanText
+      .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, '$1#DOT#')
+      .replace(/([A-Za-z])\./g, '$1#DOT#');
+
+    return safe
+      .split(/[।\n]+|\.\s+/)
+      .map((s) => s.replace(/#DOT#/g, '.').trim())
+      .filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s));
   }
 
+  const allSentences = extractSafeSentences(`${extractedDesc} ${extractedContent} ${clean}`);
+
+  // 5. Build EXACTLY 5 Distinct Journalistic Headlines
+  // विकल्प 1: मुख्य समाचार (Direct event/action)
+  // विकल्प 2: सवाल उठाने वाला समाचार (Factual inquiry)
+  // विकल्प 3: उत्सुकता पैदा करने वाला समाचार (Curiosity/key revelation)
+  // विकल्प 4: महत्वपूर्ण तथ्य या असर (Action/decision/statement)
+  // विकल्प 5: वैकल्पिक समाचार कोण (Public impact/alternative angle)
+  const baseSubject = cleanHeadlineText(extractedTitle) || 'महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला';
+
+  let opt1 = baseSubject;
   let opt2 = '';
   let opt3 = '';
   let opt4 = '';
+  let opt5 = '';
 
-  if (category === 'कारोबार' || /ग्रीन कार्ड|आईटी|टाटा|विप्रो|इंफोसिस|ट्रम्प/i.test(fullCorpus)) {
-    opt1 = opt1.length > 30 ? opt1 : 'ग्रीन कार्ड नियमों में बदलाव: प्रमुख टेक कंपनियों के आवेदन निलंबित, उद्योग में हलचल';
-    opt2 = 'भारतीय टेक पेशेवरों के वीज़ा और नियमों में बड़ा फेरबदल, कंपनियों ने शुरू की आंतरिक समीक्षा';
-    opt3 = 'प्रशासन का कड़ा फैसला: वीज़ा प्रक्रियाओं पर तत्काल प्रभाव से रोक, कर्मचारियों में चिंता की लहर';
-    opt4 = 'ग्राउंड रिपोर्ट: वैश्विक टेक उद्योग पर व्यापक असर, आगे की रणनीति को लेकर मंथन जारी';
-  } else if (category === 'हादसा') {
-    opt2 = 'भीषण सड़क हादसे के बाद मौके पर मची चीख-पुकार, घायलों को तुरंत अस्पताल में कराया गया भर्ती';
-    opt3 = 'तेज रफ्तार वाहन अनियंत्रित होकर पलटा, राहत एवं बचाव कार्य युद्धस्तर पर शुरू';
-    opt4 = 'घटनाक्रम के बाद प्रशासन और पुलिस की टीम मौके पर पहुंची, कारणों की गहन जांच के निर्देश';
+  if (category === 'हादसा') {
+    opt1 = baseSubject.length > 25 ? baseSubject : 'सड़क हादसे में बड़ा नुकसान, मौके पर प्रशासनिक अमला व बचाव दल रवाना';
+    opt2 = `${baseSubject}: रफ्तार का कहर या तकनीकी खराबी, सुरक्षा मानकों पर उठे गंभीर सवाल`;
+    opt3 = `${baseSubject}: चीख-पुकार के बीच स्थानीय लोगों ने संभाला मोर्चा, जानिए कैसे बचीं जानें`;
+    opt4 = 'हादसे के बाद प्रशासन का त्वरित एक्शन: घायलों को तुरंत अस्पताल पहुंचाया, जांच के आदेश';
+    opt5 = 'यातायात सुरक्षा और बदहाल सड़कों पर फूटा लोगों का गुस्सा, सख्त नियमों की मांग तेज';
   } else if (category === 'अपराध') {
-    opt2 = 'पुलिस प्रशासन का बड़ा एक्शन, गंभीर मामले में मुख्य आरोपियों को घेराबंदी कर किया गिरफ्तार';
-    opt3 = 'कानून व्यवस्था पर सख्त रुख: पुलिस की ताबड़तोड़ कार्रवाई, अग्रिम वैधानिक प्रक्रिया शुरू';
-    opt4 = 'क्षेत्र में हलचल पैदा करने वाले मामले का हुआ पर्दाफाश, निष्पक्ष जांच के कड़े निर्देश';
+    opt1 = baseSubject.length > 25 ? baseSubject : 'गंभीर मामले में पुलिस का बड़ा एक्शन, मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार';
+    opt2 = `${baseSubject}: सुरक्षा व्यवस्था में कहां हुई चूक, पुलिस कार्रवाई पर उठे सवाल`;
+    opt3 = `${baseSubject}: सीसीटीवी फुटेज और सबूतों से खुला राज, जानिए कैसे सुलझी गुत्थी`;
+    opt4 = 'कानून व्यवस्था पर सख्त रुख: आरोपियों के खिलाफ वैधानिक धाराओं में मुकदमा दर्ज, जेल भेजा';
+    opt5 = 'इलाके में दहशत का माहौल, सुरक्षा बढ़ाने और गश्त तेज करने की मांग को लेकर लोगों में आक्रोश';
   } else if (category === 'राजनीति') {
-    opt2 = 'सियासी गलियारों में बढ़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद राजनीतिक बयानबाजी तेज';
-    opt3 = 'बड़ा राजनीतिक घटनाक्रम: नीतिगत मुद्दों को लेकर सत्ता और विपक्ष आमने-सामने, व्यापक चर्चा';
-    opt4 = 'आगामी रणनीतियों को लेकर दलों की महत्वपूर्ण बैठक संपन्न, नए समीकरणों पर मंथन शुरू';
+    opt1 = baseSubject.length > 25 ? baseSubject : 'सियासी गलियारों में बड़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज';
+    opt2 = `${baseSubject}: क्या आगामी रणनीति में होगा बड़ा बदलाव, राजनीतिक विश्लेषकों के सवाल`;
+    opt3 = `${baseSubject}: बंद कमरे की बैठक में क्या हुआ तय, नए सियासी समीकरणों पर चर्चा गर्म`;
+    opt4 = 'पार्टी नेतृत्व का कड़ा निर्देश: संगठनात्मक मजबूती और जनमुद्दों को लेकर बनाई गई नई कार्ययोजना';
+    opt5 = 'जनता से जुड़े नीतिगत मुद्दों पर सत्ता और विपक्ष आमने-सामने, सड़कों पर उतरने की तैयारी';
+  } else if (category === 'कारोबार') {
+    opt1 = baseSubject.length > 25 ? baseSubject : 'नीतिगत बदलाव से टेक और उद्योग जगत में हलचल, कंपनियों ने शुरू की समीक्षा';
+    opt2 = `${baseSubject}: उद्योग और रोजगार पर कितना पड़ेगा असर, विशेषज्ञों ने उठाए सवाल`;
+    opt3 = `${baseSubject}: नए नियमों के पीछे का असली कारण क्या, वैश्विक बाजार की टिकी नजरें`;
+    opt4 = 'आर्थिक व व्यापारिक असर: प्रमुख कंपनियों के कामकाज पर प्रभाव, उच्चस्तरीय समीक्षा जारी';
+    opt5 = 'निवेशकों और कर्मचारियों में असमंजस, बाजार में आगामी रणनीतियों को लेकर मंथन तेज';
   } else {
-    opt2 = 'महत्वपूर्ण फैसले के बाद प्रशासनिक हलचल तेज, संबंधित विभागों को तत्काल दिशा-निर्देश जारी';
-    opt3 = 'नए नियमों और आदेशों से जनजीवन पर असर, शासन-प्रशासन द्वारा स्थिति पर रखी जा रही नजर';
-    opt4 = 'पूरे मामले को लेकर आमजन और विशेषज्ञों में व्यापक चर्चा, अग्रिम प्रक्रिया तेज करने की मांग';
+    // General News / Hospital / Administration (e.g. Shahdol case)
+    opt1 = baseSubject;
+    opt2 = `${baseSubject}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार`;
+    opt3 = `${baseSubject}: वीडियो सामने आने के बाद खुला पूरा सच, जानिए मौके पर क्या हुआ था`;
+    opt4 = 'लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच के सख्त आदेश, कार्रवाई तय';
+    opt5 = 'स्वास्थ्य व प्रशासनिक सेवाओं की बदहाली पर लोगों का गुस्सा, व्यवस्था में सुधार की उठी मांग';
   }
 
-  const rawOptions = [opt1, opt2, opt3, opt4];
+  const rawOptions = [opt1, opt2, opt3, opt4, opt5];
   const headlineOptions = rawOptions.map((h) => cleanHeadlineText(h).replace(/[।\.\,\!\?\:\-]+$/g, '').trim());
   const headline = headlineOptions[0];
 
@@ -219,33 +242,55 @@ export function processNewsLocally(
     }
   }
 
-  // 6. Detailed 3-Paragraph Summary / Caption based on actual story facts
+  // 6. Generate 3 Captions (Detailed 3-Para, Bullets, Short 2-Para)
   const cleanUsername = (channelUsername || '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
   const userTag = cleanUsername ? `#${cleanUsername}` : '#AINews';
-  const locTag = (detectedLocation || '').replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
+  const locStr = detectedLocation && detectedLocation !== 'विशेष कवरेज' ? detectedLocation : '';
+  const locTag = locStr ? `#${locStr.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News` : '';
   const catTag = category.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
 
-  const tags = [
+  const tagsList = [
     userTag,
-    ...(locTag ? [`#${locTag}News`] : []),
+    ...(locTag ? [locTag] : []),
     '#BreakingNews',
     '#HindiNews',
-    ...(catTag ? [`#${catTag}`] : []),
+    ...(catTag && !locTag.includes(catTag) ? [`#${catTag}`] : []),
+    '#AINewsMaker',
   ];
+  const tagsStr = tagsList.join(' ');
 
-  const summaryPara1 = extractedDesc
-    ? `${headline}। ${extractedDesc}`
-    : `${headline} को लेकर बड़ी और महत्वपूर्ण खबर सामने आई है। ${detectedLocation ? `${detectedLocation} से संबंधित ` : ''}इस घटनाक्रम के बाद व्यापक स्तर पर चर्चा तेज हो गई है।`;
+  const locPrefix = locStr ? `${locStr} में ` : '';
 
-  const summaryPara2 = extractedContent
-    ? extractedContent.slice(0, 350).trim()
-    : `प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार इस पूरे घटनाक्रम के प्रभाव और आगामी परिणामों का गहनता से आकलन किया जा रहा है।`;
+  // Style 1: Detailed (3 full paragraphs)
+  const dPara1 = allSentences[0]
+    ? `${locPrefix}${headline}। ${allSentences[0]}।`
+    : `${locPrefix}${headline} को लेकर बड़ा और गंभीर मामला सामने आया है। प्राप्त जानकारी के अनुसार पूरे घटनाक्रम को लेकर प्रशासनिक स्तर पर हड़कंप मच गया है।`;
 
-  const summaryPara3 = `प्रशासन और संबंधित उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है और अग्रिम आवश्यक कदम उठाए जा रहे हैं।`;
+  const dPara2 = allSentences.slice(1, 4).join('। ') ||
+    'घटना के प्रत्यक्षदर्शियों और सूत्रों के अनुसार मामले में गंभीर लापरवाही सामने आई है। ड्यूटी पर तैनात कर्मियों की कार्यशैली पर सवाल उठ रहे हैं और संबंधित पक्षों द्वारा त्वरित कार्रवाई की मांग की जा रही है।';
 
-  const summary = `${summaryPara1}\n\n${summaryPara2}\n\n${summaryPara3}\n\n${tags.join(' ')}`;
+  const dPara3 = allSentences[4]
+    ? `${allSentences[4]}। मामले में उत्तरदायी अधिकारियों ने निष्पक्ष जांच और आवश्यक कानूनी व प्रशासनिक कार्रवाई के सख्त आदेश दिए हैं।`
+    : 'मामले की गंभीरता को देखते हुए उच्चाधिकारियों ने तुरंत संज्ञान लिया है और अग्रिम वैधानिक व अनुशासनात्मक कार्रवाई के निर्देश जारी कर दिए गए हैं। स्थिति पर नजर रखी जा रही है।';
 
-  const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर${detectedLocation ? ` ${detectedLocation} से` : ''} है। ${headline}। मामले में सभी संबंधित पक्षों की प्रतिक्रिया सामने आ रही है। आइए देखते हैं इस पूरे मामले पर हमारी विस्तृत रिपोर्ट।`;
+  const captionDetailed = `${dPara1}\n\n${dPara2}।\n\n${dPara3}\n\n${tagsStr}`;
+
+  // Style 2: Bullets
+  const bulletItems = allSentences.slice(0, 4).map((s) => `• ${s}`);
+  if (bulletItems.length < 3) {
+    bulletItems.push('• घटनाक्रम के बाद प्रशासनिक व स्थानीय स्तर पर हड़कंप मच गया है');
+    bulletItems.push('• जिम्मेदार अधिकारियों द्वारा मामले की निष्पक्ष जांच शुरू कर दी गई है');
+  }
+  const captionBullets = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${locStr || 'ताज़ा समाचार'}\n\n${bulletItems.join('\n')}\n\nप्रशासनिक अमला मौके की निगरानी कर रहा है और अग्रिम कार्रवाई की जा रही है।\n\n${tagsStr}`;
+
+  // Style 3: Short (2 paragraphs)
+  const sPara1 = `${locPrefix}${headline}। ${allSentences[0] || 'पूरे मामले में प्रशासनिक लापरवाही और संवेदनहीनता को लेकर हड़कंप मच गया है।'}`;
+  const sPara2 = `${allSentences[1] ? `${allSentences[1]}। ` : ''}उत्तरदायी अधिकारियों ने घटना का त्वरित संज्ञान लेते हुए जांच व सख्त कार्रवाई के निर्देश दिए हैं।`;
+  const captionShort = `${sPara1}\n\n${sPara2}\n\n${tagsStr}`;
+
+  const summary = captionDetailed;
+
+  const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर${locStr ? ` ${locStr} से` : ''} है। ${headline}। मामले में सभी संबंधित पक्षों की प्रतिक्रिया सामने आ रही है। आइए देखते हैं इस पूरे मामले पर हमारी विस्तृत रिपोर्ट।`;
 
   return {
     headline: headlineOptions[0],
@@ -254,9 +299,12 @@ export function processNewsLocally(
     formattedHeadline,
     location: detectedLocation,
     summary,
+    captionDetailed,
+    captionBullets,
+    captionShort,
     anchorScript,
     categories,
-    tags,
+    tags: tagsList,
     category,
     suggestedImagePrompt: `Journalistic news press photo depicting ${headline}, realistic news photography, India`,
     isAiGeneratedPhoto: false,

@@ -6624,6 +6624,281 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
   };
 }
 
+// District-State mapping table
+export interface DistrictStateEntry {
+  district: string;
+  state: string;
+  aliases: string[];
+}
+
+export const DISTRICT_STATE_LIST: DistrictStateEntry[] = [
+  // Madhya Pradesh
+  { district: 'शहडोल', state: 'मध्य प्रदेश', aliases: ['shahdol', 'शहडोल'] },
+  { district: 'अनूपपुर', state: 'मध्य प्रदेश', aliases: ['anuppur', 'अनूपपुर'] },
+  { district: 'उमरिया', state: 'मध्य प्रदेश', aliases: ['umaria', 'उमरिया'] },
+  { district: 'सीधी', state: 'मध्य प्रदेश', aliases: ['sidhi', 'सीधी'] },
+  { district: 'सिंगरौली', state: 'मध्य प्रदेश', aliases: ['singrauli', 'सिंगरौली'] },
+  { district: 'रीवा', state: 'मध्य प्रदेश', aliases: ['rewa', 'रीवा'] },
+  { district: 'सतना', state: 'मध्य प्रदेश', aliases: ['satna', 'सतना'] },
+  { district: 'भोपाल', state: 'मध्य प्रदेश', aliases: ['bhopal', 'भोपाल'] },
+  { district: 'इंदौर', state: 'मध्य प्रदेश', aliases: ['indore', 'इंदौर'] },
+  { district: 'जबलपुर', state: 'मध्य प्रदेश', aliases: ['jabalpur', 'जबलपुर'] },
+  { district: 'ग्वालियर', state: 'मध्य प्रदेश', aliases: ['gwalior', 'ग्वालियर'] },
+  { district: 'उज्जैन', state: 'मध्य प्रदेश', aliases: ['ujjain', 'उज्जैन'] },
+  { district: 'सागर', state: 'मध्य प्रदेश', aliases: ['sagar', 'सागर'] },
+  { district: 'छतरपुर', state: 'मध्य प्रदेश', aliases: ['chhatarpur', 'छतरपुर'] },
+  { district: 'दमोह', state: 'मध्य प्रदेश', aliases: ['damoh', 'दमोह'] },
+  { district: 'पन्ना', state: 'मध्य प्रदेश', aliases: ['panna', 'पन्ना'] },
+  { district: 'टीकमगढ़', state: 'मध्य प्रदेश', aliases: ['tikamgarh', 'टीकमगढ़'] },
+  { district: 'निवाड़ी', state: 'मध्य प्रदेश', aliases: ['niwari', 'निवाड़ी'] },
+  { district: 'कटनी', state: 'मध्य प्रदेश', aliases: ['katni', 'कटनी'] },
+  { district: 'मंडला', state: 'मध्य प्रदेश', aliases: ['mandla', 'मंडला'] },
+  { district: 'डिंडोरी', state: 'मध्य प्रदेश', aliases: ['dindori', 'डिंडोरी'] },
+  { district: 'छिंदवाड़ा', state: 'मध्य प्रदेश', aliases: ['chhindwara', 'छिंदवाड़ा'] },
+  { district: 'सिवनी', state: 'मध्य प्रदेश', aliases: ['seoni', 'सिवनी'] },
+  { district: 'बालाघाट', state: 'मध्य प्रदेश', aliases: ['balaghat', 'बालाघाट'] },
+  { district: 'बैतूल', state: 'मध्य प्रदेश', aliases: ['betul', 'बैतूल'] },
+  { district: 'हरदा', state: 'मध्य प्रदेश', aliases: ['harda', 'हरदा'] },
+  { district: 'होशंगाबाद', state: 'मध्य प्रदेश', aliases: ['hoshangabad', 'नर्मदापुरम', 'narmadapuram'] },
+  { district: 'रायसेन', state: 'मध्य प्रदेश', aliases: ['raisen', 'रायसेन'] },
+  { district: 'विदिशा', state: 'मध्य प्रदेश', aliases: ['vidisha', 'विदिशा'] },
+  { district: 'सीहोर', state: 'मध्य प्रदेश', aliases: ['sehore', 'सीहोर'] },
+  { district: 'राजगढ़', state: 'मध्य प्रदेश', aliases: ['rajgarh', 'राजगढ़'] },
+  { district: 'शाजापुर', state: 'मध्य प्रदेश', aliases: ['shajapur', 'शाजापुर'] },
+  { district: 'आगर मालवा', state: 'मध्य प्रदेश', aliases: ['agar', 'आगर'] },
+  { district: 'देवास', state: 'मध्य प्रदेश', aliases: ['dewas', 'देवास'] },
+  { district: 'रतलाम', state: 'मध्य प्रदेश', aliases: ['ratlam', 'रतलाम'] },
+  { district: 'मंदसौर', state: 'मध्य प्रदेश', aliases: ['mandsaur', 'मंदसौर'] },
+  { district: 'नीमच', state: 'मध्य प्रदेश', aliases: ['neemuch', 'नीमच'] },
+  { district: 'धार', state: 'मध्य प्रदेश', aliases: ['dhar', 'धार'] },
+  { district: 'झाबुआ', state: 'मध्य प्रदेश', aliases: ['jhabua', 'झाबुआ'] },
+  { district: 'अलीराजपुर', state: 'मध्य प्रदेश', aliases: ['alirajpur', 'अलीराजपुर'] },
+  { district: 'बड़वानी', state: 'मध्य प्रदेश', aliases: ['barwani', 'बड़वानी'] },
+  { district: 'खरगोन', state: 'मध्य प्रदेश', aliases: ['khargone', 'खरगोन'] },
+  { district: 'खंडवा', state: 'मध्य प्रदेश', aliases: ['khandwa', 'खंडवा'] },
+  { district: 'बुरहानपुर', state: 'मध्य प्रदेश', aliases: ['burhanpur', 'बुरहानपुर'] },
+  { district: 'भिंड', state: 'मध्य प्रदेश', aliases: ['bhind', 'भिंड'] },
+  { district: 'मुरैना', state: 'मध्य प्रदेश', aliases: ['morena', 'मुरैना'] },
+  { district: 'श्योपुर', state: 'मध्य प्रदेश', aliases: ['sheopur', 'श्योपुर'] },
+  { district: 'शिवपुरी', state: 'मध्य प्रदेश', aliases: ['shivpuri', 'शिवपुरी'] },
+  { district: 'गुना', state: 'मध्य प्रदेश', aliases: ['guna', 'गुना'] },
+  { district: 'अशोकनगर', state: 'मध्य प्रदेश', aliases: ['ashoknagar', 'अशोकनगर'] },
+  { district: 'मैहर', state: 'मध्य प्रदेश', aliases: ['maihar', 'मैहर'] },
+
+  // Uttar Pradesh
+  { district: 'झांसी', state: 'उत्तर प्रदेश', aliases: ['jhansi', 'झांसी'] },
+  { district: 'लखनऊ', state: 'उत्तर प्रदेश', aliases: ['lucknow', 'लखनऊ'] },
+  { district: 'वाराणसी', state: 'उत्तर प्रदेश', aliases: ['varanasi', 'banaras', 'वाराणसी', 'बनारस', 'काशी'] },
+  { district: 'कानपुर', state: 'उत्तर प्रदेश', aliases: ['kanpur', 'कानपुर'] },
+  { district: 'प्रयागराज', state: 'उत्तर प्रदेश', aliases: ['prayagraj', 'allahabad', 'प्रयागराज', 'इलाहाबाद'] },
+  { district: 'गोरखपुर', state: 'उत्तर प्रदेश', aliases: ['gorakhpur', 'गोरखपुर'] },
+  { district: 'आगरा', state: 'उत्तर प्रदेश', aliases: ['agra', 'आगरा'] },
+  { district: 'मथुरा', state: 'उत्तर प्रदेश', aliases: ['mathura', 'मथुरा'] },
+  { district: 'मेरठ', state: 'उत्तर प्रदेश', aliases: ['meerut', 'मेरठ'] },
+  { district: 'बरेली', state: 'उत्तर प्रदेश', aliases: ['bareilly', 'बरेली'] },
+  { district: 'अलीगढ़', state: 'उत्तर प्रदेश', aliases: ['aligarh', 'अलीगढ़'] },
+  { district: 'मुरादाबाद', state: 'उत्तर प्रदेश', aliases: ['moradabad', 'मुरादाबाद'] },
+  { district: 'अयोध्या', state: 'उत्तर प्रदेश', aliases: ['ayodhya', 'faizabad', 'अयोध्या', 'फैजाबाद'] },
+  { district: 'सहारनपुर', state: 'उत्तर प्रदेश', aliases: ['saharanpur', 'सहारनपुर'] },
+  { district: 'नोएडा', state: 'उत्तर प्रदेश', aliases: ['noida', 'नोएडा', 'गौतमबुद्ध नगर'] },
+  { district: 'गाजियाबाद', state: 'उत्तर प्रदेश', aliases: ['ghaziabad', 'गाजियाबाद'] },
+  { district: 'मिर्जापुर', state: 'उत्तर प्रदेश', aliases: ['mirzapur', 'मिर्जापुर'] },
+  { district: 'बांदा', state: 'उत्तर प्रदेश', aliases: ['banda', 'बांदा'] },
+  { district: 'चित्रकूट', state: 'उत्तर प्रदेश', aliases: ['chitrakoot', 'चित्रकूट'] },
+  { district: 'महोबा', state: 'उत्तर प्रदेश', aliases: ['mahoba', 'महोबा'] },
+  { district: 'हमीरपुर', state: 'उत्तर प्रदेश', aliases: ['hamirpur', 'हमीरपुर'] },
+  { district: 'जालौन', state: 'उत्तर प्रदेश', aliases: ['jalaun', 'orai', 'उरई', 'जालौन'] },
+  { district: 'ललितपुर', state: 'उत्तर प्रदेश', aliases: ['lalitpur', 'ललितपुर'] },
+  { district: 'बस्ती', state: 'उत्तर प्रदेश', aliases: ['basti', 'बस्ती'] },
+  { district: 'गोंडा', state: 'उत्तर प्रदेश', aliases: ['gonda', 'गोंडा'] },
+  { district: 'बहराइच', state: 'उत्तर प्रदेश', aliases: ['bahraich', 'बहराइच'] },
+  { district: 'देवरिया', state: 'उत्तर प्रदेश', aliases: ['deoria', 'देवरिया'] },
+  { district: 'बलिया', state: 'उत्तर प्रदेश', aliases: ['ballia', 'बलिया'] },
+  { district: 'आजमगढ़', state: 'उत्तर प्रदेश', aliases: ['azamgarh', 'आजमगढ़'] },
+  { district: 'जौनपुर', state: 'उत्तर प्रदेश', aliases: ['jaunpur', 'जौनपुर'] },
+  { district: 'गाजीपुर', state: 'उत्तर प्रदेश', aliases: ['ghazipur', 'गाजीपुर'] },
+  { district: 'सोनभद्र', state: 'उत्तर प्रदेश', aliases: ['sonbhadra', 'सोनभद्र'] },
+  { district: 'प्रतापगढ़', state: 'उत्तर प्रदेश', aliases: ['pratapgarh', 'प्रतापगढ़'] },
+  { district: 'फतेहपुर', state: 'उत्तर प्रदेश', aliases: ['fatehpur', 'फतेहपुर'] },
+  { district: 'उन्नाव', state: 'उत्तर प्रदेश', aliases: ['unnao', 'उन्नाव'] },
+  { district: 'रायबरेली', state: 'उत्तर प्रदेश', aliases: ['raebareli', 'रायबरेली'] },
+  { district: 'अमेठी', state: 'उत्तर प्रदेश', aliases: ['amethi', 'अमेठी'] },
+  { district: 'सुल्तानपुर', state: 'उत्तर प्रदेश', aliases: ['sultanpur', 'सुल्तानपुर'] },
+  { district: 'सीतापुर', state: 'उत्तर प्रदेश', aliases: ['sitapur', 'सीतापुर'] },
+  { district: 'हरदोई', state: 'उत्तर प्रदेश', aliases: ['hardoi', 'हरदोई'] },
+  { district: 'लखीमपुर खीरी', state: 'उत्तर प्रदेश', aliases: ['lakhimpur', 'लखीमपुर'] },
+  { district: 'शाहजहांपुर', state: 'उत्तर प्रदेश', aliases: ['shahjahanpur', 'शाहजहांपुर'] },
+  { district: 'बुलंदशहर', state: 'उत्तर प्रदेश', aliases: ['bulandshahr', 'बुलंदशहर'] },
+  { district: 'हापुड़', state: 'उत्तर प्रदेश', aliases: ['hapur', 'हापुड़'] },
+  { district: 'मुजफ्फरनगर', state: 'उत्तर प्रदेश', aliases: ['muzaffarnagar', 'मुजफ्फरनगर'] },
+  { district: 'इटावा', state: 'उत्तर प्रदेश', aliases: ['etawah', 'इटावा'] },
+  { district: 'कन्नौज', state: 'उत्तर प्रदेश', aliases: ['kannauj', 'कन्नौज'] },
+
+  // Uttarakhand
+  { district: 'नैनीताल', state: 'उत्तराखंड', aliases: ['nainital', 'नैनीताल'] },
+  { district: 'देहरादून', state: 'उत्तराखंड', aliases: ['dehradun', 'देहरादून'] },
+  { district: 'हरिद्वार', state: 'उत्तराखंड', aliases: ['haridwar', 'हरिद्वार'] },
+  { district: 'अल्मोड़ा', state: 'उत्तराखंड', aliases: ['almora', 'अल्मोड़ा'] },
+  { district: 'ऊधमसिंह नगर', state: 'उत्तराखंड', aliases: ['udhamsingh', 'रुद्रपुर'] },
+  { district: 'पौड़ी गढ़वाल', state: 'उत्तराखंड', aliases: ['pauri', 'पौड़ी'] },
+  { district: 'टिहरी', state: 'उत्तराखंड', aliases: ['tehri', 'टिहरी'] },
+  { district: 'चमोली', state: 'उत्तराखंड', aliases: ['chamoli', 'चमोली'] },
+  { district: 'उत्तरकाशी', state: 'उत्तराखंड', aliases: ['uttarkashi', 'उत्तरकाशी'] },
+  { district: 'पिथौरागढ़', state: 'उत्तराखंड', aliases: ['pithoragarh', 'पिथौरागढ़'] },
+
+  // Bihar
+  { district: 'पटना', state: 'बिहार', aliases: ['patna', 'पटना'] },
+  { district: 'गया', state: 'बिहार', aliases: ['gaya', 'गया'] },
+  { district: 'मुजफ्फरपुर', state: 'बिहार', aliases: ['muzaffarpur', 'मुजफ्फरपुर'] },
+  { district: 'भागलपुर', state: 'बिहार', aliases: ['bhagalpur', 'भागलपुर'] },
+  { district: 'दरभंगा', state: 'बिहार', aliases: ['darbhanga', 'दरभंगा'] },
+  { district: 'पूर्णिया', state: 'बिहार', aliases: ['purnia', 'पूर्णिया'] },
+  { district: 'सहरसा', state: 'बिहार', aliases: ['saharsa', 'सहरसा'] },
+  { district: 'बेगूसराय', state: 'बिहार', aliases: ['begusarai', 'बेगूसराय'] },
+  { district: 'छपरा', state: 'बिहार', aliases: ['chapra', 'saran', 'सारण', 'छपरा'] },
+  { district: 'सीवान', state: 'बिहार', aliases: ['siwan', 'सीवान'] },
+  { district: 'गोपालगंज', state: 'बिहार', aliases: ['gopalganj', 'गोपालगंज'] },
+  { district: 'मोतिहारी', state: 'बिहार', aliases: ['motihari', 'मोतिहारी', 'चंपारण'] },
+  { district: 'समस्तीपुर', state: 'बिहार', aliases: ['samastipur', 'समस्तीपुर'] },
+  { district: 'नालंदा', state: 'बिहार', aliases: ['nalanda', 'biharsharif', 'नालंदा', 'बिहारशरीफ'] },
+  { district: 'आरा', state: 'बिहार', aliases: ['arrah', 'bhojpur', 'भोजपुर', 'आरा'] },
+  { district: 'बक्सर', state: 'बिहार', aliases: ['buxar', 'बक्सर'] },
+  { district: 'सासाराम', state: 'बिहार', aliases: ['sasaram', 'rohtas', 'रोहतास', 'सासाराम'] },
+
+  // Rajasthan
+  { district: 'जयपुर', state: 'राजस्थान', aliases: ['jaipur', 'जयपुर'] },
+  { district: 'जोधपुर', state: 'राजस्थान', aliases: ['jodhpur', 'जोधपुर'] },
+  { district: 'उदयपुर', state: 'राजस्थान', aliases: ['udaipur', 'उदयपुर'] },
+  { district: 'कोटा', state: 'राजस्थान', aliases: ['kota', 'कोटा'] },
+  { district: 'अजमेर', state: 'राजस्थान', aliases: ['ajmer', 'अजमेर'] },
+  { district: 'बीकानेर', state: 'राजस्थान', aliases: ['bikaner', 'बीकानेर'] },
+  { district: 'भरतपुर', state: 'राजस्थान', aliases: ['bharatpur', 'भरतपुर'] },
+  { district: 'भीलवाड़ा', state: 'राजस्थान', aliases: ['bhilwara', 'भीलवाड़ा'] },
+  { district: 'अलवर', state: 'राजस्थान', aliases: ['alwar', 'अलवर'] },
+  { district: 'सीकर', state: 'राजस्थान', aliases: ['sikar', 'सीकर'] },
+  { district: 'पाली', state: 'राजस्थान', aliases: ['pali', 'पाली'] },
+  { district: 'बाड़मेर', state: 'राजस्थान', aliases: ['barmer', 'बाड़मेर'] },
+  { district: 'जैसलमेर', state: 'राजस्थान', aliases: ['jaisalmer', 'जैसलमेर'] },
+  { district: 'नागौर', state: 'राजस्थान', aliases: ['nagaur', 'नागौर'] },
+  { district: 'चूरू', state: 'राजस्थान', aliases: ['churu', 'चूरू'] },
+  { district: 'झुंझुनूं', state: 'राजस्थान', aliases: ['jhunjhunu', 'झुंझुनूं'] },
+  { district: 'चित्तौड़गढ़', state: 'राजस्थान', aliases: ['chittorgarh', 'चित्तौड़गढ़'] },
+  { district: 'श्रीगंगानगर', state: 'राजस्थान', aliases: ['ganganagar', 'श्रीगंगानगर'] },
+
+  // Chhattisgarh
+  { district: 'रायपुर', state: 'छत्तीसगढ़', aliases: ['raipur', 'रायपुर'] },
+  { district: 'बिलासपुर', state: 'छत्तीसगढ़', aliases: ['bilaspur', 'बिलासपुर'] },
+  { district: 'दुर्ग', state: 'छत्तीसगढ़', aliases: ['durg', 'bhilai', 'दुर्ग', 'भिलाई'] },
+  { district: 'कोरबा', state: 'छत्तीसगढ़', aliases: ['korba', 'कोरबा'] },
+  { district: 'रायगढ़', state: 'छत्तीसगढ़', aliases: ['raigarh', 'रायगढ़'] },
+  { district: 'राजनांदगांव', state: 'छत्तीसगढ़', aliases: ['rajnandgaon', 'राजनांदगांव'] },
+  { district: 'जगदलपुर', state: 'छत्तीसगढ़', aliases: ['jagdalpur', 'bastar', 'बस्तर', 'जगदलपुर'] },
+  { district: 'अंबिकापुर', state: 'छत्तीसगढ़', aliases: ['ambikapur', 'surguja', 'सरगुजा', 'अंबिकापुर'] },
+
+  // Maharashtra
+  { district: 'मुंबई', state: 'महाराष्ट्र', aliases: ['mumbai', 'bombay', 'मुंबई'] },
+  { district: 'पुणे', state: 'महाराष्ट्र', aliases: ['pune', 'पुणे'] },
+  { district: 'नागपुर', state: 'महाराष्ट्र', aliases: ['nagpur', 'नागपुर'] },
+  { district: 'नासिक', state: 'महाराष्ट्र', aliases: ['nashik', 'नासिक'] },
+  { district: 'ठाणे', state: 'महाराष्ट्र', aliases: ['thane', 'ठाणे'] },
+  { district: 'छत्रपति संभाजीनगर', state: 'महाराष्ट्र', aliases: ['aurangabad', 'sambhajinagar', 'औरंगाबाद'] },
+  { district: 'कोल्हापुर', state: 'महाराष्ट्र', aliases: ['kolhapur', 'कोल्हापुर'] },
+
+  // Jharkhand
+  { district: 'रांची', state: 'झारखंड', aliases: ['ranchi', 'रांची'] },
+  { district: 'जमशेदपुर', state: 'झारखंड', aliases: ['jamshedpur', 'tatanagar', 'जमशेदपुर'] },
+  { district: 'धनबाद', state: 'झारखंड', aliases: ['dhanbad', 'धनबाद'] },
+  { district: 'बोकारो', state: 'झारखंड', aliases: ['bokaro', 'बोकारो'] },
+  { district: 'देवघर', state: 'झारखंड', aliases: ['deoghar', 'देवघर'] },
+
+  // Gujarat
+  { district: 'अहमदाबाद', state: 'गुजरात', aliases: ['ahmedabad', 'अहमदाबाद'] },
+  { district: 'सूरत', state: 'गुजरात', aliases: ['surat', 'सूरत'] },
+  { district: 'वडोदरा', state: 'गुजरात', aliases: ['vadodara', 'baroda', 'वडोदरा'] },
+  { district: 'राजकोट', state: 'गुजरात', aliases: ['rajkot', 'राजकोट'] },
+
+  // Haryana / Punjab / Delhi
+  { district: 'चंडीगढ़', state: 'पंजाब/हरियाणा', aliases: ['chandigarh', 'चंडीगढ़'] },
+  { district: 'गुरुग्राम', state: 'हरियाणा', aliases: ['gurugram', 'gurgaon', 'गुरुग्राम', 'गुड़गांव'] },
+  { district: 'अमृतसर', state: 'पंजाब', aliases: ['amritsar', 'अमृतसर'] },
+  { district: 'लुधियाना', state: 'पंजाब', aliases: ['ludhiana', 'लुधियाना'] },
+  { district: 'नई दिल्ली', state: 'दिल्ली', aliases: ['new delhi', 'new-delhi', 'नई दिल्ली'] },
+  { district: 'दिल्ली', state: 'दिल्ली', aliases: ['delhi', 'दिल्ली'] },
+];
+
+export function formatDistrictWithState(loc: string): string {
+  if (!loc || typeof loc !== 'string') return '';
+  const trimmed = loc.trim();
+  if (!trimmed || trimmed === 'विशेष कवरेज') return '';
+
+  if (trimmed.includes(',')) {
+    const parts = trimmed.split(',').map((p) => p.trim()).filter(Boolean);
+    return parts.join(', ');
+  }
+
+  for (const item of DISTRICT_STATE_LIST) {
+    if (item.district === 'दिल्ली' || item.district === 'नई दिल्ली') {
+      if (trimmed === item.district) return 'नई दिल्ली';
+      continue;
+    }
+    if (
+      trimmed.toLowerCase() === item.district.toLowerCase() ||
+      item.aliases.some((a) => a.toLowerCase() === trimmed.toLowerCase())
+    ) {
+      return `${item.district}, ${item.state}`;
+    }
+  }
+
+  return trimmed;
+}
+
+export function detectDistrictAndState(
+  title: string = '',
+  desc: string = '',
+  content: string = '',
+  url: string = ''
+): string {
+  const primaryText = `${title} ${desc} ${url}`.toLowerCase();
+  const allText = `${title} ${desc} ${content} ${url}`.toLowerCase();
+
+  for (const d of DISTRICT_STATE_LIST) {
+    if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+    for (const a of d.aliases) {
+      if (primaryText.includes(a.toLowerCase())) {
+        return `${d.district}, ${d.state}`;
+      }
+    }
+  }
+
+  for (const d of DISTRICT_STATE_LIST) {
+    if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+    for (const a of d.aliases) {
+      if (allText.includes(a.toLowerCase())) {
+        return `${d.district}, ${d.state}`;
+      }
+    }
+  }
+
+  if (/वाशिंगटन|व्हाइट हाउस|अमेरिका|trump|व्हाइटहाउस|us|usa/i.test(primaryText)) {
+    return 'वाशिंगटन';
+  }
+  if (/रूस|मास्को|moscow/i.test(primaryText)) return 'मास्को';
+  if (/ब्रिटेन|लंदन|london/i.test(primaryText)) return 'लंदन';
+
+  if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट|नई\s*दिल्ली|राजधानी\s*दिल्ली)/i.test(primaryText)) {
+    return 'नई दिल्ली';
+  }
+
+  const states = ['मध्य प्रदेश', 'उत्तर प्रदेश', 'बिहार', 'राजस्थान', 'उत्तराखंड', 'छत्तीसगढ़', 'महाराष्ट्र', 'गुजरात', 'झारखंड', 'पंजाब', 'हरियाणा'];
+  for (const st of states) {
+    if (primaryText.includes(st.toLowerCase())) {
+      return st;
+    }
+  }
+
+  return '';
+}
+
 // Generate the 3 caption styles deterministically from news facts
 function formatCaptionVariants(
   headline: string,
@@ -6636,17 +6911,38 @@ function formatCaptionVariants(
   captionShort: string;
 } {
   const loc = (location || "").trim();
-  const cleanFacts = (factsText || "").replace(/#[\w\u0900-\u097F]+/g, "").trim();
-  const sentences = cleanFacts
-    .split(/[।\.\n]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 10);
+  const cleanFacts = (factsText || "")
+    .replace(/(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]|दैनिक भास्कर[,\s]*[^\n।]+[।\n]|अमर उजाला[,\s]*[^\n।]+[।\n]|पत्रिका[,\s]*[^\n।]+[।\n])/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
+    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/#[\w\u0900-\u097F]+/g, "")
+    .trim();
+
+  // Protect abbreviations like डाॅ., डॉ., पं., प्रो., etc.
+  const safe = cleanFacts
+    .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#")
+    .replace(/([A-Za-z])\./g, "$1#DOT#");
+
+  const sentences = safe
+    .split(/[।\n]+|\.\s+/)
+    .map((s) => s.replace(/#DOT#/g, ".").trim())
+    .filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s));
 
   // Style 1: Detailed (3 full paragraphs)
-  const p1 = `${headline}। ${loc && loc !== "विशेष कवरेज" ? `${loc} से संबंधित` : "इस"} मुख्य घटनाक्रम को लेकर ताजा जानकारी सामने आई है।`;
-  const p2 = sentences.slice(0, 3).join("। ") || "प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।";
-  const p3 = sentences.slice(3, 5).join("। ") || "प्रशासन और उत्तरदायी अधिकारियों की ओर से त्वरित संज्ञान लेते हुए आवश्यक दिशा-निर्देश जारी कर दिए गए हैं। स्थिति पर लगातार नजर रखी जा रही है।";
-  const detailedBody = `${p1}\n\n${p2}\n\n${p3}`;
+  const locPrefix = loc && loc !== "विशेष कवरेज" ? `${loc} में ` : "";
+  const p1 = sentences[0]
+    ? `${locPrefix}${headline}। ${sentences[0]}।`
+    : `${locPrefix}${headline} को लेकर बड़ा और गंभीर मामला सामने आया है। प्राप्त जानकारी के अनुसार पूरे घटनाक्रम को लेकर प्रशासनिक स्तर पर हड़कंप मच गया है।`;
+
+  const p2 = sentences.slice(1, 4).join("। ") || "प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और कारण सामने आ रहे हैं। प्रत्यक्षदर्शियों व आधिकारिक सूत्रों के अनुसार घटनाक्रम के प्रभाव का गहनता से आकलन किया जा रहा है।";
+
+  const p3 = sentences[4]
+    ? `${sentences[4]}। मामले में उत्तरदायी अधिकारियों ने निष्पक्ष जांच और आवश्यक कानूनी व प्रशासनिक कार्रवाई के सख्त आदेश दिए हैं।`
+    : "मामले की गंभीरता को देखते हुए उच्चाधिकारियों ने तुरंत संज्ञान लिया है और अग्रिम वैधानिक व अनुशासनात्मक कार्रवाई के निर्देश जारी कर दिए गए हैं। स्थिति पर नजर रखी जा रही है।";
+
+  const detailedBody = `${p1}\n\n${p2}।\n\n${p3}`;
   const captionDetailed = ensureHashtagHierarchy(detailedBody, loc, username);
 
   // Style 2: Bullet Points (Intro + 3-4 bullets + status paragraph)
@@ -6661,8 +6957,8 @@ function formatCaptionVariants(
   const captionBullets = ensureHashtagHierarchy(bulletsBody, loc, username);
 
   // Style 3: Short (2 concise, impactful paragraphs)
-  const shortP1 = `${headline}। ${loc && loc !== "विशेष कवरेज" ? `${loc} से संबंधित` : "इस"} ताजा घटनाक्रम में प्राथमिक ब्योरा और मुख्य तथ्य दर्ज कर लिए गए हैं।`;
-  const shortP2 = (sentences[0] ? `${sentences[0]}। ` : "") + "मामले में उत्तरदायी अधिकारियों द्वारा आगे की प्रक्रिया पूरी की जा रही है।";
+  const shortP1 = `${locPrefix}${headline}। ${sentences[0] || "पूरे मामले में प्रशासनिक लापरवाही और संवेदनहीनता को लेकर हड़कंप मच गया है।"}`;
+  const shortP2 = (sentences[1] ? `${sentences[1]}। ` : "") + "उत्तरदायी अधिकारियों ने घटना का त्वरित संज्ञान लेते हुए जांच व सख्त कार्रवाई के निर्देश दिए हैं।";
   const shortBody = `${shortP1}\n\n${shortP2}`;
   const captionShort = ensureHashtagHierarchy(shortBody, loc, username);
 
