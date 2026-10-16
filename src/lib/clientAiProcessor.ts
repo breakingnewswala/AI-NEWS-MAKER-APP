@@ -18,7 +18,7 @@ function cleanHtmlEntities(str: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/[^\S\r\n]+/g, ' ')
     .trim();
 }
 
@@ -114,6 +114,32 @@ export function processNewsLocally(
     extractedContent = contentMatch[1].trim();
   }
 
+  if (extractedDesc) {
+    extractedDesc = extractedDesc
+      .replace(
+        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        ' '
+      )
+      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  if (extractedContent) {
+    extractedContent = extractedContent
+      .replace(
+        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        ' '
+      )
+      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   // 3. Detect genuine location using district-to-state mapping
   let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent, targetUrl);
   if (!detectedLocation) {
@@ -154,25 +180,52 @@ export function processNewsLocally(
   function extractSafeSentences(text: string): string[] {
     if (!text) return [];
     const cleanText = text
+      .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, ' ')
+      .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, ' ')
+      .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, ' ')
       .replace(/(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]|दैनिक भास्कर[,\s]*[^\n।]+[।\n]|अमर उजाला[,\s]*[^\n।]+[।\n]|पत्रिका[,\s]*[^\n।]+[।\n])/gi, ' ')
+      .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
       .replace(/<[^>]+>/g, '')
       .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, ' ')
       .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, ' ')
       .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, '')
+      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
+      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, '')
       .replace(/\s+/g, ' ')
       .trim();
 
     const safe = cleanText
       .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, '$1#DOT#')
-      .replace(/([A-Za-z])\./g, '$1#DOT#');
+      .replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, '$1#DOT#');
 
     return safe
-      .split(/[।\n]+|\.\s+/)
-      .map((s) => s.replace(/#DOT#/g, '.').trim())
-      .filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s));
+      .split(/[।\n]+|(?<=[^\d])\.\s+/)
+      .map((s) => {
+        let sent = s.replace(/#DOT#/g, '.').trim();
+        sent = sent
+          .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
+          .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, '')
+          .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
+          .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return sent;
+      })
+      .filter((s) => {
+        if (s.length <= 15) return false;
+        if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+        if (!/[\u0900-\u097F]/.test(s)) return false;
+        const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
+        const englishCount = (s.match(/[A-Za-z]/g) || []).length;
+        if (hindiCount < 10 || englishCount > hindiCount) return false;
+        if (/[A-Za-z]{6,}/.test(s) && englishCount > 15) return false;
+        return true;
+      });
   }
 
-  const allSentences = extractSafeSentences(`${extractedDesc} ${extractedContent} ${clean}`);
+  const corpusToExtract = (extractedDesc || extractedContent) ? `${extractedDesc}\n\n${extractedContent}` : clean;
+  const allSentences = extractSafeSentences(corpusToExtract);
 
   // 5. Build EXACTLY 5 Distinct Journalistic Headlines
   // विकल्प 1: मुख्य समाचार (Direct event/action)

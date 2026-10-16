@@ -5937,7 +5937,7 @@ function isSafePublicUrl(urlString) {
 }
 function cleanHtmlEntities(str) {
   if (!str) return "";
-  return str.replace(/&#039;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  return str.replace(/&#039;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/[^\S\r\n]+/g, " ").trim();
 }
 function extractSlugKeywords(urlStr) {
   try {
@@ -6400,11 +6400,20 @@ function detectDistrictAndState(title = "", desc = "", content = "", url = "") {
 function formatCaptionVariants(headline, location, factsText, username = "") {
   const loc = (location || "").trim();
   const cleanHeadline = cleanHeadlineText(headline || "");
-  const cleanFacts = (factsText || "").replace(/(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]|दैनिक भास्कर[,\s]*[^\n।]+[।\n]|अमर उजाला[,\s]*[^\n।]+[।\n]|पत्रिका[,\s]*[^\n।]+[।\n])/gi, " ").replace(/<[^>]+>/g, "").replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ").replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ").replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "").replace(/#[\w\u0900-\u097F]+/g, "").trim();
-  const safe = cleanFacts.replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#").replace(/([A-Za-z])\./g, "$1#DOT#");
-  const sentences = safe.split(/[।\n]+|\.\s+/).map(
-    (s) => s.replace(/#DOT#/g, ".").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "").trim()
-  ).filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s) && /[\u0900-\u097F]/.test(s));
+  const cleanFacts = (factsText || "").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ").replace(/(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]|दैनिक भास्कर[,\s]*[^\n।]+[।\n]|अमर उजाला[,\s]*[^\n।]+[।\n]|पत्रिका[,\s]*[^\n।]+[।\n])/gi, " ").replace(/<[^>]+>/g, "").replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ").replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ").replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "").replace(/#[\w\u0900-\u097F]+/g, "").trim();
+  const safe = cleanFacts.replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#").replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, "$1#DOT#");
+  const sentences = safe.split(/[।\n]+|(?<=[^\d])\.\s+/).map(
+    (s) => s.replace(/#DOT#/g, ".").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "").trim()
+  ).filter((s) => {
+    if (s.length <= 15) return false;
+    if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+    if (!/[\u0900-\u097F]/.test(s)) return false;
+    const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
+    const englishCount = (s.match(/[A-Za-z]/g) || []).length;
+    if (hindiCount < 10 || englishCount > hindiCount) return false;
+    if (/[A-Za-z]{6,}/.test(s) && englishCount > 15) return false;
+    return true;
+  });
   const locPrefix = loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${loc} \u092E\u0947\u0902 ` : "";
   const p1 = sentences[0] ? `${locPrefix}${cleanHeadline}\u0964 ${sentences[0]}\u0964` : `${locPrefix}${cleanHeadline} \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u0914\u0930 \u0917\u0902\u092D\u0940\u0930 \u092E\u093E\u092E\u0932\u093E \u0938\u093E\u092E\u0928\u0947 \u0906\u092F\u093E \u0939\u0948\u0964 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0939\u0921\u093C\u0915\u0902\u092A \u092E\u091A \u0917\u092F\u093E \u0939\u0948\u0964`;
   const p2 = sentences.slice(1, 4).join("\u0964 ") || "\u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u092E\u0947\u0902 \u0915\u0908 \u0905\u0939\u092E \u0924\u0925\u094D\u092F \u0914\u0930 \u0915\u093E\u0930\u0923 \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964 \u092A\u094D\u0930\u0924\u094D\u092F\u0915\u094D\u0937\u0926\u0930\u094D\u0936\u093F\u092F\u094B\u0902 \u0935 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u0942\u0924\u094D\u0930\u094B\u0902 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0947 \u092A\u094D\u0930\u092D\u093E\u0935 \u0915\u093E \u0917\u0939\u0928\u0924\u093E \u0938\u0947 \u0906\u0915\u0932\u0928 \u0915\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948\u0964";
@@ -6452,8 +6461,9 @@ function sanitizeCaptionText(caption, headline = "", location = "", username = "
     /(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]?|दैनिक भास्कर[,\s]*[^\n।]+[।\n]?|अमर उजाला[,\s]*[^\n।]+[।\n]?|पत्रिका[,\s]*[^\n।]+[।\n]?)/gi,
     " "
   );
-  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
   const bodyWithoutHashtags = text.replace(/#[\w\u0900-\u097F]+/g, "").trim();
   const paragraphs = bodyWithoutHashtags.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   const cleanParagraphs = [];
@@ -6592,9 +6602,23 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
   category = cleanCategoryField(category);
   const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
   const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, " ").slice(0, 70)) : "\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u092E\u093E\u091A\u093E\u0930");
-  const rawFactsCorpus = `${extractedDesc} ${extractedContent} ${clean}`.replace(cleanBylineRegex, " ").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "");
-  const safeFacts = rawFactsCorpus.replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#").replace(/([A-Za-z])\./g, "$1#DOT#");
-  const articleSentences = safeFacts.split(/[।\n]+|\.\s+/).map((s) => s.replace(/#DOT#/g, ".").trim()).filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s) && /[\u0900-\u097F]/.test(s));
+  const corpusToExtract = extractedDesc || extractedContent ? `${extractedDesc}
+
+${extractedContent}` : clean;
+  const rawFactsCorpus = corpusToExtract.replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ").replace(cleanBylineRegex, " ").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+  const safeFacts = rawFactsCorpus.replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#").replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, "$1#DOT#");
+  const articleSentences = safeFacts.split(/[।\n]+|(?<=[^\d])\.\s+/).map(
+    (s) => s.replace(/#DOT#/g, ".").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "").trim()
+  ).filter((s) => {
+    if (s.length <= 15) return false;
+    if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+    if (!/[\u0900-\u097F]/.test(s)) return false;
+    const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
+    const englishCount = (s.match(/[A-Za-z]/g) || []).length;
+    if (hindiCount < 10 || englishCount > hindiCount) return false;
+    if (/[A-Za-z]{6,}/.test(s) && englishCount > 15) return false;
+    return true;
+  });
   const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
   let opt1Main = "";
   if (/औद्योगिक|आवास|परियोजना|नियम|फ्लैट|जमीन/i.test(fullCorpus)) {
@@ -6696,7 +6720,7 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
       }
     }
   }
-  const combinedFacts = `${extractedDesc} ${extractedContent} ${clean}`;
+  const combinedFacts = corpusToExtract;
   const captionVariants = formatCaptionVariants(headline, detectedLocation, combinedFacts, username);
   const anchorScript = `\u0928\u092E\u0938\u094D\u0915\u093E\u0930, \u092E\u0948\u0902 \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u0947\u0964 \u0907\u0938 \u0938\u092E\u092F \u0915\u0940 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930 ${detectedLocation} \u0938\u0947 \u0939\u0948\u0964 ${headline}\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u092D\u0940 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u0940 \u092A\u094D\u0930\u0924\u093F\u0915\u094D\u0930\u093F\u092F\u093E \u0938\u093E\u092E\u0928\u0947 \u0906 \u0930\u0939\u0940 \u0939\u0948\u0964 \u0906\u0907\u090F \u0926\u0947\u0916\u0924\u0947 \u0939\u0948\u0902 \u0907\u0938 \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u092A\u0930 \u0939\u092E\u093E\u0930\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0964`;
   const suggestedPhoto = articleMeta?.imageUrl ? articleMeta.imageUrl : `Journalistic news press photo depicting ${headline}, realistic news photography, India`;

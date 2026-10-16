@@ -6310,7 +6310,7 @@ function cleanHtmlEntities(str: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\r\n]+/g, " ")
     .trim();
 }
 
@@ -6953,33 +6953,47 @@ function formatCaptionVariants(
   const loc = (location || "").trim();
   const cleanHeadline = cleanHeadlineText(headline || "");
   const cleanFacts = (factsText || "")
+    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ")
+    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ")
+    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ")
     .replace(/(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]|दैनिक भास्कर[,\s]*[^\n।]+[।\n]|अमर उजाला[,\s]*[^\n।]+[।\n]|पत्रिका[,\s]*[^\n।]+[।\n])/gi, " ")
     .replace(/<[^>]+>/g, "")
     .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ")
     .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
     .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
     .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
-    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
+    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
+    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "")
+    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "")
     .replace(/#[\w\u0900-\u097F]+/g, "")
     .trim();
 
   // Protect abbreviations like डाॅ., डॉ., पं., प्रो., etc.
   const safe = cleanFacts
     .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#")
-    .replace(/([A-Za-z])\./g, "$1#DOT#");
+    .replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, "$1#DOT#");
 
   const sentences = safe
-    .split(/[।\n]+|\.\s+/)
+    .split(/[।\n]+|(?<=[^\d])\.\s+/)
     .map((s) =>
       s
         .replace(/#DOT#/g, ".")
         .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
-        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "")
-        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
+        .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "")
+        .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
+        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "")
         .trim()
     )
-    .filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s) && /[\u0900-\u097F]/.test(s));
+    .filter((s) => {
+      if (s.length <= 15) return false;
+      if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+      if (!/[\u0900-\u097F]/.test(s)) return false;
+      const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
+      const englishCount = (s.match(/[A-Za-z]/g) || []).length;
+      if (hindiCount < 10 || englishCount > hindiCount) return false;
+      if (/[A-Za-z]{6,}/.test(s) && englishCount > 15) return false;
+      return true;
+    });
 
   // Style 1: Detailed (3 full paragraphs)
   const locPrefix = loc && loc !== "विशेष कवरेज" ? `${loc} में ` : "";
@@ -7043,8 +7057,9 @@ function sanitizeCaptionText(
   );
 
   // 3. Remove raw English SEO descriptions at start or within (e.g. "The Madhya Pradesh government has formulated an Industrial Housing Policy...")
-  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
 
   // 4. Split into paragraphs and filter
   const bodyWithoutHashtags = text.replace(/#[\w\u0900-\u097F]+/g, "").trim();
@@ -7238,19 +7253,41 @@ function createLocalNewsFallback(
   const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
   const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, " ").slice(0, 70)) : "महत्वपूर्ण समाचार");
 
-  const rawFactsCorpus = `${extractedDesc} ${extractedContent} ${clean}`
+  const corpusToExtract = (extractedDesc || extractedContent) ? `${extractedDesc}\n\n${extractedContent}` : clean;
+  const rawFactsCorpus = corpusToExtract
+    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ")
+    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ")
+    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ")
     .replace(cleanBylineRegex, " ")
     .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
-    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "");
+    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
+    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "")
+    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
 
   const safeFacts = rawFactsCorpus
     .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#")
-    .replace(/([A-Za-z])\./g, "$1#DOT#");
+    .replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, "$1#DOT#");
   const articleSentences = safeFacts
-    .split(/[।\n]+|\.\s+/)
-    .map((s) => s.replace(/#DOT#/g, ".").trim())
-    .filter((s) => s.length > 15 && !/^(विज्ञापन|क्लिक करें|यह भी पढ़ें)/i.test(s) && /[\u0900-\u097F]/.test(s));
+    .split(/[।\n]+|(?<=[^\d])\.\s+/)
+    .map((s) =>
+      s
+        .replace(/#DOT#/g, ".")
+        .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
+        .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "")
+        .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
+        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "")
+        .trim()
+    )
+    .filter((s) => {
+      if (s.length <= 15) return false;
+      if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+      if (!/[\u0900-\u097F]/.test(s)) return false;
+      const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
+      const englishCount = (s.match(/[A-Za-z]/g) || []).length;
+      if (hindiCount < 10 || englishCount > hindiCount) return false;
+      if (/[A-Za-z]{6,}/.test(s) && englishCount > 15) return false;
+      return true;
+    });
 
   const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
 
@@ -7373,7 +7410,7 @@ function createLocalNewsFallback(
   }
 
   // 6. Generate 3 caption styles (Detailed, Bullets, Short)
-  const combinedFacts = `${extractedDesc} ${extractedContent} ${clean}`;
+  const combinedFacts = corpusToExtract;
   const captionVariants = formatCaptionVariants(headline, detectedLocation, combinedFacts, username);
 
   const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर ${detectedLocation} से है। ${headline}। मामले में सभी संबंधित पक्षों की प्रतिक्रिया सामने आ रही है। आइए देखते हैं इस पूरे मामले पर हमारी विस्तृत रिपोर्ट।`;
