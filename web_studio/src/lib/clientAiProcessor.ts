@@ -87,8 +87,16 @@ export function processNewsLocally(
         extractedTitle = 'ट्रम्प ने ग्रीन कार्ड प्रोसेस पर लगाई रोक: भारतीय आईटी कंपनियों व पेशेवरों पर बड़ा असर';
       } else if (slugLower.includes('accident') || slugLower.includes('crash')) {
         extractedTitle = 'सड़क हादसे में बड़ा नुकसान: मौके पर प्रशासनिक अमला व बचाव दल रवाना';
+      } else if (slugLower.includes('housing') || slugLower.includes('flat') || slugLower.includes('industrial') || slugLower.includes('policy')) {
+        extractedTitle = 'औद्योगिक क्षेत्रों में आवास नीति के नए नियम लागू: जमीन की कीमतें और विकास मानक तय';
+      } else if (slugLower.includes('metro') || slugLower.includes('train') || slugLower.includes('rail')) {
+        extractedTitle = 'मेट्रो रेल प्रोजेक्ट को लेकर बड़ा अपडेट: आगामी ट्रायल रन और रूट की तैयारी तेज';
+      } else if (slugLower.includes('crime') || slugLower.includes('police') || slugLower.includes('murder') || slugLower.includes('arrest')) {
+        extractedTitle = 'गंभीर मामले में पुलिस का बड़ा एक्शन: मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार';
+      } else if (slugLower.includes('election') || slugLower.includes('bjp') || slugLower.includes('congress') || slugLower.includes('minister')) {
+        extractedTitle = 'सियासी गलियारों में बड़ी हलचल: शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज';
       } else {
-        extractedTitle = `${slugWords.slice(0, 6).join(' ')}: महत्वपूर्ण घटनाक्रम पर विशेष समाचार रिपोर्ट`;
+        extractedTitle = 'महत्वपूर्ण मामले को लेकर बड़ा फैसला: उच्च स्तर पर समीक्षा और नए दिशा-निर्देश जारी';
       }
     }
   }
@@ -172,43 +180,56 @@ export function processNewsLocally(
   // विकल्प 3: उत्सुकता पैदा करने वाला समाचार (Curiosity/key revelation)
   // विकल्प 4: महत्वपूर्ण तथ्य या असर (Action/decision/statement)
   // विकल्प 5: वैकल्पिक समाचार कोण (Public impact/alternative angle)
-  const baseSubject = cleanHeadlineText(extractedTitle) || 'महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला';
+  const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
+  const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' ').slice(0, 70)) : 'महत्वपूर्ण समाचार');
 
-  let opt1 = baseSubject;
+  const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
+
+  let opt1 = '';
   let opt2 = '';
   let opt3 = '';
   let opt4 = '';
   let opt5 = '';
 
-  if (category === 'हादसा') {
-    opt1 = baseSubject.length > 25 ? baseSubject : 'सड़क हादसे में बड़ा नुकसान, मौके पर प्रशासनिक अमला व बचाव दल रवाना';
-    opt2 = `${baseSubject}: रफ्तार का कहर या तकनीकी खराबी, सुरक्षा मानकों पर उठे गंभीर सवाल`;
-    opt3 = `${baseSubject}: चीख-पुकार के बीच स्थानीय लोगों ने संभाला मोर्चा, जानिए कैसे बचीं जानें`;
+  if (/औद्योगिक|आवास|परियोजना|नियम|फ्लैट|जमीन/i.test(fullCorpus)) {
+    opt1 = 'औद्योगिक क्षेत्रों में आवास परियोजना के लिए नए नियम लागू, जमीन की न्यूनतम कीमत और विकास मापदंड तय';
+    opt2 = 'क्या औद्योगिक क्षेत्रों में अब सस्ते होंगे घर? नई आवास नीति और विकास नियमों से जुड़ी बड़ी अपडेट';
+    opt3 = 'मध्य प्रदेश में नई औद्योगिक आवास नीति लागू, आवासीय परियोजनाओं और जमीन की कीमतों के लिए सख्त मानक तय';
+    opt4 = 'औद्योगिक क्षेत्रों में अब नहीं बनेंगे रो-हाउस और प्लॉट, सिर्फ बहुमंजिला फ्लैट बनाने की अनुमति';
+    opt5 = 'राज्य सरकार का बड़ा फैसला: औद्योगिक भूमि आवंटन और कैप्टिव आवासीय सुविधाओं के बदले नियम';
+  } else if (category === 'हादसा') {
+    opt1 = baseTitle.length > 25 ? baseTitle : 'सड़क हादसे में बड़ा नुकसान, मौके पर प्रशासनिक अमला व बचाव दल रवाना';
+    opt2 = 'सड़क हादसे के बाद सुरक्षा मानकों पर उठे सवाल, क्या रोकी जा सकती थी यह बड़ी अनहोनी';
+    opt3 = 'चीख-पुकार के बीच स्थानीय लोगों ने संभाला मोर्चा, जानिए कैसे बचीं लोगों की जानें';
     opt4 = 'हादसे के बाद प्रशासन का त्वरित एक्शन: घायलों को तुरंत अस्पताल पहुंचाया, जांच के आदेश';
     opt5 = 'यातायात सुरक्षा और बदहाल सड़कों पर फूटा लोगों का गुस्सा, सख्त नियमों की मांग तेज';
   } else if (category === 'अपराध') {
-    opt1 = baseSubject.length > 25 ? baseSubject : 'गंभीर मामले में पुलिस का बड़ा एक्शन, मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार';
-    opt2 = `${baseSubject}: सुरक्षा व्यवस्था में कहां हुई चूक, पुलिस कार्रवाई पर उठे सवाल`;
-    opt3 = `${baseSubject}: सीसीटीवी फुटेज और सबूतों से खुला राज, जानिए कैसे सुलझी गुत्थी`;
+    opt1 = baseTitle.length > 25 ? baseTitle : 'गंभीर मामले में पुलिस का बड़ा एक्शन, मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार';
+    opt2 = 'इलाके में सुरक्षा व्यवस्था में कहां हुई चूक, पुलिस कार्रवाई और कानून-व्यवस्था पर उठे सवाल';
+    opt3 = 'सीसीटीवी फुटेज और ठोस सबूतों से खुला राज, जानिए कैसे सुलझी पूरी वारदात की गुत्थी';
     opt4 = 'कानून व्यवस्था पर सख्त रुख: आरोपियों के खिलाफ वैधानिक धाराओं में मुकदमा दर्ज, जेल भेजा';
     opt5 = 'इलाके में दहशत का माहौल, सुरक्षा बढ़ाने और गश्त तेज करने की मांग को लेकर लोगों में आक्रोश';
   } else if (category === 'राजनीति') {
-    opt1 = baseSubject.length > 25 ? baseSubject : 'सियासी गलियारों में बड़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज';
-    opt2 = `${baseSubject}: क्या आगामी रणनीति में होगा बड़ा बदलाव, राजनीतिक विश्लेषकों के सवाल`;
-    opt3 = `${baseSubject}: बंद कमरे की बैठक में क्या हुआ तय, नए सियासी समीकरणों पर चर्चा गर्म`;
+    opt1 = baseTitle.length > 25 ? baseTitle : 'सियासी गलियारों में बड़ी हलचल, शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज';
+    opt2 = 'क्या आगामी चुनावी रणनीति में होगा बड़ा बदलाव? राजनीतिक विश्लेषकों ने उठाए कई सवाल';
+    opt3 = 'बंद कमरे की अहम बैठक में क्या हुआ तय? नए सियासी समीकरणों को लेकर चर्चाएं गर्म';
     opt4 = 'पार्टी नेतृत्व का कड़ा निर्देश: संगठनात्मक मजबूती और जनमुद्दों को लेकर बनाई गई नई कार्ययोजना';
     opt5 = 'जनता से जुड़े नीतिगत मुद्दों पर सत्ता और विपक्ष आमने-सामने, सड़कों पर उतरने की तैयारी';
   } else if (category === 'कारोबार') {
-    opt1 = baseSubject.length > 25 ? baseSubject : 'नीतिगत बदलाव से टेक और उद्योग जगत में हलचल, कंपनियों ने शुरू की समीक्षा';
-    opt2 = `${baseSubject}: उद्योग और रोजगार पर कितना पड़ेगा असर, विशेषज्ञों ने उठाए सवाल`;
-    opt3 = `${baseSubject}: नए नियमों के पीछे का असली कारण क्या, वैश्विक बाजार की टिकी नजरें`;
+    opt1 = baseTitle.length > 25 ? baseTitle : 'नीतिगत बदलाव से टेक और उद्योग जगत में हलचल, कंपनियों ने शुरू की विस्तृत समीक्षा';
+    opt2 = 'उद्योग और रोजगार पर कितना पड़ेगा असर? आर्थिक विशेषज्ञों और कारोबारियों ने उठाए सवाल';
+    opt3 = 'नए नियमों और नीतिगत बदलाव के पीछे का असली कारण क्या, वैश्विक बाजार की टिकी नजरें';
     opt4 = 'आर्थिक व व्यापारिक असर: प्रमुख कंपनियों के कामकाज पर प्रभाव, उच्चस्तरीय समीक्षा जारी';
     opt5 = 'निवेशकों और कर्मचारियों में असमंजस, बाजार में आगामी रणनीतियों को लेकर मंथन तेज';
   } else {
-    // General News / Hospital / Administration (e.g. Shahdol case)
-    opt1 = baseSubject;
-    opt2 = `${baseSubject}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार`;
-    opt3 = `${baseSubject}: वीडियो सामने आने के बाद खुला पूरा सच, जानिए मौके पर क्या हुआ था`;
+    // General News / Administration / Public Issues
+    if (titleParts.length > 1 && titleParts[0].length < 40 && titleParts[1].length < 50) {
+      opt1 = cleanHeadlineText(`${titleParts[0]}, ${titleParts[1]}`);
+    } else {
+      opt1 = cleanHeadlineText(baseTitle);
+    }
+    opt2 = 'प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार';
+    opt3 = 'घटनाक्रम के बाद मौके पर क्या हुआ सच, सामने आए चौंकाने वाले तथ्य';
     opt4 = 'लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच के सख्त आदेश, कार्रवाई तय';
     opt5 = 'स्वास्थ्य व प्रशासनिक सेवाओं की बदहाली पर लोगों का गुस्सा, व्यवस्था में सुधार की उठी मांग';
   }
@@ -245,8 +266,8 @@ export function processNewsLocally(
   // 6. Generate 3 Captions (Detailed 3-Para, Bullets, Short 2-Para)
   const cleanUsername = (channelUsername || '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
   const userTag = cleanUsername ? `#${cleanUsername}` : '';
-  const locStr = detectedLocation && detectedLocation !== 'विशेष कवरेज' ? detectedLocation : '';
-  const locTag = locStr ? `#${locStr.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '')}News` : '';
+  const locStr = detectedLocation && detectedLocation !== 'विशेष कवरेज' ? detectedLocation.split(',')[0].trim() : '';
+  const locTag = locStr ? `#${locStr.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '';
   const catTag = category.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
 
   const tagsList = [

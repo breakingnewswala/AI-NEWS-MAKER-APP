@@ -486,14 +486,13 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       }
     } catch (err: any) {
       console.warn('Headlines regeneration error, using local generator:', err);
-      const cleanH = result.headline;
-      const baseLoc = result.location || 'मध्य प्रदेश';
+      const cleanH = cleanHeadlineText(result.headline || 'ताज़ा समाचार');
       const newOpts = [
         cleanH,
-        `${cleanH}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल`,
-        `${cleanH}: घटनाक्रम के बाद मौके पर क्या हुआ`,
-        `लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने जांच व कार्रवाई के दिए आदेश`,
-        `${cleanH}: आम जनता पर असर और आगामी परिणाम`,
+        cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
+        cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
+        cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
+        cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
       ].slice(0, 5);
       setHeadlineOptions(newOpts);
       setSelectedHeadlineIndex(0);

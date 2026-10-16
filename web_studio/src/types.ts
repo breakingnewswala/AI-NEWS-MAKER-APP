@@ -383,6 +383,7 @@ export interface AIAnalysisResult {
   suggestedImagePrompt?: string;
   speakerName?: string;
   speakerTitle?: string;
+  extractedArticlePhotos?: string[];
   isLocalFallback?: boolean;
   quotaNotice?: string;
 }

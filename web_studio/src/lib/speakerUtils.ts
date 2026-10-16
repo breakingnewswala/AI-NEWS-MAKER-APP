@@ -20,32 +20,108 @@ export function cleanHeadlineText(text: string): string {
     .replace(/(?:generating[\s\.]*)+/gi, '')
     .replace(/(?:ai is processing[\s\.]*)+/gi, '');
 
-  // 2. Remove editorial fluff prefixes
+  // 2. Remove scraping artifacts & interactive website buttons
+  cleaned = cleaned.replace(
+    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+    ' '
+  );
+
+  // 3. Remove publisher, portal and city-news suffixes (e.g. "- Bhopal News", "- Indore News", "- MP News")
   cleaned = cleaned
-    .replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, '')
+    .replace(
+      /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat).*$/i,
+      ''
+    )
+    .replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, '')
     .trim();
 
-  // 3. Remove prepended location or category label tags with colons/hyphens e.g. "नई दिल्ली / राष्ट्रीय: ..." or "भोपाल: ..."
+  // 4. Remove editorial fluff prefixes and option labels
   cleaned = cleaned
-    .replace(/^(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|नई\s*दिल्ली|भोपाल|इंदौर|रीवा|जबलपुर|ग्वालियर|लखनऊ|पटना|जयपुर|रायपुर|वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय|विदेश|अपराध|क्राइम|सियासत|राजनीति|हादसा|प्रशासन|विकास|बिजनेस|कारोबार|विशेष\s*कवरेज|ताज़ा\s*समाचार|ताज़ा\s*ख़बर)\s*[:\-–—]\s*/i, '')
+    .replace(
+      /^(?:विकल्प|ऑप्शन|Option|Angle)\s*\d+[\s:\-–—.]*\s*/i,
+      ''
+    )
+    .replace(/^\d+[\s:\-–—.]*\s*(?=[\u0900-\u097F])/u, '')
+    .replace(
+      /^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|प्रेस नोट|प्रेस विज्ञप्ति|यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*[:\-–—]?\s*/i,
+      ''
+    )
+    .replace(/^[\s:\-–—,;।.]+/g, '')
     .trim();
 
-  // 4. Remove appended category/location tags at the end of headlines
+  // 5. Remove prepended location or category label tags with colons/hyphens
   cleaned = cleaned
-    .replace(/\s*[:\-–—]?\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i, '')
+    .replace(
+      /^(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|नई\s*दिल्ली|भोपाल|इंदौर|रीवा|जबलपुर|ग्वालियर|लखनऊ|पटना|जयपुर|रायपुर|वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय|विदेश|अपराध|क्राइम|सियासत|राजनीति|हादसा|प्रशासन|विकास|बिजनेस|कारोबार|विशेष\s*कवरेज|ताज़ा\s*समाचार|ताज़ा\s*ख़बर)\s*[:\-–—]\s*/i,
+      ''
+    )
     .trim();
 
-  // 5. Strip trailing punctuation (. or । or ! or ? or , or - or :) repeatedly until clean
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
+  // 6. Remove appended category/location tags at the end of headlines
+  cleaned = cleaned
+    .replace(
+      /\s*[:\-–—]?\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i,
+      ''
+    )
+    .trim();
 
-  // 6. Clean spaces around highlight tags and punctuation (prevent "रेस्टोरेंट , किचन" spaces before commas)
+  // 7. Strip URLs, domain names, social handles, hashtags
+  cleaned = cleaned
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/www\.\S+/gi, '')
+    .replace(/\b[a-zA-Z0-9.\-]+\.(?:com|in|org|net|co|io)\b/gi, '')
+    .replace(/#[\w\u0900-\u097F]+/g, '')
+    .replace(/@[\w\u0900-\u097F]+/g, '');
+
+  // 8. Transliterate common abbreviations and acronyms into Devanagari Hindi
+  const acronyms: [RegExp, string][] = [
+    [/\bAI\b/g, 'एआई'],
+    [/\bISRO\b/g, 'इसरो'],
+    [/\bNASA\b/g, 'नासा'],
+    [/\bFIR\b/g, 'एफआईआर'],
+    [/\bIT\b/g, 'आईटी'],
+    [/\bOPD\b/g, 'ओपीडी'],
+    [/\bVIP\b/g, 'वीआईपी'],
+    [/\bBJP\b/g, 'बीजेपी'],
+    [/\bPM\b/g, 'पीएम'],
+    [/\bCM\b/g, 'सीएम'],
+    [/\bDM\b/g, 'डीएम'],
+    [/\bSP\b/g, 'एसपी'],
+    [/\bSDM\b/g, 'एसडीएम'],
+    [/\bBHK\b/g, 'बीएचके'],
+    [/\bGST\b/g, 'जीएसटी'],
+    [/\bCBI\b/g, 'सीबीआई'],
+    [/\bED\b/g, 'ईडी'],
+    [/\bNIA\b/g, 'एनआईए'],
+    [/\bICU\b/g, 'आईसीयू'],
+    [/\bMP\b/g, 'एमपी'],
+    [/\bUP\b/g, 'यूपी'],
+    [/\bUSA\b/g, 'यूएसए'],
+    [/\bUK\b/g, 'यूके'],
+    [/\bCEO\b/g, 'सीईओ'],
+  ];
+  for (const [pattern, devanagari] of acronyms) {
+    cleaned = cleaned.replace(pattern, devanagari);
+  }
+
+  // 9. Strict English character elimination (protecting [yellow] and [highlight] tags)
+  cleaned = cleaned.replace(/\[(yellow|highlight)\]/g, '\uE001');
+  cleaned = cleaned.replace(/\[\/(yellow|highlight)\]/g, '\uE002');
+  cleaned = cleaned.replace(/[A-Za-z]+/g, '');
+  cleaned = cleaned.replace(/\uE001/g, '[yellow]');
+  cleaned = cleaned.replace(/\uE002/g, '[/yellow]');
+
+  // 10. Strip leading and trailing punctuation repeatedly (. or । or ! or ? or , or - or : or ;)
+  cleaned = cleaned.replace(/^[\s:\-–—,;।.]+/g, '').replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+
+  // 11. Clean spaces around highlight tags and punctuation
   cleaned = cleaned
     .replace(/\[(highlight|yellow)\]\s+/g, '[$1]')
     .replace(/\s+\[\/(highlight|yellow)\]/g, '[/$1]')
     .replace(/\s+([,\.!\?:;।])/g, '$1');
 
-  // 7. Clean up multiple spaces
-  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  // 12. Clean up multiple spaces
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
 
   return cleaned;
 }

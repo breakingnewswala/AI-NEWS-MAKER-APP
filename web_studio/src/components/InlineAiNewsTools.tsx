@@ -406,9 +406,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const baseImmediate = cleanHeadlineText(immediateHeadline);
       setHeadlineOptions([
         baseImmediate,
-        cleanHeadlineText(`${baseImmediate}: मुख्य तथ्यों का पूरा विवरण`),
-        cleanHeadlineText(`मामले में त्वरित संज्ञान, अग्रिम दिशा-निर्देश व जांच जारी`),
-        cleanHeadlineText(`${baseImmediate}: आम जनजीवन पर असर और परिणाम`),
+        cleanHeadlineText("मामले में बड़ा खुलासा, सामने आए महत्वपूर्ण तथ्य और नए दिशा-निर्देश"),
+        cleanHeadlineText("क्या नियमों में बदलाव से आम जनता को मिलेगी राहत? उठे गंभीर सवाल"),
+        cleanHeadlineText("उच्चाधिकारियों ने लिया त्वरित संज्ञान, अग्रिम दिशा-निर्देश व जांच जारी"),
+        cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
       ]);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!immediateImage);
@@ -472,10 +473,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const baseH = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
         const standardOptions = [
           baseH,
-          cleanHeadlineText(`${baseH}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल`),
-          cleanHeadlineText(`${baseH}: घटनाक्रम के बाद मौके पर क्या हुआ`),
-          cleanHeadlineText(`लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के आदेश`),
-          cleanHeadlineText(`${baseH}: आम जनता पर असर और आगामी परिणाम`),
+          cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
+          cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
+          cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
+          cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
         ];
         for (const sOpt of standardOptions) {
           if (!opts.includes(sOpt) && opts.length < 5) {
@@ -576,23 +577,24 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
-      if (opts.length < 4) {
+      if (opts.length < 5) {
         const baseH = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || 'ताज़ा समाचार');
         const standardOptions = [
           baseH,
-          cleanHeadlineText(`${baseH}: मुख्य तथ्यों का विस्तृत ब्योरा`),
-          cleanHeadlineText(`मामले को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी`),
-          cleanHeadlineText(`${baseH}: आम जनता पर असर और आगामी परिणाम`),
+          cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
+          cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
+          cleanHeadlineText("मामले को लेकर बड़ा फैसला: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के निर्देश"),
+          cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
         ];
         for (const sOpt of standardOptions) {
-          if (!opts.includes(sOpt) && opts.length < 4) {
+          if (!opts.includes(sOpt) && opts.length < 5) {
             opts.push(sOpt);
           }
         }
       }
 
       setResult(fallbackResult);
-      setHeadlineOptions(opts.slice(0, 4));
+      setHeadlineOptions(opts.slice(0, 5));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
@@ -728,10 +730,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
         const baseH = cleanHeadlineText(opts[0] || res.headline || card.headline || 'ताज़ा समाचार');
         const extras = [
-          cleanHeadlineText(`${baseH}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल`),
-          cleanHeadlineText(`${baseH}: घटनाक्रम के बाद मौके पर क्या हुआ`),
-          cleanHeadlineText(`लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने जांच व कार्रवाई के दिए आदेश`),
-          cleanHeadlineText(`${baseH}: आम जनता पर असर और आगामी परिणाम`),
+          cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
+          cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
+          cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
+          cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
         ];
         for (const ex of extras) {
           if (!opts.includes(ex) && opts.length < 5) opts.push(ex);
@@ -800,10 +802,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           opts.push(`${fallbackResult.location}: ${fallbackResult.headline}`);
           const baseH = cleanHeadlineText(opts[0] || fallbackResult.headline || 'ताज़ा समाचार');
           const extras = [
-            cleanHeadlineText(`${baseH}: प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल`),
-            cleanHeadlineText(`${baseH}: घटनाक्रम के बाद मौके पर क्या हुआ`),
-            cleanHeadlineText(`लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के आदेश`),
-            cleanHeadlineText(`${baseH}: आम जनता पर असर और आगामी परिणाम`),
+            cleanHeadlineText("प्रशासनिक संवेदनहीनता और बदहाली पर उठे गंभीर सवाल, आखिर कौन है जिम्मेदार"),
+            cleanHeadlineText("मामले में सामने आए चौंकाने वाले तथ्य, जानिए क्या है पूरा घटनाक्रम"),
+            cleanHeadlineText("लापरवाही पर सख्त संज्ञान: उत्तरदायी अधिकारियों ने दिए जांच व कार्रवाई के सख्त आदेश"),
+            cleanHeadlineText("फैसले का आम जनजीवन पर दिखेगा व्यापक असर, व्यवस्था में सुधार की मांग तेज"),
           ];
           for (const ex of extras) {
             if (!opts.includes(ex) && opts.length < 5) opts.push(ex);

@@ -523,15 +523,21 @@ export interface PlanUserRecord {
   userId: string;
   email: string;
   name?: string;
+  fullName?: string;
   username?: string;
   role?: 'superadmin' | 'admin' | 'reporter' | 'user';
   mobile?: string;
+  mobileNumber?: string;
+  district?: string;
   channelName?: string;
+  channelNameHi?: string;
+  channelNameEn?: string;
+  channelLogoPngUrl?: string;
   tier: UserPlanTier;
   planName: PlanKeyName;
-  activatedAt: number;
-  expiresAt: number;
-  activatedVia: string;
+  activatedAt?: number;
+  expiresAt?: number;
+  activatedVia?: string;
   isLocked?: boolean;
   isProfileLocked?: boolean;
   websiteUrl?: string;
@@ -556,18 +562,167 @@ export interface PlanUserRecord {
   hasActivePaidPlan?: boolean;
 }
 
+export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
+  {
+    userId: 'user-1791697518060',
+    email: 'admin.ainewsmaker@gmail.com',
+    name: 'सुपर एडमिन (Super Admin)',
+    fullName: 'सुपर एडमिन (Super Admin)',
+    username: 'AI News Maker',
+    role: 'superadmin',
+    tier: 'ultra',
+    planName: 'VIP DESK',
+    channelName: 'एआई न्यूज़ मेकर',
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+    mobile: '9669802408',
+    mobileNumber: '9669802408',
+    district: 'हेडक्वार्टर सेंट्रल डेस्क',
+    websiteUrl: 'ainewsmaker.online',
+    isBlocked: false,
+    isProfileLocked: true,
+    isLocked: true,
+    createdAt: 1791697518060,
+    trialStartedAt: 1791697518060,
+    trialEndsAt: 2107057518060,
+    expiresAt: 2107057518060,
+    activatedVia: 'Super Admin Preset',
+    hasActivePaidPlan: true,
+  },
+  {
+    userId: 'usr_627265616b69',
+    email: 'breakingnewswala.com@gmail.com',
+    name: 'मुख्य संपादक',
+    fullName: 'मुख्य संपादक',
+    username: 'breakingnewswala',
+    role: 'superadmin',
+    tier: 'ultra',
+    planName: 'VIP DESK',
+    channelName: 'ब्रेकिंग न्यूज़ वाला',
+    channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
+    channelNameEn: 'BREAKING NEWS WALA',
+    channelLogoUrl: '/assets/breaking_news_wala_logo.png',
+    channelLogoPngUrl: '/assets/breaking_news_wala_logo.png',
+    mobile: '9669802408',
+    mobileNumber: '9669802408',
+    district: 'सेंट्रल डेस्क / भोपाल',
+    websiteUrl: 'breakingnewswala.com',
+    isBlocked: false,
+    isProfileLocked: true,
+    isLocked: true,
+    createdAt: 1791792137805,
+    trialStartedAt: 1791792137805,
+    trialEndsAt: 2107057518060,
+    expiresAt: 2107057518060,
+    activatedVia: 'Admin Preset',
+    hasActivePaidPlan: true,
+  },
+  {
+    userId: 'usr_khabridas_101',
+    email: 'khabridasnews@gmail.com',
+    name: 'खबरिदास न्यूज़ (Khabridas News)',
+    fullName: 'खबरिदास न्यूज़ (Khabridas News)',
+    username: 'khabridasnews',
+    role: 'user',
+    tier: 'basic',
+    planName: 'BASIC',
+    channelName: 'खबरिदास न्यूज़',
+    channelNameHi: 'खबरिदास न्यूज़',
+    channelNameEn: 'Khabridas News',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    mobile: '9876543210',
+    mobileNumber: '9876543210',
+    district: 'ग्वालियर',
+    websiteUrl: 'https://khabridasnews.com',
+    isBlocked: false,
+    isProfileLocked: false,
+    createdAt: 1791892712618,
+    trialStartedAt: 1791892712618,
+    trialEndsAt: 1792497512618,
+    daysRemaining: 5,
+    hoursRemaining: 2,
+  },
+  {
+    userId: 'usr_rituraj_102',
+    email: 'riturajtomarorchha@gmail.com',
+    name: 'ऋतुराज तोमर (ओरछा)',
+    fullName: 'ऋतुराज तोमर (ओरछा)',
+    username: 'riturajtomarorchha',
+    role: 'user',
+    tier: 'basic',
+    planName: 'BASIC',
+    channelName: 'ओरछा बुंदेलखंड न्यूज़',
+    channelNameHi: 'ओरछा बुंदेलखंड न्यूज़',
+    channelNameEn: 'Orchha Bundelkhand News',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    mobile: '9876543211',
+    mobileNumber: '9876543211',
+    district: 'ओरछा / निवाड़ी',
+    websiteUrl: 'ainewsmaker.online',
+    isBlocked: false,
+    isProfileLocked: false,
+    createdAt: 1791892712618,
+    trialStartedAt: 1791892712618,
+    trialEndsAt: 1792497512618,
+    daysRemaining: 5,
+    hoursRemaining: 2,
+  },
+  {
+    userId: 'usr_anmolsandesh_103',
+    email: 'digital.anmolsandesh@gmail.com',
+    name: 'Anmol Sandesh',
+    fullName: 'Anmol Sandesh',
+    username: 'anmolsandesh',
+    role: 'user',
+    tier: 'basic',
+    planName: 'BASIC',
+    channelName: 'अनमोल संदेश',
+    channelNameHi: 'अनमोल संदेश',
+    channelNameEn: 'Anmol Sandesh',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    mobile: '9425000998',
+    mobileNumber: '9425000998',
+    district: 'सेंट्रल डेस्क',
+    websiteUrl: 'anmolsandesh.com',
+    isBlocked: false,
+    isProfileLocked: false,
+    createdAt: 1791892712618,
+    trialStartedAt: 1791892712618,
+    trialEndsAt: 1792497512618,
+    daysRemaining: 5,
+    hoursRemaining: 2,
+  },
+];
+
 export function getPlanUsers(): PlanUserRecord[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return DEFAULT_GUARANTEED_PLAN_USERS;
+  let parsed: PlanUserRecord[] = [];
   try {
     const saved = localStorage.getItem(STORAGE_KEY_ASSIGNED_USERS);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) return parsed;
+      const data = JSON.parse(saved);
+      if (Array.isArray(data)) parsed = data;
     }
   } catch (e) {
     console.warn('Error reading plan users:', e);
   }
-  return [];
+
+  const map = new Map<string, PlanUserRecord>();
+  DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => {
+    map.set(u.email.toLowerCase().trim(), u);
+  });
+  parsed.forEach((u) => {
+    if (u && u.email) {
+      const key = u.email.toLowerCase().trim();
+      const existing = map.get(key);
+      map.set(key, { ...existing, ...u });
+    }
+  });
+
+  const merged = Array.from(map.values());
+  return merged;
 }
 
 export function recordUserPlanAssignment(record: PlanUserRecord): void {
@@ -1067,6 +1222,7 @@ export function registerOrUpdateUser(userData: {
   role?: 'superadmin' | 'admin' | 'reporter' | 'user' | string;
   userId?: string;
   uid?: string;
+  profileIncomplete?: boolean;
 }): void {
   if (typeof window === 'undefined') return;
   try {
@@ -1395,9 +1551,19 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.users)) {
-        localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(data.users));
+        const map = new Map<string, PlanUserRecord>();
+        DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => map.set(u.email.toLowerCase().trim(), u));
+        data.users.forEach((u: PlanUserRecord) => {
+          if (u && u.email) {
+            const key = u.email.toLowerCase().trim();
+            const existing = map.get(key);
+            map.set(key, { ...existing, ...u });
+          }
+        });
+        const merged = Array.from(map.values());
+        localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(merged));
         window.dispatchEvent(new Event('ai_news_plan_users_changed'));
-        return data.users;
+        return merged;
       }
     }
   } catch (err) {

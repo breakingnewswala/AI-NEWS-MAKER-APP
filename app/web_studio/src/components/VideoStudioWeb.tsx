@@ -31,6 +31,7 @@ import {
   Music,
   FastForward,
   Layers,
+  Save,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
@@ -38,6 +39,8 @@ import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
+import { generateVideoDownloadFileName } from '../lib/dateUtils';
+import { saveVideoDraft } from '../lib/draftsManager';
 
 export type VideoAspect = '4:5' | '9:16' | '16:9' | '1:1' | '4:3';
 export type VideoTransitionType = 'none' | 'fade' | 'flash' | 'zoom' | 'slide' | 'glitch';
@@ -133,6 +136,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     profile?.showMobileNumber ?? true
   );
+
+  // Listen to profile updates (Video feed prioritizes GIF logo, falls back to PNG primary logo)
+  useEffect(() => {
+    const handleProfileUpdate = (e: any) => {
+      const p = e.detail;
+      if (p) {
+        const logo = p.channelLogoGifUrl || p.channelLogoPngUrl || p.channelLogoUrl || '';
+        if (logo) setChannelLogoUrl(logo);
+      }
+    };
+    window.addEventListener('channel_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('channel_profile_updated', handleProfileUpdate);
+  }, []);
 
   const [tickerText, setTickerText] = useState<string>(
     '⚡ ताज़ा बुलेटिन: देश भर के डिजिटल पत्रकारों के लिए नई प्रेस नियमावली जारी • लाइव अपडेट्स जारी'
@@ -262,11 +278,51 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const isGif = file.type.includes('gif') || file.name.toLowerCase().endsWith('.gif');
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         if (typeof reader.result === 'string') {
-          setChannelLogoUrl(reader.result);
-          showToast('✅ चैनल लोगो अपडेट हुआ!');
+          const dataUrl = reader.result;
+          setChannelLogoUrl(dataUrl);
+          showToast(isGif ? '🎬 एनिमेटेड GIF लोगो अपलोड हो रहा है...' : '📦 चैनल लोगो अपलोड हो रहा है...');
+
+          try {
+            const userIdentifier = currentUser?.username || profile?.username || currentUser?.email || profile?.email || '';
+            const res = await fetch('/api/upload-logo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                dataUrl,
+                logoType: isGif ? 'gif' : 'png',
+                username: userIdentifier,
+                email: currentUser?.email || profile?.email || '',
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.logoUrl) {
+                setChannelLogoUrl(data.logoUrl);
+                // Update local storage profile
+                try {
+                  const existingRaw = localStorage.getItem('user_channel_profile') || localStorage.getItem('user_profile_data');
+                  const existing = existingRaw ? JSON.parse(existingRaw) : {};
+                  const updated = {
+                    ...existing,
+                    ...(isGif
+                      ? { channelLogoGifUrl: data.logoUrl, channelLogoType: 'gif' }
+                      : { channelLogoPngUrl: data.logoUrl, channelLogoType: 'png', channelLogoUrl: data.logoUrl }),
+                  };
+                  localStorage.setItem('user_channel_profile', JSON.stringify(updated));
+                  localStorage.setItem('user_profile_data', JSON.stringify(updated));
+                  window.dispatchEvent(new CustomEvent('channel_profile_updated', { detail: updated }));
+                } catch {}
+                showToast(isGif ? '✅ एनिमेटेड GIF स्थायी रूप से सेव हुआ!' : '✅ चैनल लोगो स्थायी रूप से सेव हुआ!');
+              }
+            }
+          } catch (err) {
+            console.warn('Video Studio logo upload error:', err);
+            showToast('✅ लोगो लागू किया गया (लोकल)');
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -542,6 +598,30 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     }
   };
 
+  // Trigger welcome reward for 1st video export from Video Studio (500 coins)
+  const triggerVideoWelcomeReward = () => {
+    try {
+      const email = (currentUser?.email || profile?.email || '').toLowerCase().trim();
+      if (!email) return;
+      fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, rewardType: 'video' }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && (data.awarded || (data.claimed && !data.alreadyClaimed))) {
+            window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+            window.dispatchEvent(new CustomEvent('ai_news_wallet_updated'));
+            setTimeout(() => {
+              alert('🎉 बधाई! वीडियो स्टूडियो से प्रथम वीडियो एक्सपोर्ट पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
+            }, 600);
+          }
+        })
+        .catch(() => {});
+    } catch {}
+  };
+
   // Export Full Video File with Progress, Status & Retry
   const handleDownloadVideo = async () => {
     setIsExporting(true);
@@ -558,7 +638,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setVideoExportProgress(50);
       setVideoExportStatus('जैकेट व ऑडियो सिंक किए जा रहे हैं...');
 
-      const filename = `news_video_${Date.now()}.mp4`;
+      const filename = generateVideoDownloadFileName('mp4');
 
       // 1. Android Native Bridge integration
       if (
@@ -572,6 +652,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           setVideoExportProgress(100);
           setVideoExportStatus('डाउनलोड पूर्ण!');
           showToast('✅ वीडियो डाउनलोड शुरू हो गया!');
+          triggerVideoWelcomeReward();
           setIsExporting(false);
           return;
         } catch (bridgeErr) {
@@ -596,6 +677,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         setVideoExportProgress(100);
         setVideoExportStatus('सफलतापूर्वक डाउनलोड!');
         showToast('✅ वीडियो सफलतापूर्वक डाउनलोड हो गया!');
+        triggerVideoWelcomeReward();
       } else {
         // Fallback to high-res news frame snapshot
         handleDownloadSnapshot();
@@ -803,7 +885,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <span className="px-1.5 py-0.2 bg-red-600 text-white text-[8px] font-black rounded shrink-0">
                     ताज़ा
                   </span>
-                  <marquee className="truncate">{tickerText}</marquee>
+                  <span className="truncate flex-1">{tickerText}</span>
                 </div>
               </div>
             </div>
@@ -975,30 +1057,29 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </div>
             )}
 
-            {/* Action Buttons Underneath Preview: Download, Refresh, Caption & Share */}
-            <div className="grid grid-cols-4 gap-1.5 w-full mt-3 pt-2.5 border-t border-neutral-800/80">
+            {/* Action Buttons: 1. Video Download, 2. Caption, 3. Reset */}
+            <div className="grid grid-cols-3 gap-2 w-full mt-3 pt-2.5 border-t border-neutral-800/80">
               {/* 1. Video Download Button */}
               <button
                 type="button"
                 onClick={handleDownloadVideo}
                 disabled={isExporting}
-                className="py-2 px-1.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                className="py-2.5 px-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
                 title="वीडियो डाउनलोड करें (MP4)"
               >
-                <Download className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">वीडियो MP4</span>
+                <Download className="w-4 h-4 shrink-0" />
+                <span className="truncate">वीडियो डाउनलोड करें</span>
               </button>
 
-              {/* 2. Snapshot Frame Download */}
+              {/* 2. Caption & Share Button */}
               <button
                 type="button"
-                onClick={handleDownloadSnapshot}
-                disabled={isExporting}
-                className="py-2 px-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                title="वीडियो जैकेट फ्रेम (JPG) डाउनलोड करें"
+                onClick={handleCopyCaption}
+                className="py-2.5 px-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95"
+                title="सोशल मीडिया कैप्शन कॉपी करें"
               >
-                <Download className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">फ्रेम JPG</span>
+                {copiedCaption ? <Check className="w-4 h-4 shrink-0 text-amber-300" /> : <Share2 className="w-4 h-4 shrink-0" />}
+                <span className="truncate">{copiedCaption ? 'कॉपी हुआ!' : 'कैप्शन'}</span>
               </button>
 
               {/* 3. Reset Button */}
@@ -1011,24 +1092,49 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   setTrimEnd(Math.floor(duration) || 60);
                   showToast('वीडियो पोजीशन रीसेट हो गई');
                 }}
-                className="py-2 px-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white font-extrabold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95"
+                className="py-2.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white font-extrabold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95"
                 title="वीडियो ज़ूम व पोजीशन रीसेट करें"
               >
-                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                <RotateCcw className="w-4 h-4 shrink-0" />
                 <span>रीसेट</span>
               </button>
-
-              {/* 4. Caption & Share Button */}
-              <button
-                type="button"
-                onClick={handleCopyCaption}
-                className="py-2 px-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all active:scale-95"
-                title="सोशल मीडिया कैप्शन कॉपी करें"
-              >
-                {copiedCaption ? <Check className="w-3.5 h-3.5 shrink-0 text-amber-300" /> : <Share2 className="w-3.5 h-3.5 shrink-0" />}
-                <span className="truncate">{copiedCaption ? 'कॉपी हुआ!' : 'कैप्शन'}</span>
-              </button>
             </div>
+
+            {/* Save Video Draft Button */}
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  saveVideoDraft(
+                    {
+                      videoUrl,
+                      headline1: headline,
+                      headline2: subHeadline,
+                      location,
+                      channelName: channelTag,
+                      channelLogoUrl,
+                      aspect,
+                      zoomScale,
+                      offsetY,
+                      trimStart,
+                      trimEnd,
+                      videoCaption,
+                    },
+                    {
+                      title: headline || videoCaption || 'वीडियो प्रोजेक्ट ड्राफ्ट',
+                    }
+                  );
+                  showToast('✅ वीडियो ड्राफ्ट सफलतापूर्वक सहेजा गया!');
+                } catch {
+                  showToast('❌ ड्राफ्ट सेव करने में समस्या आई');
+                }
+              }}
+              className="w-full mt-2 py-2 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-slate-200 hover:text-amber-300 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow"
+              title="इस वीडियो प्रोजेक्ट को ड्राफ्ट में सहेजें"
+            >
+              <Save className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>ड्राफ्ट सेव करें</span>
+            </button>
           </div>
         </aside>
 

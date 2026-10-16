@@ -1108,10 +1108,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   saveVideoDraft(
                     {
                       videoUrl,
-                      headline1,
-                      headline2,
+                      headline1: headline,
+                      headline2: subHeadline,
                       location,
-                      channelName,
+                      channelName: channelTag,
                       channelLogoUrl,
                       aspect,
                       zoomScale,
@@ -1121,7 +1121,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       videoCaption,
                     },
                     {
-                      title: headline1 || videoCaption || 'वीडियो प्रोजेक्ट ड्राफ्ट',
+                      title: headline || videoCaption || 'वीडियो प्रोजेक्ट ड्राफ्ट',
                     }
                   );
                   showToast('✅ वीडियो ड्राफ्ट सफलतापूर्वक सहेजा गया!');
