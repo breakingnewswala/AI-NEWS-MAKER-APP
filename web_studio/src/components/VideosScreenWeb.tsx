@@ -206,45 +206,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     }
   };
 
-  const handleDownloadVideo = async (vid: VideoFeedItem) => {
-    try {
-      // 1. Download video file via anchor
-      const a = document.createElement('a');
-      a.href = vid.videoUrl;
-      a.download = `${vid.title || 'video'}.mp4`;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        if (a.parentNode) document.body.removeChild(a);
-      }, 500);
-
-      // 2. Trigger welcome reward for 1st video download (500 coins)
-      if (currentUser?.email) {
-        fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: currentUser.email,
-            rewardType: 'video',
-          }),
-        })
-          .then((r) => r.json())
-          .then((data) => {
-            if (data && data.awarded) {
-              window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
-              setTimeout(() => {
-                alert('🎉 बधाई! पहले वीडियो डाउनलोड पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
-              }, 600);
-            }
-          })
-          .catch(() => {});
-      }
-    } catch (err) {
-      console.warn('Video download trigger error:', err);
-    }
-  };
-
   // State for Delete Confirmation Dialog
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
 
