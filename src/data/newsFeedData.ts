@@ -20,6 +20,9 @@ export interface NewsFeedPost {
   status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   isBonus?: boolean;
   rewardCoins?: number;
+  coinValue?: number;
+  coinCost?: number;
+  restrictedPlans?: string[];
 }
 
 export interface VideoFeedItem {
@@ -36,6 +39,9 @@ export interface VideoFeedItem {
   category: string;
   isBonus?: boolean;
   rewardCoins?: number;
+  coinValue?: number;
+  coinCost?: number;
+  restrictedPlans?: string[];
 }
 
 // 7-Day Auto Delete Rule: Videos & News older than 7 days (168 hours) are automatically removed

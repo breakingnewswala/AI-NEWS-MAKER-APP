@@ -1067,6 +1067,7 @@ export function registerOrUpdateUser(userData: {
   role?: 'superadmin' | 'admin' | 'reporter' | 'user' | string;
   userId?: string;
   uid?: string;
+  profileIncomplete?: boolean;
 }): void {
   if (typeof window === 'undefined') return;
   try {

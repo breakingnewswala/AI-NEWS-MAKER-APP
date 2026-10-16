@@ -35,6 +35,7 @@ import {
   fetchNotificationsFromServer,
   AppNotification,
 } from '../lib/notificationManager';
+import { getApiUrl } from '../lib/apiConfig';
 
 interface AppTopBarWebProps {
   currentTab: string;

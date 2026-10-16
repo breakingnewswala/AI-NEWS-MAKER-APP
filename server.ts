@@ -283,6 +283,9 @@ interface StoredNewsPost {
   timestamp: number;
   expiresAt?: number;
   status?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  coinValue?: number;
+  coinCost?: number;
+  restrictedPlans?: string[];
 }
 
 const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
@@ -2878,6 +2881,9 @@ interface StoredVideoItem {
   category?: string;
   isBonus?: boolean;
   rewardCoins?: number;
+  coinValue?: number;
+  coinCost?: number;
+  restrictedPlans?: string[];
 }
 
 function loadDeletedVideoIds(): Set<string> {
