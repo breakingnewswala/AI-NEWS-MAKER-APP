@@ -6890,51 +6890,312 @@ export function formatDistrictWithState(loc: string): string {
   return trimmed;
 }
 
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Checks if alias matches in text using word boundaries:
+ * - English/Latin: \b${alias}\b (avoids "agra" inside "paragraphs", "instagram", etc.)
+ * - Devanagari: unicode boundary with guards against common false-positive verbs/multipliers
+ */
+export function matchDistrictAlias(text: string, alias: string): boolean {
+  if (!alias || !text) return false;
+  // If alias is English/Latin
+  if (/^[A-Za-z0-9\s\-]+$/.test(alias)) {
+    const reg = new RegExp(`\\b${escapeRegExp(alias.toLowerCase())}\\b`, 'i');
+    return reg.test(text);
+  }
+  // If alias is Devanagari
+  if (alias === 'गया') {
+    if (/(?:किया|लिया|दिया|हो|चला|आ|गए|गई)\s+गया/u.test(text)) {
+      return /(?:गया\s*(?:जिले|में|शहर|से|का|की|के)|बोधगया)/u.test(text);
+    }
+  }
+  if (alias === 'गुना') {
+    if (/\d+\s*गुना|चार\s*गुना|दो\s*गुना|तीन\s*गुना|दस\s*गुना|दोगुना|तीनगुना/u.test(text)) {
+      return /(?:गुना\s*(?:जिले|में|शहर|से|का|की|के))/u.test(text);
+    }
+  }
+  if (alias === 'धार') {
+    if (/(?:तेज|पानी की|हवा की)\s+धार|धारदार/u.test(text)) {
+      return /(?:धार\s*(?:जिले|में|शहर|से|का|की|के))/u.test(text);
+    }
+  }
+  if (alias === 'बांदा') {
+    if (/बांधा/u.test(text) && !/बांदा\s*(?:जिले|में|शहर|से|का|की|के)/u.test(text)) {
+      return false;
+    }
+  }
+  const devReg = new RegExp(`(?:^|[^\\p{L}\\p{M}])${escapeRegExp(alias)}(?=[^\\p{L}\\p{M}]|$)`, 'u');
+  return devReg.test(text);
+}
+
+function cleanCorpusForLocation(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/(?:paragraphs?\s+extracted|instagram\.com|facebook\.com|twitter\.com|youtube\.com)/gi, ' ')
+    .replace(/(?:Article Content & Facts|Meta Description|Source URL|File Photo|Credit)/gi, ' ')
+    .replace(/https?:\/\/[^\s]+/gi, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Detects genuine event location from news facts, title, and URL.
+ * Prioritizes district-level matches over generic states, and never defaults to "आगरा" due to "paragraphs" or generic text.
+ */
 export function detectDistrictAndState(
   title: string = '',
   desc: string = '',
   content: string = '',
   url: string = ''
 ): string {
-  const primaryText = `${title} ${desc} ${url}`.toLowerCase();
-  const allText = `${title} ${desc} ${content} ${url}`.toLowerCase();
+  const cleanTitle = cleanCorpusForLocation(title);
+  const cleanDesc = cleanCorpusForLocation(desc);
+  const cleanContent = cleanCorpusForLocation(content);
 
+  // 1. Check URL path segments explicitly (e.g. /local/mp/bhopal/news/ -> bhopal)
+  if (url) {
+    const urlLower = url.toLowerCase();
+    for (const d of DISTRICT_STATE_LIST) {
+      if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+      for (const a of d.aliases) {
+        if (/^[a-z0-9\-]+$/i.test(a) && a.length >= 4) {
+          const pathReg = new RegExp(`[/\\-_]${escapeRegExp(a)}[/\\-_.]`, 'i');
+          if (pathReg.test(urlLower)) {
+            return `${d.district}, ${d.state}`;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Check title first (highest editorial priority)
   for (const d of DISTRICT_STATE_LIST) {
     if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
     for (const a of d.aliases) {
-      if (primaryText.includes(a.toLowerCase())) {
+      if (matchDistrictAlias(cleanTitle, a)) {
         return `${d.district}, ${d.state}`;
       }
     }
   }
 
+  // 3. Check description
   for (const d of DISTRICT_STATE_LIST) {
     if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
     for (const a of d.aliases) {
-      if (allText.includes(a.toLowerCase())) {
+      if (matchDistrictAlias(cleanDesc, a)) {
         return `${d.district}, ${d.state}`;
       }
     }
   }
 
-  if (/वाशिंगटन|व्हाइट हाउस|अमेरिका|trump|व्हाइटहाउस|us|usa/i.test(primaryText)) {
+  // 4. Check clean article content
+  for (const d of DISTRICT_STATE_LIST) {
+    if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+    for (const a of d.aliases) {
+      if (matchDistrictAlias(cleanContent, a)) {
+        return `${d.district}, ${d.state}`;
+      }
+    }
+  }
+
+  // 5. International places
+  const primaryText = `${cleanTitle} ${cleanDesc} ${url}`.toLowerCase();
+  if (/वाशिंगटन|व्हाइट हाउस|अमेरिका|trump|व्हाइटहाउस|white house|washington/i.test(primaryText)) {
     return 'वाशिंगटन';
   }
   if (/रूस|मास्को|moscow/i.test(primaryText)) return 'मास्को';
   if (/ब्रिटेन|लंदन|london/i.test(primaryText)) return 'लंदन';
 
+  // 6. Genuine Delhi
   if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट|नई\s*दिल्ली|राजधानी\s*दिल्ली)/i.test(primaryText)) {
     return 'नई दिल्ली';
   }
 
-  const states = ['मध्य प्रदेश', 'उत्तर प्रदेश', 'बिहार', 'राजस्थान', 'उत्तराखंड', 'छत्तीसगढ़', 'महाराष्ट्र', 'गुजरात', 'झारखंड', 'पंजाब', 'हरियाणा'];
+  // 7. State-level match if state is explicitly referenced in title/desc
+  const states = [
+    { state: 'मध्य प्रदेश', capital: 'भोपाल, मध्य प्रदेश', aliases: ['मध्य प्रदेश', 'madhya pradesh', 'mp'] },
+    { state: 'उत्तर प्रदेश', capital: 'लखनऊ, उत्तर प्रदेश', aliases: ['उत्तर प्रदेश', 'uttar pradesh', 'up'] },
+    { state: 'बिहार', capital: 'पटना, बिहार', aliases: ['बिहार', 'bihar'] },
+    { state: 'राजस्थान', capital: 'जयपुर, राजस्थान', aliases: ['राजस्थान', 'rajasthan'] },
+    { state: 'उत्तराखंड', capital: 'देहरादून, उत्तराखंड', aliases: ['उत्तराखंड', 'uttarakhand'] },
+    { state: 'छत्तीसगढ़', capital: 'रायपुर, छत्तीसगढ़', aliases: ['छत्तीसगढ़', 'chhattisgarh'] },
+    { state: 'महाराष्ट्र', capital: 'मुंबई, महाराष्ट्र', aliases: ['महाराष्ट्र', 'maharashtra'] },
+    { state: 'गुजरात', capital: 'गांधीनगर, गुजरात', aliases: ['गुजरात', 'gujarat'] },
+    { state: 'झारखंड', capital: 'रांची, झारखंड', aliases: ['झारखंड', 'jharkhand'] },
+    { state: 'पंजाब', capital: 'चंडीगढ़', aliases: ['पंजाब', 'punjab'] },
+    { state: 'हरियाणा', capital: 'चंडीगढ़', aliases: ['हरियाणा', 'haryana'] },
+  ];
+
   for (const st of states) {
-    if (primaryText.includes(st.toLowerCase())) {
-      return st;
+    for (const a of st.aliases) {
+      if (matchDistrictAlias(cleanTitle, a) || matchDistrictAlias(cleanDesc, a)) {
+        return st.capital;
+      }
     }
   }
 
   return '';
+}
+
+/**
+ * Transforms any raw sentence or clause into a punchy, active journalistic Hindi headline title.
+ * Eliminates declarative endings like "नहीं बनेंगे", "किए गए", "दी जाएगी", "हुआ", avoiding implied full stops.
+ */
+export function formatAsJournalisticHeadline(raw: string): string {
+  if (!raw) return '';
+  let h = cleanHeadlineText(raw);
+
+  // 1. Strip conversational starter words that make it sound like spoken narrative
+  h = h.replace(/^(?:अब|वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|दरअसल|इस दौरान|इसके तहत|सभी|मामले में|इधर)[,\s]*/gi, '');
+
+  // 2. Strip leading English junk (without stripping numbers like 40 or 250)
+  h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
+
+  // 3. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
+  h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, '$1 पर रोक');
+  h = h.replace(/(?:अब\s+)?नहीं\s*(?:होगा|होंगे)\s+([^,:।\n]+)/gu, '$1 पर पाबंदी');
+
+  // 4. Transform declarative closing verb phrases into journalistic headline nouns/action tags
+  h = h
+    .replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, ' पर रोक')
+    .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
+    .replace(/(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' तय')
+    .replace(/(?:लागू\s*किए\s*गए\s*हैं|लागू\s*किया\s*गया|लागू\s*होगा)(?:\s*हैं|\s*है)?$/u, ' लागू')
+    .replace(/(?:\s*अतिरिक्त)?\s*(?:सहायता|छूट|राहत)\s*(?:दी\s*जाएगी|मिलेगी|का\s*प्रावधान)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
+    .replace(/(?:दी\s*जाएगी|छूट\s*मिलेगी|प्रावधान\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
+    .replace(/(?:\s*सीधा)?\s*(?:लाभ|फायदा)\s*(?:मिलेगा|होगा)(?:\s*हैं|\s*है)?$/u, ' को सीधा फायदा')
+    .replace(/(?:पूरे\s*किए|रन\s*बनाए)(?:\s*हैं|\s*है)?$/u, ' ठोके')
+    .replace(/(?:शतक|अर्धशतक)\s*(?:लगाया|जड़ा|बनाया)(?:\s*हैं|\s*है)?$/u, ' जड़ा')
+    .replace(/(?:बनाए\s*जा\s*सकेंगे|बनाए\s*जाएंगे)(?:\s*हैं|\s*है)?$/u, ' को हरी झंडी')
+    .replace(/(?:गिरफ्तार\s*किया\s*गया|गिरफ्तार\s*किया)(?:\s*हैं|\s*है)?$/u, ' गिरफ्तार')
+    .replace(/(?:बरामद\s*की\s*गई|बरामद\s*किए\s*गए|बरामद\s*हुए)(?:\s*हैं|\s*है)?$/u, ' बरामद')
+    .replace(/(?:\s*की)?\s*(?:मौत\s*हो\s*गई|जान\s*गंवाई|दम\s*तोड़\s*दिया)(?:\s*हैं|\s*है)?$/u, ' की मौत')
+    .replace(/(?:घायल\s*हो\s*गए|घायल\s*हुए)(?:\s*हैं|\s*है)?$/u, ' घायल')
+    .replace(/(?:आदेश\s*दिए\s*गए|आदेश\s*जारी\s*किए|निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, ' के सख्त आदेश')
+    .replace(/(?:निधन\s*हो\s*गया)(?:\s*हैं|\s*है)?$/u, ' का निधन')
+    .replace(/(?:जांच\s*शुरू\s*कर\s*दी\s*गई|जांच\s*के\s*निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, ' की जांच शुरू')
+    .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का बड़ा ऐलान')
+    .replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, ' के नए नियम');
+
+  // 5. Strip auxiliary/past verb endings if still lingering at the end
+  h = h
+    .replace(/\s+(?:हो\s*गया|हो\s*गई|हो\s*गए|किया\s*गया|किए\s*गए|की\s*गई|दिया\s*गया|दिए\s*गए|ली\s*गई|लिया\s*गया)$/u, '')
+    .replace(/\s+(?:रहा\s*है|रही\s*है|रहे\s*हैं|रहा\s*था|रही\s*थी|रहे\s*थे|हो\s*रहा\s*है|हो\s*रही\s*है)$/u, '')
+    .replace(/\s+(?:हैं|है|था|थी|थे)$/u, '');
+
+  // 6. Strip trailing prepositions/connectives that leave an incomplete sentence fragment
+  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक)$/u, '');
+
+  // 7. Clean duplicate particles like "की की", "को को"
+  h = h
+    .replace(/(?:^|[^\p{L}\p{M}])(को|की|का|के|में|पर|से|ने)\s+\1(?=[^\p{L}\p{M}]|$)/gu, ' $1 ')
+    .replace(/\s+/g, ' ');
+
+  // 8. Final cleanup of any punctuation marks at end
+  h = h.replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+
+  return h;
+}
+
+function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
+  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
+  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
+  if (words1.size === 0 || words2.size === 0) return 0;
+  let common = 0;
+  for (const w of words1) {
+    if (words2.has(w)) common++;
+  }
+  return (2 * common) / (words1.size + words2.size);
+}
+
+/**
+ * Generates exactly 5 publishable, distinct journalistic headlines in pure Hindi.
+ * Guaranteed: zero full stops, zero incomplete sentence cuts, dynamic extraction from facts.
+ */
+export function generate5JournalisticHeadlines(
+  baseTitle: string,
+  sentences: string[] = [],
+  location: string = ''
+): string[] {
+  const options: string[] = [];
+  const locClean = location && location !== 'विशेष कवरेज' ? location.split(',')[0].trim() : '';
+
+  const addIfValid = (text: string) => {
+    const formatted = formatAsJournalisticHeadline(text);
+    if (!formatted || formatted.length < 14) return;
+    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return;
+    for (const opt of options) {
+      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.8) {
+        return;
+      }
+    }
+    options.push(formatted);
+  };
+
+  // 1. Process base title: Convert into active title
+  const cleanTitle = formatAsJournalisticHeadline(baseTitle);
+  addIfValid(cleanTitle);
+
+  // 2. Structured title combinations (if baseTitle had multiple parts)
+  const rawParts = baseTitle
+    .split(/[:|–—,]+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 8);
+
+  if (rawParts.length >= 2) {
+    const part0 = formatAsJournalisticHeadline(rawParts[0]);
+    const part1 = formatAsJournalisticHeadline(rawParts[1]);
+    if (part0 && part1) {
+      addIfValid(`${part1}: ${part0}`);
+    }
+  }
+
+  // 3. Extract facts from body sentences (numbers, metrics, regulations, actions)
+  for (const sent of sentences) {
+    if (options.length >= 5) break;
+
+    const hasNumbers = /\d+/.test(sent);
+    const hasKeyAction = /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा/u.test(sent);
+
+    if (hasNumbers || hasKeyAction) {
+      const clauses = sent.split(/[,;।\n]+/).map((c) => c.trim()).filter((c) => c.length >= 12);
+      for (const clause of clauses) {
+        if (options.length >= 5) break;
+        const candidate = formatAsJournalisticHeadline(clause);
+        if (candidate.length >= 15 && candidate.length <= 80) {
+          addIfValid(candidate);
+        }
+      }
+    }
+  }
+
+  // 4. Create Location-Anchored Headline
+  if (options.length < 5 && locClean) {
+    if (!cleanTitle.includes(locClean)) {
+      addIfValid(`${locClean}: ${cleanTitle}`);
+    }
+  }
+
+  // 5. Create "बड़ा फैसला / नए नियम" perspective if still under 5
+  if (options.length < 5 && rawParts.length > 0) {
+    addIfValid(`बड़ा फैसला: ${formatAsJournalisticHeadline(rawParts[0])}`);
+  }
+  if (options.length < 5 && rawParts.length > 1) {
+    addIfValid(`नई गाइडलाइन: ${formatAsJournalisticHeadline(rawParts[1])}`);
+  }
+
+  // 6. Remaining sentences if still under 5
+  for (const sent of sentences) {
+    if (options.length >= 5) break;
+    const candidate = formatAsJournalisticHeadline(sent);
+    if (candidate.length >= 15 && candidate.length <= 80) {
+      addIfValid(candidate);
+    }
+  }
+
+  return options.slice(0, 5);
 }
 
 // Generate the 3 caption styles deterministically from news facts
@@ -7843,7 +8104,7 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 - Template ID: ${tplConfig.template_id} (${tplConfig.name})
 - Headline Layout Area: ${targetArea}
 - Strict Maximum Lines: ${targetMaxLines} lines (${targetMaxLines === 2 ? "सख्ती से 2 लाइन्स, लगभग 8-14 शब्द" : "सख्ती से 3 लाइन्स, लगभग 12-22 शब्द"})
-- Headline के अंत में full stop, पूर्णविराम (।), comma, hyphen या कोई विराम चिह्न न लगाएं।
+- Headline के अंत में full stop, पूर्णविराम (।), comma, hyphen या कोई विराम चिह्न कभी न लगाएं।
 - NEVER use a URL, domain, or slug as a headline.
 - Do NOT add prefixes like 'Breaking News', 'Live Update', 'News Update', 'खबर अपडेट' to the headline.
 
@@ -7856,6 +8117,7 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 
 ★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINE OPTIONS (NO FIXED TEMPLATES):
 Generate EXACTLY 5 publishable, natural, impactful Hindi headline options directly derived from the core facts of the news:
+- CRITICAL: Headlines must be punchy title/action phrases, NEVER plain declarative narrative sentences from article body ending in verbs like 'नहीं बनेंगे', 'किए गए', 'दी जाएगी', 'हुआ'. Transform narrative verbs into title nouns (e.g. write 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
 - Each option must represent a genuinely different editorial angle or focus on a distinct factual element of the story (e.g. key decision/event, major public impact, key quote/accusation, quantitative milestone/rule, or future implication).
 - All 5 options must be complete, professional, broadcast-ready news headlines in pure Devanagari Hindi.
 - DO NOT force options into generic predetermined formulas or fixed sentence patterns.
@@ -7863,7 +8125,7 @@ Generate EXACTLY 5 publishable, natural, impactful Hindi headline options direct
 - NO clickbait or artificial curiosity phrases like "सामने आए चौंकाने वाले तथ्य" unless strictly justified by extraordinary facts.
 - NO generic administrative filler like "प्रशासनिक अमला मौके की निगरानी में जुटा" or "लापरवाही पर सख्त संज्ञान".
 - STRICTLY DO NOT output prefixes like "विकल्प 1:", "विकल्प 2:", "Option 1:" in the headline text. Provide pure headline strings.
-- No full stop (।) at the end.
+- Absolutely NO trailing full stop (।) or period (.) at the end of any headline.
 
 ★ MULTICOLOR HEADLINE HIGHLIGHTING:
 - Select 2-4 key impactful words from the headline.
@@ -7900,9 +8162,9 @@ ${customPrompt ? `यूज़र का विशेष निर्देश:\
 1. हेडलाइन व कैप्शन में 100% शुद्ध देवनागरी हिंदी का प्रयोग करें। हेडलाइन में [yellow]...[/yellow] टैग के अलावा एक भी अंग्रेजी अक्षर [A-Za-z] न हो।
 2. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
 3. किसी भी हेडलाइन में शहर का सफ़िक्स (जैसे - Bhopal News) या वेबसाइट स्क्रैपिंग टेक्स्ट (जैसे कॉपी लिंक, फाइल फोटो) न हो।
-4. ठीक 5 बिल्कुल अलग-अलग, स्वतंत्र और तथ्य-आधारित हेडलाइन विकल्प दें। हर विकल्प खबर के अलग पहलू (मुख्य निर्णय, प्रत्यक्ष असर, मुख्य तथ्य/आंकड़ा, संबंधित बयान या भविष्य की योजना) पर केंद्रित हो। कोई घिसे-पिटे प्रशासनिक या सवालिया सांचे न थोपें।
+4. ठीक 5 बिल्कुल अलग-अलग, स्वतंत्र और तथ्य-आधारित हेडलाइन विकल्प दें। हर विकल्प पेशेवर शीर्षक (Title Format) में हो, कोई साधारण वर्णनात्मक वाक्य नहीं (जैसे 'नहीं बनेंगे' की जगह 'पर रोक', 'दी जाएगी' की जगह 'का ऐलान')। कोई घिसे-पिटे प्रशासनिक या सवालिया सांचे न थोपें।
 5. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें।
-6. मुख्य हेडलाइन: ${targetMaxLines === 2 ? "8-14" : "12-22"} शब्द, बिना पूर्णविराम के।
+6. मुख्य हेडलाइन: ${targetMaxLines === 2 ? "8-14" : "12-22"} शब्द, बिना किसी पूर्णविराम (।) या डॉट (.) के।
 7. 2-4 हाईलाइट शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
 8. स्थान (location): जिला, राज्य (उदा. भोपाल, मध्य प्रदेश) स्रोत अनुसार वास्तविक।
 9. 3 कैप्शन स्टाइल दें (शुद्ध हिंदी में, कोई अंग्रेजी मेटा विवरण नहीं): captionDetailed (ठीक 3 पैराग्राफ), captionBullets (बुलेट पॉइंट्स), captionShort (ठीक 2 पैराग्राफ)।
@@ -8044,7 +8306,7 @@ JSON Schema:
       }
     }
 
-    // Sanitize any honorifics or press note flattery, reject invalid URL headlines, ensure 4 options & caption styles
+    // Sanitize any honorifics or press note flattery, reject invalid URL headlines, ensure 5 options & caption styles
     if (parsedData) {
       if (pickedImages.main && (!parsedData.pickedImages || !parsedData.pickedImages.main)) {
         if (!parsedData.pickedImages) parsedData.pickedImages = {};
@@ -8069,14 +8331,14 @@ JSON Schema:
       if (!parsedData.headline || isInvalidUrlHeadline(parsedData.headline)) {
         parsedData.headline = "महत्वपूर्ण घटनाक्रम को लेकर बड़ा फैसला, अग्रिम दिशा-निर्देश जारी";
       } else {
-        parsedData.headline = cleanHeadlineText(parsedData.headline);
+        parsedData.headline = formatAsJournalisticHeadline(cleanHeadlineText(parsedData.headline));
       }
 
       // Guarantee exactly 5 distinct headline options
       const cleanOptions: string[] = [];
       if (Array.isArray(parsedData.headlineOptions)) {
         for (const h of parsedData.headlineOptions) {
-          const s = cleanHeadlineText(String(h || ""));
+          const s = formatAsJournalisticHeadline(cleanHeadlineText(String(h || "")));
           if (s && !isInvalidUrlHeadline(s) && !cleanOptions.includes(s)) {
             cleanOptions.push(s);
           }
@@ -8096,19 +8358,19 @@ JSON Schema:
           channelUsername
         );
         for (const fbOpt of fallbackObj.headlineOptions) {
-          const cleanFb = cleanHeadlineText(fbOpt);
+          const cleanFb = formatAsJournalisticHeadline(cleanHeadlineText(fbOpt));
           if (cleanFb && !cleanOptions.includes(cleanFb) && cleanOptions.length < 5) {
             cleanOptions.push(cleanFb);
           }
         }
       }
-      parsedData.headlineOptions = cleanOptions.map((h) => cleanHeadlineText(h)).slice(0, 5);
+      parsedData.headlineOptions = cleanOptions.map((h) => formatAsJournalisticHeadline(cleanHeadlineText(h))).slice(0, 5);
 
       if (parsedData.formattedHeadline) {
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {
           parsedData.formattedHeadline = parsedData.headline;
         } else {
-          parsedData.formattedHeadline = cleanHeadlineText(parsedData.formattedHeadline);
+          parsedData.formattedHeadline = cleanHeadlineText(parsedData.formattedHeadline).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
         }
       } else {
         parsedData.formattedHeadline = parsedData.headline;
@@ -8259,7 +8521,7 @@ function cleanHeadlineText(text: string): string {
       /^(?:विकल्प|ऑप्शन|Option|Angle)\s*\d+[\s:\-–—.]*\s*/i,
       ""
     )
-    .replace(/^\d+[\s:\-–—.]*\s*(?=[\u0900-\u097F])/u, "")
+    .replace(/^\d+[\.:\)\-–—]+\s*(?=[\u0900-\u097F])/u, "")
     .replace(
       /^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|प्रेस नोट|प्रेस विज्ञप्ति|यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*[:\-–—]?\s*/i,
       ""

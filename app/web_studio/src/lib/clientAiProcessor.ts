@@ -1,5 +1,5 @@
 import { AIAnalysisResult } from '../types';
-import { cleanHeadlineText, cleanLocationField, detectDistrictAndState, formatDistrictWithState } from './speakerUtils';
+import { cleanHeadlineText, cleanLocationField, detectDistrictAndState, formatDistrictWithState, formatAsJournalisticHeadline, generate5JournalisticHeadlines } from './speakerUtils';
 import { TemplateConfig, getGraphicTemplateConfig } from './graphicTemplatesRegistry';
 
 export type HeadlineTemplateMeta = Partial<TemplateConfig> | {
@@ -229,101 +229,10 @@ export function processNewsLocally(
 
   // 5. Build EXACTLY 5 Distinct Journalistic Headlines (No Hardcoded Genre Templates)
   const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
-  const baseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' ').slice(0, 70)) : 'महत्वपूर्ण समाचार');
+  const rawBaseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' ').slice(0, 70)) : 'महत्वपूर्ण समाचार');
 
-  const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
+  const headlineOptions = generate5JournalisticHeadlines(rawBaseTitle, allSentences, detectedLocation);
 
-  const turnSentenceToHeadline = (sentence: string, maxLength: number = 75): string => {
-    let s = sentence
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '')
-      .replace(/^(?:वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|इस दौरान|मामले में)[,\s]*/gi, '')
-      .replace(/[।\.\,\!\?\:\-]+$/g, '')
-      .trim();
-
-    if (s.length > maxLength) {
-      const commaIdx = s.lastIndexOf(',', maxLength);
-      const spaceIdx = s.lastIndexOf(' ', maxLength);
-      const cutIdx = commaIdx > 35 ? commaIdx : (spaceIdx > 35 ? spaceIdx : maxLength);
-      s = s.slice(0, cutIdx).trim();
-    }
-    return cleanHeadlineText(s);
-  };
-
-  const calculateHeadlineSimilarity = (h1: string, h2: string): number => {
-    const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
-    const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
-    if (words1.size === 0 || words2.size === 0) return 0;
-    let common = 0;
-    for (const w of words1) {
-      if (words2.has(w)) common++;
-    }
-    return (2 * common) / (words1.size + words2.size);
-  };
-
-  const headlineOptions: string[] = [];
-  const addIfDistinct = (cand: string) => {
-    const cleaned = cleanHeadlineText(cand);
-    if (!cleaned || cleaned.length < 14) return;
-    for (const existing of headlineOptions) {
-      if (existing === cleaned || calculateHeadlineSimilarity(existing, cleaned) > 0.82) {
-        return;
-      }
-    }
-    headlineOptions.push(cleaned);
-  };
-
-  // 1. Primary cleaned headline
-  addIfDistinct(baseTitle);
-
-  // 2. If title has parts separated by colon or dash, generate clean editorial combinations
-  if (titleParts.length >= 2) {
-    if (titleParts[0].length >= 12 && titleParts[1].length >= 12) {
-      addIfDistinct(`${titleParts[1]}: ${titleParts[0]}`);
-    }
-    addIfDistinct(titleParts[0]);
-    addIfDistinct(titleParts[1]);
-  }
-
-  // 3. Derive distinct headlines from the extracted article sentences
-  for (const s of allSentences) {
-    if (headlineOptions.length >= 5) break;
-    addIfDistinct(turnSentenceToHeadline(s));
-  }
-
-  // 4. Try incorporating detected location if not already present
-  if (headlineOptions.length < 5 && detectedLocation && detectedLocation !== 'विशेष कवरेज') {
-    const locClean = detectedLocation.split(',')[0].trim();
-    if (!baseTitle.includes(locClean) && locClean.length > 2) {
-      addIfDistinct(`${locClean}: ${baseTitle}`);
-    }
-  }
-
-  // 5. If still fewer than 5, create distinct phrasing using story clauses
-  if (headlineOptions.length < 5) {
-    const words = baseTitle.split(/\s+/).filter(Boolean);
-    if (words.length >= 6) {
-      const mid = Math.floor(words.length / 2);
-      const partA = words.slice(0, mid).join(' ');
-      const partB = words.slice(mid).join(' ');
-      addIfDistinct(`${partB}: ${partA}`);
-    }
-  }
-
-  // Ensure we have at least 1 headline
-  if (headlineOptions.length === 0) {
-    headlineOptions.push(baseTitle || 'ताज़ा समाचार अपडेट');
-  }
-
-  // Ensure exactly 5 options without generic administrative templates
-  while (headlineOptions.length < 5) {
-    const seed = headlineOptions[0];
-    const cand = `${seed} - ताज़ा अपडेट`;
-    if (!headlineOptions.includes(cand)) {
-      headlineOptions.push(cand);
-    } else {
-      break;
-    }
-  }
 
   const headline = headlineOptions[0];
 
