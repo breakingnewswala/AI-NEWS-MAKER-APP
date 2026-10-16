@@ -42,6 +42,7 @@ import {
   Minus,
   FolderOpen,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import {
   saveCustomFrame,
@@ -2493,6 +2494,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </span>
                 <span className="text-[10px] text-neutral-400">
                   चयनित फोटो यहाँ लाइव प्रीव्यू होगी
+                </span>
+              </div>
+
+              {/* Step 4 Auto-Fit and Slider Instructions */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200/90 leading-relaxed flex items-start gap-2.5 shadow-sm">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>ऑटो-फिट सिस्टम:</strong> अपलोड की गई फोटो फ्रेम में अपने आप स्वतः फिट (Auto-fit) हो जाती है। यदि आप फोटो की स्थिति या आकार को एडजस्ट करना चाहते हैं, तो नीचे दिए गए <strong>ज़ूम व पोजीशनिंग स्लाइडर्स</strong> का उपयोग करें।
                 </span>
               </div>
 

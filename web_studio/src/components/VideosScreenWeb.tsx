@@ -953,14 +953,15 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* DESKTOP CONTROLS (Hidden on mobile) */}
+          <div className="hidden sm:flex items-center gap-2 flex-wrap">
             {/* Total Videos Count */}
             <span className="px-3 py-1.5 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full flex items-center gap-1.5">
               <Flame className="w-3.5 h-3.5 text-red-500" />
               {activeVideos.length} वीडियो
             </span>
 
-            {/* Ratio Filter Dropdown (Part Q) */}
+            {/* Ratio Filter Dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -995,7 +996,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               )}
             </div>
 
-            {/* Bonus Videos Filter Button (Part Q & S) */}
+            {/* Bonus Videos Filter Button */}
             <button
               type="button"
               onClick={() => setIsBonusOnlyFilter(!isBonusOnlyFilter)}
@@ -1008,21 +1009,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>बोनस वीडियो</span>
-            </button>
-
-            {/* Refresh Button with Icon & Label (Part F) */}
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-                }
-              }}
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition active:scale-95"
-              title="वीडियो फ़ीड रिफ्रेश करें"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-              <span>↻ रिफ्रेश</span>
             </button>
 
             {/* Admin Video Upload Button */}
@@ -1043,6 +1029,80 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <Calendar className="w-3 h-3 text-amber-400" />
                 4-दिन ऑटो-डिलीट
               </span>
+            )}
+          </div>
+
+          {/* MOBILE CONTROLS (Row 1: 3 Centered Controls, Row 2: Full-width Admin Upload) */}
+          <div className="flex sm:hidden flex-col gap-2 w-full mt-1">
+            {/* Row 1: Three balanced, centered controls */}
+            <div className="grid grid-cols-3 gap-1.5 w-full items-center">
+              {/* 1. Video Count */}
+              <div className="py-2 px-1 bg-red-950/80 border border-red-700/50 text-red-300 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 text-center truncate">
+                <Flame className="w-3 h-3 text-red-500 shrink-0" />
+                <span className="truncate">{activeVideos.length} वीडियो</span>
+              </div>
+
+              {/* 2. All Ratios Filter */}
+              <div className="relative w-full">
+                <button
+                  type="button"
+                  onClick={() => setIsRatioDropdownOpen(!isRatioDropdownOpen)}
+                  className="w-full py-2 px-1 bg-slate-900 border border-slate-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer truncate shadow"
+                  title="अनुपात फ़िल्टर"
+                >
+                  <span className="truncate">{ratioOptions.find((o) => o.id === selectedRatioFilter)?.label || 'सभी अनुपात'}</span>
+                  <ChevronDown className={`w-3 h-3 text-amber-400 shrink-0 transition-transform ${isRatioDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isRatioDropdownOpen && (
+                  <div className="absolute left-0 mt-1 w-40 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1 z-50 space-y-1">
+                    {ratioOptions.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedRatioFilter(opt.id as any);
+                          setIsRatioDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-between ${
+                          selectedRatioFilter === opt.id
+                            ? 'bg-amber-400 text-slate-950 font-black'
+                            : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {selectedRatioFilter === opt.id && <Check className="w-3 h-3 text-slate-950" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Bonus Video Filter */}
+              <button
+                type="button"
+                onClick={() => setIsBonusOnlyFilter(!isBonusOnlyFilter)}
+                className={`w-full py-2 px-1 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 border transition truncate cursor-pointer ${
+                  isBonusOnlyFilter
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 border-amber-300 font-black shadow'
+                    : 'bg-slate-900 text-amber-300 border-amber-500/40'
+                }`}
+                title="केवल बोनस वीडियो दिखाएं"
+              >
+                <Sparkles className="w-3 h-3 shrink-0" />
+                <span className="truncate">बोनस वीडियो</span>
+              </button>
+            </div>
+
+            {/* Row 2: Full-width Video Upload Button (ADMIN ONLY) */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsAdminPanelOpen(!isAdminPanelOpen)}
+                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-yellow-400 active:from-amber-400 active:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4 text-slate-950 shrink-0" />
+                <span>＋ वीडियो अपलोड करें</span>
+              </button>
             )}
           </div>
         </div>

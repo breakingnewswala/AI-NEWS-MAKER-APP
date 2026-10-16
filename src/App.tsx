@@ -1463,10 +1463,26 @@ export default function App() {
   // Export card to High-Res PNG or JPG (with full status, progress & robust blob downloading)
   
   const handleOpenDraftInStudio = (draft: any) => {
+    if (draft.draftType === 'video' || draft.videoData) {
+      if (draft.videoData?.videoUrl) {
+        setStudioInitialVideo(draft.videoData.videoUrl);
+      }
+      if (draft.videoData?.headline1 || draft.headline) {
+        setStudioInitialHeadline(draft.videoData?.headline1 || draft.headline);
+      }
+      updateStudioMode('video');
+      setCurrentTab('studio');
+      window.location.hash = 'studio';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (draft.card) {
       setCard(draft.card);
+    } else if (draft.cardData) {
+      setCard(draft.cardData);
     }
     setActiveDraftId(draft.id);
+    updateStudioMode('graphic');
     setCurrentTab('studio');
     window.location.hash = 'studio';
     window.scrollTo({ top: 0, behavior: 'smooth' });

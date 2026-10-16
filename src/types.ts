@@ -387,6 +387,21 @@ export interface AIAnalysisResult {
   quotaNotice?: string;
 }
 
+export interface VideoDraftData {
+  videoUrl: string;
+  headline1?: string;
+  headline2?: string;
+  location?: string;
+  channelName?: string;
+  channelLogoUrl?: string;
+  aspect?: string;
+  zoomScale?: number;
+  offsetY?: number;
+  trimStart?: number;
+  trimEnd?: number;
+  videoCaption?: string;
+}
+
 export interface NewsDraft {
   id: string;
   title: string;
@@ -396,7 +411,9 @@ export interface NewsDraft {
   summary: string;
   anchorScript?: string;
   tags?: string[];
-  cardData: NewsCardData;
+  cardData?: NewsCardData;
+  draftType?: 'graphic' | 'video';
+  videoData?: VideoDraftData;
   thumbnailUrl?: string;
   createdAt: number;
   updatedAt: number;

@@ -59,7 +59,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     support: boolean;
     epaper: boolean;
   }>({
-    drafts: true,
+    drafts: false,
     support: false,
     epaper: false,
   });
@@ -453,8 +453,12 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800/80 pb-2">
-                      <span className="px-2 py-0.5 bg-slate-800 text-amber-300 font-bold rounded-md text-[10px]">
-                        {draft.category || 'ब्रेकिंग'}
+                      <span className={`px-2 py-0.5 font-bold rounded-md text-[10px] flex items-center gap-1 ${
+                        draft.draftType === 'video' 
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/40' 
+                          : 'bg-slate-800 text-amber-300'
+                      }`}>
+                        {draft.draftType === 'video' ? '🎬 वीडियो प्रोजेक्ट' : (draft.category || 'ब्रेकिंग')}
                       </span>
                       <span className="flex items-center gap-1 text-[11px]">
                         <Clock className="w-3 h-3 text-slate-500" />
