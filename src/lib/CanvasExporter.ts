@@ -1686,8 +1686,8 @@ async function drawGraphic001Canvas(
   if (card.showMasterBranding !== false) {
     ctx.save();
     const safeLeft = Math.round(width * 0.05);
-    const safeTop = Math.round(height * 0.015);
-    const safeRight = Math.round(width * 0.92);
+    const safeTop = Math.round(height * 0.05);
+    const safeRight = Math.round(width * 0.95);
     const safeBottom = Math.round(height * 0.60);
     const defaultX = Math.round(width * 0.055);
 
@@ -1900,10 +1900,10 @@ async function drawGraphic001Canvas(
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = (card.highlightColor && card.highlightColor !== '#DC2626') ? card.highlightColor : '#FFE600';
-    const maxHeadlineW = width - 140;
+    const maxHeadlineW = Math.round(width * 0.90);
 
-    let testFontSize = 64;
-    for (let s = 70; s >= 36; s -= 2) {
+    let testFontSize = 68;
+    for (let s = 74; s >= 38; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, s, 0);
       if (testLines.length <= 4) {
         testFontSize = s;
@@ -1914,7 +1914,7 @@ async function drawGraphic001Canvas(
     const headlineLineH = Math.round(testFontSize * 1.32);
     const headlineLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineW, testFontSize, 4);
     const totalHeadH = headlineLines.length * headlineLineH;
-    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2 + Math.round(headlineLineH * 0.08);
+    let startY = bannerY + bannerH / 2 - ((headlineLines.length - 1) * headlineLineH) / 2;
 
     ctx.font = `900 ${testFontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';

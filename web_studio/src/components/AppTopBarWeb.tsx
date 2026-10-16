@@ -107,32 +107,49 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   }, [currentUser?.email]);
 
   // Wallet Coin Balance for Non-Admin Users
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  // Wallet Coin Balance for Authenticated Users (Real-time sync)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [isWalletLoading, setIsWalletLoading] = useState<boolean>(true);
+
   useEffect(() => {
-    if (isAdminUser) return;
+    const email = (currentUser?.email || '').toLowerCase().trim();
+    const userId = (currentUser?.userId || (currentUser as any)?.uid || email).trim();
+    if (!email && !userId) {
+      setIsWalletLoading(false);
+      return;
+    }
+
     const fetchBalance = () => {
-      const email = currentUser?.email || '';
-      if (!email) return;
-      fetch(`/api/wallet?email=${encodeURIComponent(email)}`)
+      fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(userId)}`))
         .then((res) => res.json())
         .then((data) => {
           if (data?.success && data?.wallet) {
             setWalletBalance(data.wallet.coinBalance ?? 0);
+            setIsWalletLoading(false);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setIsWalletLoading(false);
+        });
     };
+
     fetchBalance();
-    const interval = setInterval(fetchBalance, 12000);
+    const interval = setInterval(fetchBalance, 10000);
     const handleWalletEvent = () => fetchBalance();
+
     window.addEventListener('ai_news_wallet_updated', handleWalletEvent);
+    window.addEventListener('wallet_balance_updated', handleWalletEvent);
+    window.addEventListener('storage', handleWalletEvent);
     window.addEventListener('focus', handleWalletEvent);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('ai_news_wallet_updated', handleWalletEvent);
+      window.removeEventListener('wallet_balance_updated', handleWalletEvent);
+      window.removeEventListener('storage', handleWalletEvent);
       window.removeEventListener('focus', handleWalletEvent);
     };
-  }, [currentUser?.email, isAdminUser]);
+  }, [currentUser?.email, (currentUser as any)?.userId, (currentUser as any)?.uid]);
 
   // Format plan name for display
   const planDisplay = React.useMemo(() => {
@@ -305,8 +322,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-            {/* Wallet Coin Balance Button for Non-Admin Users */}
-            {!isAdminUser && (
+            {/* Wallet Coin Balance Button */}
+            {(!isAdminUser || adminSystemMode === 'test') && (
               <button
                 type="button"
                 onClick={() => {
@@ -320,7 +337,9 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
               >
                 <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="font-mono font-black">{walletBalance}</span>
+                <span className="font-mono font-black min-w-[20px] text-center">
+                  {walletBalance !== null ? walletBalance : (isWalletLoading ? '···' : '0')}
+                </span>
                 <span className="text-[10px] hidden sm:inline">कॉइन्स</span>
               </button>
             )}

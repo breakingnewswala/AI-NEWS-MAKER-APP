@@ -357,6 +357,8 @@ interface ServerRewardsDatabase {
   transactions: ServerWalletTransaction[];
   downloadEvents: ServerDownloadEvent[];
   wallets: Record<string, { coinBalance: number; pendingCoins: number; totalEarnedCoins: number }>;
+  welcomeRewards?: Record<string, { graphicClaimed?: boolean; videoClaimed?: boolean }>;
+  unlockedItems?: Record<string, string[]>;
 }
 
 function loadRewardsDatabase(): ServerRewardsDatabase {
@@ -369,12 +371,14 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
         transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
         downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
         wallets: parsed.wallets && typeof parsed.wallets === 'object' ? parsed.wallets : {},
+        welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === 'object' ? parsed.welcomeRewards : {},
+        unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === 'object' ? parsed.unlockedItems : {},
       };
     }
   } catch (err: any) {
     console.error("Error reading rewards_database.json:", err.message);
   }
-  return { claims: [], transactions: [], downloadEvents: [], wallets: {} };
+  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {} };
 }
 
 function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
@@ -865,19 +869,32 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
     const { id } = req.params;
     let existing = loadNewsDatabase();
     let found = false;
+    let approvedTitle = "";
     existing = existing.map((p) => {
       if (p.id === id) {
         found = true;
-        return { ...p, status: "APPROVED" as const, timestamp: Date.now() };
+        const postData = req.body || {};
+        const updatedTitle = postData.title || p.title;
+        approvedTitle = updatedTitle;
+        return {
+          ...p,
+          title: updatedTitle,
+          summary: postData.summary || p.summary,
+          imageUrl: postData.imageUrl || p.imageUrl,
+          sourceChannel: postData.sourceChannel || p.sourceChannel,
+          status: "APPROVED" as const,
+          timestamp: Date.now()
+        };
       }
       return p;
     });
 
     if (!found) {
       const postData = req.body || {};
+      approvedTitle = postData.title || postData.headline || "समाचार";
       const newApprovedPost: StoredNewsPost = {
         id,
-        title: postData.title || postData.headline || "समाचार",
+        title: approvedTitle,
         summary: postData.summary || postData.shortDescription || "",
         sourceChannel: postData.sourceChannel || "एआई न्यूज़ मेकर",
         sourceUrl: postData.sourceUrl || "",
@@ -900,6 +917,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
     }
 
     saveNewsDatabase(existing);
+    broadcastNewsPublishedNotification(id, approvedTitle);
     const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "खबर स्वीकृत हो गई", id, posts: existing });
@@ -1179,7 +1197,7 @@ app.post("/api/rewards/download-event", (req, res) => {
 });
 
 // 3. GET User Wallet Balance, Eligible Downloads, Claims, and Transaction History
-app.get("/api/user/wallet", (req, res) => {
+app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
   try {
     const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
     const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
@@ -1512,6 +1530,32 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
   }
 });
 
+// 9. POST /api/upload-logo - Downscaled & compressed logo upload endpoint
+app.post("/api/upload-logo", (req, res) => {
+  try {
+    const { imageBase64, mimeType = "image/png" } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ error: "लोगो इमेज डेटा आवश्यक है" });
+    }
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const ext = mimeType.includes("gif") ? "gif" : (mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png");
+    const filename = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const filePath = path.join(UPLOAD_LOGOS_DIR, filename);
+    const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, filename);
+
+    const buf = Buffer.from(cleanBase64, "base64");
+    fs.writeFileSync(filePath, buf);
+    try {
+      fs.writeFileSync(webFilePath, buf);
+    } catch {}
+
+    const url = `/uploads/logos/${filename}`;
+    return res.json({ success: true, url });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // 10. POST /api/wallet/claim-welcome-reward - 500 Coins for 1st graphic, 500 for 1st video
 app.post("/api/wallet/claim-welcome-reward", (req, res) => {
   try {
@@ -1549,7 +1593,7 @@ app.post("/api/wallet/claim-welcome-reward", (req, res) => {
         wallet: rDb.wallets[walletKey],
         message: rewardType === "graphic"
           ? "प्रथम ग्राफिक डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
-          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
+          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है。"
       });
     }
 
@@ -1589,6 +1633,7 @@ app.post("/api/wallet/claim-welcome-reward", (req, res) => {
     return res.json({
       success: true,
       claimed: true,
+      awarded: true,
       rewardCoins,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
@@ -1700,7 +1745,81 @@ app.get("/api/wallet/unlocked-items", (req, res) => {
     const rDb = loadRewardsDatabase();
     const unlocked = rDb.unlockedItems?.[walletKey] || [];
     const welcome = rDb.welcomeRewards?.[walletKey] || { graphicClaimed: false, videoClaimed: false };
-    return res.json({ success: true, unlockedItems: unlocked, welcomeRewards: welcome });
+    return res.json({
+      success: true,
+      unlockedItems: unlocked,
+      items: unlocked.map(id => ({ itemId: id, itemType: id.startsWith('vid') ? 'video' : 'news' })),
+      unlockedList: unlocked,
+      welcomeRewards: welcome
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 12B. Admin POST /api/admin/wallet/adjust-coins - Manually credit coins to a user's wallet
+app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन क्रेडिट कर सकते हैं" });
+    }
+    const { email, userId, amount, coins, note, reason } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const coinAmount = Number(amount !== undefined ? amount : coins);
+
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी आवश्यक है" });
+    }
+    if (!Number.isInteger(coinAmount) || coinAmount <= 0) {
+      return res.status(400).json({ error: "कॉइन की संख्या एक धनात्मक पूर्णांक (Positive Integer) होनी चाहिए" });
+    }
+
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+
+    // Atomically credit coins
+    rDb.wallets[walletKey].coinBalance += coinAmount;
+    rDb.wallets[walletKey].totalEarnedCoins += coinAmount;
+
+    const callerEmail = (
+      req.headers["x-user-email"] ||
+      req.headers["x-admin-email"] ||
+      req.body?.adminEmail ||
+      req.body?.userEmail ||
+      "admin"
+    ).toString().toLowerCase().trim();
+    const txId = `tx-admin-adj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const txReason = note || reason || 'एडमिन द्वारा मैनुअल कॉइन समायोजन (Admin Manual Credit)';
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: `एडमिन क्रेडिट: +${coinAmount} कॉइन्स (${txReason})`,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: coinAmount,
+      amount: coinAmount,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: callerEmail,
+    } as any;
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      coinBalance: rDb.wallets[walletKey].coinBalance,
+      message: `सफलतापूर्वक ${coinAmount} कॉइन क्रेडिट किए गए! नया बैलेंस: ${rDb.wallets[walletKey].coinBalance}`,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -2050,6 +2169,54 @@ function saveNotificationsDatabase(notifs: StoredNotification[]): boolean {
   }
 }
 
+function broadcastNewsPublishedNotification(newsId: string, title: string) {
+  try {
+    const notifs = loadNotificationsDatabase();
+    const notifId = `notif_news_${newsId}`;
+    if (!notifs.some(n => n.id === notifId)) {
+      notifs.unshift({
+        id: notifId,
+        title: '📰 नई समाचार स्वीकृत व प्रकाशित',
+        message: (title && title !== 'समाचार' ? title : 'नया समाचार मुख्य होम फ़ीड में प्रकाशित कर दिया गया है।'),
+        time: 'अभी',
+        timestamp: Date.now(),
+        unread: true,
+        type: 'news',
+        targetUserEmail: 'all',
+        linkTab: 'home',
+      } as any);
+      if (notifs.length > 200) notifs.length = 200;
+      saveNotificationsDatabase(notifs);
+    }
+  } catch (e) {
+    console.error('Error broadcasting news notification:', e);
+  }
+}
+
+function broadcastVideoPublishedNotification(videoId: string, title: string) {
+  try {
+    const notifs = loadNotificationsDatabase();
+    const notifId = `notif_video_${videoId}`;
+    if (!notifs.some(n => n.id === notifId)) {
+      notifs.unshift({
+        id: notifId,
+        title: '🎬 नया वीडियो व रील्स जारी',
+        message: (title || 'नया वीडियो वीडियो एंड रील्स सेक्शन में जारी हो गया है।'),
+        time: 'अभी',
+        timestamp: Date.now(),
+        unread: true,
+        type: 'video',
+        targetUserEmail: 'all',
+        linkTab: 'videos',
+      } as any);
+      if (notifs.length > 200) notifs.length = 200;
+      saveNotificationsDatabase(notifs);
+    }
+  } catch (e) {
+    console.error('Error broadcasting video notification:', e);
+  }
+}
+
 function computeTrialFields(u: AuthoritativeUser, now = Date.now()) {
   const isSuper = u.role === 'superadmin' || isProtectedAdminAccount(u.email);
   if (isSuper || (u.tier && u.tier !== 'basic')) {
@@ -2193,13 +2360,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
   const idx = users.findIndex(u => {
     const uEmail = (u.email || '').toLowerCase().trim();
     const uUserId = (u.userId || '').toLowerCase().trim();
-    const uPhone = (u.mobileNumber || u.mobile || '').toString().replace(/[^0-9]/g, '').slice(-10);
     return (
       (cleanEmail && uEmail && uEmail === cleanEmail) ||
       (cleanEmail && uEmail && uEmail.replace(/\s+/g, '') === cleanEmail.replace(/\s+/g, '')) ||
       (cleanUserId && uUserId && uUserId === cleanUserId) ||
-      (cleanUserId && uEmail && uEmail === cleanUserId) ||
-      (rawMobile.length === 10 && uPhone.length === 10 && uPhone === rawMobile)
+      (cleanUserId && uEmail && uEmail === cleanUserId)
     );
   });
 
@@ -2415,7 +2580,7 @@ function reconcileAllUsers() {
       district: superProf?.district || existingSuper?.district || 'हेडक्वार्टर सेंट्रल डेस्क',
       websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || 'ainewsmaker.online',
       isBlocked: false,
-      isProfileLocked: false,
+      isProfileLocked: true,
       createdAt: existingSuper?.createdAt || 1791697518060,
       trialStartedAt: 1791697518060,
       trialEndsAt: 2107057518060,
@@ -2437,9 +2602,9 @@ function reconcileAllUsers() {
       role: 'superadmin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || 'एआई न्यूज़ मेकर',
-      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || 'एआई न्यूज़ मेकर',
-      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || 'AI News Maker',
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || 'ब्रेकिंग न्यूज़ वाला',
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || 'ब्रेकिंग न्यूज़ वाला',
+      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || 'BREAKING NEWS WALA',
       channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || '/assets/breaking_news_wala_logo.png',
       channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || '/assets/breaking_news_wala_logo.png',
       channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || '',
@@ -2447,9 +2612,9 @@ function reconcileAllUsers() {
       mobile: adminProf?.mobileNumber || existingAdmin?.mobile || '9669802408',
       mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || '9669802408',
       district: adminProf?.district || existingAdmin?.district || 'सेंट्रल डेस्क / भोपाल',
-      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || 'ainewsmaker.online',
+      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || 'breakingnewswala.com',
       isBlocked: false,
-      isProfileLocked: false,
+      isProfileLocked: true,
       createdAt: existingAdmin?.createdAt || 1791792137805,
       trialStartedAt: 1791792137805,
       trialEndsAt: 2107057518060,
@@ -2518,6 +2683,41 @@ function reconcileAllUsers() {
         mobileNumber: p2?.mobileNumber || '9876543211',
         district: p2?.district || 'ओरछा / निवाड़ी',
         websiteUrl: p2?.websiteUrl || 'ainewsmaker.online',
+        isBlocked: false,
+        isProfileLocked: false,
+        createdAt: 1791892712618,
+        trialStartedAt: 1791892712618,
+        trialEndsAt: 1792497512618,
+        activatedAt: 1791892712618,
+        expiresAt: 1792497512618,
+        activatedVia: 'Free 7-Day VIP Trial',
+        lastLoginAt: 1791892712618,
+      });
+    }
+
+    const seedUser3 = 'digital.anmolsandesh@gmail.com';
+    if (!userMap.has(seedUser3)) {
+      const p3 = profiles[seedUser3];
+      userMap.set(seedUser3, {
+        userId: p3?.userId || 'usr_anmolsandesh_103',
+        email: seedUser3,
+        name: p3?.fullName || 'Anmol Sandesh',
+        fullName: p3?.fullName || 'Anmol Sandesh',
+        username: p3?.username || 'anmolsandesh',
+        role: 'user',
+        tier: 'basic',
+        planName: 'BASIC',
+        channelName: p3?.channelNameHi || 'अनमोल संदेश',
+        channelNameHi: p3?.channelNameHi || 'अनमोल संदेश',
+        channelNameEn: p3?.channelNameEn || 'Anmol Sandesh',
+        channelLogoUrl: p3?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
+        channelLogoPngUrl: p3?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
+        channelLogoGifUrl: '',
+        channelLogoType: 'png',
+        mobile: p3?.mobileNumber || '9425000998',
+        mobileNumber: p3?.mobileNumber || '9425000998',
+        district: p3?.district || 'सेंट्रल डेस्क',
+        websiteUrl: p3?.websiteUrl || 'anmolsandesh.com',
         isBlocked: false,
         isProfileLocked: false,
         createdAt: 1791892712618,
@@ -2790,6 +2990,7 @@ app.post("/api/admin/videos/upload", (req, res) => {
     // Prepend so users see it immediately in real-time
     const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];
     saveVideosDatabase(updated);
+    broadcastVideoPublishedNotification(newVideo.id, newVideo.title);
     return res.json({ success: true, video: newVideo, total: updated.length });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -2877,10 +3078,21 @@ app.get(["/api/users", "/api/admin/users"], (_req, res) => {
   try {
     const now = Date.now();
     const users = loadUsersMasterDatabase();
-    const decorated = users.map(u => ({
-      ...u,
-      ...computeTrialFields(u, now),
-    }));
+    const rDb = loadRewardsDatabase();
+    const decorated = users.map(u => {
+      const emailKey = (u.email || "").toLowerCase().trim();
+      const idKey = (u.userId || "").toLowerCase().trim();
+      const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
+      const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      return {
+        ...u,
+        coins: w.coinBalance || 0,
+        coinBalance: w.coinBalance || 0,
+        permanentLock: isSuper,
+        isLocked: isSuper,
+        ...computeTrialFields(u, now),
+      };
+    });
     return res.json({ success: true, users: decorated });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

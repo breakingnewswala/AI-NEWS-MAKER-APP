@@ -410,13 +410,17 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         knownProfile?.channelLogoUrl ||
         (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
 
+      const isBreakingNewsWala = cleanEmail === 'breakingnewswala.com@gmail.com';
+      const isAiNewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+
       const finalProfile: ChannelProfile = {
-        fullName: serverProfile?.fullName || parsedProfile?.fullName || knownProfile?.fullName || name || (isAdmin ? 'मुख्य संपादक' : 'यूज़र'),
-        channelNameHi: serverProfile?.channelNameHi || parsedProfile?.channelNameHi || knownProfile?.channelNameHi || 'एआई न्यूज़ मेकर',
-        channelNameEn: serverProfile?.channelNameEn || parsedProfile?.channelNameEn || knownProfile?.channelNameEn || 'AI News Maker',
-        channelLogoUrl: existingLogo,
-        channelLogoPngUrl: serverProfile?.channelLogoPngUrl || parsedProfile?.channelLogoPngUrl || (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''),
-        channelLogoGifUrl: serverProfile?.channelLogoGifUrl || parsedProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
+        fullName: serverProfile?.fullName || (isBreakingNewsWala ? 'मुख्य संपादक' : (isAiNewsAdmin ? 'सुपर एडमिन (Super Admin)' : (name || (isAdmin ? 'एडमिन' : 'संपादक')))),
+        district: serverProfile?.district || (isBreakingNewsWala ? 'सेंट्रल डेस्क / भोपाल' : (isAiNewsAdmin ? 'हेडक्वार्टर सेंट्रल डेस्क' : (parsedProfile?.district || knownProfile?.district || 'डिजिटल डेस्क'))),
+        channelNameHi: serverProfile?.channelNameHi || (isBreakingNewsWala ? 'ब्रेकिंग न्यूज़ वाला' : (isAiNewsAdmin ? 'एआई न्यूज़ मेकर' : (parsedProfile?.channelNameHi || knownProfile?.channelNameHi || 'एआई न्यूज़ मेकर'))),
+        channelNameEn: serverProfile?.channelNameEn || (isBreakingNewsWala ? 'BREAKING NEWS WALA' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.channelNameEn || knownProfile?.channelNameEn || 'AI News Maker'))),
+        channelLogoUrl: serverProfile?.channelLogoUrl || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : existingLogo)),
+        channelLogoPngUrl: serverProfile?.channelLogoPngUrl || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''))),
+        channelLogoGifUrl: serverProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
         channelLogoType: serverProfile?.channelLogoType || parsedProfile?.channelLogoType || knownProfile?.channelLogoType || 'png',
         socialIcons: serverProfile?.socialIcons || parsedProfile?.socialIcons || {
           youtube: true,
@@ -426,18 +430,18 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           telegram: false,
           whatsapp: true,
         },
-        username: serverProfile?.username || parsedProfile?.username || knownProfile?.username || (isAdmin ? 'breakingnewswala' : (isSuper ? 'admin.ainewsmaker' : '')),
-        mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || (isAdmin ? '9669802408' : ''),
-        whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || (isAdmin ? '9669802408' : ''),
+        username: serverProfile?.username || (isBreakingNewsWala ? 'breakingnewswala' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.username || knownProfile?.username || 'user'))),
+        mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
+        whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
         showMobileNumber: true,
-        websiteUrl: serverProfile?.websiteUrl || parsedProfile?.websiteUrl || knownProfile?.websiteUrl || 'ainewsmaker.online',
+        websiteUrl: serverProfile?.websiteUrl || (isBreakingNewsWala ? 'breakingnewswala.com' : (isAiNewsAdmin ? 'ainewsmaker.online' : (parsedProfile?.websiteUrl || knownProfile?.websiteUrl || 'ainewsmaker.online'))),
       };
 
       const googleUser: ReporterUser = {
         username: finalProfile.username || '',
         name: finalProfile.fullName || name || 'यूज़र',
         role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : (serverProfile?.role || 'user')),
-        district: serverProfile?.district || knownProfile?.district || parsedProfile?.district || (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
+        district: finalProfile.district || 'डिजिटल डेस्क',
         email: cleanEmail,
         avatarUrl: picture, // Avatar photo only, NEVER channel logo
       };

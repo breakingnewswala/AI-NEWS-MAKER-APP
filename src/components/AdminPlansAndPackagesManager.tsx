@@ -631,6 +631,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   });
   const [editBrandMsg, setEditBrandMsg] = useState<string>('');
 
+  // Admin Coin Credit Dialog state
+  const [coinTargetUser, setCoinTargetUser] = useState<PlanUserRecord | null>(null);
+  const [coinAmountInput, setCoinAmountInput] = useState<string>('');
+  const [coinNoteInput, setCoinNoteInput] = useState<string>('');
+  const [isSubmittingCoins, setIsSubmittingCoins] = useState<boolean>(false);
+  const [coinDialogError, setCoinDialogError] = useState<string | null>(null);
+  const [coinDialogSuccess, setCoinDialogSuccess] = useState<string | null>(null);
+  const [targetUserBalance, setTargetUserBalance] = useState<number | null>(null);
+  const [isLoadingTargetBalance, setIsLoadingTargetBalance] = useState<boolean>(false);
+
   // Reload data on events
   useEffect(() => {
     const handlePlansUpdated = () => setPlans(getPlansCatalog());
@@ -880,6 +890,97 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       setEditingBrandingUser(null);
       setEditBrandMsg('');
     }, 1500);
+  };
+
+  const handleOpenCoinCreditDialog = async (user: PlanUserRecord) => {
+    setCoinTargetUser(user);
+    setCoinAmountInput('');
+    setCoinNoteInput('');
+    setCoinDialogError(null);
+    setCoinDialogSuccess(null);
+    setTargetUserBalance((user as any).coinBalance ?? (user as any).coins ?? null);
+    setIsLoadingTargetBalance(true);
+    try {
+      const email = user.email;
+      const res = await fetch(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(user.userId || '')}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTargetUserBalance(data.coinBalance ?? 0);
+      }
+    } catch (e) {
+      console.warn('Error fetching user coin balance:', e);
+    } finally {
+      setIsLoadingTargetBalance(false);
+    }
+  };
+
+  const handleConfirmCreditCoins = async () => {
+    if (!coinTargetUser) return;
+    const amount = parseInt(coinAmountInput, 10);
+    if (isNaN(amount) || amount <= 0) {
+      setCoinDialogError('कृपया एक मान्य और धनात्मक संख्या (Positive Integer) दर्ज करें।');
+      return;
+    }
+    setIsSubmittingCoins(true);
+    setCoinDialogError(null);
+    try {
+      const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
+      const res = await fetch('/api/admin/wallet/adjust-coins', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': adminEmail,
+          'x-user-email': adminEmail,
+        },
+        body: JSON.stringify({
+          adminEmail,
+          email: coinTargetUser.email,
+          userId: coinTargetUser.userId || coinTargetUser.email,
+          amount,
+          note: coinNoteInput.trim() || 'एडमिन मैनुअल कॉइन क्रेडिट',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setCoinDialogError(data.error || 'कॉइन क्रेडिट करने में विफल');
+        setIsSubmittingCoins(false);
+        return;
+      }
+
+      const newBal = data.wallet?.coinBalance ?? ((targetUserBalance || 0) + amount);
+      setTargetUserBalance(newBal);
+      setCoinDialogSuccess(`सफलतापूर्वक ${amount} कॉइन क्रेडिट किए गए! नया बैलेंस: ${newBal}`);
+
+      // Update user in planUsers state
+      setPlanUsers((prev) =>
+        prev.map((usr) =>
+          usr.email.toLowerCase() === coinTargetUser.email.toLowerCase()
+            ? { ...usr, coins: newBal, coinBalance: newBal }
+            : usr
+        )
+      );
+
+      // Broadcast wallet balance updates
+      window.dispatchEvent(
+        new CustomEvent('wallet_balance_updated', {
+          detail: { email: coinTargetUser.email, balance: newBal },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('ai_news_wallet_updated', {
+          detail: { email: coinTargetUser.email, balance: newBal },
+        })
+      );
+
+      setTimeout(() => {
+        setCoinTargetUser(null);
+        setCoinDialogSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      setCoinDialogError(err.message || 'सर्वर से कनेक्ट करने में त्रुटि');
+    } finally {
+      setIsSubmittingCoins(false);
+    }
   };
 
   // Filtered Promo Codes
@@ -2248,6 +2349,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               {u.mobile && (
                                 <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
                               )}
+                              <div className="text-[10px] text-amber-300 font-bold flex items-center gap-1 mt-0.5">
+                                <Coins className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>{(u as any).coinBalance ?? (u as any).coins ?? 0} कॉइन्स</span>
+                              </div>
                               <div className="text-[9px] text-slate-500 mt-0.5">
                                 पंजीकृत: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('hi-IN') : 'सक्रिय'}
                               </div>
@@ -2379,31 +2484,41 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                             {/* Profile Lock Status */}
                             <td className="p-3">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newLockState = !u.isLocked;
-                                  adminUpdateUserRecord(u.email, { isLocked: newLockState });
-                                  adminUpdateCloudUser(u.userId, { isLocked: newLockState });
-                                  setPlanUsers(getPlanUsers());
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
-                                  u.isLocked !== false
-                                    ? 'bg-amber-950/60 border-amber-600/80 text-amber-300 hover:bg-amber-900/60'
-                                    : 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60'
-                                }`}
-                                title={
-                                  u.isLocked !== false
-                                    ? 'क्लिक करके इस विशिष्ट यूज़र को अनलॉक करें'
-                                    : 'क्लिक करके इस विशिष्ट यूज़र को सुरक्षित लॉक करें'
-                                }
-                              >
-                                {u.isLocked !== false ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                <span>{u.isLocked !== false ? '🔒 लॉक्ड' : '🔓 अनलॉक्ड'}</span>
-                              </button>
+                              {isSuper ? (
+                                <span
+                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-amber-500/60 bg-amber-950/60 text-amber-300 flex items-center gap-1 w-max select-none shadow-xs"
+                                  title="मास्टर / सुपर एडमिन प्रोफाइल स्थायी रूप से सुरक्षित व लॉक है"
+                                >
+                                  <Lock className="w-3 h-3 text-amber-400" />
+                                  <span>🔒 स्थायी लॉक</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newLockState = !u.isLocked;
+                                    adminUpdateUserRecord(u.email, { isLocked: newLockState });
+                                    adminUpdateCloudUser(u.userId, { isLocked: newLockState });
+                                    setPlanUsers(getPlanUsers());
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                                    u.isLocked !== false
+                                      ? 'bg-amber-950/60 border-amber-600/80 text-amber-300 hover:bg-amber-900/60'
+                                      : 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60'
+                                  }`}
+                                  title={
+                                    u.isLocked !== false
+                                      ? 'क्लिक करके इस विशिष्ट यूज़र को अनलॉक करें'
+                                      : 'क्लिक करके इस विशिष्ट यूज़र को सुरक्षित लॉक करें'
+                                  }
+                                >
+                                  {u.isLocked !== false ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                                  <span>{u.isLocked !== false ? '🔒 लॉक्ड' : '🔓 अनलॉक्ड'}</span>
+                                </button>
+                              )}
                             </td>
 
-                            {/* Actions Column: Block / Unblock, Edit Branding, Delete */}
+                            {/* Actions Column: Block / Unblock, Edit Branding, Coin Credit, Delete */}
                             <td className="p-3 text-right">
                               <div className="flex items-center justify-end gap-1.5 flex-wrap">
                                 {/* Block / Unblock Button */}
@@ -2439,6 +2554,17 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                 >
                                   <Edit2 className="w-3 h-3" />
                                   <span>ब्रांडिंग</span>
+                                </button>
+
+                                {/* Coin Credit Action Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCoinCreditDialog(u)}
+                                  className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                  title="यूज़र को कॉइन क्रेडिट करें"
+                                >
+                                  <Coins className="w-3 h-3 text-amber-400" />
+                                  <span>कॉइन जोड़ें</span>
                                 </button>
 
                                 {/* Delete User Button */}
@@ -2595,6 +2721,135 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   >
                     <Save className="w-4 h-4" />
                     <span>विवरण सुरक्षित करें</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* COIN CREDIT MODAL (ADMIN COIN MANAGEMENT) */}
+          {coinTargetUser && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl">
+                      <Coins className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white">यूज़र को कॉइन जोड़ें</h3>
+                      <p className="text-xs text-slate-400">
+                        {coinTargetUser.name || coinTargetUser.fullName || coinTargetUser.email}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isSubmittingCoins) {
+                        setCoinTargetUser(null);
+                        setCoinDialogError(null);
+                        setCoinDialogSuccess(null);
+                      }
+                    }}
+                    disabled={isSubmittingCoins}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer disabled:opacity-50"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {coinDialogError && (
+                  <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/80 text-rose-300 text-xs font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{coinDialogError}</span>
+                  </div>
+                )}
+
+                {coinDialogSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/80 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>{coinDialogSuccess}</span>
+                  </div>
+                )}
+
+                {/* User info & Current balance */}
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400">ईमेल आईडी:</span>
+                    <span className="font-mono text-slate-200 font-bold">{coinTargetUser.email}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400">वर्तमान कॉइन बैलेंस:</span>
+                    <span className="text-amber-400 font-black text-sm flex items-center gap-1">
+                      <Coins className="w-4 h-4" />
+                      {isLoadingTargetBalance ? 'लोड हो रहा...' : `${targetUserBalance ?? 0} कॉइन्स`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Coin amount input */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    जोड़ने हेतु कॉइन संख्या (Coins to Add) *
+                  </label>
+                  <div className="relative">
+                    <Coins className="w-4 h-4 absolute left-3 top-3 text-amber-400 pointer-events-none" />
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={coinAmountInput}
+                      onChange={(e) => setCoinAmountInput(e.target.value)}
+                      placeholder="उदा. 500"
+                      disabled={isSubmittingCoins}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white font-bold focus:outline-hidden focus:border-amber-400 disabled:opacity-50"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">कृपया धनात्मक पूर्णांक (Positive Integer) दर्ज करें</p>
+                </div>
+
+                {/* Optional note input */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    कारण / नोट (वैकल्पिक / Optional Note)
+                  </label>
+                  <input
+                    type="text"
+                    value={coinNoteInput}
+                    onChange={(e) => setCoinNoteInput(e.target.value)}
+                    placeholder="उदा. विशेष बोनस, कॉन्टेस्ट रिवॉर्ड, सहायता..."
+                    disabled={isSubmittingCoins}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400 disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCoinTargetUser(null);
+                      setCoinDialogError(null);
+                      setCoinDialogSuccess(null);
+                    }}
+                    disabled={isSubmittingCoins}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold cursor-pointer transition disabled:opacity-50"
+                  >
+                    रद्द करें
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmCreditCoins}
+                    disabled={isSubmittingCoins || !coinAmountInput.trim()}
+                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 transition"
+                  >
+                    {isSubmittingCoins ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Coins className="w-4 h-4" />
+                    )}
+                    <span>{isSubmittingCoins ? 'क्रेडिट हो रहा है...' : 'कॉइन जोड़ें'}</span>
                   </button>
                 </div>
               </div>

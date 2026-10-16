@@ -180,7 +180,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
         const SAFE_MIN_X = 5.0;
         const SAFE_MIN_Y = 5.0;
-        const SAFE_MAX_X = 92;
+        const SAFE_MAX_X = 95.0;
         const SAFE_MAX_Y = 60;
         const baseW = 18;
         const baseH = 11.5;
@@ -331,9 +331,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   // Exact proportional font size & padding matching CanvasExporter 1080px canvas and exact 20px default preview size
   const previewScale = containerWidth / 1080;
-  const canvasTargetFontSize = Math.max(36, Math.min(84, Math.round((card.headlineFontSize || 20) * 2.3)));
-  const effectivePreviewFontSize = Math.max(12, Math.min(32, Math.round((card.headlineFontSize || 20) * (containerWidth > 0 ? containerWidth / 420 : 1))));
-  const effectivePaddingX = Math.max(10, Math.round(48 * previewScale));
+  const canvasTargetFontSize = Math.max(38, Math.min(84, Math.round((card.headlineFontSize || 22) * 2.3)));
+  const effectivePreviewFontSize = Math.max(14, Math.min(34, Math.round((card.headlineFontSize || 22) * (containerWidth > 0 ? containerWidth / 400 : 1.05))));
+  const effectivePaddingX = Math.max(12, Math.round(52 * previewScale));
   // Parse formatted headline with [yellow]...[/yellow] or highlightWords, preserving manual lines
   const renderFormattedHeadline = () => {
     const rawUncleaned = card.formattedHeadline || card.headline;
@@ -1214,7 +1214,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </svg>
 
               {/* Headline Text: Center vertically & horizontally with balanced padding */}
-              <div className="relative z-10 w-full flex items-center justify-center pt-1.5 sm:pt-2 px-2">
+              <div className="relative z-10 w-full h-full flex items-center justify-center px-4 sm:px-6">
                 <h1
                   className="font-black leading-tight sm:leading-snug tracking-tight text-white transition-all line-clamp-4 text-center px-2"
                   style={{

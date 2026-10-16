@@ -968,13 +968,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>पुनः प्रयास करें (Retry)</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onChange({ sourceNewsId: undefined })}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-lg cursor-pointer"
-                >
-                  मैन्युअल मोड में बदलें
-                </button>
               </div>
             </div>
           )}
@@ -985,14 +978,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                 <span><strong>डायरेक्ट खबर मोड:</strong> AI हेडलाइन विकल्प नीचे तैयार हैं</span>
               </div>
-              <button
-                type="button"
-                onClick={() => onChange({ sourceNewsId: undefined })}
-                className="text-[11px] font-bold text-slate-400 hover:text-white underline cursor-pointer"
-                title="सामान्य URL व स्क्रिप्ट इनपुट पर वापस जाएं"
-              >
-                मैन्युअल मोड खोलें
-              </button>
             </div>
           )}
         </div>

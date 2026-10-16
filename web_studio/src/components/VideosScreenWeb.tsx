@@ -81,10 +81,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     const fetchUnlocked = async () => {
       try {
         const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email)}`));
-        if (uRes.ok) {
           const uData = await uRes.json();
-          if (uData.items && Array.isArray(uData.items)) {
-            const videoUnlocked = uData.items.filter((it: any) => it.itemType === 'video').map((it: any) => it.itemId);
+          const rawItems = uData.unlockedItems || uData.unlockedList || (Array.isArray(uData.items) ? uData.items.map((it: any) => typeof it === 'string' ? it : it.itemId) : []);
+          if (Array.isArray(rawItems) && rawItems.length > 0) {
+            const videoUnlocked = rawItems.filter((id: string) => typeof id === 'string' && (id.startsWith('vid') || id.includes('video') || !id.startsWith('news')));
             setUnlockedVideoIds((prev) => {
               const updated = new Set([...Array.from(prev), ...videoUnlocked]);
               try {
@@ -93,7 +93,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               return updated;
             });
           }
-        }
       } catch {}
     };
     fetchUnlocked();
@@ -908,15 +907,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               <span>वीडियो स्टूडियो</span>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => handleDownloadVideo(vid)}
-            className="py-2.5 px-3 bg-slate-800 hover:bg-emerald-950/60 hover:text-emerald-400 text-slate-300 border border-slate-700 rounded-xl transition-colors cursor-pointer active:scale-95 shrink-0"
-            title="वीडियो डाउनलोड करें (500 वेलकम कॉइन)"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-400" />
-          </button>
 
           <button
             type="button"

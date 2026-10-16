@@ -2564,17 +2564,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         <p className="text-xs text-green-400 font-bold flex items-center gap-1">
                           <Check className="w-3.5 h-3.5" /> फोटो 1 सक्रिय है
                         </p>
-                        <p className="text-[11px] text-neutral-400 mt-0.5 truncate">लाइव कार्ड व डाउनलोड में यह फोटो दिखाई देगी</p>
+                        <p className="text-xs text-neutral-300 mt-0.5 font-medium truncate">लाइव कार्ड व डाउनलोड में यह फोटो दिखाई देगी</p>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-3 bg-neutral-900/40 rounded-lg border border-dashed border-neutral-800 text-center text-xs text-neutral-400">
-                      कोई फोटो चयनित नहीं है। कृपया नीचे से मुख्य फोटो अपलोड करें।
+                    <div className="p-3 bg-neutral-900/60 rounded-lg border border-dashed border-neutral-700 text-center text-xs sm:text-sm font-semibold text-neutral-200 tracking-wide font-['Noto_Sans_Devanagari']">
+                      कोई फोटो चयनित नहीं है। कृपया नीचे दिए गए बटन से मुख्य फोटो अपलोड करें।
                     </div>
                   )}
 
-                  <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-yellow-500/60 hover:border-yellow-400 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold hover:text-white bg-yellow-500/10 hover:bg-yellow-500/20 transition-all shadow-sm">
-                    <Upload className="w-3.5 h-3.5 text-yellow-400" />
+                  <label className="flex items-center justify-center gap-2 p-2.5 border-2 border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-xl cursor-pointer text-xs sm:text-sm font-black text-yellow-300 hover:text-white bg-yellow-500/15 hover:bg-yellow-500/25 transition-all shadow-sm">
+                    <Upload className="w-4 h-4 text-yellow-400" />
                     <span>{card.images.main ? 'नई फोटो अपलोड / बदलें' : 'मुख्य फोटो अपलोड करें'}</span>
                     <input
                       type="file"
@@ -2612,19 +2612,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
+                          <p className="text-xs text-green-400 font-bold truncate flex items-center gap-1">
                             <Check className="w-3 h-3 text-green-400" /> फोटो 1 सक्रिय
                           </p>
-                          <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+                          <p className="text-[11px] text-neutral-300 font-medium truncate">लाइव कार्ड पर दिख रही है</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-neutral-900/40 rounded border border-dashed border-neutral-800 text-center text-[11px] text-neutral-400">
-                        फोटो 1 खाली है
+                      <div className="p-2.5 bg-neutral-900/60 rounded border border-dashed border-neutral-700 text-center text-xs font-semibold text-neutral-200">
+                        फोटो 1 खाली है (अपलोड करें)
                       </div>
                     )}
 
-                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-500/50 hover:border-yellow-400 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold bg-yellow-500/10 hover:bg-yellow-500/20 transition-all">
+                    <label className="flex items-center justify-center gap-1.5 p-2 border-2 border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-lg cursor-pointer text-xs font-bold text-yellow-300 bg-yellow-500/15 hover:bg-yellow-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-yellow-400" />
                       <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
                       <input
@@ -2660,19 +2660,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           onError={handleThumbnailImgError}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] text-green-400 font-bold truncate flex items-center gap-1">
+                          <p className="text-xs text-green-400 font-bold truncate flex items-center gap-1">
                             <Check className="w-3 h-3 text-green-400" /> फोटो 2 सक्रिय
                           </p>
-                          <p className="text-[10px] text-neutral-400 truncate">लाइव कार्ड पर दिख रही है</p>
+                          <p className="text-[11px] text-neutral-300 font-medium truncate">लाइव कार्ड पर दिख रही है</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-neutral-900/40 rounded border border-dashed border-neutral-800 text-center text-[11px] text-neutral-400">
-                        दूसरी फोटो अपलोड करें
+                      <div className="p-2.5 bg-neutral-900/60 rounded border border-dashed border-neutral-700 text-center text-xs font-semibold text-neutral-200">
+                        दूसरी फोटो खाली है (अपलोड करें)
                       </div>
                     )}
 
-                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-blue-500/50 hover:border-blue-400 rounded-lg cursor-pointer text-xs text-blue-300 font-bold bg-blue-500/10 hover:bg-blue-500/20 transition-all">
+                    <label className="flex items-center justify-center gap-1.5 p-2 border-2 border-dashed border-blue-400/80 hover:border-blue-300 rounded-lg cursor-pointer text-xs font-bold text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-blue-400" />
                       <span>{card.images.second ? 'फोटो 2 बदलें' : 'दूसरी फोटो अपलोड करें'}</span>
                       <input
@@ -3771,7 +3771,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onChange({ logoScale: 1.25, logoX: 5.5, logoY: 5.5 })}
+                      onClick={() => onChange({ logoScale: 1.25, logoX: 5.5, logoY: undefined })}
                       className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-[10px] border border-neutral-700 cursor-pointer"
                       title="डिफ़ॉल्ट सेफ-ज़ोन (5.5%) पर रीसेट करें"
                     >

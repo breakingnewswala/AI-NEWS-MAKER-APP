@@ -41,6 +41,7 @@ import {
   Coins,
   Gift,
   Film,
+  Unlock,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
@@ -343,8 +344,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email)}`));
         if (uRes.ok) {
           const uData = await uRes.json();
-          if (uData.items && Array.isArray(uData.items)) {
-            const newsUnlocked = uData.items.filter((it: any) => it.itemType === 'news').map((it: any) => it.itemId);
+          const rawItems = uData.unlockedItems || uData.unlockedList || (Array.isArray(uData.items) ? uData.items.map((it: any) => typeof it === 'string' ? it : it.itemId) : []);
+          if (Array.isArray(rawItems) && rawItems.length > 0) {
+            const newsUnlocked = rawItems.filter((id: string) => typeof id === 'string' && !id.startsWith('vid'));
             setUnlockedNewsIds((prev) => {
               const updated = new Set([...Array.from(prev), ...newsUnlocked]);
               try {
@@ -357,6 +359,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       } catch {}
     };
     fetchWalletAndUnlocks();
+
+    const handleWalletUpdated = () => fetchWalletAndUnlocks();
+    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
+    window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
+    window.addEventListener('focus', handleWalletUpdated);
+
+    return () => {
+      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
+      window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
+      window.removeEventListener('focus', handleWalletUpdated);
+    };
   }, [currentUser?.email]);
 
   const markBonusNewsClaimed = (newsId: string) => {
@@ -1348,10 +1361,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
             {/* Grid of Highlight Cards: 3 on desktop, 2 on tablet, 1 on mobile (Proper 16:9 Thumbnail preview) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleHighlightPosts.map((post) => (
+              {visibleHighlightPosts.map((post) => {
+                const isPaid = !!(post.coinCost && post.coinCost > 0);
+                const isBonus = !!post.isBonus;
+                const isUnlocked = unlockedNewsIds.has(post.id);
+                const isRestricted = isPostRestricted(post);
+                const isBonusClaimed = claimedBonusNewsIds.has(post.id);
+
+                const cardBorderClass = (isPaid && isBonus)
+                  ? 'border-2 border-amber-500/90 ring-2 ring-emerald-500/60 shadow-lg shadow-amber-500/10'
+                  : isPaid
+                  ? 'border-2 border-amber-500/90 ring-1 ring-amber-400/50 shadow-lg shadow-amber-500/10'
+                  : isBonus
+                  ? 'border-2 border-emerald-500/90 ring-1 ring-emerald-400/50 shadow-lg shadow-emerald-500/10'
+                  : 'border border-slate-700/90 hover:border-slate-500/80 shadow-md';
+
+                return (
                 <div
                   key={post.id}
-                  className="bg-slate-950/80 border border-slate-800/90 hover:border-amber-500/60 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group shadow-md"
+                  className={`bg-slate-950/80 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group ${cardBorderClass}`}
                 >
                   <div>
                     {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
@@ -1369,7 +1397,33 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
 
                       {/* Top Tag on Image */}
-                      <div className="absolute top-2 right-2">
+                      <div className="absolute top-2 right-2 flex flex-col items-end gap-1 z-10">
+                        {isPaid && (
+                          isUnlocked ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 shadow flex items-center gap-1 backdrop-blur-sm">
+                              <Unlock className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>🔓 अनलॉक की गई</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-950/90 text-amber-300 border border-amber-500/80 shadow flex items-center gap-1 backdrop-blur-sm">
+                              <Coins className="w-2.5 h-2.5 text-amber-400" />
+                              <span>🪙 पेड खबर • {post.coinCost} कॉइन</span>
+                            </span>
+                          )
+                        )}
+                        {isBonus && (
+                          isBonusClaimed ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 shadow flex items-center gap-1 backdrop-blur-sm">
+                              <Check className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>✓ बोनस क्लेम किया गया</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-900/90 text-emerald-200 border border-emerald-400/80 shadow flex items-center gap-1 backdrop-blur-sm animate-pulse">
+                              <Gift className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>🎁 बोनस खबर</span>
+                            </span>
+                          )
+                        )}
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider text-white shadow whitespace-nowrap ${
                             post.isExclusive
@@ -1470,11 +1524,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       >
                         {cleanViewerHeadline(post.title)}
                       </h3>
-                      {post.coinCost && post.coinCost > 0 && (
-                        <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
-                          <Coins className="w-2.5 h-2.5 text-amber-400" />
-                          <span>{post.coinCost} कॉइन</span>
-                        </span>
+                      {isPaid && (
+                        isUnlocked ? (
+                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
+                            <Unlock className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>अनलॉक</span>
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
+                            <Coins className="w-2.5 h-2.5 text-amber-400" />
+                            <span>{post.coinCost} कॉइन</span>
+                          </span>
+                        )
                       )}
                     </div>
 
@@ -1618,7 +1679,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
 
             {/* Bottom: Page Indicator Dots */}
@@ -1691,17 +1753,26 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
               const isDefaultThumbActive = defaultThumbnailIds.has(post.id);
               const displayThumbnail = getPostThumbnail(post);
+              const isPaid = !!(post.coinCost && post.coinCost > 0);
+              const isBonus = !!post.isBonus;
+              const isUnlocked = unlockedNewsIds.has(post.id);
+              const isRestricted = isPostRestricted(post);
+              const isBonusClaimed = claimedBonusNewsIds.has(post.id);
+
+              const cardBorderClass = (isPaid && isBonus)
+                ? 'border-2 border-amber-500/90 ring-2 ring-emerald-500/60 shadow-lg shadow-amber-500/10'
+                : isPaid
+                ? 'border-2 border-amber-500/90 ring-1 ring-amber-400/50 shadow-lg shadow-amber-500/10'
+                : isBonus
+                ? 'border-2 border-emerald-500/90 ring-1 ring-emerald-400/50 shadow-lg shadow-emerald-500/10'
+                : isHighlighted
+                ? 'border-2 border-indigo-400/80 ring-1 ring-indigo-400/30 shadow-lg shadow-indigo-500/10'
+                : 'border border-slate-700/90 hover:border-slate-500/80 shadow-md';
 
               return (
                 <div
                   key={post.id}
-                  className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${
-                    post.isBonus
-                      ? 'border-yellow-500/80 ring-2 ring-yellow-400/40 shadow-xl shadow-yellow-500/10'
-                      : isHighlighted
-                      ? 'border-amber-400 ring-2 ring-amber-400/40 shadow-xl shadow-amber-500/10'
-                      : `${catTheme.cardBorder} hover:shadow-lg`
-                  }`}
+                  className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass}`}
                 >
                   {/* Admin Moderation Bar (Visible strictly to authenticated Admin in Admin Mode) */}
                   {canModerate && (
@@ -1869,11 +1940,31 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         loading="lazy"
                       />
                       <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
-                        {post.isBonus && (
-                          <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
-                            <Coins className="w-2.5 h-2.5 text-slate-950" />
-                            बोनस खबर ({post.rewardCoins || 100} Coins)
-                          </span>
+                        {isPaid && (
+                          isUnlocked ? (
+                            <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
+                              <Unlock className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>🔓 अनलॉक की गई</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-amber-950/90 text-amber-300 border border-amber-500/80 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
+                              <Coins className="w-2.5 h-2.5 text-amber-400" />
+                              <span>🪙 पेड खबर • {post.coinCost} कॉइन</span>
+                            </span>
+                          )
+                        )}
+                        {isBonus && (
+                          isBonusClaimed ? (
+                            <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
+                              <Check className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>✓ बोनस क्लेम किया गया</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-emerald-900/90 text-emerald-200 border border-emerald-400/80 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md backdrop-blur-sm animate-pulse">
+                              <Gift className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>🎁 बोनस खबर ({post.rewardCoins || 100} Coins)</span>
+                            </span>
+                          )
                         )}
                         {isHighlighted && (
                           <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
@@ -1925,11 +2016,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         >
                           {cleanViewerHeadline(post.title)}
                         </h4>
-                        {post.coinCost && post.coinCost > 0 && (
-                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
-                            <Coins className="w-2.5 h-2.5 text-amber-400" />
-                            <span>{post.coinCost} कॉइन</span>
-                          </span>
+                        {isPaid && (
+                          isUnlocked ? (
+                            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
+                              <Unlock className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>अनलॉक</span>
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
+                              <Coins className="w-2.5 h-2.5 text-amber-400" />
+                              <span>{post.coinCost} कॉइन</span>
+                            </span>
+                          )
                         )}
                       </div>
 

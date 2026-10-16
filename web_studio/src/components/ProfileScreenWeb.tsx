@@ -437,6 +437,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   useEffect(() => {
     fetchUserWallet();
+    const handleWalletUpdated = () => {
+      fetchUserWallet();
+    };
+    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
+    window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
+    return () => {
+      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
+      window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
+    };
   }, [currentUser?.email]);
 
   const handleScreenshotFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2630,16 +2639,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <Crown className="w-3 h-3" />
                       <span>{activePlanDetail.nameHi}</span>
                     </span>
-
-                    {/* Requirement 20: 7-Day Free Trial Active & Days Remaining */}
-                    {!isAdmin && subscription.isTrialActive && (
-                      <span className="px-2.5 py-0.5 bg-emerald-950/90 border border-emerald-500/70 text-emerald-300 text-[10px] font-black rounded-full flex items-center gap-1.5 shadow-xs">
-                        <Sparkles className="w-3 h-3 text-emerald-400" />
-                        <span>7-Day Free Trial Active</span>
-                        <span>•</span>
-                        <span>{subscription.daysRemaining} Days Remaining</span>
-                      </span>
-                    )}
                   </div>
 
                   {/* Clean Email Display (No boxed container/border) */}
@@ -2653,16 +2652,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                   )}
 
-                  {/* Primary Mobile Status - Strictly Locked & Top Only */}
-                  <div className="pt-1.5 flex flex-col items-center sm:items-start text-xs">
+                  {/* Primary Mobile Status - Strictly Locked & Inline with Primary Number */}
+                  <div className="pt-1.5 flex items-center flex-wrap gap-2 text-xs">
                     <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
                       <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span>प्राइमरी नंबर: +91 {subscription.primaryMobile || channelProfile.mobileNumber || '9876543210'}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold mt-0.5 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
                       <Lock className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
                       <span>स्थायी लॉक</span>
-                    </div>
+                    </span>
                   </div>
                 </div>
               </div>

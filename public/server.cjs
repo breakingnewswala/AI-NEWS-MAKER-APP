@@ -1167,13 +1167,15 @@ function loadRewardsDatabase() {
         claims: Array.isArray(parsed.claims) ? parsed.claims : [],
         transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
         downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
-        wallets: parsed.wallets && typeof parsed.wallets === "object" ? parsed.wallets : {}
+        wallets: parsed.wallets && typeof parsed.wallets === "object" ? parsed.wallets : {},
+        welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === "object" ? parsed.welcomeRewards : {},
+        unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === "object" ? parsed.unlockedItems : {}
       };
     }
   } catch (err) {
     console.error("Error reading rewards_database.json:", err.message);
   }
-  return { claims: [], transactions: [], downloadEvents: [], wallets: {} };
+  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {} };
 }
 function saveRewardsDatabase(db) {
   try {
@@ -1539,18 +1541,31 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
     const { id } = req.params;
     let existing = loadNewsDatabase();
     let found = false;
+    let approvedTitle = "";
     existing = existing.map((p) => {
       if (p.id === id) {
         found = true;
-        return { ...p, status: "APPROVED", timestamp: Date.now() };
+        const postData = req.body || {};
+        const updatedTitle = postData.title || p.title;
+        approvedTitle = updatedTitle;
+        return {
+          ...p,
+          title: updatedTitle,
+          summary: postData.summary || p.summary,
+          imageUrl: postData.imageUrl || p.imageUrl,
+          sourceChannel: postData.sourceChannel || p.sourceChannel,
+          status: "APPROVED",
+          timestamp: Date.now()
+        };
       }
       return p;
     });
     if (!found) {
       const postData = req.body || {};
+      approvedTitle = postData.title || postData.headline || "\u0938\u092E\u093E\u091A\u093E\u0930";
       const newApprovedPost = {
         id,
-        title: postData.title || postData.headline || "\u0938\u092E\u093E\u091A\u093E\u0930",
+        title: approvedTitle,
         summary: postData.summary || postData.shortDescription || "",
         sourceChannel: postData.sourceChannel || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
         sourceUrl: postData.sourceUrl || "",
@@ -1572,6 +1587,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
       existing.unshift(newApprovedPost);
     }
     saveNewsDatabase(existing);
+    broadcastNewsPublishedNotification(id, approvedTitle);
     const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id, posts: existing });
@@ -1791,7 +1807,7 @@ app.post("/api/rewards/download-event", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/user/wallet", (req, res) => {
+app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
   try {
     const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
     const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
@@ -2056,6 +2072,29 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.post("/api/upload-logo", (req, res) => {
+  try {
+    const { imageBase64, mimeType = "image/png" } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const ext = mimeType.includes("gif") ? "gif" : mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
+    const filename = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
+    const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
+    const buf = Buffer.from(cleanBase64, "base64");
+    import_fs.default.writeFileSync(filePath, buf);
+    try {
+      import_fs.default.writeFileSync(webFilePath, buf);
+    } catch {
+    }
+    const url = `/uploads/logos/${filename}`;
+    return res.json({ success: true, url });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/wallet/claim-welcome-reward", (req, res) => {
   try {
     const { email, userId, rewardType } = req.body || {};
@@ -2086,7 +2125,7 @@ app.post("/api/wallet/claim-welcome-reward", (req, res) => {
         alreadyClaimed: true,
         rewardCoins: 0,
         wallet: rDb.wallets[walletKey],
-        message: rewardType === "graphic" ? "\u092A\u094D\u0930\u0925\u092E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" : "\u092A\u094D\u0930\u0925\u092E \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+        message: rewardType === "graphic" ? "\u092A\u094D\u0930\u0925\u092E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" : "\u092A\u094D\u0930\u0925\u092E \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u3002"
       });
     }
     const rewardCoins = 500;
@@ -2118,6 +2157,7 @@ app.post("/api/wallet/claim-welcome-reward", (req, res) => {
     return res.json({
       success: true,
       claimed: true,
+      awarded: true,
       rewardCoins,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
@@ -2214,7 +2254,66 @@ app.get("/api/wallet/unlocked-items", (req, res) => {
     const rDb = loadRewardsDatabase();
     const unlocked = rDb.unlockedItems?.[walletKey] || [];
     const welcome = rDb.welcomeRewards?.[walletKey] || { graphicClaimed: false, videoClaimed: false };
-    return res.json({ success: true, unlockedItems: unlocked, welcomeRewards: welcome });
+    return res.json({
+      success: true,
+      unlockedItems: unlocked,
+      items: unlocked.map((id) => ({ itemId: id, itemType: id.startsWith("vid") ? "video" : "news" })),
+      unlockedList: unlocked,
+      welcomeRewards: welcome
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u0949\u0907\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { email, userId, amount, coins, note, reason } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const coinAmount = Number(amount !== void 0 ? amount : coins);
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    if (!Number.isInteger(coinAmount) || coinAmount <= 0) {
+      return res.status(400).json({ error: "\u0915\u0949\u0907\u0928 \u0915\u0940 \u0938\u0902\u0916\u094D\u092F\u093E \u090F\u0915 \u0927\u0928\u093E\u0924\u094D\u092E\u0915 \u092A\u0942\u0930\u094D\u0923\u093E\u0902\u0915 (Positive Integer) \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F" });
+    }
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    rDb.wallets[walletKey].coinBalance += coinAmount;
+    rDb.wallets[walletKey].totalEarnedCoins += coinAmount;
+    const callerEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || req.body?.adminEmail || req.body?.userEmail || "admin").toString().toLowerCase().trim();
+    const txId = `tx-admin-adj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const txReason = note || reason || "\u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092E\u0948\u0928\u0941\u0905\u0932 \u0915\u0949\u0907\u0928 \u0938\u092E\u093E\u092F\u094B\u091C\u0928 (Admin Manual Credit)";
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: `\u090F\u0921\u092E\u093F\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F: +${coinAmount} \u0915\u0949\u0907\u0928\u094D\u0938 (${txReason})`,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount,
+      amount: coinAmount,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: callerEmail
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      coinBalance: rDb.wallets[walletKey].coinBalance,
+      message: `\u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 ${coinAmount} \u0915\u0949\u0907\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0915\u093F\u090F \u0917\u090F! \u0928\u092F\u093E \u092C\u0948\u0932\u0947\u0902\u0938: ${rDb.wallets[walletKey].coinBalance}`,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx
+    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -2459,6 +2558,52 @@ function saveNotificationsDatabase(notifs) {
     return false;
   }
 }
+function broadcastNewsPublishedNotification(newsId, title) {
+  try {
+    const notifs = loadNotificationsDatabase();
+    const notifId = `notif_news_${newsId}`;
+    if (!notifs.some((n) => n.id === notifId)) {
+      notifs.unshift({
+        id: notifId,
+        title: "\u{1F4F0} \u0928\u0908 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0935 \u092A\u094D\u0930\u0915\u093E\u0936\u093F\u0924",
+        message: title && title !== "\u0938\u092E\u093E\u091A\u093E\u0930" ? title : "\u0928\u092F\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u092E\u0941\u0916\u094D\u092F \u0939\u094B\u092E \u092B\u093C\u0940\u0921 \u092E\u0947\u0902 \u092A\u094D\u0930\u0915\u093E\u0936\u093F\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964",
+        time: "\u0905\u092D\u0940",
+        timestamp: Date.now(),
+        unread: true,
+        type: "news",
+        targetUserEmail: "all",
+        linkTab: "home"
+      });
+      if (notifs.length > 200) notifs.length = 200;
+      saveNotificationsDatabase(notifs);
+    }
+  } catch (e) {
+    console.error("Error broadcasting news notification:", e);
+  }
+}
+function broadcastVideoPublishedNotification(videoId, title) {
+  try {
+    const notifs = loadNotificationsDatabase();
+    const notifId = `notif_video_${videoId}`;
+    if (!notifs.some((n) => n.id === notifId)) {
+      notifs.unshift({
+        id: notifId,
+        title: "\u{1F3AC} \u0928\u092F\u093E \u0935\u0940\u0921\u093F\u092F\u094B \u0935 \u0930\u0940\u0932\u094D\u0938 \u091C\u093E\u0930\u0940",
+        message: title || "\u0928\u092F\u093E \u0935\u0940\u0921\u093F\u092F\u094B \u0935\u0940\u0921\u093F\u092F\u094B \u090F\u0902\u0921 \u0930\u0940\u0932\u094D\u0938 \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u091C\u093E\u0930\u0940 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964",
+        time: "\u0905\u092D\u0940",
+        timestamp: Date.now(),
+        unread: true,
+        type: "video",
+        targetUserEmail: "all",
+        linkTab: "videos"
+      });
+      if (notifs.length > 200) notifs.length = 200;
+      saveNotificationsDatabase(notifs);
+    }
+  } catch (e) {
+    console.error("Error broadcasting video notification:", e);
+  }
+}
 function computeTrialFields(u, now = Date.now()) {
   const isSuper = u.role === "superadmin" || isProtectedAdminAccount(u.email);
   if (isSuper || u.tier && u.tier !== "basic") {
@@ -2586,8 +2731,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   const idx = users.findIndex((u) => {
     const uEmail = (u.email || "").toLowerCase().trim();
     const uUserId = (u.userId || "").toLowerCase().trim();
-    const uPhone = (u.mobileNumber || u.mobile || "").toString().replace(/[^0-9]/g, "").slice(-10);
-    return cleanEmail && uEmail && uEmail === cleanEmail || cleanEmail && uEmail && uEmail.replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || cleanUserId && uUserId && uUserId === cleanUserId || cleanUserId && uEmail && uEmail === cleanUserId || rawMobile.length === 10 && uPhone.length === 10 && uPhone === rawMobile;
+    return cleanEmail && uEmail && uEmail === cleanEmail || cleanEmail && uEmail && uEmail.replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || cleanUserId && uUserId && uUserId === cleanUserId || cleanUserId && uEmail && uEmail === cleanUserId;
   });
   const now = Date.now();
   let updatedRecord;
@@ -2776,7 +2920,7 @@ function reconcileAllUsers() {
       district: superProf?.district || existingSuper?.district || "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
       websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || "ainewsmaker.online",
       isBlocked: false,
-      isProfileLocked: false,
+      isProfileLocked: true,
       createdAt: existingSuper?.createdAt || 1791697518060,
       trialStartedAt: 1791697518060,
       trialEndsAt: 2107057518060,
@@ -2797,9 +2941,9 @@ function reconcileAllUsers() {
       role: "superadmin",
       tier: "ultra",
       planName: "VIP DESK",
-      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || "AI News Maker",
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
+      channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || "BREAKING NEWS WALA",
       channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || "/assets/breaking_news_wala_logo.png",
       channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || "/assets/breaking_news_wala_logo.png",
       channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || "",
@@ -2807,9 +2951,9 @@ function reconcileAllUsers() {
       mobile: adminProf?.mobileNumber || existingAdmin?.mobile || "9669802408",
       mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || "9669802408",
       district: adminProf?.district || existingAdmin?.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
-      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "ainewsmaker.online",
+      websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "breakingnewswala.com",
       isBlocked: false,
-      isProfileLocked: false,
+      isProfileLocked: true,
       createdAt: existingAdmin?.createdAt || 1791792137805,
       trialStartedAt: 1791792137805,
       trialEndsAt: 2107057518060,
@@ -2875,6 +3019,40 @@ function reconcileAllUsers() {
         mobileNumber: p2?.mobileNumber || "9876543211",
         district: p2?.district || "\u0913\u0930\u091B\u093E / \u0928\u093F\u0935\u093E\u0921\u093C\u0940",
         websiteUrl: p2?.websiteUrl || "ainewsmaker.online",
+        isBlocked: false,
+        isProfileLocked: false,
+        createdAt: 1791892712618,
+        trialStartedAt: 1791892712618,
+        trialEndsAt: 1792497512618,
+        activatedAt: 1791892712618,
+        expiresAt: 1792497512618,
+        activatedVia: "Free 7-Day VIP Trial",
+        lastLoginAt: 1791892712618
+      });
+    }
+    const seedUser3 = "digital.anmolsandesh@gmail.com";
+    if (!userMap.has(seedUser3)) {
+      const p3 = profiles[seedUser3];
+      userMap.set(seedUser3, {
+        userId: p3?.userId || "usr_anmolsandesh_103",
+        email: seedUser3,
+        name: p3?.fullName || "Anmol Sandesh",
+        fullName: p3?.fullName || "Anmol Sandesh",
+        username: p3?.username || "anmolsandesh",
+        role: "user",
+        tier: "basic",
+        planName: "BASIC",
+        channelName: p3?.channelNameHi || "\u0905\u0928\u092E\u094B\u0932 \u0938\u0902\u0926\u0947\u0936",
+        channelNameHi: p3?.channelNameHi || "\u0905\u0928\u092E\u094B\u0932 \u0938\u0902\u0926\u0947\u0936",
+        channelNameEn: p3?.channelNameEn || "Anmol Sandesh",
+        channelLogoUrl: p3?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoPngUrl: p3?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoGifUrl: "",
+        channelLogoType: "png",
+        mobile: p3?.mobileNumber || "9425000998",
+        mobileNumber: p3?.mobileNumber || "9425000998",
+        district: p3?.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+        websiteUrl: p3?.websiteUrl || "anmolsandesh.com",
         isBlocked: false,
         isProfileLocked: false,
         createdAt: 1791892712618,
@@ -3095,6 +3273,7 @@ app.post("/api/admin/videos/upload", (req, res) => {
     const currentVideos = loadVideosDatabase();
     const updated = [newVideo, ...currentVideos.filter((v) => v.id !== newVideo.id)];
     saveVideosDatabase(updated);
+    broadcastVideoPublishedNotification(newVideo.id, newVideo.title);
     return res.json({ success: true, video: newVideo, total: updated.length });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3171,10 +3350,21 @@ app.get(["/api/users", "/api/admin/users"], (_req, res) => {
   try {
     const now = Date.now();
     const users = loadUsersMasterDatabase();
-    const decorated = users.map((u) => ({
-      ...u,
-      ...computeTrialFields(u, now)
-    }));
+    const rDb = loadRewardsDatabase();
+    const decorated = users.map((u) => {
+      const emailKey = (u.email || "").toLowerCase().trim();
+      const idKey = (u.userId || "").toLowerCase().trim();
+      const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
+      const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      return {
+        ...u,
+        coins: w.coinBalance || 0,
+        coinBalance: w.coinBalance || 0,
+        permanentLock: isSuper,
+        isLocked: isSuper,
+        ...computeTrialFields(u, now)
+      };
+    });
     return res.json({ success: true, users: decorated });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

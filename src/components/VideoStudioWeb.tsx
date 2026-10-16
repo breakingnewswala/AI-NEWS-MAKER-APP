@@ -596,6 +596,30 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     }
   };
 
+  // Trigger welcome reward for 1st video export from Video Studio (500 coins)
+  const triggerVideoWelcomeReward = () => {
+    try {
+      const email = (currentUser?.email || profile?.email || '').toLowerCase().trim();
+      if (!email) return;
+      fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, rewardType: 'video' }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && (data.awarded || (data.claimed && !data.alreadyClaimed))) {
+            window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+            window.dispatchEvent(new CustomEvent('ai_news_wallet_updated'));
+            setTimeout(() => {
+              alert('🎉 बधाई! वीडियो स्टूडियो से प्रथम वीडियो एक्सपोर्ट पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
+            }, 600);
+          }
+        })
+        .catch(() => {});
+    } catch {}
+  };
+
   // Export Full Video File with Progress, Status & Retry
   const handleDownloadVideo = async () => {
     setIsExporting(true);
@@ -626,6 +650,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           setVideoExportProgress(100);
           setVideoExportStatus('डाउनलोड पूर्ण!');
           showToast('✅ वीडियो डाउनलोड शुरू हो गया!');
+          triggerVideoWelcomeReward();
           setIsExporting(false);
           return;
         } catch (bridgeErr) {
@@ -650,6 +675,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         setVideoExportProgress(100);
         setVideoExportStatus('सफलतापूर्वक डाउनलोड!');
         showToast('✅ वीडियो सफलतापूर्वक डाउनलोड हो गया!');
+        triggerVideoWelcomeReward();
       } else {
         // Fallback to high-res news frame snapshot
         handleDownloadSnapshot();

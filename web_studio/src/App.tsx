@@ -147,7 +147,11 @@ function getSavedChannelProfile(): ChannelProfile | null {
       }
 
       // 1. Signed-in User Profile by UID / Email (Permanent and Per-User Data Isolation)
-      const userStr = localStorage.getItem('reporter_current_user') || localStorage.getItem('user_profile_data');
+      const userStr =
+        localStorage.getItem('reporter_auth_session') ||
+        localStorage.getItem('reporter_current_user') ||
+        localStorage.getItem('user_profile_data') ||
+        localStorage.getItem('ai_news_user');
       let userEmail = '';
       if (userStr) {
         try {
@@ -875,7 +879,11 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('reporter_auth_session');
+    localStorage.removeItem('reporter_current_user');
+    localStorage.removeItem('user_channel_profile');
     localStorage.removeItem('is_onboarding_completed');
+    localStorage.removeItem('ai_news_user');
+    localStorage.removeItem('user_profile_data');
     setCurrentUser(null);
     setIsOnboardingCompleted(false);
     setIsUserMenuOpen(false);
