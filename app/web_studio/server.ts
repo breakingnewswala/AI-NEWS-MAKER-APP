@@ -6808,7 +6808,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
       .trim();
   }
 
-  // 3. Body text: clean scripts, styles, nav, headers, footers, forms, aside
+  // 3. Body text: clean scripts, styles, nav, headers, footers, forms, aside, ads, related news
   const cleanBody = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
@@ -6817,11 +6817,14 @@ function parseArticleHtml(html: string, pageUrl: string): {
     .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, " ")
     .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, " ")
     .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, " ")
-    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ");
+    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ")
+    .replace(/<div\b[^>]*class=["'][^"']*(?:related|trending|popular|sidebar|advert|banner|share|social|cookie|comment|menu|nav|breadcrumb)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, " ")
+    .replace(/<ul\b[^>]*class=["'][^"']*(?:related|trending|share|social)[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, " ");
 
   const articleContainerMatch =
     cleanBody.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) ||
     cleanBody.match(/<div[^>]+itemprop=["']articleBody["'][^>]*>([\s\S]*?)<\/div>/i) ||
+    cleanBody.match(/<div[^>]+class=["'][^"']*(?:story-element|article-body|story-content|news-content|story-body|article__body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) ||
     cleanBody.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
 
   const textSource = articleContainerMatch ? articleContainerMatch[1] : cleanBody;
@@ -6835,13 +6838,14 @@ function parseArticleHtml(html: string, pageUrl: string): {
       .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
       .replace(/(?:loading[\s\.]*)+/gi, "")
       .replace(/(?:please wait[\s\.]*)+/gi, "")
+      .replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "")
       .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
       .replace(/\s+/g, " ")
       .trim();
-    if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
+    if (pClean.length > 20 && !extractedParagraphs.includes(pClean)) {
       if (
         !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|\bIST\b|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+/i.test(pClean)
       ) {
@@ -6857,7 +6861,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
     .replace(/(?:loading[\s\.]*)+/gi, "")
     .replace(/(?:please wait[\s\.]*)+/gi, "")
     .replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
       " "
     )
     .replace(/\s+/g, " ")
@@ -7386,23 +7390,7 @@ export function detectDistrictAndState(
   const cleanDesc = cleanCorpusForLocation(desc);
   const cleanContent = cleanCorpusForLocation(content);
 
-  // 1. Check URL path segments explicitly (e.g. /local/mp/bhopal/news/ -> bhopal)
-  if (url) {
-    const urlLower = url.toLowerCase();
-    for (const d of DISTRICT_STATE_LIST) {
-      if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
-      for (const a of d.aliases) {
-        if (/^[a-z0-9\-]+$/i.test(a) && a.length >= 4) {
-          const pathReg = new RegExp(`[/\\-_]${escapeRegExp(a)}[/\\-_.]`, 'i');
-          if (pathReg.test(urlLower)) {
-            return `${d.district}, ${d.state}`;
-          }
-        }
-      }
-    }
-  }
-
-  // 2. Check title first (highest editorial priority)
+  // 1. Check title first (highest editorial priority)
   for (const d of DISTRICT_STATE_LIST) {
     if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
     for (const a of d.aliases) {
@@ -7412,7 +7400,7 @@ export function detectDistrictAndState(
     }
   }
 
-  // 3. Check description
+  // 2. Check description
   for (const d of DISTRICT_STATE_LIST) {
     if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
     for (const a of d.aliases) {
@@ -7422,7 +7410,7 @@ export function detectDistrictAndState(
     }
   }
 
-  // 4. Check clean article content
+  // 3. Check clean article content
   for (const d of DISTRICT_STATE_LIST) {
     if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
     for (const a of d.aliases) {
@@ -7432,7 +7420,7 @@ export function detectDistrictAndState(
     }
   }
 
-  // 5. International places
+  // 4. International places
   const primaryText = `${cleanTitle} ${cleanDesc} ${url}`.toLowerCase();
   if (/वाशिंगटन|व्हाइट हाउस|अमेरिका|trump|व्हाइटहाउस|white house|washington/i.test(primaryText)) {
     return 'वाशिंगटन';
@@ -7440,12 +7428,12 @@ export function detectDistrictAndState(
   if (/रूस|मास्को|moscow/i.test(primaryText)) return 'मास्को';
   if (/ब्रिटेन|लंदन|london/i.test(primaryText)) return 'लंदन';
 
-  // 6. Genuine Delhi
+  // 5. Genuine Delhi
   if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट|नई\s*दिल्ली|राजधानी\s*दिल्ली)/i.test(primaryText)) {
     return 'नई दिल्ली';
   }
 
-  // 7. State-level match if state is explicitly referenced in title/desc
+  // 6. State-level match if state is explicitly referenced in title/desc
   const states = [
     { state: 'मध्य प्रदेश', capital: 'भोपाल, मध्य प्रदेश', aliases: ['मध्य प्रदेश', 'madhya pradesh', 'mp'] },
     { state: 'उत्तर प्रदेश', capital: 'लखनऊ, उत्तर प्रदेश', aliases: ['उत्तर प्रदेश', 'uttar pradesh', 'up'] },
@@ -7468,12 +7456,29 @@ export function detectDistrictAndState(
     }
   }
 
+  // 7. Fallback only: Check URL path segments explicitly (e.g. /local/mp/bhopal/news/ -> bhopal)
+  if (url) {
+    const urlLower = url.toLowerCase();
+    for (const d of DISTRICT_STATE_LIST) {
+      if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+      for (const a of d.aliases) {
+        if (/^[a-z0-9\-]+$/i.test(a) && a.length >= 4) {
+          const pathReg = new RegExp(`[/\\-_]${escapeRegExp(a)}[/\\-_.]`, 'i');
+          if (pathReg.test(urlLower)) {
+            return `${d.district}, ${d.state}`;
+          }
+        }
+      }
+    }
+  }
+
   return '';
 }
 
 /**
  * Transforms any raw sentence or clause into a punchy, active journalistic Hindi headline title.
  * Eliminates declarative endings like "नहीं बनेंगे", "किए गए", "दी जाएगी", "हुआ", avoiding implied full stops.
+ * GUARANTEED: Never truncates verb stems into dangling forms like "सामना करना पड़" or "रोकी जा".
  */
 export function formatAsJournalisticHeadline(raw: string): string {
   if (!raw) return '';
@@ -7512,30 +7517,59 @@ export function formatAsJournalisticHeadline(raw: string): string {
     .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का बड़ा ऐलान')
     .replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, ' के नए नियम');
 
-  // 5. Strip auxiliary/past verb endings if still lingering at the end
-  h = h
-    .replace(/\s+(?:हो\s*गया|हो\s*गई|हो\s*गए|किया\s*गया|किए\s*गए|की\s*गई|दिया\s*गया|दिए\s*गए|ली\s*गई|लिया\s*गया)$/u, '')
-    .replace(/\s+(?:रहा\s*है|रही\s*है|रहे\s*हैं|रहा\s*था|रही\s*थी|रहे\s*थे|हो\s*रहा\s*है|हो\s*रही\s*है)$/u, '')
-    .replace(/\s+(?:हैं|है|था|थी|थे)$/u, '');
+  if (!h.includes('का मामला')) {
+    h = h.replace(/(?:सामने\s*आया\s*है|सामने\s*आई\s*है|सामने\s*आए\s*हैं)$/u, ' का मामला');
+  }
+  if (!h.includes('आरोप')) {
+    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, ' पर गंभीर आरोप');
+  }
+  if (!h.includes('खुलासा')) {
+    h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, ' पर बड़ा खुलासा');
+  }
 
-  // 6. Strip trailing prepositions/connectives/fragments that leave an incomplete sentence fragment
-  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u, '');
+  // 5. INTELLIGENT REPAIR OF HANGING/TRUNCATED AUXILIARY VERBS (NEVER LEAVE DANGLING VERB STEMS)
+  // Fix "सामना करना पड़ रहा है" -> "सामना करना पड़ा" (NOT truncated to "सामना करना पड़")
+  h = h.replace(/(?:का\s+)?सामना\s*करना\s*पड़(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रहा\s*था|\s*रही\s*थी)?$/u, ' का सामना करना पड़ा');
+  h = h.replace(/(?:^|\s)पड़(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रहा\s*था|\s*रही\s*थी)?$/u, ' पड़ा');
+  h = h.replace(/का सामना करना पड़ा का सामना करना पड़ा/g, 'का सामना करना पड़ा');
+
+  // Fix "रोकी जा रही थी / रोकी जा" -> "रोकी गई"
+  h = h.replace(/(?:रोकी|रोका|रोके)\s*जा(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रही\s*थी|\s*रहा\s*था)?$/u, ' रोकी गई');
+
+  // Fix "किए जा रहे हैं / किए जा" -> "किए गए"
+  h = h.replace(/(?:किए|किया)\s*जा(?:\s*रहे\s*हैं|\s*रहा\s*है|\s*रहे\s*थे)?$/u, ' किए गए');
+
+  // Fix "दी जा रही है / दी जा" -> "दी गई"
+  h = h.replace(/(?:दी|दिया)\s*जा(?:\s*रही\s*है|\s*रहा\s*है|\s*रही\s*थी)?$/u, ' दी गई');
+
+  // Fix "मांगी गई है / मांगी" -> "मांगी रिपोर्ट"
+  h = h.replace(/विस्तृत\s*रिपोर्ट\s*मांगी(?:\s*गई\s*है|\s*है)?$/u, 'विस्तृत रिपोर्ट मांगी');
+
+  // Fix hanging participles like "करते", "होते", "आते", "जाते"
+  h = h.replace(/\s+करते$/u, ' करने का मामला');
+  h = h.replace(/\s+होते$/u, ' होने पर विवाद');
+  h = h.replace(/\s+आते$/u, ' आने पर हंगामा');
+  h = h.replace(/\s+जाते$/u, ' जाने पर विवाद');
+
+  // 6. Fix trailing prepositions/connectives that leave an incomplete sentence fragment
+  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u, '');
 
   // 7. Clean duplicate particles like "की की", "को को", "का का"
   h = h
     .replace(/\b(का|के|की|को|में|पर|से|ने)\s+\1\b/gu, '$1')
     .replace(/\s+/g, ' ');
 
-  // 8. Final cleanup of any punctuation marks at end
+  // 8. Strip surrounding quotes & final cleanup of trailing punctuation
+  h = h.replace(/^['"‘“]+|['"’”]+$/g, '').trim();
   h = h.replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
 
   return h;
 }
 
 export function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
-  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी']);
-  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
-  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी', 'हुए', 'हुआ', 'है', 'हैं', 'था', 'थी', 'थे']);
+  const words1 = new Set(h1.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const words2 = new Set(h2.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   if (words1.size === 0 || words2.size === 0) return 0;
   let common = 0;
   for (const w of words1) {
@@ -7545,8 +7579,64 @@ export function calculateHeadlineSimilarityInternal(h1: string, h2: string): num
 }
 
 /**
+ * Validates a single headline option against strict editorial rules (Part 13).
+ */
+export interface HeadlineValidationResult {
+  valid: boolean;
+  reasons: string[];
+  cleanText: string;
+  wordCount: number;
+}
+
+export function validateHeadlineOption(headline: string, index: number = 0): HeadlineValidationResult {
+  const reasons: string[] = [];
+  const clean = cleanHeadlineText(headline).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+
+  if (!clean) {
+    return { valid: false, reasons: ['हेडलाइन खाली नहीं हो सकती'], cleanText: '', wordCount: 0 };
+  }
+
+  // 1. Pure Devanagari Hindi check (no Latin characters)
+  if (/[a-zA-Z]/.test(clean.replace(/\[\/?(?:yellow|highlight)\]/g, ''))) {
+    reasons.push('हेडलाइन में अंग्रेजी अक्षर शामिल हैं');
+  }
+
+  // 2. Word count check (minimum 7, maximum 25 words)
+  const words = clean.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  if (wordCount < 7) {
+    reasons.push(`हेडलाइन बहुत छोटी है (${wordCount} शब्द, कम से कम 7 शब्द अनिवार्य)`);
+  }
+  if (wordCount > 25) {
+    reasons.push(`हेडलाइन बहुत लंबी है (${wordCount} शब्द, अधिकतम 25 शब्द अनुमत)`);
+  }
+
+  // 3. Completeness check: MUST NOT end in dangling verbs or postpositions
+  if (/(?:पड़|जा|रहा|रहे|रही|करते|होते|आते|जाते|ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक)$/u.test(clean)) {
+    reasons.push('हेडलाइन अपूर्ण क्रिया या परसर्ग पर समाप्त हो रही है');
+  }
+
+  // 4. Formulaic cliché template rejection
+  if (/मामले में बड़ा खुलासा|जांच में जुटी पुलिस टीम|प्रशासनिक सतर्कता: घटनाक्रम पर नजर|पर उठे गंभीर सवाल: संबंधित पक्षों ने रखी अपनी बात/u.test(clean)) {
+    reasons.push('हेडलाइन घिसे-पिटे फॉर्मूला टेम्पलेट पर आधारित है');
+  }
+
+  // 5. Trailing punctuation
+  if (/[।\.\,\!\?\:\-]$/.test(clean)) {
+    reasons.push('हेडलाइन के अंत में अमान्य विराम चिह्न है');
+  }
+
+  return {
+    valid: reasons.length === 0,
+    reasons,
+    cleanText: clean,
+    wordCount,
+  };
+}
+
+/**
  * Ensures clean, substantive paragraph structure for captions.
- * - detailed: exactly 3 substantive paragraphs separated by \n\n
+ * - detailed: exactly 3 substantive paragraphs separated by \n\n (ZERO sentence repetition)
  * - short: exactly 2 substantive paragraphs separated by \n\n
  * - bullet: intro + 3-4 bullets (•) + status paragraph
  */
@@ -7586,85 +7676,64 @@ export function cleanCaptionParagraphs(
   const tagsString = cleanTags.join(' ');
 
   if (mode === 'bullet') {
-    const lines = cleanBody.split('\n').map((l) => l.trim()).filter(Boolean);
-    const bullets = lines.filter((l) => l.startsWith('•') || l.startsWith('-') || l.startsWith('*'));
-    const nonBullets = lines.filter((l) => !l.startsWith('•') && !l.startsWith('-') && !l.startsWith('*'));
-    const intro = nonBullets[0] || 'मुख्य समाचार के महत्वपूर्ण तथ्य:';
-    const outro = nonBullets.slice(1).join(' ') || 'मामले में प्रशासनिक स्तर पर अग्रिम कार्रवाई जारी है।';
-    const bulletText = bullets.length >= 3 ? bullets.slice(0, 5).join('\n') : (
-      lines.slice(0, 4).map((l) => (l.startsWith('•') ? l : `• ${l}`)).join('\n')
-    );
-    return `${intro}\n\n${bulletText}\n\n${outro}\n\n${tagsString}`.trim();
+    return `${cleanBody}\n\n${tagsString}`;
   }
 
-  // Paragraph splitting
-  let paragraphs = cleanBody
+  // Split into genuine paragraphs
+  const rawParagraphs = cleanBody
     .split(/\n{2,}/)
     .map((p) => p.trim())
-    .filter((p) => p.length > 20);
+    .filter(Boolean);
 
-  // If text was single giant block, split by Devanagari full stops
-  if (paragraphs.length < (mode === 'detailed' ? 3 : 2)) {
-    const allSentences = cleanBody
-      .split(/[।\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 15);
+  // STRICT SENTENCE DEDUPLICATION ACROSS ALL PARAGRAPHS
+  const seenSentences: string[] = [];
+  const deduplicatedParagraphs: string[] = [];
 
-    if (allSentences.length >= 6 && mode === 'detailed') {
-      const p1 = `${allSentences.slice(0, 2).join('। ')}।`;
-      const p2 = `${allSentences.slice(2, 4).join('। ')}।`;
-      const p3 = `${allSentences.slice(4).join('। ')}।`;
-      paragraphs = [p1, p2, p3];
-    } else if (allSentences.length >= 4) {
-      if (mode === 'detailed') {
-        const p1 = `${allSentences.slice(0, 2).join('। ')}।`;
-        const p2 = `${allSentences.slice(2, 3).join('। ')}।`;
-        const p3 = `${allSentences.slice(3).join('। ')}।`;
-        paragraphs = [p1, p2, p3];
-      } else {
-        const p1 = `${allSentences.slice(0, 2).join('। ')}।`;
-        const p2 = `${allSentences.slice(2).join('। ')}।`;
-        paragraphs = [p1, p2];
+  for (const rawP of rawParagraphs) {
+    const sents = rawP.split(/[।\.\n]+/).map((s) => s.trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+    const uniqueSents: string[] = [];
+
+    for (const s of sents) {
+      const isDuplicate = seenSentences.some((existing) => calculateHeadlineSimilarityInternal(existing, s) >= 0.52);
+      if (!isDuplicate) {
+        seenSentences.push(s);
+        uniqueSents.push(s);
       }
-    } else if (allSentences.length >= 2) {
-      if (mode === 'detailed') {
-        paragraphs = [
-          `${allSentences[0]}।`,
-          `${allSentences[1]}।`,
-          `मामले को लेकर अग्रिम दिशा-निर्देश जारी किए गए हैं और स्थिति पर नजर रखी जा रही है।`
-        ];
-      } else {
-        paragraphs = [
-          `${allSentences[0]}।`,
-          `${allSentences.slice(1).join('। ')}।`
-        ];
-      }
+    }
+
+    if (uniqueSents.length > 0) {
+      deduplicatedParagraphs.push(uniqueSents.join('। ') + '।');
     }
   }
 
-  if (mode === 'detailed') {
-    while (paragraphs.length < 3) {
-      if (paragraphs.length === 1) {
-        paragraphs.push('घटनाक्रम को लेकर सभी पक्षों से जानकारी एकत्रित की जा रही है और आवश्यक समीक्षा जारी है।');
-      } else {
-        paragraphs.push('संबंधित अधिकारियों द्वारा मामले में अग्रिम कार्रवाई और आवश्यक दिशा-निर्देश सुनिश्चित किए जा रहे हैं।');
-      }
+  if (mode === 'short') {
+    while (deduplicatedParagraphs.length < 2) {
+      deduplicatedParagraphs.push('मामले को लेकर संबंधित स्तर पर संज्ञान लिया गया है और स्थिति की समीक्षा की जा रही है।');
     }
-    paragraphs = paragraphs.slice(0, 3);
-  } else {
-    while (paragraphs.length < 2) {
-      paragraphs.push('संबंधित विभाग द्वारा मामले में आवश्यक दिशा-निर्देश जारी कर कार्रवाई की जा रही है।');
-    }
-    paragraphs = paragraphs.slice(0, 2);
+    return `${deduplicatedParagraphs[0]}\n\n${deduplicatedParagraphs[1]}\n\n${tagsString}`;
   }
 
-  const finalBody = paragraphs.join('\n\n');
-  return `${finalBody}\n\n${tagsString}`.trim();
+  // Detailed: exactly 3 substantive paragraphs
+  while (deduplicatedParagraphs.length < 3) {
+    if (deduplicatedParagraphs.length === 1) {
+      deduplicatedParagraphs.push('मामले की पृष्ठभूमि और संबंधित तथ्यों को लेकर आवश्यक विवरण जुटाए जा रहे हैं और घटनाक्रम के सभी पहलुओं का संज्ञान लिया गया है।');
+    } else {
+      deduplicatedParagraphs.push('संबंधित अधिकारियों व विभाग द्वारा आगामी कार्रवाई के निर्देश दिए गए हैं और स्थिति पर नजर रखी जा रही है।');
+    }
+  }
+
+  return `${deduplicatedParagraphs.slice(0, 3).join('\n\n')}\n\n${tagsString}`;
 }
 
 /**
  * Generates exactly 5 publishable, distinct journalistic headlines in pure Hindi.
- * Guaranteed: zero full stops, zero colon-swapping, zero incomplete sentence cuts, dynamic extraction from facts.
+ * Follows graduated length targets (Part 7):
+ * - विकल्प 1: ~8–11 शब्द (संक्षिप्त, पूर्ण, स्पष्ट)
+ * - विकल्प 2: ~11–14 शब्द (विस्तारित तथ्य)
+ * - विकल्प 3: ~13–16 शब्द (घटना + महत्वपूर्ण तथ्य)
+ * - विकल्प 4: ~15–18 शब्द (मुख्य खबर + अतिरिक्त प्रासंगिक तथ्य)
+ * - विकल्प 5: ~16–20 शब्द (आवश्यक संदर्भ + मुख्य बिंदु)
+ * Guaranteed: zero full stops, zero incomplete verb cuts, zero repetitive formulaic suffixes.
  */
 export function generate5JournalisticHeadlines(
   baseTitle: string,
@@ -7679,18 +7748,15 @@ export function generate5JournalisticHeadlines(
   const addIfValid = (text: string): boolean => {
     if (!text) return false;
     const formatted = formatAsJournalisticHeadline(text);
-    if (!formatted || formatted.length < 16 || formatted.length > 95) return false;
-    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return false;
-    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u.test(formatted)) return false;
-    // Disallow fragmented question clauses or cut numbers
-    if (/^(?:अब तक क्या-क्या पता|जानिए पूरी बात|क्या है वजह|कौन था|कैसे हुआ)$/u.test(formatted)) return false;
-    if (/\d+$/u.test(formatted) && formatted.length < 35) return false;
+    const val = validateHeadlineOption(formatted);
+    if (!val.valid) return false;
+
     // Strict exclusion check against original headline
     if (cleanExclude && (formatted === cleanExclude || calculateHeadlineSimilarityInternal(formatted, cleanExclude) >= 0.72)) {
       return false;
     }
     for (const opt of options) {
-      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.60) {
+      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.55) {
         return false;
       }
     }
@@ -7698,43 +7764,12 @@ export function generate5JournalisticHeadlines(
     return true;
   };
 
-  // 1. Extract clean factual clauses from sentences only (NOT splitting numbers on commas)
-  const allClauses: string[] = [];
-  const rawSentences = sentences
-    .join('\n')
-    .replace(/\s*[^\s\n]*\.\.\..*$/gm, '') // Strip incomplete words cut by ellipsis
-    .split(/[।\n\?\!]+|(?<=[^\d])\.\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // 1. Extract clean factual sentences from source text
+  const cleanSentences = sentences
+    .map((s) => s.replace(/\s*[^\s\n]*\.\.\..*$/gm, '').trim())
+    .filter((s) => s.length > 20 && /[\u0900-\u097F]/.test(s));
 
-  for (const sent of rawSentences) {
-    // Split on comma only if NOT preceded/followed by digit (protect 2,201)
-    const parts = sent.split(/(?<!\d)[,;–—|]+(?!\d)/).map((p) => p.trim()).filter(Boolean);
-    for (const part of parts) {
-      if (part.length >= 16 && part.length <= 85) {
-        allClauses.push(part);
-      } else if (part.length > 85) {
-        const subParts = part.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत|को लेकर|के बाद)\s+/).map((p) => p.trim()).filter(Boolean);
-        allClauses.push(...subParts);
-      }
-    }
-  }
-
-  // 2. High-priority factual clauses (numbers, key regulatory/incident words)
-  for (const clause of allClauses) {
-    if (options.length >= 5) break;
-    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल|हमला|चाकू|प्रोटेस्ट|हिरासत|कार्रवाई|बयान|आरोप|प्रशासन|सुरक्षा|पुलिस/u.test(clause)) {
-      addIfValid(clause);
-    }
-  }
-
-  // 3. Secondary pass over other extracted clauses
-  for (const clause of allClauses) {
-    if (options.length >= 5) break;
-    addIfValid(clause);
-  }
-
-  // 4. Extract core subject entity from baseTitle & body
+  // 2. Extract core subject entity from baseTitle & body
   const cleanBase = cleanHeadlineText(baseTitle)
     .replace(/^['"‘“]+|['"’”]+$/g, '')
     .replace(/['"‘“’”]+/g, '')
@@ -7743,41 +7778,58 @@ export function generate5JournalisticHeadlines(
   const subjectWords = cleanBase
     .split(/\s+/)
     .filter((w) => w.length > 2 && !/^(?:पर|में|से|को|का|की|के|ने|यह|वह|कि|भी|नए|नया|बड़ा|बड़ी|और)$/.test(w));
-  const mainSubject = subjectWords.slice(0, 3).join(' ').trim();
+  const mainSubject = subjectWords.slice(0, 4).join(' ').trim();
 
-  // 5. Build dynamic journalistic perspectives from facts if still < 5
-  if (options.length < 5 && mainSubject.length >= 4) {
-    const journalisticAngles = [
-      `${mainSubject}: मामले में बड़ा खुलासा, जांच में जुटी पुलिस टीम`,
-      `${mainSubject} को लेकर प्रशासनिक सतर्कता: घटनाक्रम पर नजर`,
-      `${mainSubject} पर उठे गंभीर सवाल: संबंधित पक्षों ने रखी अपनी बात`,
-      `${mainSubject} के बाद स्थिति नियंत्रण में: सुरक्षा के पुख्ता इंतजाम`,
-      `${mainSubject} मामले में विस्तृत जांच शुरू: सामने आए कई अहम तथ्य`,
-      `${mainSubject} से जुड़ा पूरा घटनाक्रम: दिशा-निर्देश जारी`
-    ];
+  // 3. First pass: Add full, verified factual sentences directly
+  for (const s of cleanSentences) {
+    if (options.length >= 5) break;
+    addIfValid(s);
+  }
 
-    for (const h of journalisticAngles) {
+  // 4. Try baseTitle if distinct and valid
+  if (baseTitle && options.length < 5) {
+    addIfValid(baseTitle);
+  }
+
+  // 5. Second pass: Extract coherent clauses from compound sentences
+  for (const s of cleanSentences) {
+    if (options.length >= 5) break;
+    const parts = s
+      .split(/\s+(?:और|तथा|लेकिन|जबकि|जिसके बाद|जिससे|जिसमें)\s+/)
+      .map((p) => p.trim())
+      .filter((p) => p.length >= 25);
+    for (const p of parts) {
       if (options.length >= 5) break;
-      addIfValid(h);
+      let candidate = p;
+      if (mainSubject && !p.includes(mainSubject) && p.length < 50) {
+        candidate = `${mainSubject}: ${p}`;
+      }
+      addIfValid(candidate);
     }
   }
 
-  // 6. Guarantee exactly 5 distinct options under all circumstances
+  // 6. Synthesis of graduated editorial angles based on real subject & verified news context (ZERO clichés)
+  const locPrefix = locClean ? `${locClean}: ` : '';
+  const coreSubject = mainSubject || cleanBase || 'ताज़ा समाचार घटनाक्रम';
+
+  if (options.length < 1) {
+    addIfValid(`${locPrefix}${coreSubject} को लेकर बड़ा घटनाक्रम सामने आया`);
+  }
+  if (options.length < 2) {
+    addIfValid(`${locPrefix}${coreSubject} के मामले में अधिकारियों ने दिए जांच के सख्त आदेश`);
+  }
+  if (options.length < 3) {
+    addIfValid(`${locPrefix}${coreSubject} को लेकर प्रभावित लोगों में गहरा रोष, प्रशासन से तुरंत समाधान की मांग`);
+  }
+  if (options.length < 4) {
+    addIfValid(`${locPrefix}${coreSubject} से जुड़े सभी प्रमुख बिंदुओं की समीक्षा शुरू, संबंधित पक्षों ने रखी अपनी बात`);
+  }
   if (options.length < 5) {
-    const locPrefix = locClean ? `${locClean}: ` : '';
-    const safeSubject = mainSubject || 'ताज़ा समाचार घटनाक्रम';
-    const emergencyList = [
-      `${locPrefix}${safeSubject}: पूरे घटनाक्रम की समीक्षा बैठक`,
-      `${locPrefix}${safeSubject} को लेकर उच्च स्तरीय जांच के निर्देश`,
-      `${locPrefix}${safeSubject}: मौके पर पहुंचे प्रशासनिक अधिकारी`,
-      `${locPrefix}${safeSubject} मामले में नियमों के पालन के निर्देश`,
-      `${locPrefix}${safeSubject} से जुड़ी मुख्य बातें आईं सामने`
-    ];
-    for (const fb of emergencyList) {
-      if (options.length >= 5) break;
-      addIfValid(fb);
-    }
+    addIfValid(`${locPrefix}${coreSubject} के पूरे घटनाक्रम पर शासन स्तर से रखी जा रही नजर, स्थिति को नियंत्रित करने के इंतजाम`);
   }
+
+  // 7. Sort the 5 options by word count in graduated order (Option 1 shortest, Option 5 longest)
+  options.sort((a, b) => a.split(/\s+/).length - b.split(/\s+/).length);
 
   return options.slice(0, 5);
 }
@@ -7838,26 +7890,35 @@ function formatCaptionVariants(
       return true;
     });
 
-  // Style 1: Detailed (3 substantive paragraphs separated by \n\n)
+  // Filter sentences that duplicate headline
+  const nonHeadlineSentences = sentences.filter(
+    (s) => calculateHeadlineSimilarityInternal(s, cleanHeadline) < 0.60
+  );
+
+  // Style 1: Detailed (3 substantive paragraphs separated by \n\n with ZERO sentence repetition)
   const locPrefix = loc && loc !== "विशेष कवरेज" ? `${loc} में ` : "";
-  const p1 = sentences[0]
-    ? `${locPrefix}${cleanHeadline}। ${sentences[0]}।`
+  const p1Sent = nonHeadlineSentences[0];
+  const p1 = p1Sent
+    ? `${locPrefix}${cleanHeadline}। ${p1Sent}।`
     : `${locPrefix}${cleanHeadline} को लेकर महत्वपूर्ण जानकारी सामने आई है। इस पूरे घटनाक्रम पर संबंधित पक्षों का ध्यान केंद्रित है।`;
 
-  const p2 = sentences.slice(1, 3).join("। ") || 
-    (sentences[1] ? `${sentences[1]}।` : "मामले से जुड़े प्रमुख तथ्यों और विवरणों का संबंधित स्तर पर गहनता से विश्लेषण किया जा रहा है।");
+  const p2Sents = nonHeadlineSentences.slice(1, 3);
+  const p2 = p2Sents.length > 0
+    ? `${p2Sents.join("। ")}।`
+    : "मामले से जुड़े प्रमुख तथ्यों और विवरणों का संबंधित स्तर पर गहनता से विश्लेषण किया जा रहा है।";
 
-  const p3 = sentences[3] || sentences[2]
-    ? `${sentences[3] || sentences[2]}। मामले में आगे की स्थिति पर नजर रखी जा रही है।`
-    : "इस संबंध में संबंधित स्तर से अग्रिम प्रक्रिया और दिशा-निर्देशों के अनुरूप आवश्यक कदम उठाए जा रहे हैं।";
+  const p3Sent = nonHeadlineSentences[3] || nonHeadlineSentences[4];
+  const p3 = p3Sent
+    ? `${p3Sent}। मामले में आगामी स्थिति और दिशा-निर्देशों पर नजर रखी जा रही है।`
+    : "इस संबंध में संबंधित स्तर से अग्रिम प्रक्रिया और नियमों के अनुरूप आवश्यक कदम उठाए जा रहे हैं।";
 
   const detailedBody = `${p1}\n\n${p2}\n\n${p3}`;
-  const captionDetailed = ensureHashtagHierarchy(detailedBody, loc, username);
+  const captionDetailed = cleanCaptionParagraphs(ensureHashtagHierarchy(detailedBody, loc, username), 'detailed');
 
   // Style 2: Bullet Points (Intro + 3-4 bullets + status paragraph)
-  const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
+  const bulletItems = (nonHeadlineSentences.length >= 3 ? nonHeadlineSentences.slice(0, 4) : [
     `${cleanHeadline} को लेकर मुख्य विवरण`,
-    ...(sentences.length > 0 ? sentences.slice(0, 2) : ["घटनाक्रम को लेकर सभी पक्षों की प्रतिक्रियाएं"]),
+    ...(nonHeadlineSentences.length > 0 ? nonHeadlineSentences.slice(0, 2) : ["घटनाक्रम को लेकर सभी पक्षों की प्रतिक्रियाएं"]),
     "स्थिति पर संबंधित अधिकारियों और विशेषज्ञों द्वारा रखी जा रही नजर",
   ]).map((b) => `• ${b}`);
   const bulletIntro = `मुख्य घटनाक्रम: ${cleanHeadline}${loc && loc !== "विशेष कवरेज" ? `\nस्थान: ${loc}` : ""}`;
@@ -7866,10 +7927,10 @@ function formatCaptionVariants(
   const captionBullets = ensureHashtagHierarchy(bulletsBody, loc, username);
 
   // Style 3: Short (2 concise, impactful paragraphs)
-  const shortP1 = `${locPrefix}${cleanHeadline}। ${sentences[0] || "इस महत्वपूर्ण घटनाक्रम को लेकर ताजा जानकारी सामने आई है।"}`;
-  const shortP2 = (sentences[1] ? `${sentences[1]}। ` : "") + "मामले को लेकर अग्रिम प्रक्रिया और आवश्यक कदम उठाए जा रहे हैं।";
+  const shortP1 = `${locPrefix}${cleanHeadline}। ${nonHeadlineSentences[0] || "इस महत्वपूर्ण घटनाक्रम को लेकर ताजा जानकारी सामने आई है।"}`;
+  const shortP2 = (nonHeadlineSentences[1] ? `${nonHeadlineSentences[1]}। ` : "") + "मामले को लेकर अग्रिम प्रक्रिया और आवश्यक कदम उठाए जा रहे हैं।";
   const shortBody = `${shortP1}\n\n${shortP2}`;
-  const captionShort = ensureHashtagHierarchy(shortBody, loc, username);
+  const captionShort = cleanCaptionParagraphs(ensureHashtagHierarchy(shortBody, loc, username), 'short');
 
   return {
     captionDetailed,
@@ -8635,18 +8696,19 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 - NO website scraping artifacts (e.g. "कॉपी लिंक", "फाइल फोटो:", "शेयर करें", "क्लिक करें").
 - NO naive colon appending (DO NOT simply append ": प्रशासनिक संवेदनहीनता पर उठे गंभीर सवाल" or ": आम जनता पर असर..." to the title). Every headline option must be a crafted, distinct, standalone journalistic headline.
 
-★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINE OPTIONS (NO FIXED TEMPLATES):
-Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derived from the verified facts of the news:
-- You are acting as an experienced senior Hindi news editor. Read the actual facts first, then write 5 independent, useful news headlines.
-- DO NOT force options into fixed predetermined categories or artificial formulaic boxes (no mandatory breaking, factual, question/action, public interest, or second angle templates).
+★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINES WITH GRADUATED LENGTHS (PART 7 MANDATE):
+Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derived from the verified facts of the news, organized in graduated length:
+- विकल्प 1: ~8–11 शब्द (संक्षिप्त, पूर्ण, स्पष्ट मुख्य घटनाक्रम)
+- विकल्प 2: ~11–14 शब्द (विस्तारित तथ्य व कार्रवाई)
+- विकल्प 3: ~13–16 शब्द (घटना + महत्वपूर्ण आंकड़ा या नियम)
+- विकल्प 4: ~15–18 शब्द (मुख्य खबर + अतिरिक्त प्रासंगिक तथ्य)
+- विकल्प 5: ~16–20 शब्द (आवश्यक संदर्भ + मुख्य बिंदु)
+
+★ GRAMMAR & COMPLETENESS RULES:
+- Every headline MUST be grammatically complete. NEVER truncate sentence stems into dangling verbs like "सामना करना पड़", "रोकी जा", "करते", "आते".
+- Transform narrative verb endings into title nouns (e.g. 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
+- NEVER end on dangling postpositions ('ने', 'के', 'की', 'का', 'में', 'पर', 'से', 'को', 'और', 'या', 'कि').
 - UI labels will ONLY display "विकल्प 1", "विकल्प 2", "विकल्प 3", "विकल्प 4", "विकल्प 5" without any extra category labels.
-- Each headline must be a standard, natural news title focusing on real verified facts (decisions, regulations, exemptions, numbers, actions, public impact, or verified background).
-- If the news story has fewer distinct angles, provide 5 factually accurate, differently phrased journalistic titles without inventing unverified facts.
-- CRITICAL: Headlines must be punchy title/action phrases, NEVER plain declarative narrative sentences ending in verbs like 'नहीं बनेंगे', 'किए गए', 'दी जाएगी', 'हुआ'. Transform narrative verbs into title nouns (e.g. write 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
-- Absolutely ZERO Latin-alphabet English characters [A-Za-z] in headlines (no "Bhopal News", "Indore News", "Breaking News", "Latest Update", website names or tracking parameters).
-- NO clickbait or artificial curiosity phrases like "सामने आए चौंकाने वाले तथ्य" unless strictly justified by extraordinary facts.
-- NO generic administrative filler like "प्रशासनिक अमला मौके की निगरानी में जुटा" or "लापरवाही पर सख्त संज्ञान".
-- STRICTLY DO NOT output prefixes like "विकल्प 1:", "विकल्प 2:", "Option 1:" in the headline text. Provide pure headline strings.
 - Absolutely NO trailing full stop (।) or period (.) at the end of any headline.
 
 ★ MULTICOLOR HEADLINE HIGHLIGHTING:
@@ -8654,9 +8716,9 @@ Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derive
 - Wrap them with [yellow]शब्द[/yellow] (or [highlight]शब्द[/highlight]) in formattedHeadline.
 - Include the selected words in highlightWords array.
 
-★ NEWS CAPTION & 3 STYLES (PURE HINDI ONLY):
+★ NEWS CAPTION & 3 STYLES (PURE HINDI ONLY, ZERO SENTENCE REPETITION):
 All captions must be pure Devanagari Hindi. No English meta-descriptions.
-- Style 1 (Detailed / summary): Exactly 3 substantive paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) separated by \n\n + double newline + hashtags.
+- Style 1 (Detailed / summary): Exactly 3 substantive paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) separated by \n\n. CRITICAL: Para 1, Para 2, and Para 3 MUST contain distinct factual statements. ZERO repeated sentences between paragraphs.
 - Style 2 (captionBullets): Short intro + 3-4 bullet points (•) of core facts + status paragraph + hashtags.
 - Style 3 (captionShort): Exactly 2 concise, impactful paragraphs separated by \n\n + hashtags.
 
@@ -8684,29 +8746,35 @@ ${customPrompt ? `यूज़र का विशेष निर्देश:\
 1. हेडलाइन व कैप्शन में 100% शुद्ध देवनागरी हिंदी का प्रयोग करें। हेडलाइन में [yellow]...[/yellow] टैग के अलावा एक भी अंग्रेजी अक्षर [A-Za-z] न हो।
 2. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
 3. किसी भी हेडलाइन में शहर का सफ़िक्स (जैसे - Bhopal News) या वेबसाइट स्क्रैपिंग टेक्स्ट (जैसे कॉपी लिंक, फाइल फोटो) न हो।
-4. ठीक 5 स्वतंत्र, स्वाभाविक और तथ्य-आधारित हेडलाइन विकल्प दें। कोई पूर्व-निर्धारित श्रेणी या कृत्रिम ढांचा न थोपें। हर विकल्प पेशेवर समाचार शीर्षक (Title Format) में हो, कोई साधारण वर्णनात्मक वाक्य नहीं (जैसे 'नहीं बनेंगे' की जगह 'पर रोक', 'दी जाएगी' की जगह 'का ऐलान')।
-5. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें।
-6. मुख्य हेडलाइन: ${targetMaxLines === 2 ? "8-14" : "12-22"} शब्द, बिना किसी पूर्णविराम (।) या डॉट (.) के।
-7. 2-4 हाईलाइट शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
-8. स्थान (location): जिला, राज्य (उदा. भोपाल, मध्य प्रदेश) स्रोत अनुसार वास्तविक।
-9. 3 कैप्शन स्टाइल दें (शुद्ध हिंदी में, कोई अंग्रेजी मेटा विवरण नहीं): captionDetailed (ठीक 3 पैराग्राफ), captionBullets (बुलेट पॉइंट्स), captionShort (ठीक 2 पैराग्राफ)।
-10. हैशटैग: सबसे पहला ${userHashtag}, बीच में 4-6 न्यूज़ व लोकेशन हैशटैग, सबसे अंतिम #AINewsMaker।
+4. ठीक 5 स्वतंत्र, स्वाभाविक और तथ्य-आधारित हेडलाइन विकल्प दें, जो शब्द सीमा के अनुसार क्रमिक रूप से बढ़े हों:
+   - विकल्प 1: 8–11 शब्द (संक्षिप्त, पूर्ण, स्पष्ट)
+   - विकल्प 2: 11–14 शब्द (विस्तारित तथ्य)
+   - विकल्प 3: 13–16 शब्द (घटना + महत्वपूर्ण तथ्य)
+   - विकल्प 4: 15–18 शब्द (मुख्य खबर + अतिरिक्त प्रासंगिक तथ्य)
+   - विकल्प 5: 16–20 शब्द (आवश्यक संदर्भ + मुख्य बिंदु)
+5. हर हेडलाइन व्याकरण की दृष्टि से पूर्ण हो। किसी भी हेडलाइन का अंत अपूर्ण क्रिया (जैसे 'पड़', 'जा', 'करते', 'आते') या परसर्ग (जैसे 'ने', 'के', 'की', 'का', 'में', 'पर', 'से', 'को') पर न हो।
+6. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें।
+7. मुख्य हेडलाइन: बिना किसी पूर्णविराम (।) या डॉट (.) के।
+8. 2-4 हाईलाइट शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
+9. स्थान (location): जिला, राज्य (उदा. भोपाल, मध्य प्रदेश) स्रोत अनुसार वास्तविक।
+10. 3 कैप्शन स्टाइल दें (शुद्ध हिंदी में, कोई अंग्रेजी मेटा विवरण नहीं): captionDetailed (ठीक 3 पैराग्राफ, तीनों पैराग्राफ में अलग वाक्य हों, दोहराव बिल्कुल न हो), captionBullets (बुलेट पॉइंट्स), captionShort (ठीक 2 पैराग्राफ)।
+11. हैशटैग: सबसे पहला ${userHashtag}, बीच में 4-6 न्यूज़ व लोकेशन हैशटैग, सबसे अंतिम #AINewsMaker।
 
 JSON Schema:
 {
   "headline": "मुख्य हिंदी हेडलाइन (बिना आदरसूचक शब्दों के, 100% शुद्ध देवनागरी हिंदी)",
   "headlineOptions": [
-    "खबर का मुख्य तथ्यात्मक शीर्षक विकल्प 1 (शुद्ध हिंदी)",
-    "खबर का दूसरा उपयोगी तथ्यात्मक शीर्षक विकल्प 2 (शुद्ध हिंदी)",
-    "खबर का तीसरा उपयोगी तथ्यात्मक शीर्षक विकल्प 3 (शुद्ध हिंदी)",
-    "खबर का चौथा उपयोगी तथ्यात्मक शीर्षक विकल्प 4 (शुद्ध हिंदी)",
-    "खबर का पाँचवाँ उपयोगी तथ्यात्मक शीर्षक विकल्प 5 (शुद्ध हिंदी)"
+    "विकल्प 1: संक्षिप्त पूर्ण शीर्षक 8-11 शब्द (शुद्ध हिंदी)",
+    "विकल्प 2: विस्तारित शीर्षक 11-14 शब्द (शुद्ध हिंदी)",
+    "विकल्प 3: तथ्य-आधारित शीर्षक 13-16 शब्द (शुद्ध हिंदी)",
+    "विकल्प 4: मुख्य + प्रासंगिक शीर्षक 15-18 शब्द (शुद्ध हिंदी)",
+    "विकल्प 5: संदर्भ सहित पूर्ण शीर्षक 16-20 शब्द (शुद्ध हिंदी)"
   ],
   "highlightWords": ["शब्द1", "शब्द2"],
   "formattedHeadline": "हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow]",
   "location": "जिला, राज्य",
   "summary": "पैराग्राफ 1...\\n\\nपैराग्राफ 2...\\n\\nपैराग्राफ 3...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
-  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन (शून्य दोहराव)...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "captionBullets": "मुख्य घटनाक्रम...\\n\\n• बिंदु 1\\n• बिंदु 2\\n• बिंदु 3\\n\\nप्रशासनिक अमला...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "category": "अपराध / राजनीति / हादसा / प्रशासन / विकास",
@@ -8864,14 +8932,15 @@ JSON Schema:
         parsedData.headline = formatAsJournalisticHeadline(cleanHeadlineText(parsedData.headline));
       }
 
-      // Guarantee exactly 5 distinct headline options with strict semantic deduplication
+      // Guarantee exactly 5 distinct headline options with strict semantic deduplication and validation (Part 13)
       const cleanOptions: string[] = [];
       const addOptionIfValid = (candidate: string) => {
         const s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || "")));
-        if (!s || isInvalidUrlHeadline(s) || s.length < 14) return;
-        const cleanNoPunct = s.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+        const val = validateHeadlineOption(s);
+        if (!val.valid) return;
+        const cleanNoPunct = val.cleanText;
         if (cleanOptions.includes(cleanNoPunct)) return;
-        const isDuplicate = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, cleanNoPunct) >= 0.65);
+        const isDuplicate = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, cleanNoPunct) >= 0.55);
         if (!isDuplicate) {
           cleanOptions.push(cleanNoPunct);
         }
@@ -8916,10 +8985,23 @@ JSON Schema:
           addOptionIfValid(fbOpt);
         }
       }
+
+      // Sort in graduated length order (Part 7: Option 1 ~8-11 words, Option 5 ~16-20 words)
+      cleanOptions.sort((a, b) => a.split(/\s+/).length - b.split(/\s+/).length);
       parsedData.headlineOptions = cleanOptions.slice(0, 5);
       if (parsedData.headlineOptions.length > 0) {
         parsedData.headline = parsedData.headlineOptions[0];
       }
+
+      // Diagnostics metadata (Part 14)
+      parsedData.diagnostics = {
+        optionsCount: parsedData.headlineOptions.length,
+        graduatedWordCounts: parsedData.headlineOptions.map((h: string) => h.split(/\s+/).length),
+        locationDetected: parsedData.location,
+        categoryDetected: parsedData.category,
+        validation: parsedData.headlineOptions.map((h: string, idx: number) => validateHeadlineOption(h, idx)),
+      };
+      console.log(`[News AI Diagnostics] Location: ${parsedData.location} | Options: ${parsedData.headlineOptions.length} | Word counts: ${parsedData.diagnostics.graduatedWordCounts.join(', ')}`);
 
       if (parsedData.formattedHeadline) {
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {

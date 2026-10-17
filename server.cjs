@@ -970,7 +970,8 @@ __export(server_exports, {
   formatAsJournalisticHeadline: () => formatAsJournalisticHeadline,
   formatDistrictWithState: () => formatDistrictWithState,
   generate5JournalisticHeadlines: () => generate5JournalisticHeadlines,
-  matchDistrictAlias: () => matchDistrictAlias
+  matchDistrictAlias: () => matchDistrictAlias,
+  validateHeadlineOption: () => validateHeadlineOption
 });
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
@@ -6275,18 +6276,18 @@ function parseArticleHtml(html, pageUrl) {
       " "
     ).replace(/\s+/g, " ").trim();
   }
-  const cleanBody = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, " ").replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, " ").replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, " ").replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, " ").replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, " ").replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ");
-  const articleContainerMatch = cleanBody.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) || cleanBody.match(/<div[^>]+itemprop=["']articleBody["'][^>]*>([\s\S]*?)<\/div>/i) || cleanBody.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
+  const cleanBody = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, " ").replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, " ").replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, " ").replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, " ").replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, " ").replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ").replace(/<div\b[^>]*class=["'][^"']*(?:related|trending|popular|sidebar|advert|banner|share|social|cookie|comment|menu|nav|breadcrumb)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, " ").replace(/<ul\b[^>]*class=["'][^"']*(?:related|trending|share|social)[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, " ");
+  const articleContainerMatch = cleanBody.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) || cleanBody.match(/<div[^>]+itemprop=["']articleBody["'][^>]*>([\s\S]*?)<\/div>/i) || cleanBody.match(/<div[^>]+class=["'][^"']*(?:story-element|article-body|story-content|news-content|story-body|article__body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) || cleanBody.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
   const textSource = articleContainerMatch ? articleContainerMatch[1] : cleanBody;
   const pMatches = textSource.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi);
   const extractedParagraphs = [];
   for (const pMatch of pMatches) {
     let pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
-    pClean = pClean.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "").replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "").replace(/(?:loading[\s\.]*)+/gi, "").replace(/(?:please wait[\s\.]*)+/gi, "").replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+    pClean = pClean.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "").replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "").replace(/(?:loading[\s\.]*)+/gi, "").replace(/(?:please wait[\s\.]*)+/gi, "").replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "").replace(
+      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
       " "
     ).replace(/\s+/g, " ").trim();
-    if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
+    if (pClean.length > 20 && !extractedParagraphs.includes(pClean)) {
       if (!/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|\bIST\b|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+/i.test(pClean)) {
         extractedParagraphs.push(pClean);
         if (extractedParagraphs.join("\n\n").length >= 3500) break;
@@ -6295,7 +6296,7 @@ function parseArticleHtml(html, pageUrl) {
   }
   let bodyContent = extractedParagraphs.join("\n\n");
   bodyContent = bodyContent.replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "").replace(/(?:loading[\s\.]*)+/gi, "").replace(/(?:please wait[\s\.]*)+/gi, "").replace(
-    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
     " "
   ).replace(/\s+/g, " ").trim();
   const foundImages = [];
@@ -6704,20 +6705,6 @@ function detectDistrictAndState(title = "", desc = "", content = "", url = "") {
   const cleanTitle = cleanCorpusForLocation(title);
   const cleanDesc = cleanCorpusForLocation(desc);
   const cleanContent = cleanCorpusForLocation(content);
-  if (url) {
-    const urlLower = url.toLowerCase();
-    for (const d of DISTRICT_STATE_LIST) {
-      if (d.district === "\u0926\u093F\u0932\u094D\u0932\u0940" || d.district === "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940") continue;
-      for (const a of d.aliases) {
-        if (/^[a-z0-9\-]+$/i.test(a) && a.length >= 4) {
-          const pathReg = new RegExp(`[/\\-_]${escapeRegExp(a)}[/\\-_.]`, "i");
-          if (pathReg.test(urlLower)) {
-            return `${d.district}, ${d.state}`;
-          }
-        }
-      }
-    }
-  }
   for (const d of DISTRICT_STATE_LIST) {
     if (d.district === "\u0926\u093F\u0932\u094D\u0932\u0940" || d.district === "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940") continue;
     for (const a of d.aliases) {
@@ -6771,6 +6758,20 @@ function detectDistrictAndState(title = "", desc = "", content = "", url = "") {
       }
     }
   }
+  if (url) {
+    const urlLower = url.toLowerCase();
+    for (const d of DISTRICT_STATE_LIST) {
+      if (d.district === "\u0926\u093F\u0932\u094D\u0932\u0940" || d.district === "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940") continue;
+      for (const a of d.aliases) {
+        if (/^[a-z0-9\-]+$/i.test(a) && a.length >= 4) {
+          const pathReg = new RegExp(`[/\\-_]${escapeRegExp(a)}[/\\-_.]`, "i");
+          if (pathReg.test(urlLower)) {
+            return `${d.district}, ${d.state}`;
+          }
+        }
+      }
+    }
+  }
   return "";
 }
 function formatAsJournalisticHeadline(raw) {
@@ -6781,22 +6782,75 @@ function formatAsJournalisticHeadline(raw) {
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, "$1 \u092A\u0930 \u0930\u094B\u0915");
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:होगा|होंगे)\s+([^,:।\n]+)/gu, "$1 \u092A\u0930 \u092A\u093E\u092C\u0902\u0926\u0940");
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, " \u092A\u0930 \u0930\u094B\u0915").replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली|को\s*मंजूरी\s*दी\s*है)(?:\s*हैं|\s*है)?$/u, " \u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940").replace(/(?:का\s+)?(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0924\u092F").replace(/(?:का\s+)?(?:निर्णय\s*लिया\s*गया|फैसला\s*लिया\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0928\u093F\u0930\u094D\u0923\u092F").replace(/(?:लागू\s*किए\s*गए\s*हैं|लागू\s*किया\s*गया|लागू\s*होगा)(?:\s*हैं|\s*है)?$/u, " \u0932\u093E\u0917\u0942").replace(/(?:\s*अतिरिक्त)?\s*(?:सहायता|छूट|राहत)\s*(?:दी\s*जाएगी|मिलेगी|का\s*प्रावधान)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0910\u0932\u093E\u0928").replace(/(?:दी\s*जाएगी|छूट\s*मिलेगी|प्रावधान\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0910\u0932\u093E\u0928").replace(/(?:\s*सीधा)?\s*(?:लाभ|फायदा)\s*(?:मिलेगा|होगा)(?:\s*हैं|\s*है)?$/u, " \u0915\u094B \u0938\u0940\u0927\u093E \u092B\u093E\u092F\u0926\u093E").replace(/(?:पूरे\s*किए|रन\s*बनाए)(?:\s*हैं|\s*है)?$/u, " \u0920\u094B\u0915\u0947").replace(/(?:शतक|अर्धशतक)\s*(?:लगाया|जड़ा|बनाया)(?:\s*हैं|\s*है)?$/u, " \u091C\u0921\u093C\u093E").replace(/(?:बनाए\s*जा\s*सकेंगे|बनाए\s*जाएंगे)(?:\s*हैं|\s*है)?$/u, " \u0915\u094B \u0939\u0930\u0940 \u091D\u0902\u0921\u0940").replace(/(?:गिरफ्तार\s*किया\s*गया|गिरफ्तार\s*किया)(?:\s*हैं|\s*है)?$/u, " \u0917\u093F\u0930\u092B\u094D\u0924\u093E\u0930").replace(/(?:बरामद\s*की\s*गई|बरामद\s*किए\s*गए|बरामद\s*हुए)(?:\s*हैं|\s*है)?$/u, " \u092C\u0930\u093E\u092E\u0926").replace(/(?:\s*की)?\s*(?:मौत\s*हो\s*गई|जान\s*गंवाई|दम\s*तोड़\s*दिया)(?:\s*हैं|\s*है)?$/u, " \u0915\u0940 \u092E\u094C\u0924").replace(/(?:घायल\s*हो\s*गए|घायल\s*हुए)(?:\s*हैं|\s*है)?$/u, " \u0918\u093E\u092F\u0932").replace(/(?:आदेश\s*दिए\s*गए|आदेश\s*जारी\s*किए|निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, " \u0915\u0947 \u0938\u0916\u094D\u0924 \u0906\u0926\u0947\u0936").replace(/(?:निधन\s*हो\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0928\u093F\u0927\u0928").replace(/(?:जांच\s*शुरू\s*कर\s*दी\s*गई|जांच\s*के\s*निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, " \u0915\u0940 \u091C\u093E\u0902\u091A \u0936\u0941\u0930\u0942").replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u092C\u0921\u093C\u093E \u0910\u0932\u093E\u0928").replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, " \u0915\u0947 \u0928\u090F \u0928\u093F\u092F\u092E");
-  h = h.replace(/\s+(?:हो\s*गया|हो\s*गई|हो\s*गए|किया\s*गया|किए\s*गए|की\s*गई|दिया\s*गया|दिए\s*गए|ली\s*गई|लिया\s*गया)$/u, "").replace(/\s+(?:रहा\s*है|रही\s*है|रहे\s*हैं|रहा\s*था|रही\s*थी|रहे\s*थे|हो\s*रहा\s*है|हो\s*रही\s*है)$/u, "").replace(/\s+(?:हैं|है|था|थी|थे)$/u, "");
-  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u, "");
+  if (!h.includes("\u0915\u093E \u092E\u093E\u092E\u0932\u093E")) {
+    h = h.replace(/(?:सामने\s*आया\s*है|सामने\s*आई\s*है|सामने\s*आए\s*हैं)$/u, " \u0915\u093E \u092E\u093E\u092E\u0932\u093E");
+  }
+  if (!h.includes("\u0906\u0930\u094B\u092A")) {
+    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, " \u092A\u0930 \u0917\u0902\u092D\u0940\u0930 \u0906\u0930\u094B\u092A");
+  }
+  if (!h.includes("\u0916\u0941\u0932\u093E\u0938\u093E")) {
+    h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, " \u092A\u0930 \u092C\u0921\u093C\u093E \u0916\u0941\u0932\u093E\u0938\u093E");
+  }
+  h = h.replace(/(?:का\s+)?सामना\s*करना\s*पड़(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रहा\s*था|\s*रही\s*थी)?$/u, " \u0915\u093E \u0938\u093E\u092E\u0928\u093E \u0915\u0930\u0928\u093E \u092A\u0921\u093C\u093E");
+  h = h.replace(/(?:^|\s)पड़(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रहा\s*था|\s*रही\s*थी)?$/u, " \u092A\u0921\u093C\u093E");
+  h = h.replace(/का सामना करना पड़ा का सामना करना पड़ा/g, "\u0915\u093E \u0938\u093E\u092E\u0928\u093E \u0915\u0930\u0928\u093E \u092A\u0921\u093C\u093E");
+  h = h.replace(/(?:रोकी|रोका|रोके)\s*जा(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रही\s*थी|\s*रहा\s*था)?$/u, " \u0930\u094B\u0915\u0940 \u0917\u0908");
+  h = h.replace(/(?:किए|किया)\s*जा(?:\s*रहे\s*हैं|\s*रहा\s*है|\s*रहे\s*थे)?$/u, " \u0915\u093F\u090F \u0917\u090F");
+  h = h.replace(/(?:दी|दिया)\s*जा(?:\s*रही\s*है|\s*रहा\s*है|\s*रही\s*थी)?$/u, " \u0926\u0940 \u0917\u0908");
+  h = h.replace(/विस्तृत\s*रिपोर्ट\s*मांगी(?:\s*गई\s*है|\s*है)?$/u, "\u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u092E\u093E\u0902\u0917\u0940");
+  h = h.replace(/\s+करते$/u, " \u0915\u0930\u0928\u0947 \u0915\u093E \u092E\u093E\u092E\u0932\u093E");
+  h = h.replace(/\s+होते$/u, " \u0939\u094B\u0928\u0947 \u092A\u0930 \u0935\u093F\u0935\u093E\u0926");
+  h = h.replace(/\s+आते$/u, " \u0906\u0928\u0947 \u092A\u0930 \u0939\u0902\u0917\u093E\u092E\u093E");
+  h = h.replace(/\s+जाते$/u, " \u091C\u093E\u0928\u0947 \u092A\u0930 \u0935\u093F\u0935\u093E\u0926");
+  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u, "");
   h = h.replace(/\b(का|के|की|को|में|पर|से|ने)\s+\1\b/gu, "$1").replace(/\s+/g, " ");
+  h = h.replace(/^['"‘“]+|['"’”]+$/g, "").trim();
   h = h.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
   return h;
 }
 function calculateHeadlineSimilarityInternal(h1, h2) {
-  const stopWords = /* @__PURE__ */ new Set(["\u0914\u0930", "\u092A\u0930", "\u092E\u0947\u0902", "\u0938\u0947", "\u0915\u094B", "\u0915\u093E", "\u0915\u0940", "\u0915\u0947", "\u0928\u0947", "\u092F\u0939", "\u0935\u0939", "\u0915\u093F", "\u092D\u0940", "\u0932\u093F\u090F", "\u0928\u090F", "\u0928\u092F\u093E", "\u092C\u0921\u093C\u093E", "\u092C\u0921\u093C\u0940"]);
-  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
-  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const stopWords = /* @__PURE__ */ new Set(["\u0914\u0930", "\u092A\u0930", "\u092E\u0947\u0902", "\u0938\u0947", "\u0915\u094B", "\u0915\u093E", "\u0915\u0940", "\u0915\u0947", "\u0928\u0947", "\u092F\u0939", "\u0935\u0939", "\u0915\u093F", "\u092D\u0940", "\u0932\u093F\u090F", "\u0928\u090F", "\u0928\u092F\u093E", "\u092C\u0921\u093C\u093E", "\u092C\u0921\u093C\u0940", "\u0939\u0941\u090F", "\u0939\u0941\u0906", "\u0939\u0948", "\u0939\u0948\u0902", "\u0925\u093E", "\u0925\u0940", "\u0925\u0947"]);
+  const words1 = new Set(h1.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const words2 = new Set(h2.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   if (words1.size === 0 || words2.size === 0) return 0;
   let common = 0;
   for (const w of words1) {
     if (words2.has(w)) common++;
   }
   return 2 * common / (words1.size + words2.size);
+}
+function validateHeadlineOption(headline, index = 0) {
+  const reasons = [];
+  const clean = cleanHeadlineText(headline).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  if (!clean) {
+    return { valid: false, reasons: ["\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0916\u093E\u0932\u0940 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u0940"], cleanText: "", wordCount: 0 };
+  }
+  if (/[a-zA-Z]/.test(clean.replace(/\[\/?(?:yellow|highlight)\]/g, ""))) {
+    reasons.push("\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0905\u0915\u094D\u0937\u0930 \u0936\u093E\u092E\u093F\u0932 \u0939\u0948\u0902");
+  }
+  const words = clean.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  if (wordCount < 7) {
+    reasons.push(`\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092C\u0939\u0941\u0924 \u091B\u094B\u091F\u0940 \u0939\u0948 (${wordCount} \u0936\u092C\u094D\u0926, \u0915\u092E \u0938\u0947 \u0915\u092E 7 \u0936\u092C\u094D\u0926 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F)`);
+  }
+  if (wordCount > 25) {
+    reasons.push(`\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092C\u0939\u0941\u0924 \u0932\u0902\u092C\u0940 \u0939\u0948 (${wordCount} \u0936\u092C\u094D\u0926, \u0905\u0927\u093F\u0915\u0924\u092E 25 \u0936\u092C\u094D\u0926 \u0905\u0928\u0941\u092E\u0924)`);
+  }
+  if (/(?:पड़|जा|रहा|रहे|रही|करते|होते|आते|जाते|ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक)$/u.test(clean)) {
+    reasons.push("\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0905\u092A\u0942\u0930\u094D\u0923 \u0915\u094D\u0930\u093F\u092F\u093E \u092F\u093E \u092A\u0930\u0938\u0930\u094D\u0917 \u092A\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0930\u0939\u0940 \u0939\u0948");
+  }
+  if (/मामले में बड़ा खुलासा|जांच में जुटी पुलिस टीम|प्रशासनिक सतर्कता: घटनाक्रम पर नजर|पर उठे गंभीर सवाल: संबंधित पक्षों ने रखी अपनी बात/u.test(clean)) {
+    reasons.push("\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0918\u093F\u0938\u0947-\u092A\u093F\u091F\u0947 \u092B\u0949\u0930\u094D\u092E\u0942\u0932\u093E \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u0948");
+  }
+  if (/[।\.\,\!\?\:\-]$/.test(clean)) {
+    reasons.push("\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0905\u092E\u093E\u0928\u094D\u092F \u0935\u093F\u0930\u093E\u092E \u091A\u093F\u0939\u094D\u0928 \u0939\u0948");
+  }
+  return {
+    valid: reasons.length === 0,
+    reasons,
+    cleanText: clean,
+    wordCount
+  };
 }
 function cleanCaptionParagraphs(caption, mode = "detailed") {
   if (!caption) return "";
@@ -6818,73 +6872,47 @@ function cleanCaptionParagraphs(caption, mode = "detailed") {
   if (!cleanTags.some((t) => t.toLowerCase() === "#ainewsmaker")) cleanTags.push("#AINewsMaker");
   const tagsString = cleanTags.join(" ");
   if (mode === "bullet") {
-    const lines = cleanBody.split("\n").map((l) => l.trim()).filter(Boolean);
-    const bullets = lines.filter((l) => l.startsWith("\u2022") || l.startsWith("-") || l.startsWith("*"));
-    const nonBullets = lines.filter((l) => !l.startsWith("\u2022") && !l.startsWith("-") && !l.startsWith("*"));
-    const intro = nonBullets[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F:";
-    const outro = nonBullets.slice(1).join(" ") || "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0905\u0917\u094D\u0930\u093F\u092E \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964";
-    const bulletText = bullets.length >= 3 ? bullets.slice(0, 5).join("\n") : lines.slice(0, 4).map((l) => l.startsWith("\u2022") ? l : `\u2022 ${l}`).join("\n");
-    return `${intro}
+    return `${cleanBody}
 
-${bulletText}
-
-${outro}
-
-${tagsString}`.trim();
+${tagsString}`;
   }
-  let paragraphs = cleanBody.split(/\n{2,}/).map((p) => p.trim()).filter((p) => p.length > 20);
-  if (paragraphs.length < (mode === "detailed" ? 3 : 2)) {
-    const allSentences = cleanBody.split(/[।\n]+/).map((s) => s.trim()).filter((s) => s.length > 15);
-    if (allSentences.length >= 6 && mode === "detailed") {
-      const p1 = `${allSentences.slice(0, 2).join("\u0964 ")}\u0964`;
-      const p2 = `${allSentences.slice(2, 4).join("\u0964 ")}\u0964`;
-      const p3 = `${allSentences.slice(4).join("\u0964 ")}\u0964`;
-      paragraphs = [p1, p2, p3];
-    } else if (allSentences.length >= 4) {
-      if (mode === "detailed") {
-        const p1 = `${allSentences.slice(0, 2).join("\u0964 ")}\u0964`;
-        const p2 = `${allSentences.slice(2, 3).join("\u0964 ")}\u0964`;
-        const p3 = `${allSentences.slice(3).join("\u0964 ")}\u0964`;
-        paragraphs = [p1, p2, p3];
-      } else {
-        const p1 = `${allSentences.slice(0, 2).join("\u0964 ")}\u0964`;
-        const p2 = `${allSentences.slice(2).join("\u0964 ")}\u0964`;
-        paragraphs = [p1, p2];
-      }
-    } else if (allSentences.length >= 2) {
-      if (mode === "detailed") {
-        paragraphs = [
-          `${allSentences[0]}\u0964`,
-          `${allSentences[1]}\u0964`,
-          `\u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0905\u0917\u094D\u0930\u093F\u092E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u093F\u090F \u0917\u090F \u0939\u0948\u0902 \u0914\u0930 \u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0928\u091C\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`
-        ];
-      } else {
-        paragraphs = [
-          `${allSentences[0]}\u0964`,
-          `${allSentences.slice(1).join("\u0964 ")}\u0964`
-        ];
+  const rawParagraphs = cleanBody.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const seenSentences = [];
+  const deduplicatedParagraphs = [];
+  for (const rawP of rawParagraphs) {
+    const sents = rawP.split(/[।\.\n]+/).map((s) => s.trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+    const uniqueSents = [];
+    for (const s of sents) {
+      const isDuplicate = seenSentences.some((existing) => calculateHeadlineSimilarityInternal(existing, s) >= 0.52);
+      if (!isDuplicate) {
+        seenSentences.push(s);
+        uniqueSents.push(s);
       }
     }
-  }
-  if (mode === "detailed") {
-    while (paragraphs.length < 3) {
-      if (paragraphs.length === 1) {
-        paragraphs.push("\u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u092D\u0940 \u092A\u0915\u094D\u0937\u094B\u0902 \u0938\u0947 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u090F\u0915\u0924\u094D\u0930\u093F\u0924 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948 \u0914\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u091C\u093E\u0930\u0940 \u0939\u0948\u0964");
-      } else {
-        paragraphs.push("\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0905\u0917\u094D\u0930\u093F\u092E \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0914\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u093F\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964");
-      }
+    if (uniqueSents.length > 0) {
+      deduplicatedParagraphs.push(uniqueSents.join("\u0964 ") + "\u0964");
     }
-    paragraphs = paragraphs.slice(0, 3);
-  } else {
-    while (paragraphs.length < 2) {
-      paragraphs.push("\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0926\u094D\u0935\u093E\u0930\u093E \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964");
-    }
-    paragraphs = paragraphs.slice(0, 2);
   }
-  const finalBody = paragraphs.join("\n\n");
-  return `${finalBody}
+  if (mode === "short") {
+    while (deduplicatedParagraphs.length < 2) {
+      deduplicatedParagraphs.push("\u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948 \u0914\u0930 \u0938\u094D\u0925\u093F\u0924\u093F \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964");
+    }
+    return `${deduplicatedParagraphs[0]}
 
-${tagsString}`.trim();
+${deduplicatedParagraphs[1]}
+
+${tagsString}`;
+  }
+  while (deduplicatedParagraphs.length < 3) {
+    if (deduplicatedParagraphs.length === 1) {
+      deduplicatedParagraphs.push("\u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u0914\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0924\u0925\u094D\u092F\u094B\u0902 \u0915\u094B \u0932\u0947\u0915\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0935\u093F\u0935\u0930\u0923 \u091C\u0941\u091F\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902 \u0914\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0947 \u0938\u092D\u0940 \u092A\u0939\u0932\u0941\u0913\u0902 \u0915\u093E \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964");
+    } else {
+      deduplicatedParagraphs.push("\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0935 \u0935\u093F\u092D\u093E\u0917 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0917\u093E\u092E\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902 \u0914\u0930 \u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0928\u091C\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964");
+    }
+  }
+  return `${deduplicatedParagraphs.slice(0, 3).join("\n\n")}
+
+${tagsString}`;
 }
 function generate5JournalisticHeadlines(baseTitle, sentences = [], location = "", excludeTitle = "") {
   const options = [];
@@ -6893,77 +6921,60 @@ function generate5JournalisticHeadlines(baseTitle, sentences = [], location = ""
   const addIfValid = (text) => {
     if (!text) return false;
     const formatted = formatAsJournalisticHeadline(text);
-    if (!formatted || formatted.length < 16 || formatted.length > 95) return false;
-    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return false;
-    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u.test(formatted)) return false;
-    if (/^(?:अब तक क्या-क्या पता|जानिए पूरी बात|क्या है वजह|कौन था|कैसे हुआ)$/u.test(formatted)) return false;
-    if (/\d+$/u.test(formatted) && formatted.length < 35) return false;
+    const val = validateHeadlineOption(formatted);
+    if (!val.valid) return false;
     if (cleanExclude && (formatted === cleanExclude || calculateHeadlineSimilarityInternal(formatted, cleanExclude) >= 0.72)) {
       return false;
     }
     for (const opt of options) {
-      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.6) {
+      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.55) {
         return false;
       }
     }
     options.push(formatted);
     return true;
   };
-  const allClauses = [];
-  const rawSentences = sentences.join("\n").replace(/\s*[^\s\n]*\.\.\..*$/gm, "").split(/[।\n\?\!]+|(?<=[^\d])\.\s+/).map((s) => s.trim()).filter(Boolean);
-  for (const sent of rawSentences) {
-    const parts = sent.split(/(?<!\d)[,;–—|]+(?!\d)/).map((p) => p.trim()).filter(Boolean);
-    for (const part of parts) {
-      if (part.length >= 16 && part.length <= 85) {
-        allClauses.push(part);
-      } else if (part.length > 85) {
-        const subParts = part.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत|को लेकर|के बाद)\s+/).map((p) => p.trim()).filter(Boolean);
-        allClauses.push(...subParts);
-      }
-    }
-  }
-  for (const clause of allClauses) {
-    if (options.length >= 5) break;
-    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल|हमला|चाकू|प्रोटेस्ट|हिरासत|कार्रवाई|बयान|आरोप|प्रशासन|सुरक्षा|पुलिस/u.test(clause)) {
-      addIfValid(clause);
-    }
-  }
-  for (const clause of allClauses) {
-    if (options.length >= 5) break;
-    addIfValid(clause);
-  }
+  const cleanSentences = sentences.map((s) => s.replace(/\s*[^\s\n]*\.\.\..*$/gm, "").trim()).filter((s) => s.length > 20 && /[\u0900-\u097F]/.test(s));
   const cleanBase = cleanHeadlineText(baseTitle).replace(/^['"‘“]+|['"’”]+$/g, "").replace(/['"‘“’”]+/g, "").replace(/[,:;–—|?].*$/, "").trim();
   const subjectWords = cleanBase.split(/\s+/).filter((w) => w.length > 2 && !/^(?:पर|में|से|को|का|की|के|ने|यह|वह|कि|भी|नए|नया|बड़ा|बड़ी|और)$/.test(w));
-  const mainSubject = subjectWords.slice(0, 3).join(" ").trim();
-  if (options.length < 5 && mainSubject.length >= 4) {
-    const journalisticAngles = [
-      `${mainSubject}: \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092C\u0921\u093C\u093E \u0916\u0941\u0932\u093E\u0938\u093E, \u091C\u093E\u0902\u091A \u092E\u0947\u0902 \u091C\u0941\u091F\u0940 \u092A\u0941\u0932\u093F\u0938 \u091F\u0940\u092E`,
-      `${mainSubject} \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u0924\u0930\u094D\u0915\u0924\u093E: \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0928\u091C\u0930`,
-      `${mainSubject} \u092A\u0930 \u0909\u0920\u0947 \u0917\u0902\u092D\u0940\u0930 \u0938\u0935\u093E\u0932: \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0928\u0947 \u0930\u0916\u0940 \u0905\u092A\u0928\u0940 \u092C\u093E\u0924`,
-      `${mainSubject} \u0915\u0947 \u092C\u093E\u0926 \u0938\u094D\u0925\u093F\u0924\u093F \u0928\u093F\u092F\u0902\u0924\u094D\u0930\u0923 \u092E\u0947\u0902: \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u0947 \u092A\u0941\u0916\u094D\u0924\u093E \u0907\u0902\u0924\u091C\u093E\u092E`,
-      `${mainSubject} \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0902\u091A \u0936\u0941\u0930\u0942: \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0915\u0908 \u0905\u0939\u092E \u0924\u0925\u094D\u092F`,
-      `${mainSubject} \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u092A\u0942\u0930\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940`
-    ];
-    for (const h of journalisticAngles) {
+  const mainSubject = subjectWords.slice(0, 4).join(" ").trim();
+  for (const s of cleanSentences) {
+    if (options.length >= 5) break;
+    addIfValid(s);
+  }
+  if (baseTitle && options.length < 5) {
+    addIfValid(baseTitle);
+  }
+  for (const s of cleanSentences) {
+    if (options.length >= 5) break;
+    const parts = s.split(/\s+(?:और|तथा|लेकिन|जबकि|जिसके बाद|जिससे|जिसमें)\s+/).map((p) => p.trim()).filter((p) => p.length >= 25);
+    for (const p of parts) {
       if (options.length >= 5) break;
-      addIfValid(h);
+      let candidate = p;
+      if (mainSubject && !p.includes(mainSubject) && p.length < 50) {
+        candidate = `${mainSubject}: ${p}`;
+      }
+      addIfValid(candidate);
     }
+  }
+  const locPrefix = locClean ? `${locClean}: ` : "";
+  const coreSubject = mainSubject || cleanBase || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E";
+  if (options.length < 1) {
+    addIfValid(`${locPrefix}${coreSubject} \u0915\u094B \u0932\u0947\u0915\u0930 \u092C\u0921\u093C\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u093E\u092E\u0928\u0947 \u0906\u092F\u093E`);
+  }
+  if (options.length < 2) {
+    addIfValid(`${locPrefix}${coreSubject} \u0915\u0947 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0928\u0947 \u0926\u093F\u090F \u091C\u093E\u0902\u091A \u0915\u0947 \u0938\u0916\u094D\u0924 \u0906\u0926\u0947\u0936`);
+  }
+  if (options.length < 3) {
+    addIfValid(`${locPrefix}${coreSubject} \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u093F\u0924 \u0932\u094B\u0917\u094B\u0902 \u092E\u0947\u0902 \u0917\u0939\u0930\u093E \u0930\u094B\u0937, \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0938\u0947 \u0924\u0941\u0930\u0902\u0924 \u0938\u092E\u093E\u0927\u093E\u0928 \u0915\u0940 \u092E\u093E\u0902\u0917`);
+  }
+  if (options.length < 4) {
+    addIfValid(`${locPrefix}${coreSubject} \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0938\u092D\u0940 \u092A\u094D\u0930\u092E\u0941\u0916 \u092C\u093F\u0902\u0926\u0941\u0913\u0902 \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0936\u0941\u0930\u0942, \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0928\u0947 \u0930\u0916\u0940 \u0905\u092A\u0928\u0940 \u092C\u093E\u0924`);
   }
   if (options.length < 5) {
-    const locPrefix = locClean ? `${locClean}: ` : "";
-    const safeSubject = mainSubject || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E";
-    const emergencyList = [
-      `${locPrefix}${safeSubject}: \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u092C\u0948\u0920\u0915`,
-      `${locPrefix}${safeSubject} \u0915\u094B \u0932\u0947\u0915\u0930 \u0909\u091A\u094D\u091A \u0938\u094D\u0924\u0930\u0940\u092F \u091C\u093E\u0902\u091A \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`,
-      `${locPrefix}${safeSubject}: \u092E\u094C\u0915\u0947 \u092A\u0930 \u092A\u0939\u0941\u0902\u091A\u0947 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u0927\u093F\u0915\u093E\u0930\u0940`,
-      `${locPrefix}${safeSubject} \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u092F\u092E\u094B\u0902 \u0915\u0947 \u092A\u093E\u0932\u0928 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`,
-      `${locPrefix}${safeSubject} \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u092E\u0941\u0916\u094D\u092F \u092C\u093E\u0924\u0947\u0902 \u0906\u0908\u0902 \u0938\u093E\u092E\u0928\u0947`
-    ];
-    for (const fb of emergencyList) {
-      if (options.length >= 5) break;
-      addIfValid(fb);
-    }
+    addIfValid(`${locPrefix}${coreSubject} \u0915\u0947 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0936\u093E\u0938\u0928 \u0938\u094D\u0924\u0930 \u0938\u0947 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0928\u091C\u0930, \u0938\u094D\u0925\u093F\u0924\u093F \u0915\u094B \u0928\u093F\u092F\u0902\u0924\u094D\u0930\u093F\u0924 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0907\u0902\u0924\u091C\u093E\u092E`);
   }
+  options.sort((a, b) => a.split(/\s+/).length - b.split(/\s+/).length);
   return options.slice(0, 5);
 }
 function formatCaptionVariants(headline, location, factsText, username = "") {
@@ -6983,19 +6994,25 @@ function formatCaptionVariants(headline, location, factsText, username = "") {
     if (/[A-Za-z]{6,}/.test(s) && englishCount > 15) return false;
     return true;
   });
+  const nonHeadlineSentences = sentences.filter(
+    (s) => calculateHeadlineSimilarityInternal(s, cleanHeadline) < 0.6
+  );
   const locPrefix = loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${loc} \u092E\u0947\u0902 ` : "";
-  const p1 = sentences[0] ? `${locPrefix}${cleanHeadline}\u0964 ${sentences[0]}\u0964` : `${locPrefix}${cleanHeadline} \u0915\u094B \u0932\u0947\u0915\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u093E\u092E\u0928\u0947 \u0906\u0908 \u0939\u0948\u0964 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u093E \u0927\u094D\u092F\u093E\u0928 \u0915\u0947\u0902\u0926\u094D\u0930\u093F\u0924 \u0939\u0948\u0964`;
-  const p2 = sentences.slice(1, 3).join("\u0964 ") || (sentences[1] ? `${sentences[1]}\u0964` : "\u092E\u093E\u092E\u0932\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u092A\u094D\u0930\u092E\u0941\u0916 \u0924\u0925\u094D\u092F\u094B\u0902 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923\u094B\u0902 \u0915\u093E \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0917\u0939\u0928\u0924\u093E \u0938\u0947 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948\u0964");
-  const p3 = sentences[3] || sentences[2] ? `${sentences[3] || sentences[2]}\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u0947 \u0915\u0940 \u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0928\u091C\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964` : "\u0907\u0938 \u0938\u0902\u092C\u0902\u0927 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u094D\u0924\u0930 \u0938\u0947 \u0905\u0917\u094D\u0930\u093F\u092E \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0914\u0930 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936\u094B\u0902 \u0915\u0947 \u0905\u0928\u0941\u0930\u0942\u092A \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964";
+  const p1Sent = nonHeadlineSentences[0];
+  const p1 = p1Sent ? `${locPrefix}${cleanHeadline}\u0964 ${p1Sent}\u0964` : `${locPrefix}${cleanHeadline} \u0915\u094B \u0932\u0947\u0915\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u093E\u092E\u0928\u0947 \u0906\u0908 \u0939\u0948\u0964 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u093E \u0927\u094D\u092F\u093E\u0928 \u0915\u0947\u0902\u0926\u094D\u0930\u093F\u0924 \u0939\u0948\u0964`;
+  const p2Sents = nonHeadlineSentences.slice(1, 3);
+  const p2 = p2Sents.length > 0 ? `${p2Sents.join("\u0964 ")}\u0964` : "\u092E\u093E\u092E\u0932\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u092A\u094D\u0930\u092E\u0941\u0916 \u0924\u0925\u094D\u092F\u094B\u0902 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923\u094B\u0902 \u0915\u093E \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0917\u0939\u0928\u0924\u093E \u0938\u0947 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948\u0964";
+  const p3Sent = nonHeadlineSentences[3] || nonHeadlineSentences[4];
+  const p3 = p3Sent ? `${p3Sent}\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u093E\u092E\u0940 \u0938\u094D\u0925\u093F\u0924\u093F \u0914\u0930 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936\u094B\u0902 \u092A\u0930 \u0928\u091C\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964` : "\u0907\u0938 \u0938\u0902\u092C\u0902\u0927 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0938\u094D\u0924\u0930 \u0938\u0947 \u0905\u0917\u094D\u0930\u093F\u092E \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0914\u0930 \u0928\u093F\u092F\u092E\u094B\u0902 \u0915\u0947 \u0905\u0928\u0941\u0930\u0942\u092A \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964";
   const detailedBody = `${p1}
 
 ${p2}
 
 ${p3}`;
-  const captionDetailed = ensureHashtagHierarchy(detailedBody, loc, username);
-  const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
+  const captionDetailed = cleanCaptionParagraphs(ensureHashtagHierarchy(detailedBody, loc, username), "detailed");
+  const bulletItems = (nonHeadlineSentences.length >= 3 ? nonHeadlineSentences.slice(0, 4) : [
     `${cleanHeadline} \u0915\u094B \u0932\u0947\u0915\u0930 \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u0935\u0930\u0923`,
-    ...sentences.length > 0 ? sentences.slice(0, 2) : ["\u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u092D\u0940 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u0940 \u092A\u094D\u0930\u0924\u093F\u0915\u094D\u0930\u093F\u092F\u093E\u090F\u0902"],
+    ...nonHeadlineSentences.length > 0 ? nonHeadlineSentences.slice(0, 2) : ["\u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u092D\u0940 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u0940 \u092A\u094D\u0930\u0924\u093F\u0915\u094D\u0930\u093F\u092F\u093E\u090F\u0902"],
     "\u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0914\u0930 \u0935\u093F\u0936\u0947\u0937\u091C\u094D\u091E\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0928\u091C\u0930"
   ]).map((b) => `\u2022 ${b}`);
   const bulletIntro = `\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: ${cleanHeadline}${loc && loc !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `
@@ -7007,12 +7024,12 @@ ${bulletItems.join("\n")}
 
 ${bulletOutro}`;
   const captionBullets = ensureHashtagHierarchy(bulletsBody, loc, username);
-  const shortP1 = `${locPrefix}${cleanHeadline}\u0964 ${sentences[0] || "\u0907\u0938 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u0924\u093E\u091C\u093E \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u093E\u092E\u0928\u0947 \u0906\u0908 \u0939\u0948\u0964"}`;
-  const shortP2 = (sentences[1] ? `${sentences[1]}\u0964 ` : "") + "\u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0905\u0917\u094D\u0930\u093F\u092E \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0914\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964";
+  const shortP1 = `${locPrefix}${cleanHeadline}\u0964 ${nonHeadlineSentences[0] || "\u0907\u0938 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u0924\u093E\u091C\u093E \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u093E\u092E\u0928\u0947 \u0906\u0908 \u0939\u0948\u0964"}`;
+  const shortP2 = (nonHeadlineSentences[1] ? `${nonHeadlineSentences[1]}\u0964 ` : "") + "\u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0905\u0917\u094D\u0930\u093F\u092E \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0914\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964";
   const shortBody = `${shortP1}
 
 ${shortP2}`;
-  const captionShort = ensureHashtagHierarchy(shortBody, loc, username);
+  const captionShort = cleanCaptionParagraphs(ensureHashtagHierarchy(shortBody, loc, username), "short");
   return {
     captionDetailed,
     captionBullets,
@@ -7592,18 +7609,19 @@ Exception: Only retain words if removing them alters legal meaning or quotes.
 - NO website scraping artifacts (e.g. "\u0915\u0949\u092A\u0940 \u0932\u093F\u0902\u0915", "\u092B\u093E\u0907\u0932 \u092B\u094B\u091F\u094B:", "\u0936\u0947\u092F\u0930 \u0915\u0930\u0947\u0902", "\u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902").
 - NO naive colon appending (DO NOT simply append ": \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u0902\u0935\u0947\u0926\u0928\u0939\u0940\u0928\u0924\u093E \u092A\u0930 \u0909\u0920\u0947 \u0917\u0902\u092D\u0940\u0930 \u0938\u0935\u093E\u0932" or ": \u0906\u092E \u091C\u0928\u0924\u093E \u092A\u0930 \u0905\u0938\u0930..." to the title). Every headline option must be a crafted, distinct, standalone journalistic headline.
 
-\u2605 EXACTLY 5 DISTINCT JOURNALISTIC HEADLINE OPTIONS (NO FIXED TEMPLATES):
-Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derived from the verified facts of the news:
-- You are acting as an experienced senior Hindi news editor. Read the actual facts first, then write 5 independent, useful news headlines.
-- DO NOT force options into fixed predetermined categories or artificial formulaic boxes (no mandatory breaking, factual, question/action, public interest, or second angle templates).
+\u2605 EXACTLY 5 DISTINCT JOURNALISTIC HEADLINES WITH GRADUATED LENGTHS (PART 7 MANDATE):
+Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derived from the verified facts of the news, organized in graduated length:
+- \u0935\u093F\u0915\u0932\u094D\u092A 1: ~8\u201311 \u0936\u092C\u094D\u0926 (\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924, \u092A\u0942\u0930\u094D\u0923, \u0938\u094D\u092A\u0937\u094D\u091F \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E)
+- \u0935\u093F\u0915\u0932\u094D\u092A 2: ~11\u201314 \u0936\u092C\u094D\u0926 (\u0935\u093F\u0938\u094D\u0924\u093E\u0930\u093F\u0924 \u0924\u0925\u094D\u092F \u0935 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908)
+- \u0935\u093F\u0915\u0932\u094D\u092A 3: ~13\u201316 \u0936\u092C\u094D\u0926 (\u0918\u091F\u0928\u093E + \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0906\u0902\u0915\u0921\u093C\u093E \u092F\u093E \u0928\u093F\u092F\u092E)
+- \u0935\u093F\u0915\u0932\u094D\u092A 4: ~15\u201318 \u0936\u092C\u094D\u0926 (\u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930 + \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0924\u0925\u094D\u092F)
+- \u0935\u093F\u0915\u0932\u094D\u092A 5: ~16\u201320 \u0936\u092C\u094D\u0926 (\u0906\u0935\u0936\u094D\u092F\u0915 \u0938\u0902\u0926\u0930\u094D\u092D + \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941)
+
+\u2605 GRAMMAR & COMPLETENESS RULES:
+- Every headline MUST be grammatically complete. NEVER truncate sentence stems into dangling verbs like "\u0938\u093E\u092E\u0928\u093E \u0915\u0930\u0928\u093E \u092A\u0921\u093C", "\u0930\u094B\u0915\u0940 \u091C\u093E", "\u0915\u0930\u0924\u0947", "\u0906\u0924\u0947".
+- Transform narrative verb endings into title nouns (e.g. '\u0930\u094B-\u0939\u093E\u0909\u0938 \u0914\u0930 \u092A\u094D\u0932\u0949\u091F \u092A\u0930 \u0930\u094B\u0915: \u0938\u093F\u0930\u094D\u092B \u092B\u094D\u0932\u0948\u091F \u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940', NOT '\u0905\u092C \u0914\u0926\u094D\u092F\u094B\u0917\u093F\u0915 \u0915\u094D\u0937\u0947\u0924\u094D\u0930\u094B\u0902 \u092E\u0947\u0902 \u0930\u094B-\u0939\u093E\u0909\u0938 \u0914\u0930 \u092A\u094D\u0932\u0949\u091F \u0928\u0939\u0940\u0902 \u092C\u0928\u0947\u0902\u0917\u0947\u0964').
+- NEVER end on dangling postpositions ('\u0928\u0947', '\u0915\u0947', '\u0915\u0940', '\u0915\u093E', '\u092E\u0947\u0902', '\u092A\u0930', '\u0938\u0947', '\u0915\u094B', '\u0914\u0930', '\u092F\u093E', '\u0915\u093F').
 - UI labels will ONLY display "\u0935\u093F\u0915\u0932\u094D\u092A 1", "\u0935\u093F\u0915\u0932\u094D\u092A 2", "\u0935\u093F\u0915\u0932\u094D\u092A 3", "\u0935\u093F\u0915\u0932\u094D\u092A 4", "\u0935\u093F\u0915\u0932\u094D\u092A 5" without any extra category labels.
-- Each headline must be a standard, natural news title focusing on real verified facts (decisions, regulations, exemptions, numbers, actions, public impact, or verified background).
-- If the news story has fewer distinct angles, provide 5 factually accurate, differently phrased journalistic titles without inventing unverified facts.
-- CRITICAL: Headlines must be punchy title/action phrases, NEVER plain declarative narrative sentences ending in verbs like '\u0928\u0939\u0940\u0902 \u092C\u0928\u0947\u0902\u0917\u0947', '\u0915\u093F\u090F \u0917\u090F', '\u0926\u0940 \u091C\u093E\u090F\u0917\u0940', '\u0939\u0941\u0906'. Transform narrative verbs into title nouns (e.g. write '\u0930\u094B-\u0939\u093E\u0909\u0938 \u0914\u0930 \u092A\u094D\u0932\u0949\u091F \u092A\u0930 \u0930\u094B\u0915: \u0938\u093F\u0930\u094D\u092B \u092B\u094D\u0932\u0948\u091F \u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940', NOT '\u0905\u092C \u0914\u0926\u094D\u092F\u094B\u0917\u093F\u0915 \u0915\u094D\u0937\u0947\u0924\u094D\u0930\u094B\u0902 \u092E\u0947\u0902 \u0930\u094B-\u0939\u093E\u0909\u0938 \u0914\u0930 \u092A\u094D\u0932\u0949\u091F \u0928\u0939\u0940\u0902 \u092C\u0928\u0947\u0902\u0917\u0947\u0964').
-- Absolutely ZERO Latin-alphabet English characters [A-Za-z] in headlines (no "Bhopal News", "Indore News", "Breaking News", "Latest Update", website names or tracking parameters).
-- NO clickbait or artificial curiosity phrases like "\u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u091A\u094C\u0902\u0915\u093E\u0928\u0947 \u0935\u093E\u0932\u0947 \u0924\u0925\u094D\u092F" unless strictly justified by extraordinary facts.
-- NO generic administrative filler like "\u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u092E\u0932\u093E \u092E\u094C\u0915\u0947 \u0915\u0940 \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u092E\u0947\u0902 \u091C\u0941\u091F\u093E" or "\u0932\u093E\u092A\u0930\u0935\u093E\u0939\u0940 \u092A\u0930 \u0938\u0916\u094D\u0924 \u0938\u0902\u091C\u094D\u091E\u093E\u0928".
-- STRICTLY DO NOT output prefixes like "\u0935\u093F\u0915\u0932\u094D\u092A 1:", "\u0935\u093F\u0915\u0932\u094D\u092A 2:", "Option 1:" in the headline text. Provide pure headline strings.
 - Absolutely NO trailing full stop (\u0964) or period (.) at the end of any headline.
 
 \u2605 MULTICOLOR HEADLINE HIGHLIGHTING:
@@ -7611,11 +7629,11 @@ Generate EXACTLY 5 natural, publish-ready Hindi headline options directly derive
 - Wrap them with [yellow]\u0936\u092C\u094D\u0926[/yellow] (or [highlight]\u0936\u092C\u094D\u0926[/highlight]) in formattedHeadline.
 - Include the selected words in highlightWords array.
 
-\u2605 NEWS CAPTION & 3 STYLES (PURE HINDI ONLY):
+\u2605 NEWS CAPTION & 3 STYLES (PURE HINDI ONLY, ZERO SENTENCE REPETITION):
 All captions must be pure Devanagari Hindi. No English meta-descriptions.
 - Style 1 (Detailed / summary): Exactly 3 substantive paragraphs (Para 1: Event/time/place, Para 2: Background & statements, Para 3: Administrative action & current status) separated by 
 
- + double newline + hashtags.
+. CRITICAL: Para 1, Para 2, and Para 3 MUST contain distinct factual statements. ZERO repeated sentences between paragraphs.
 - Style 2 (captionBullets): Short intro + 3-4 bullet points (\u2022) of core facts + status paragraph + hashtags.
 - Style 3 (captionShort): Exactly 2 concise, impactful paragraphs separated by 
 
@@ -7650,29 +7668,35 @@ ${customPrompt}
 1. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 100% \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u0915\u093E \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 [yellow]...[/yellow] \u091F\u0948\u0917 \u0915\u0947 \u0905\u0932\u093E\u0935\u093E \u090F\u0915 \u092D\u0940 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0905\u0915\u094D\u0937\u0930 [A-Za-z] \u0928 \u0939\u094B\u0964
 2. \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0935 \u092A\u0940\u0906\u0930 \u0936\u092C\u094D\u0926\u094B\u0902 (\u0936\u094D\u0930\u0940, \u0936\u094D\u0930\u0940\u092E\u0924\u0940, \u092E\u093E\u0928\u0928\u0940\u092F, \u092E\u0939\u094B\u0926\u092F, \u091C\u0940) \u0915\u094B \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E\u090F\u0902\u0964
 3. \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0936\u0939\u0930 \u0915\u093E \u0938\u092B\u093C\u093F\u0915\u094D\u0938 (\u091C\u0948\u0938\u0947 - Bhopal News) \u092F\u093E \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0938\u094D\u0915\u094D\u0930\u0948\u092A\u093F\u0902\u0917 \u091F\u0947\u0915\u094D\u0938\u094D\u091F (\u091C\u0948\u0938\u0947 \u0915\u0949\u092A\u0940 \u0932\u093F\u0902\u0915, \u092B\u093E\u0907\u0932 \u092B\u094B\u091F\u094B) \u0928 \u0939\u094B\u0964
-4. \u0920\u0940\u0915 5 \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930, \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0914\u0930 \u0924\u0925\u094D\u092F-\u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0926\u0947\u0902\u0964 \u0915\u094B\u0908 \u092A\u0942\u0930\u094D\u0935-\u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0936\u094D\u0930\u0947\u0923\u0940 \u092F\u093E \u0915\u0943\u0924\u094D\u0930\u093F\u092E \u0922\u093E\u0902\u091A\u093E \u0928 \u0925\u094B\u092A\u0947\u0902\u0964 \u0939\u0930 \u0935\u093F\u0915\u0932\u094D\u092A \u092A\u0947\u0936\u0947\u0935\u0930 \u0938\u092E\u093E\u091A\u093E\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 (Title Format) \u092E\u0947\u0902 \u0939\u094B, \u0915\u094B\u0908 \u0938\u093E\u0927\u093E\u0930\u0923 \u0935\u0930\u094D\u0923\u0928\u093E\u0924\u094D\u092E\u0915 \u0935\u093E\u0915\u094D\u092F \u0928\u0939\u0940\u0902 (\u091C\u0948\u0938\u0947 '\u0928\u0939\u0940\u0902 \u092C\u0928\u0947\u0902\u0917\u0947' \u0915\u0940 \u091C\u0917\u0939 '\u092A\u0930 \u0930\u094B\u0915', '\u0926\u0940 \u091C\u093E\u090F\u0917\u0940' \u0915\u0940 \u091C\u0917\u0939 '\u0915\u093E \u0910\u0932\u093E\u0928')\u0964
-5. \u0915\u093F\u0938\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0906\u0917\u0947 '\u0935\u093F\u0915\u0932\u094D\u092A 1:', '\u0935\u093F\u0915\u0932\u094D\u092A 2:' \u0906\u0926\u093F \u0932\u0947\u092C\u0932 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964 \u0915\u0947\u0935\u0932 \u0936\u0941\u0926\u094D\u0927 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0926\u0947\u0902\u0964
-6. \u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928: ${targetMaxLines === 2 ? "8-14" : "12-22"} \u0936\u092C\u094D\u0926, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (\u0964) \u092F\u093E \u0921\u0949\u091F (.) \u0915\u0947\u0964
-7. 2-4 \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0936\u092C\u094D\u0926 \u091A\u0941\u0928\u0947\u0902 \u0914\u0930 formattedHeadline \u092E\u0947\u0902 [yellow]\u0936\u092C\u094D\u0926[/yellow] \u0932\u0917\u093E\u090F\u0902\u0964
-8. \u0938\u094D\u0925\u093E\u0928 (location): \u091C\u093F\u0932\u093E, \u0930\u093E\u091C\u094D\u092F (\u0909\u0926\u093E. \u092D\u094B\u092A\u093E\u0932, \u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936) \u0938\u094D\u0930\u094B\u0924 \u0905\u0928\u0941\u0938\u093E\u0930 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915\u0964
-9. 3 \u0915\u0948\u092A\u094D\u0936\u0928 \u0938\u094D\u091F\u093E\u0907\u0932 \u0926\u0947\u0902 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902, \u0915\u094B\u0908 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092E\u0947\u091F\u093E \u0935\u093F\u0935\u0930\u0923 \u0928\u0939\u0940\u0902): captionDetailed (\u0920\u0940\u0915 3 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B), captionBullets (\u092C\u0941\u0932\u0947\u091F \u092A\u0949\u0907\u0902\u091F\u094D\u0938), captionShort (\u0920\u0940\u0915 2 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B)\u0964
-10. \u0939\u0948\u0936\u091F\u0948\u0917: \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E ${userHashtag}, \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u0928\u094D\u092F\u0942\u091C\u093C \u0935 \u0932\u094B\u0915\u0947\u0936\u0928 \u0939\u0948\u0936\u091F\u0948\u0917, \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E #AINewsMaker\u0964
+4. \u0920\u0940\u0915 5 \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930, \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0914\u0930 \u0924\u0925\u094D\u092F-\u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0926\u0947\u0902, \u091C\u094B \u0936\u092C\u094D\u0926 \u0938\u0940\u092E\u093E \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0915\u094D\u0930\u092E\u093F\u0915 \u0930\u0942\u092A \u0938\u0947 \u092C\u0922\u093C\u0947 \u0939\u094B\u0902:
+   - \u0935\u093F\u0915\u0932\u094D\u092A 1: 8\u201311 \u0936\u092C\u094D\u0926 (\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924, \u092A\u0942\u0930\u094D\u0923, \u0938\u094D\u092A\u0937\u094D\u091F)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 2: 11\u201314 \u0936\u092C\u094D\u0926 (\u0935\u093F\u0938\u094D\u0924\u093E\u0930\u093F\u0924 \u0924\u0925\u094D\u092F)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 3: 13\u201316 \u0936\u092C\u094D\u0926 (\u0918\u091F\u0928\u093E + \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 4: 15\u201318 \u0936\u092C\u094D\u0926 (\u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930 + \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0924\u0925\u094D\u092F)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 5: 16\u201320 \u0936\u092C\u094D\u0926 (\u0906\u0935\u0936\u094D\u092F\u0915 \u0938\u0902\u0926\u0930\u094D\u092D + \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941)
+5. \u0939\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u094D\u092F\u093E\u0915\u0930\u0923 \u0915\u0940 \u0926\u0943\u0937\u094D\u091F\u093F \u0938\u0947 \u092A\u0942\u0930\u094D\u0923 \u0939\u094B\u0964 \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0905\u0902\u0924 \u0905\u092A\u0942\u0930\u094D\u0923 \u0915\u094D\u0930\u093F\u092F\u093E (\u091C\u0948\u0938\u0947 '\u092A\u0921\u093C', '\u091C\u093E', '\u0915\u0930\u0924\u0947', '\u0906\u0924\u0947') \u092F\u093E \u092A\u0930\u0938\u0930\u094D\u0917 (\u091C\u0948\u0938\u0947 '\u0928\u0947', '\u0915\u0947', '\u0915\u0940', '\u0915\u093E', '\u092E\u0947\u0902', '\u092A\u0930', '\u0938\u0947', '\u0915\u094B') \u092A\u0930 \u0928 \u0939\u094B\u0964
+6. \u0915\u093F\u0938\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0906\u0917\u0947 '\u0935\u093F\u0915\u0932\u094D\u092A 1:', '\u0935\u093F\u0915\u0932\u094D\u092A 2:' \u0906\u0926\u093F \u0932\u0947\u092C\u0932 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964 \u0915\u0947\u0935\u0932 \u0936\u0941\u0926\u094D\u0927 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0926\u0947\u0902\u0964
+7. \u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928: \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (\u0964) \u092F\u093E \u0921\u0949\u091F (.) \u0915\u0947\u0964
+8. 2-4 \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0936\u092C\u094D\u0926 \u091A\u0941\u0928\u0947\u0902 \u0914\u0930 formattedHeadline \u092E\u0947\u0902 [yellow]\u0936\u092C\u094D\u0926[/yellow] \u0932\u0917\u093E\u090F\u0902\u0964
+9. \u0938\u094D\u0925\u093E\u0928 (location): \u091C\u093F\u0932\u093E, \u0930\u093E\u091C\u094D\u092F (\u0909\u0926\u093E. \u092D\u094B\u092A\u093E\u0932, \u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936) \u0938\u094D\u0930\u094B\u0924 \u0905\u0928\u0941\u0938\u093E\u0930 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915\u0964
+10. 3 \u0915\u0948\u092A\u094D\u0936\u0928 \u0938\u094D\u091F\u093E\u0907\u0932 \u0926\u0947\u0902 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902, \u0915\u094B\u0908 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092E\u0947\u091F\u093E \u0935\u093F\u0935\u0930\u0923 \u0928\u0939\u0940\u0902): captionDetailed (\u0920\u0940\u0915 3 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B, \u0924\u0940\u0928\u094B\u0902 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092E\u0947\u0902 \u0905\u0932\u0917 \u0935\u093E\u0915\u094D\u092F \u0939\u094B\u0902, \u0926\u094B\u0939\u0930\u093E\u0935 \u092C\u093F\u0932\u094D\u0915\u0941\u0932 \u0928 \u0939\u094B), captionBullets (\u092C\u0941\u0932\u0947\u091F \u092A\u0949\u0907\u0902\u091F\u094D\u0938), captionShort (\u0920\u0940\u0915 2 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B)\u0964
+11. \u0939\u0948\u0936\u091F\u0948\u0917: \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E ${userHashtag}, \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u0928\u094D\u092F\u0942\u091C\u093C \u0935 \u0932\u094B\u0915\u0947\u0936\u0928 \u0939\u0948\u0936\u091F\u0948\u0917, \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E #AINewsMaker\u0964
 
 JSON Schema:
 {
   "headline": "\u092E\u0941\u0916\u094D\u092F \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u092C\u093F\u0928\u093E \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947, 100% \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940)",
   "headlineOptions": [
-    "\u0916\u092C\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 \u0935\u093F\u0915\u0932\u094D\u092A 1 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
-    "\u0916\u092C\u0930 \u0915\u093E \u0926\u0942\u0938\u0930\u093E \u0909\u092A\u092F\u094B\u0917\u0940 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 \u0935\u093F\u0915\u0932\u094D\u092A 2 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
-    "\u0916\u092C\u0930 \u0915\u093E \u0924\u0940\u0938\u0930\u093E \u0909\u092A\u092F\u094B\u0917\u0940 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 \u0935\u093F\u0915\u0932\u094D\u092A 3 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
-    "\u0916\u092C\u0930 \u0915\u093E \u091A\u094C\u0925\u093E \u0909\u092A\u092F\u094B\u0917\u0940 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 \u0935\u093F\u0915\u0932\u094D\u092A 4 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
-    "\u0916\u092C\u0930 \u0915\u093E \u092A\u093E\u0901\u091A\u0935\u093E\u0901 \u0909\u092A\u092F\u094B\u0917\u0940 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 \u0935\u093F\u0915\u0932\u094D\u092A 5 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)"
+    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u092A\u0942\u0930\u094D\u0923 \u0936\u0940\u0930\u094D\u0937\u0915 8-11 \u0936\u092C\u094D\u0926 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u0935\u093F\u0938\u094D\u0924\u093E\u0930\u093F\u0924 \u0936\u0940\u0930\u094D\u0937\u0915 11-14 \u0936\u092C\u094D\u0926 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0924\u0925\u094D\u092F-\u0906\u0927\u093E\u0930\u093F\u0924 \u0936\u0940\u0930\u094D\u0937\u0915 13-16 \u0936\u092C\u094D\u0926 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F + \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 15-18 \u0936\u092C\u094D\u0926 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u0902\u0926\u0930\u094D\u092D \u0938\u0939\u093F\u0924 \u092A\u0942\u0930\u094D\u0923 \u0936\u0940\u0930\u094D\u0937\u0915 16-20 \u0936\u092C\u094D\u0926 (\u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)"
   ],
   "highlightWords": ["\u0936\u092C\u094D\u09261", "\u0936\u092C\u094D\u09262"],
   "formattedHeadline": "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u0939\u094B\u0928\u0947 \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947 \u091A\u093E\u0930\u094B\u0902 \u0913\u0930 [yellow]\u0936\u092C\u094D\u0926[/yellow]",
   "location": "\u091C\u093F\u0932\u093E, \u0930\u093E\u091C\u094D\u092F",
   "summary": "\u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B 1...\\n\\n\u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B 2...\\n\\n\u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B 3...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
-  "captionDetailed": "\u0935\u093F\u0938\u094D\u0924\u0943\u0924 3 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u0915\u0948\u092A\u094D\u0936\u0928...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionDetailed": "\u0935\u093F\u0938\u094D\u0924\u0943\u0924 3 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u0915\u0948\u092A\u094D\u0936\u0928 (\u0936\u0942\u0928\u094D\u092F \u0926\u094B\u0939\u0930\u093E\u0935)...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "captionBullets": "\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E...\\n\\n\u2022 \u092C\u093F\u0902\u0926\u0941 1\\n\u2022 \u092C\u093F\u0902\u0926\u0941 2\\n\u2022 \u092C\u093F\u0902\u0926\u0941 3\\n\\n\u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u092E\u0932\u093E...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "captionShort": "\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 2 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u0915\u0948\u092A\u094D\u0936\u0928...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
   "category": "\u0905\u092A\u0930\u093E\u0927 / \u0930\u093E\u091C\u0928\u0940\u0924\u093F / \u0939\u093E\u0926\u0938\u093E / \u092A\u094D\u0930\u0936\u093E\u0938\u0928 / \u0935\u093F\u0915\u093E\u0938",
@@ -7816,10 +7840,11 @@ JSON Schema:
       const cleanOptions = [];
       const addOptionIfValid = (candidate) => {
         const s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || "")));
-        if (!s || isInvalidUrlHeadline(s) || s.length < 14) return;
-        const cleanNoPunct = s.replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+        const val = validateHeadlineOption(s);
+        if (!val.valid) return;
+        const cleanNoPunct = val.cleanText;
         if (cleanOptions.includes(cleanNoPunct)) return;
-        const isDuplicate = cleanOptions.some((existing) => calculateHeadlineSimilarityInternal(existing, cleanNoPunct) >= 0.65);
+        const isDuplicate = cleanOptions.some((existing) => calculateHeadlineSimilarityInternal(existing, cleanNoPunct) >= 0.55);
         if (!isDuplicate) {
           cleanOptions.push(cleanNoPunct);
         }
@@ -7857,10 +7882,19 @@ JSON Schema:
           addOptionIfValid(fbOpt);
         }
       }
+      cleanOptions.sort((a, b) => a.split(/\s+/).length - b.split(/\s+/).length);
       parsedData.headlineOptions = cleanOptions.slice(0, 5);
       if (parsedData.headlineOptions.length > 0) {
         parsedData.headline = parsedData.headlineOptions[0];
       }
+      parsedData.diagnostics = {
+        optionsCount: parsedData.headlineOptions.length,
+        graduatedWordCounts: parsedData.headlineOptions.map((h) => h.split(/\s+/).length),
+        locationDetected: parsedData.location,
+        categoryDetected: parsedData.category,
+        validation: parsedData.headlineOptions.map((h, idx) => validateHeadlineOption(h, idx))
+      };
+      console.log(`[News AI Diagnostics] Location: ${parsedData.location} | Options: ${parsedData.headlineOptions.length} | Word counts: ${parsedData.diagnostics.graduatedWordCounts.join(", ")}`);
       if (parsedData.formattedHeadline) {
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {
           parsedData.formattedHeadline = parsedData.headline;
@@ -9160,5 +9194,6 @@ startServer().catch((err) => {
   formatAsJournalisticHeadline,
   formatDistrictWithState,
   generate5JournalisticHeadlines,
-  matchDistrictAlias
+  matchDistrictAlias,
+  validateHeadlineOption
 });
