@@ -113,6 +113,7 @@ export interface NewsCardData {
   date?: string;
   photoUrl?: string;
   headline: string;
+  originalHeadline?: string;
   subHeadline?: string;
   customScript?: string;
   formattedHeadline: string;

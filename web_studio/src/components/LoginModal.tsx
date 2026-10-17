@@ -32,6 +32,9 @@ export interface UserSocialLinks {
 }
 
 export interface ReporterUser {
+  userId?: string;
+  uid?: string;
+  id?: string;
   username: string;
   name: string;
   role: 'reporter' | 'admin' | 'superadmin' | 'bureau' | 'user';
