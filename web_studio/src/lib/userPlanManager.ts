@@ -223,6 +223,31 @@ const STORAGE_KEY_ADMIN_TEST_PLAN = 'ai_news_maker_admin_test_plan_tier'; // 'ba
 // ==========================================
 // 1. PLANS CATALOG MANAGEMENT (FOR ADMIN)
 // ==========================================
+export async function syncPlansCatalogFromBackend(): Promise<PlanFeatureDetail[]> {
+  if (typeof window === 'undefined') return DEFAULT_PLAN_DETAILS;
+  try {
+    const res = await fetch('/api/plans');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.plans) && data.plans.length >= 4) {
+        localStorage.setItem(STORAGE_KEY_PLANS_CONFIG, JSON.stringify(data.plans));
+        window.dispatchEvent(new CustomEvent('ai_news_plans_updated'));
+        return data.plans;
+      }
+    }
+  } catch (err) {
+    console.warn('syncPlansCatalogFromBackend notice:', err);
+  }
+  return getPlansCatalog();
+}
+
+if (typeof window !== 'undefined') {
+  syncPlansCatalogFromBackend().catch(() => {});
+  window.addEventListener('focus', () => {
+    syncPlansCatalogFromBackend().catch(() => {});
+  });
+}
+
 export function getPlansCatalog(): PlanFeatureDetail[] {
   if (typeof window === 'undefined') return DEFAULT_PLAN_DETAILS;
   try {
@@ -244,6 +269,13 @@ export function savePlansCatalog(plans: PlanFeatureDetail[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_PLANS_CONFIG, JSON.stringify(plans));
     window.dispatchEvent(new CustomEvent('ai_news_plans_updated'));
+
+    // Authoritative backend sync
+    fetch('/api/admin/plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plans }),
+    }).catch((e) => console.warn('Failed to sync plans to backend:', e));
   } catch (e) {
     console.warn('Error saving plans catalog:', e);
   }

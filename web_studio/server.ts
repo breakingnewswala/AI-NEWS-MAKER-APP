@@ -10589,7 +10589,7 @@ function getStoredTemplateConfigs(): Record<string, any> {
     console.warn("Failed to read news_template_configs.json:", e);
   }
   return {
-    graphic_001: { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" },
+    graphic_001: { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" },
     graphic_002: { allowedPlans: ["ADVANCED"], isActive: true, version: "v1.0" },
     graphic_003: { allowedPlans: ["PRO"], isActive: true, version: "v1.0" },
     graphic_004: { allowedPlans: ["VIP DESK"], isActive: true, version: "v1.0" },
@@ -10610,7 +10610,7 @@ app.post("/api/admin/save-template-config", (req, res) => {
       return res.status(400).json({ error: "templateId is required" });
     }
     const current = getStoredTemplateConfigs();
-    const existing = current[templateId] || { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" };
+    const existing = current[templateId] || { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" };
     current[templateId] = {
       ...existing,
       ...(allowedPlans && Array.isArray(allowedPlans) ? { allowedPlans } : {}),
@@ -10622,6 +10622,317 @@ app.post("/api/admin/save-template-config", (req, res) => {
       success: true,
       message: `Template config updated for ${templateId}`,
       configs: current,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Centralized Dynamic Category Management & Persistence
+const CATEGORIES_DB_FILE = path.join(process.cwd(), "categories_database.json");
+
+const DEFAULT_CATEGORIES_PRESET = [
+  { id: 'breaking', name: '⚡ ब्रेकिंग न्यूज़', isActive: true, order: 1 },
+  { id: 'politics', name: '🏛️ राजनीति व चुनाव', isActive: true, order: 2 },
+  { id: 'state', name: '📍 मध्य प्रदेश', isActive: true, order: 3 },
+  { id: 'national', name: '🇮🇳 देश / राष्ट्रीय', isActive: true, order: 4 },
+  { id: 'up', name: '📍 उत्तर प्रदेश', isActive: true, order: 5 },
+  { id: 'bihar', name: '📍 बिहार', isActive: true, order: 6 },
+  { id: 'rajasthan', name: '📍 राजस्थान', isActive: true, order: 7 },
+  { id: 'tech', name: '💻 टेक्नोलॉजी', isActive: true, order: 8 },
+  { id: 'business', name: '📈 कारोबार व व्यापार', isActive: true, order: 9 },
+  { id: 'sports', name: '🏏 खेल', isActive: true, order: 10 },
+  { id: 'entertainment', name: '🎬 मनोरंजन', isActive: true, order: 11 },
+  { id: 'crime', name: '🚨 क्राइम / अपराध', isActive: true, order: 12 },
+  { id: 'accident', name: '🚨 हादसा व दुर्घटना', isActive: true, order: 13 },
+  { id: 'agriculture', name: '🌾 खेती-किसानी', isActive: true, order: 14 },
+  { id: 'health', name: '🏥 स्वास्थ्य', isActive: true, order: 15 },
+  { id: 'special', name: '📑 विशेष रिपोर्ट', isActive: true, order: 16 },
+];
+
+function loadCategoriesDatabase(): any[] {
+  try {
+    if (fs.existsSync(CATEGORIES_DB_FILE)) {
+      const data = fs.readFileSync(CATEGORIES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to read categories_database.json:", e);
+  }
+  return DEFAULT_CATEGORIES_PRESET;
+}
+
+function saveCategoriesDatabase(categories: any[]): void {
+  try {
+    fs.writeFileSync(CATEGORIES_DB_FILE, JSON.stringify(categories, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Failed to write categories_database.json:", e);
+  }
+}
+
+app.get("/api/categories", (_req, res) => {
+  res.json({
+    success: true,
+    categories: loadCategoriesDatabase(),
+  });
+});
+
+app.post("/api/categories", (req, res) => {
+  try {
+    const { categories } = req.body;
+    if (Array.isArray(categories) && categories.length > 0) {
+      saveCategoriesDatabase(categories);
+      return res.json({ success: true, message: "Categories saved successfully", categories });
+    }
+    return res.status(400).json({ error: "Invalid categories format" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Plans Catalog Management & Pricing Persistence
+const PLANS_CATALOG_DB_FILE = path.join(process.cwd(), "plans_catalog_database.json");
+
+const DEFAULT_PLANS_CATALOG = [
+  {
+    id: 'basic',
+    planKey: 'BASIC',
+    nameHi: 'बेसिक (BASIC)',
+    nameEn: 'BASIC',
+    priceDisplay: '₹0',
+    priceNum: 0,
+    durationDays: 7,
+    validityLabel: '7 दिन फ्री ट्रायल',
+    period: '7 दिन निःशुल्क',
+    badge: 'प्रारंभिक / ट्रायल',
+    tagline: '7 दिन का निःशुल्क ट्रायल — सभी बेसिक फीचर्स देखें व बनाएं',
+    hasWatermark: true,
+    graphicExportResolution: '720p',
+    maxGraphicsPerDay: 5,
+    hasVideoStudio: false,
+    hasAiTools: false,
+    hasVipDeskFrames: false,
+    isActive: true,
+    features: [
+      '✅ 7 दिन का पूर्ण फ्री ट्रायल',
+      '✅ बेसिक न्यूज़ टेम्पलेट्स व स्टाइल्स',
+      '✅ लाइव कार्ड प्रीव्यू व लेआउट कस्टमाइज़ेशन',
+      '⚠️ ग्राफिक पर "AI News Maker App" वॉटरमार्क रहेगा',
+      '⚠️ सीमित 720p एक्सपोर्ट (5 ग्राफिक प्रतिदिन)',
+    ],
+  },
+  {
+    id: 'advanced',
+    planKey: 'ADVANCE',
+    nameHi: 'एडवांस (ADVANCE)',
+    nameEn: 'ADVANCE',
+    priceDisplay: '₹499',
+    priceNum: 499,
+    durationDays: 30,
+    validityLabel: '30 दिन (प्रति माह)',
+    period: 'प्रति माह',
+    badge: 'सबसे लोकप्रिय',
+    popular: true,
+    tagline: 'वॉटरमार्क रहित फुल एचडी डिजिटल न्यूज़ कार्ड क्रिएटर',
+    hasWatermark: false,
+    graphicExportResolution: '1080p',
+    maxGraphicsPerDay: 25,
+    hasVideoStudio: false,
+    hasAiTools: true,
+    hasVipDeskFrames: false,
+    isActive: true,
+    features: [
+      '🚫 वॉटरमार्क पूरी तरह से हटाया जाएगा (No Watermark)',
+      '⚡ 1080p Full HD अल्ट्रा-शार्प डाउनलोड',
+      '✨ कस्टम चैनल लोगो, हेडर व वॉटरमार्क नियंत्रण',
+      '🤖 ChatGPT (GPT-4o-mini) हेडलाइन व समरी टूल्स',
+      '🎨 सभी सोशल मीडिया साइज़ (1:1, 4:5, 9:16, 16:9)',
+      '⚡ प्राथमिकता आधारित त्वरित रेंडरिंग (25 ग्राफिक प्रतिदिन)',
+    ],
+  },
+  {
+    id: 'professional',
+    planKey: 'PRO',
+    nameHi: 'प्रो (PRO)',
+    nameEn: 'PRO',
+    priceDisplay: '₹999',
+    priceNum: 999,
+    durationDays: 30,
+    validityLabel: '30 दिन (प्रति माह)',
+    period: 'प्रति माह',
+    badge: 'पत्रकार व चैनल चॉइस',
+    tagline: 'ग्राफिक + फुल वीडियो डिज़ाइन स्टूडियो (रील्स व टीवी जैकेट)',
+    hasWatermark: false,
+    graphicExportResolution: '1080p',
+    maxGraphicsPerDay: 100,
+    hasVideoStudio: true,
+    hasAiTools: true,
+    hasVipDeskFrames: false,
+    isActive: true,
+    features: [
+      '🚫 100% वॉटरमार्क रहित (No Watermark)',
+      '🎬 फुल वीडियो स्टूडियो (9:16 रील्स/शॉर्ट्स व 16:9 टीवी जैकेट)',
+      '🔊 लाइव न्यूज़ ब्रेकिंग ऑडियो स्टिंग्स व साउंड इफेक्ट्स',
+      '📺 लाइव न्यूज़ टिकर व हेडलाइन स्क्रोलर',
+      '📍 विशेष जिला / ब्यूरो डेस्क बैज व प्रेस कार्ड',
+      '⚡ एडवांस के सभी फीचर्स शामिल (100 ग्राफिक प्रतिदिन)',
+    ],
+  },
+  {
+    id: 'ultra',
+    planKey: 'VIP DESK',
+    nameHi: 'वीआईपी डेस्क (VIP DESK)',
+    nameEn: 'VIP DESK',
+    priceDisplay: '₹1,999',
+    priceNum: 1999,
+    durationDays: 30,
+    validityLabel: '30 दिन (प्रति माह)',
+    period: 'प्रति माह',
+    badge: 'असीमित पावर',
+    tagline: 'मल्टी-रिपोर्टर नेटवर्क, 4K एक्सपोर्ट व ऑटो RSS पब्लिशर',
+    hasWatermark: false,
+    graphicExportResolution: '4K',
+    maxGraphicsPerDay: 9999,
+    hasVideoStudio: true,
+    hasAiTools: true,
+    hasVipDeskFrames: true,
+    isActive: true,
+    features: [
+      '🚫 100% वॉटरमार्क रहित (No Watermark)',
+      '👑 अनलिमिटेड 4K अल्ट्रा एचडी एक्सपोर्ट',
+      '⭐ VIP DESK विशेष प्रीमियम फ्रेम्स (Graphic 4, VIP Jackets)',
+      '👥 मल्टी-रिपोर्टर व सब-एडिटर टीम अकाउंट्स',
+      '🎯 कस्टम डेडिकेटेड चैनल टेम्पलेट व ग्राफिक सपोर्ट',
+      '⭐ 24x7 वीआईपी व्हाट्सएप व फोन सपोर्ट',
+    ],
+  },
+];
+
+function loadPlansCatalogDatabase(): any[] {
+  try {
+    if (fs.existsSync(PLANS_CATALOG_DB_FILE)) {
+      const data = fs.readFileSync(PLANS_CATALOG_DB_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length >= 4) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to read plans_catalog_database.json:", e);
+  }
+  return DEFAULT_PLANS_CATALOG;
+}
+
+function savePlansCatalogDatabase(plans: any[]): void {
+  try {
+    fs.writeFileSync(PLANS_CATALOG_DB_FILE, JSON.stringify(plans, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Failed to write plans_catalog_database.json:", e);
+  }
+}
+
+app.get("/api/plans", (_req, res) => {
+  res.json({
+    success: true,
+    plans: loadPlansCatalogDatabase(),
+  });
+});
+
+app.post("/api/admin/plans", (req, res) => {
+  try {
+    const { plans } = req.body;
+    if (Array.isArray(plans) && plans.length >= 4) {
+      savePlansCatalogDatabase(plans);
+      return res.json({ success: true, message: "Plans catalog saved successfully", plans });
+    }
+    return res.status(400).json({ error: "Invalid plans catalog format" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Authoritative Download Entitlement & Quota Verification
+const dailyDownloadsTracker = new Map<string, { date: string; count: number }>();
+
+app.post("/api/verify-download-entitlement", (req, res) => {
+  try {
+    const { email } = req.body;
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+
+    // 1. Privileged accounts (Super Admin & Admin) have unlimited VIP access
+    if (cleanEmail && isProtectedAdminAccount(cleanEmail)) {
+      return res.json({
+        allowed: true,
+        plan: "ultra",
+        planName: "VIP DESK",
+        role: "admin",
+        remainingToday: 9999,
+        unlimited: true,
+      });
+    }
+
+    // 2. Check if user exists and is blocked
+    const users = loadUsersMasterDatabase();
+    const matchedUser = users.find(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail)
+    );
+
+    if (matchedUser?.isBlocked) {
+      return res.status(403).json({
+        error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+        blocked: true,
+      });
+    }
+
+    // 3. Subscription & Trial expiry checks
+    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    const now = Date.now();
+    const trialStartedAt = matchedUser?.trialStartedAt || matchedUser?.createdAt || now;
+    const trialEndsAt = matchedUser?.trialEndsAt || (trialStartedAt + 7 * 24 * 60 * 60 * 1000);
+
+    if (tier === "basic") {
+      if (now > trialEndsAt) {
+        return res.status(403).json({
+          error: "आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कार्ड डाउनलोड करने के लिए कृपया मेंबरशिप प्लान चुनें।",
+          trialExpired: true,
+        });
+      }
+    }
+
+    // 4. Daily download limits per tier
+    const catalog = loadPlansCatalogDatabase();
+    const planDetail = catalog.find(p => p.id === tier);
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined ? planDetail.maxGraphicsPerDay : (tier === 'ultra' ? 9999 : tier === 'professional' ? 100 : tier === 'advanced' ? 25 : 5);
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const userKey = cleanEmail || req.ip || "anon";
+    const currentRecord = dailyDownloadsTracker.get(userKey);
+
+    let downloadsToday = 0;
+    if (currentRecord && currentRecord.date === todayStr) {
+      downloadsToday = currentRecord.count;
+    } else {
+      dailyDownloadsTracker.set(userKey, { date: todayStr, count: 0 });
+    }
+
+    if (downloadsToday >= maxAllowed && maxAllowed < 9999) {
+      return res.status(403).json({
+        error: `आपकी दैनिक डाउनलोड सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया अगले दिन प्रयास करें या प्लान अपग्रेड करें।`,
+        quotaExceeded: true,
+        maxAllowed,
+        downloadsToday,
+      });
+    }
+
+    // Record verified download quota usage
+    dailyDownloadsTracker.set(userKey, { date: todayStr, count: downloadsToday + 1 });
+
+    return res.json({
+      allowed: true,
+      plan: tier,
+      maxAllowed,
+      downloadsToday: downloadsToday + 1,
+      remainingToday: maxAllowed >= 9999 ? 9999 : Math.max(0, maxAllowed - (downloadsToday + 1)),
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

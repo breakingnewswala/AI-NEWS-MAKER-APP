@@ -14,6 +14,7 @@
     "studio:dev": "npm --prefix web_studio run dev",
     "studio:build": "npm --prefix web_studio run build",
     "lint": "npm --prefix web_studio run lint",
+    "test": "node test_system_verification.cjs",
     "sync-apk": "node web_studio/build_and_sync.js"
   },
   "dependencies": {

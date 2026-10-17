@@ -47,6 +47,7 @@ import {
 interface UserTemplateManagerProps {
   currentUser?: any;
   isAdmin?: boolean;
+  defaultTab?: 'frames' | 'templates' | 'admin' | 'custom_hf';
   onOpenStudioWithTemplate?: (templateId: string) => void;
   onClose?: () => void;
 }
@@ -54,10 +55,13 @@ interface UserTemplateManagerProps {
 export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
   currentUser,
   isAdmin = false,
+  defaultTab,
   onOpenStudioWithTemplate,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'frames' | 'templates' | 'admin' | 'custom_hf'>('frames');
+  const [activeTab, setActiveTab] = useState<'frames' | 'templates' | 'admin' | 'custom_hf'>(
+    defaultTab || (isAdmin ? 'admin' : 'frames')
+  );
   const [frames, setFrames] = useState<CustomFrameItem[]>([]);
   const [userTemplates, setUserTemplates] = useState<UserCustomTemplate[]>([]);
   const [activeFrameId, setActiveFrameId] = useState<string | null>(null);

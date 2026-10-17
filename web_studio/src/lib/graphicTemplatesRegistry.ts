@@ -360,6 +360,32 @@ export const DEFAULT_TEMPLATE_PLAN_CONFIGS: Record<string, TemplatePlanConfig> =
 
 const STORAGE_KEY_TEMPLATE_CONFIGS = 'admin_template_configs_v3';
 
+export async function syncTemplateConfigsFromBackend(): Promise<Record<string, TemplatePlanConfig>> {
+  if (typeof window === 'undefined') return DEFAULT_TEMPLATE_PLAN_CONFIGS;
+  try {
+    const res = await fetch('/api/template-configs');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.configs && typeof data.configs === 'object') {
+        const merged = { ...DEFAULT_TEMPLATE_PLAN_CONFIGS, ...data.configs };
+        localStorage.setItem(STORAGE_KEY_TEMPLATE_CONFIGS, JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('template_plans_updated'));
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn('syncTemplateConfigsFromBackend notice:', err);
+  }
+  return getAllTemplateConfigs();
+}
+
+if (typeof window !== 'undefined') {
+  syncTemplateConfigsFromBackend().catch(() => {});
+  window.addEventListener('focus', () => {
+    syncTemplateConfigsFromBackend().catch(() => {});
+  });
+}
+
 export function getAllTemplateConfigs(): Record<string, TemplatePlanConfig> {
   if (typeof window === 'undefined') return DEFAULT_TEMPLATE_PLAN_CONFIGS;
   try {

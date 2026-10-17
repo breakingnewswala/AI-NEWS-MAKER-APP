@@ -35,6 +35,34 @@ function slugify(name: string): string {
   return clean || `cat-${Date.now()}`;
 }
 
+export async function syncCategoriesFromBackend(): Promise<CategoryItem[]> {
+  if (typeof window === 'undefined') return DEFAULT_PRESET_CATEGORIES;
+  try {
+    const res = await fetch('/api/categories');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.categories) && data.categories.length > 0) {
+        localStorage.setItem(STORAGE_KEY_CATEGORIES_V2, JSON.stringify(data.categories));
+        const names = data.categories.filter((c: any) => c.isActive !== false).map((c: any) => c.name);
+        localStorage.setItem(STORAGE_KEY_LEGACY_LIST, JSON.stringify(names));
+        window.dispatchEvent(new CustomEvent('ai_news_categories_updated', { detail: data.categories }));
+        return data.categories;
+      }
+    }
+  } catch (err) {
+    console.warn('syncCategoriesFromBackend notice:', err);
+  }
+  return getAllCategories();
+}
+
+// Auto-trigger background sync on startup and window focus
+if (typeof window !== 'undefined') {
+  syncCategoriesFromBackend().catch(() => {});
+  window.addEventListener('focus', () => {
+    syncCategoriesFromBackend().catch(() => {});
+  });
+}
+
 export function getAllCategories(): CategoryItem[] {
   if (typeof window === 'undefined') return DEFAULT_PRESET_CATEGORIES;
   try {
@@ -82,6 +110,13 @@ export function saveAllCategories(categories: CategoryItem[]): void {
     localStorage.setItem('ai_news_web_categories_list', JSON.stringify(names));
 
     window.dispatchEvent(new CustomEvent('ai_news_categories_updated', { detail: categories }));
+
+    // Authoritative backend persistence
+    fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories }),
+    }).catch((e) => console.warn('Failed to sync categories to backend:', e));
   } catch (err) {
     console.error('Failed to save categories', err);
   }

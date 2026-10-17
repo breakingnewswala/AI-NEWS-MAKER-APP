@@ -9147,7 +9147,7 @@ function getStoredTemplateConfigs() {
     console.warn("Failed to read news_template_configs.json:", e);
   }
   return {
-    graphic_001: { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" },
+    graphic_001: { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" },
     graphic_002: { allowedPlans: ["ADVANCED"], isActive: true, version: "v1.0" },
     graphic_003: { allowedPlans: ["PRO"], isActive: true, version: "v1.0" },
     graphic_004: { allowedPlans: ["VIP DESK"], isActive: true, version: "v1.0" }
@@ -9166,7 +9166,7 @@ app.post("/api/admin/save-template-config", (req, res) => {
       return res.status(400).json({ error: "templateId is required" });
     }
     const current = getStoredTemplateConfigs();
-    const existing = current[templateId] || { allowedPlans: ["BASIC"], isActive: true, version: "v1.0" };
+    const existing = current[templateId] || { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" };
     current[templateId] = {
       ...existing,
       ...allowedPlans && Array.isArray(allowedPlans) ? { allowedPlans } : {},
@@ -9178,6 +9178,283 @@ app.post("/api/admin/save-template-config", (req, res) => {
       success: true,
       message: `Template config updated for ${templateId}`,
       configs: current
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var CATEGORIES_DB_FILE = import_path.default.join(process.cwd(), "categories_database.json");
+var DEFAULT_CATEGORIES_PRESET = [
+  { id: "breaking", name: "\u26A1 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C", isActive: true, order: 1 },
+  { id: "politics", name: "\u{1F3DB}\uFE0F \u0930\u093E\u091C\u0928\u0940\u0924\u093F \u0935 \u091A\u0941\u0928\u093E\u0935", isActive: true, order: 2 },
+  { id: "state", name: "\u{1F4CD} \u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936", isActive: true, order: 3 },
+  { id: "national", name: "\u{1F1EE}\u{1F1F3} \u0926\u0947\u0936 / \u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F", isActive: true, order: 4 },
+  { id: "up", name: "\u{1F4CD} \u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936", isActive: true, order: 5 },
+  { id: "bihar", name: "\u{1F4CD} \u092C\u093F\u0939\u093E\u0930", isActive: true, order: 6 },
+  { id: "rajasthan", name: "\u{1F4CD} \u0930\u093E\u091C\u0938\u094D\u0925\u093E\u0928", isActive: true, order: 7 },
+  { id: "tech", name: "\u{1F4BB} \u091F\u0947\u0915\u094D\u0928\u094B\u0932\u0949\u091C\u0940", isActive: true, order: 8 },
+  { id: "business", name: "\u{1F4C8} \u0915\u093E\u0930\u094B\u092C\u093E\u0930 \u0935 \u0935\u094D\u092F\u093E\u092A\u093E\u0930", isActive: true, order: 9 },
+  { id: "sports", name: "\u{1F3CF} \u0916\u0947\u0932", isActive: true, order: 10 },
+  { id: "entertainment", name: "\u{1F3AC} \u092E\u0928\u094B\u0930\u0902\u091C\u0928", isActive: true, order: 11 },
+  { id: "crime", name: "\u{1F6A8} \u0915\u094D\u0930\u093E\u0907\u092E / \u0905\u092A\u0930\u093E\u0927", isActive: true, order: 12 },
+  { id: "accident", name: "\u{1F6A8} \u0939\u093E\u0926\u0938\u093E \u0935 \u0926\u0941\u0930\u094D\u0918\u091F\u0928\u093E", isActive: true, order: 13 },
+  { id: "agriculture", name: "\u{1F33E} \u0916\u0947\u0924\u0940-\u0915\u093F\u0938\u093E\u0928\u0940", isActive: true, order: 14 },
+  { id: "health", name: "\u{1F3E5} \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F", isActive: true, order: 15 },
+  { id: "special", name: "\u{1F4D1} \u0935\u093F\u0936\u0947\u0937 \u0930\u093F\u092A\u094B\u0930\u094D\u091F", isActive: true, order: 16 }
+];
+function loadCategoriesDatabase() {
+  try {
+    if (import_fs.default.existsSync(CATEGORIES_DB_FILE)) {
+      const data = import_fs.default.readFileSync(CATEGORIES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to read categories_database.json:", e);
+  }
+  return DEFAULT_CATEGORIES_PRESET;
+}
+function saveCategoriesDatabase(categories) {
+  try {
+    import_fs.default.writeFileSync(CATEGORIES_DB_FILE, JSON.stringify(categories, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Failed to write categories_database.json:", e);
+  }
+}
+app.get("/api/categories", (_req, res) => {
+  res.json({
+    success: true,
+    categories: loadCategoriesDatabase()
+  });
+});
+app.post("/api/categories", (req, res) => {
+  try {
+    const { categories } = req.body;
+    if (Array.isArray(categories) && categories.length > 0) {
+      saveCategoriesDatabase(categories);
+      return res.json({ success: true, message: "Categories saved successfully", categories });
+    }
+    return res.status(400).json({ error: "Invalid categories format" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var PLANS_CATALOG_DB_FILE = import_path.default.join(process.cwd(), "plans_catalog_database.json");
+var DEFAULT_PLANS_CATALOG = [
+  {
+    id: "basic",
+    planKey: "BASIC",
+    nameHi: "\u092C\u0947\u0938\u093F\u0915 (BASIC)",
+    nameEn: "BASIC",
+    priceDisplay: "\u20B90",
+    priceNum: 0,
+    durationDays: 7,
+    validityLabel: "7 \u0926\u093F\u0928 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932",
+    period: "7 \u0926\u093F\u0928 \u0928\u093F\u0903\u0936\u0941\u0932\u094D\u0915",
+    badge: "\u092A\u094D\u0930\u093E\u0930\u0902\u092D\u093F\u0915 / \u091F\u094D\u0930\u093E\u092F\u0932",
+    tagline: "7 \u0926\u093F\u0928 \u0915\u093E \u0928\u093F\u0903\u0936\u0941\u0932\u094D\u0915 \u091F\u094D\u0930\u093E\u092F\u0932 \u2014 \u0938\u092D\u0940 \u092C\u0947\u0938\u093F\u0915 \u092B\u0940\u091A\u0930\u094D\u0938 \u0926\u0947\u0916\u0947\u0902 \u0935 \u092C\u0928\u093E\u090F\u0902",
+    hasWatermark: true,
+    graphicExportResolution: "720p",
+    maxGraphicsPerDay: 5,
+    hasVideoStudio: false,
+    hasAiTools: false,
+    hasVipDeskFrames: false,
+    isActive: true,
+    features: [
+      "\u2705 7 \u0926\u093F\u0928 \u0915\u093E \u092A\u0942\u0930\u094D\u0923 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932",
+      "\u2705 \u092C\u0947\u0938\u093F\u0915 \u0928\u094D\u092F\u0942\u091C\u093C \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F\u094D\u0938 \u0935 \u0938\u094D\u091F\u093E\u0907\u0932\u094D\u0938",
+      "\u2705 \u0932\u093E\u0907\u0935 \u0915\u093E\u0930\u094D\u0921 \u092A\u094D\u0930\u0940\u0935\u094D\u092F\u0942 \u0935 \u0932\u0947\u0906\u0909\u091F \u0915\u0938\u094D\u091F\u092E\u093E\u0907\u091C\u093C\u0947\u0936\u0928",
+      '\u26A0\uFE0F \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u0930 "AI News Maker App" \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u0947\u0917\u093E',
+      "\u26A0\uFE0F \u0938\u0940\u092E\u093F\u0924 720p \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F (5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)"
+    ]
+  },
+  {
+    id: "advanced",
+    planKey: "ADVANCE",
+    nameHi: "\u090F\u0921\u0935\u093E\u0902\u0938 (ADVANCE)",
+    nameEn: "ADVANCE",
+    priceDisplay: "\u20B9499",
+    priceNum: 499,
+    durationDays: 30,
+    validityLabel: "30 \u0926\u093F\u0928 (\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939)",
+    period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
+    badge: "\u0938\u092C\u0938\u0947 \u0932\u094B\u0915\u092A\u094D\u0930\u093F\u092F",
+    popular: true,
+    tagline: "\u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u093F\u0924 \u092B\u0941\u0932 \u090F\u091A\u0921\u0940 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0915\u093E\u0930\u094D\u0921 \u0915\u094D\u0930\u093F\u090F\u091F\u0930",
+    hasWatermark: false,
+    graphicExportResolution: "1080p",
+    maxGraphicsPerDay: 25,
+    hasVideoStudio: false,
+    hasAiTools: true,
+    hasVipDeskFrames: false,
+    isActive: true,
+    features: [
+      "\u{1F6AB} \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0938\u0947 \u0939\u091F\u093E\u092F\u093E \u091C\u093E\u090F\u0917\u093E (No Watermark)",
+      "\u26A1 1080p Full HD \u0905\u0932\u094D\u091F\u094D\u0930\u093E-\u0936\u093E\u0930\u094D\u092A \u0921\u093E\u0909\u0928\u0932\u094B\u0921",
+      "\u2728 \u0915\u0938\u094D\u091F\u092E \u091A\u0948\u0928\u0932 \u0932\u094B\u0917\u094B, \u0939\u0947\u0921\u0930 \u0935 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0928\u093F\u092F\u0902\u0924\u094D\u0930\u0923",
+      "\u{1F916} ChatGPT (GPT-4o-mini) \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0938\u092E\u0930\u0940 \u091F\u0942\u0932\u094D\u0938",
+      "\u{1F3A8} \u0938\u092D\u0940 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0938\u093E\u0907\u091C\u093C (1:1, 4:5, 9:16, 16:9)",
+      "\u26A1 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E \u0906\u0927\u093E\u0930\u093F\u0924 \u0924\u094D\u0935\u0930\u093F\u0924 \u0930\u0947\u0902\u0921\u0930\u093F\u0902\u0917 (25 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)"
+    ]
+  },
+  {
+    id: "professional",
+    planKey: "PRO",
+    nameHi: "\u092A\u094D\u0930\u094B (PRO)",
+    nameEn: "PRO",
+    priceDisplay: "\u20B9999",
+    priceNum: 999,
+    durationDays: 30,
+    validityLabel: "30 \u0926\u093F\u0928 (\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939)",
+    period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
+    badge: "\u092A\u0924\u094D\u0930\u0915\u093E\u0930 \u0935 \u091A\u0948\u0928\u0932 \u091A\u0949\u0907\u0938",
+    tagline: "\u0917\u094D\u0930\u093E\u092B\u093F\u0915 + \u092B\u0941\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093F\u091C\u093C\u093E\u0907\u0928 \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B (\u0930\u0940\u0932\u094D\u0938 \u0935 \u091F\u0940\u0935\u0940 \u091C\u0948\u0915\u0947\u091F)",
+    hasWatermark: false,
+    graphicExportResolution: "1080p",
+    maxGraphicsPerDay: 100,
+    hasVideoStudio: true,
+    hasAiTools: true,
+    hasVipDeskFrames: false,
+    isActive: true,
+    features: [
+      "\u{1F6AB} 100% \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u093F\u0924 (No Watermark)",
+      "\u{1F3AC} \u092B\u0941\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B (9:16 \u0930\u0940\u0932\u094D\u0938/\u0936\u0949\u0930\u094D\u091F\u094D\u0938 \u0935 16:9 \u091F\u0940\u0935\u0940 \u091C\u0948\u0915\u0947\u091F)",
+      "\u{1F50A} \u0932\u093E\u0907\u0935 \u0928\u094D\u092F\u0942\u091C\u093C \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0911\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u093F\u0902\u0917\u094D\u0938 \u0935 \u0938\u093E\u0909\u0902\u0921 \u0907\u092B\u0947\u0915\u094D\u091F\u094D\u0938",
+      "\u{1F4FA} \u0932\u093E\u0907\u0935 \u0928\u094D\u092F\u0942\u091C\u093C \u091F\u093F\u0915\u0930 \u0935 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0938\u094D\u0915\u094D\u0930\u094B\u0932\u0930",
+      "\u{1F4CD} \u0935\u093F\u0936\u0947\u0937 \u091C\u093F\u0932\u093E / \u092C\u094D\u092F\u0942\u0930\u094B \u0921\u0947\u0938\u094D\u0915 \u092C\u0948\u091C \u0935 \u092A\u094D\u0930\u0947\u0938 \u0915\u093E\u0930\u094D\u0921",
+      "\u26A1 \u090F\u0921\u0935\u093E\u0902\u0938 \u0915\u0947 \u0938\u092D\u0940 \u092B\u0940\u091A\u0930\u094D\u0938 \u0936\u093E\u092E\u093F\u0932 (100 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)"
+    ]
+  },
+  {
+    id: "ultra",
+    planKey: "VIP DESK",
+    nameHi: "\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 (VIP DESK)",
+    nameEn: "VIP DESK",
+    priceDisplay: "\u20B91,999",
+    priceNum: 1999,
+    durationDays: 30,
+    validityLabel: "30 \u0926\u093F\u0928 (\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939)",
+    period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
+    badge: "\u0905\u0938\u0940\u092E\u093F\u0924 \u092A\u093E\u0935\u0930",
+    tagline: "\u092E\u0932\u094D\u091F\u0940-\u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0930 \u0928\u0947\u091F\u0935\u0930\u094D\u0915, 4K \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F \u0935 \u0911\u091F\u094B RSS \u092A\u092C\u094D\u0932\u093F\u0936\u0930",
+    hasWatermark: false,
+    graphicExportResolution: "4K",
+    maxGraphicsPerDay: 9999,
+    hasVideoStudio: true,
+    hasAiTools: true,
+    hasVipDeskFrames: true,
+    isActive: true,
+    features: [
+      "\u{1F6AB} 100% \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u093F\u0924 (No Watermark)",
+      "\u{1F451} \u0905\u0928\u0932\u093F\u092E\u093F\u091F\u0947\u0921 4K \u0905\u0932\u094D\u091F\u094D\u0930\u093E \u090F\u091A\u0921\u0940 \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F",
+      "\u2B50 VIP DESK \u0935\u093F\u0936\u0947\u0937 \u092A\u094D\u0930\u0940\u092E\u093F\u092F\u092E \u092B\u094D\u0930\u0947\u092E\u094D\u0938 (Graphic 4, VIP Jackets)",
+      "\u{1F465} \u092E\u0932\u094D\u091F\u0940-\u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0930 \u0935 \u0938\u092C-\u090F\u0921\u093F\u091F\u0930 \u091F\u0940\u092E \u0905\u0915\u093E\u0909\u0902\u091F\u094D\u0938",
+      "\u{1F3AF} \u0915\u0938\u094D\u091F\u092E \u0921\u0947\u0921\u093F\u0915\u0947\u091F\u0947\u0921 \u091A\u0948\u0928\u0932 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0935 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0938\u092A\u094B\u0930\u094D\u091F",
+      "\u2B50 24x7 \u0935\u0940\u0906\u0908\u092A\u0940 \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A \u0935 \u092B\u094B\u0928 \u0938\u092A\u094B\u0930\u094D\u091F"
+    ]
+  }
+];
+function loadPlansCatalogDatabase() {
+  try {
+    if (import_fs.default.existsSync(PLANS_CATALOG_DB_FILE)) {
+      const data = import_fs.default.readFileSync(PLANS_CATALOG_DB_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed) && parsed.length >= 4) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to read plans_catalog_database.json:", e);
+  }
+  return DEFAULT_PLANS_CATALOG;
+}
+function savePlansCatalogDatabase(plans) {
+  try {
+    import_fs.default.writeFileSync(PLANS_CATALOG_DB_FILE, JSON.stringify(plans, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Failed to write plans_catalog_database.json:", e);
+  }
+}
+app.get("/api/plans", (_req, res) => {
+  res.json({
+    success: true,
+    plans: loadPlansCatalogDatabase()
+  });
+});
+app.post("/api/admin/plans", (req, res) => {
+  try {
+    const { plans } = req.body;
+    if (Array.isArray(plans) && plans.length >= 4) {
+      savePlansCatalogDatabase(plans);
+      return res.json({ success: true, message: "Plans catalog saved successfully", plans });
+    }
+    return res.status(400).json({ error: "Invalid plans catalog format" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var dailyDownloadsTracker = /* @__PURE__ */ new Map();
+app.post("/api/verify-download-entitlement", (req, res) => {
+  try {
+    const { email } = req.body;
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (cleanEmail && isProtectedAdminAccount(cleanEmail)) {
+      return res.json({
+        allowed: true,
+        plan: "ultra",
+        planName: "VIP DESK",
+        role: "admin",
+        remainingToday: 9999,
+        unlimited: true
+      });
+    }
+    const users = loadUsersMasterDatabase();
+    const matchedUser = users.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail
+    );
+    if (matchedUser?.isBlocked) {
+      return res.status(403).json({
+        error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0921\u0947\u0938\u094D\u0915 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+        blocked: true
+      });
+    }
+    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    const now = Date.now();
+    const trialStartedAt = matchedUser?.trialStartedAt || matchedUser?.createdAt || now;
+    const trialEndsAt = matchedUser?.trialEndsAt || trialStartedAt + 7 * 24 * 60 * 60 * 1e3;
+    if (tier === "basic") {
+      if (now > trialEndsAt) {
+        return res.status(403).json({
+          error: "\u0906\u092A\u0915\u093E 7-\u0926\u093F\u0928 \u0915\u093E \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u093E\u0930\u094D\u0921 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u0943\u092A\u092F\u093E \u092E\u0947\u0902\u092C\u0930\u0936\u093F\u092A \u092A\u094D\u0932\u093E\u0928 \u091A\u0941\u0928\u0947\u0902\u0964",
+          trialExpired: true
+        });
+      }
+    }
+    const catalog = loadPlansCatalogDatabase();
+    const planDetail = catalog.find((p) => p.id === tier);
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : tier === "ultra" ? 9999 : tier === "professional" ? 100 : tier === "advanced" ? 25 : 5;
+    const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const userKey = cleanEmail || req.ip || "anon";
+    const currentRecord = dailyDownloadsTracker.get(userKey);
+    let downloadsToday = 0;
+    if (currentRecord && currentRecord.date === todayStr) {
+      downloadsToday = currentRecord.count;
+    } else {
+      dailyDownloadsTracker.set(userKey, { date: todayStr, count: 0 });
+    }
+    if (downloadsToday >= maxAllowed && maxAllowed < 9999) {
+      return res.status(403).json({
+        error: `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0947 \u0926\u093F\u0928 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
+        quotaExceeded: true,
+        maxAllowed,
+        downloadsToday
+      });
+    }
+    dailyDownloadsTracker.set(userKey, { date: todayStr, count: downloadsToday + 1 });
+    return res.json({
+      allowed: true,
+      plan: tier,
+      maxAllowed,
+      downloadsToday: downloadsToday + 1,
+      remainingToday: maxAllowed >= 9999 ? 9999 : Math.max(0, maxAllowed - (downloadsToday + 1))
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

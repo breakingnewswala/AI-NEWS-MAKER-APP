@@ -1431,7 +1431,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'templates' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
-              <UserTemplateManager isAdmin={true} currentUser={currentUser} onOpenStudioWithTemplate={onOpenStudio} />
+              <UserTemplateManager isAdmin={true} defaultTab="admin" currentUser={currentUser} onOpenStudioWithTemplate={onOpenStudio} />
             </div>
           )}
         </div>
