@@ -964,13 +964,19 @@ var require_migrate_json_to_firestore = __commonJS({
 var server_exports = {};
 __export(server_exports, {
   DISTRICT_STATE_LIST: () => DISTRICT_STATE_LIST,
+  GEMINI_NEWS_RESPONSE_SCHEMA: () => GEMINI_NEWS_RESPONSE_SCHEMA,
+  buildMasterNewsEditorialPrompt: () => buildMasterNewsEditorialPrompt,
+  buildMasterNewsEditorialPromptString: () => buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarityInternal: () => calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs: () => cleanCaptionParagraphs,
+  createLocalNewsFallback: () => createLocalNewsFallback,
   detectDistrictAndState: () => detectDistrictAndState,
   formatAsJournalisticHeadline: () => formatAsJournalisticHeadline,
   formatDistrictWithState: () => formatDistrictWithState,
   generate5JournalisticHeadlines: () => generate5JournalisticHeadlines,
   matchDistrictAlias: () => matchDistrictAlias,
+  sanitizePressNoteFlattery: () => sanitizePressNoteFlattery,
+  scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   validateHeadlineOption: () => validateHeadlineOption
 });
 module.exports = __toCommonJS(server_exports);
@@ -7463,7 +7469,7 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
     const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
     const targetArea = headline_area || tplConfig.headline_area;
     const promptText = `
-\u0906\u092A \u092D\u093E\u0930\u0924 \u0915\u0947 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932 "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" \u0915\u0947 \u0935\u0930\u093F\u0937\u094D\u0920 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
+\u0906\u092A \u092D\u093E\u0930\u0924 \u0915\u0947 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932 "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" \u0915\u0947 \u0935\u0930\u093F\u0937\u094D\u0920 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
 \u092F\u0942\u091C\u093C\u0930 \u0928\u0947 \u092F\u0939 \u092B\u094B\u091F\u094B \u0905\u092A\u0932\u094B\u0921 \u0915\u0940 \u0939\u0948 \u0914\u0930 \u0928\u094D\u092F\u0942\u091C\u093C \u0915\u093E\u0930\u094D\u0921 (\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921) \u092C\u0928\u093E\u0928\u093E \u091A\u093E\u0939\u0924\u093E \u0939\u0948\u0964
 
 \u091A\u092F\u0928\u093F\u0924 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0935\u093F\u0928\u093F\u0930\u094D\u0926\u0947\u0936 (SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS):
@@ -7506,7 +7512,7 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
       {
         contents,
         config: {
-          systemInstruction: `You are the Senior Editor of Breaking News Wala. Strictly enforce template capacity constraints: Headline layout area "${targetArea}", STRICT MAXIMUM ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}). Strip all PR flattery and honorifics. Output valid JSON.`,
+          systemInstruction: `You are the Senior Editor of AI News Maker. Strictly enforce template capacity constraints: Headline layout area "${targetArea}", STRICT MAXIMUM ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}). Strip all PR flattery and honorifics. Output valid JSON.`,
           responseMimeType: "application/json",
           responseSchema: {
             type: import_genai.Type.OBJECT,
@@ -7577,113 +7583,54 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
     });
   }
 });
-app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
+var GEMINI_NEWS_RESPONSE_SCHEMA = {
+  type: import_genai.Type.OBJECT,
+  properties: {
+    headline: { type: import_genai.Type.STRING },
+    headlineOptions: {
+      type: import_genai.Type.ARRAY,
+      items: { type: import_genai.Type.STRING },
+      description: "Exactly 5 independent, distinct journalistic Hindi headlines (100-250 characters each)"
+    },
+    highlightWords: {
+      type: import_genai.Type.ARRAY,
+      items: { type: import_genai.Type.STRING }
+    },
+    formattedHeadline: { type: import_genai.Type.STRING },
+    location: { type: import_genai.Type.STRING },
+    summary: { type: import_genai.Type.STRING },
+    captionDetailed: { type: import_genai.Type.STRING },
+    captionBullets: { type: import_genai.Type.STRING },
+    captionShort: { type: import_genai.Type.STRING },
+    category: { type: import_genai.Type.STRING },
+    suggestedImagePrompt: { type: import_genai.Type.STRING },
+    isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
+    speakerName: { type: import_genai.Type.STRING },
+    speakerTitle: { type: import_genai.Type.STRING }
+  },
+  required: [
+    "headline",
+    "headlineOptions",
+    "highlightWords",
+    "formattedHeadline",
+    "location",
+    "summary"
+  ]
+};
+function buildMasterNewsEditorialPrompt(params) {
   const {
-    input,
-    command,
-    linkUrl,
-    imageUrl,
+    effectiveInput,
+    fetchedArticleSnippet,
     customPrompt,
-    template_id,
-    headline_max_lines,
-    headline_area,
-    headline_line_count
-  } = req.body;
-  try {
-    const rawInputText = input || command;
-    if (!rawInputText && !linkUrl && !customPrompt) {
-      return res.status(400).json({ error: "Please provide a command, text, link or prompt" });
-    }
-    const channelUsername = (req.body.channelUsername || req.body.username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
-    const userHashtag = channelUsername ? `#${channelUsername}` : "#AINews";
-    let parsedData = null;
-    const effectiveTemplateId = template_id || "graphic_001";
-    const tplConfig = getTemplateConfig(effectiveTemplateId);
-    const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
-    const targetArea = headline_area || tplConfig.headline_area;
-    let fetchedArticleSnippet = "";
-    let effectiveArticleTitle = "";
-    let effectiveArticleDesc = "";
-    let articleBodySnippets = "";
-    const pickedImages = {};
-    const extractedPhotos = [];
-    let extractedArticleMeta = void 0;
-    let effectiveInput = (rawInputText || "").trim();
-    let rawLink = (linkUrl || "").trim();
-    if (!rawLink && (/^https?:\/\//i.test(effectiveInput) || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}\//i.test(effectiveInput))) {
-      rawLink = effectiveInput;
-      effectiveInput = "";
-    }
-    const isInternalPlatformUrl = rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com") || rawLink.includes("localhost") || rawLink.includes("127.0.0.1");
-    if (rawLink && isInternalPlatformUrl && !effectiveInput) {
-      return res.status(400).json({
-        error: "\u0906\u0902\u0924\u0930\u093F\u0915 \u090F\u092A\u094D\u0932\u093F\u0915\u0947\u0936\u0928 URL \u0915\u094B \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u094D\u0930\u094B\u0924 \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0938\u094D\u0915\u094D\u0930\u0948\u092A \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u093F\u0938\u0940 \u092C\u093E\u0939\u0930\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0915\u093E \u0932\u093F\u0902\u0915 \u092F\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0916\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964"
-      });
-    }
-    if (rawLink && !isInternalPlatformUrl) {
-      if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
-        const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
-        try {
-          const extracted = await fetchAndProcessNewsUrl(normalizedUrl);
-          if (extracted) {
-            effectiveArticleTitle = extracted.title || "";
-            effectiveArticleDesc = extracted.description || "";
-            articleBodySnippets = extracted.content || "";
-            if (extracted.images && extracted.images.length > 0) {
-              extracted.images.forEach((img) => {
-                if (img && typeof img === "string" && img.trim()) {
-                  const proxied = `/api/proxy-image?url=${encodeURIComponent(img.trim())}`;
-                  if (!extractedPhotos.includes(proxied)) {
-                    extractedPhotos.push(proxied);
-                  }
-                }
-              });
-              if (extractedPhotos[0]) pickedImages.main = extractedPhotos[0];
-              if (extractedPhotos[1]) pickedImages.second = extractedPhotos[1];
-              if (extractedPhotos[2]) pickedImages.third = extractedPhotos[2];
-              if (extractedPhotos[3]) pickedImages.fourth = extractedPhotos[3];
-            }
-            if (effectiveArticleTitle || effectiveArticleDesc || articleBodySnippets) {
-              extractedArticleMeta = {
-                title: effectiveArticleTitle,
-                description: effectiveArticleDesc,
-                content: articleBodySnippets,
-                imageUrl: pickedImages.main,
-                linkUrl: extracted.sourceUrl || normalizedUrl
-              };
-            }
-            fetchedArticleSnippet = `
-Title: ${effectiveArticleTitle}
-Description: ${effectiveArticleDesc}
-Facts & Content: ${articleBodySnippets || effectiveArticleDesc || effectiveArticleTitle}
-Source URL: ${extracted.sourceUrl || normalizedUrl}
-`;
-          }
-        } catch (fetchErr) {
-          console.warn("Could not fetch or parse URL directly:", fetchErr?.message || fetchErr);
-          fetchedArticleSnippet = "";
-        }
-        const hasRealFacts = Boolean(
-          effectiveArticleTitle && effectiveArticleTitle.trim().length > 5 || effectiveArticleDesc && effectiveArticleDesc.trim().length > 10 || articleBodySnippets && articleBodySnippets.trim().length > 20
-        );
-        if (!hasRealFacts) {
-          fetchedArticleSnippet = "";
-        }
-        if (!effectiveInput && !fetchedArticleSnippet && rawLink) {
-          console.log("Could not scrape URL, generating slug-based local fallback draft for:", rawLink);
-          parsedData = createLocalNewsFallback(rawLink, rawLink, targetMaxLines, void 0, channelUsername);
-        }
-      } else {
-        effectiveInput = effectiveInput ? `${effectiveInput}
-
-${rawLink}` : rawLink;
-      }
-    }
-    if (!pickedImages.main && imageUrl && typeof imageUrl === "string" && imageUrl.trim()) {
-      const trimmed = imageUrl.trim();
-      pickedImages.main = trimmed.includes("/api/proxy-image") ? trimmed : `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
-    }
-    const editorialSystemInstruction = `You are the Chief AI News Editor (\u091A\u0940\u092B \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0921\u093F\u091F\u0930) of "AI News Maker" (\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930).
+    channelUsername = "",
+    targetMaxLines = 3,
+    targetArea = "center",
+    templateName = "Classic Graphic",
+    templateId = "graphic_001"
+  } = params;
+  const cleanUser = (channelUsername || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
+  const userHashtag = cleanUser ? `#${cleanUser}` : "#AINews";
+  const systemInstruction = `You are the Chief AI News Editor (\u091A\u0940\u092B \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0921\u093F\u091F\u0930) of "AI News Maker" (\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930).
 
 Your task is to analyze the provided news URL, RSS article content, raw news, press note, or script, and create factual, objective, balanced, and impactful Hindi news content.
 
@@ -7692,12 +7639,12 @@ Your task is to analyze the provided news URL, RSS article content, raw news, pr
 
 \u2605 MANDATORY ANTI-FLATTERY & HONORIFIC CLEANUP:
 Completely remove unnecessary formal honorifics and PR flattery such as:
-'\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u092A\u0930\u092E \u092A\u0942\u091C\u094D\u092F', and the formal name suffix '\u091C\u0940'.
+'\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u092A\u0930\u092E \u092A\u0942\u091C\u094D\u092F', '\u092A\u0942\u091C\u094D\u092F', and the formal name suffix '\u091C\u0940'.
 Directly write the designation and name (e.g. "\u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940 \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935", NOT "\u092E\u093E\u0928\u0928\u0940\u092F \u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940 \u0936\u094D\u0930\u0940 \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935 \u091C\u0940"; "\u0915\u0932\u0947\u0915\u094D\u091F\u0930", NOT "\u0915\u0932\u0947\u0915\u094D\u091F\u0930 \u092E\u0939\u094B\u0926\u092F").
-Exception: Only retain words if removing them alters legal meaning or quotes.
+CRITICAL: Never alter valid names or places containing '\u0936\u094D\u0930\u0940' like '\u0936\u094D\u0930\u0940\u0935\u093E\u0938\u094D\u0924\u0935', '\u0936\u094D\u0930\u0940\u0928\u0917\u0930', '\u0936\u094D\u0930\u0940\u0930\u093E\u092E', '\u0936\u094D\u0930\u0940\u0927\u0930'.
 
 \u2605 TEMPLATE CAPACITY & CONSTRAINTS:
-- Template ID: ${tplConfig.template_id} (${tplConfig.name})
+- Template ID: ${templateId} (${templateName})
 - Headline Layout Area: ${targetArea}
 - Strict Maximum Lines: ${targetMaxLines} lines
 - Headline \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 full stop, \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (\u0964), comma, hyphen \u092F\u093E \u0915\u094B\u0908 \u0935\u093F\u0930\u093E\u092E \u091A\u093F\u0939\u094D\u0928 \u0915\u092D\u0940 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
@@ -7752,7 +7699,7 @@ All captions must be pure Devanagari Hindi. No English meta-descriptions.
 - NEVER use #breakingnewswala or #BNWTV.
 
 Output strictly valid JSON.`;
-    const prompt = `
+  const prompt = `
 \u0906\u092A "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" \u0915\u0947 \u091A\u0940\u092B \u090F\u0921\u093F\u091F\u0930 \u0939\u0948\u0902\u0964
 \u092F\u0942\u091C\u093C\u0930 \u0928\u0947 \u092F\u0939 \u0938\u092E\u093E\u091A\u093E\u0930 \u0907\u0928\u092A\u0941\u091F / \u0932\u093F\u0902\u0915 / \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u0926\u093F\u092F\u093E \u0939\u0948:
 ${effectiveInput ? `\u0915\u091A\u094D\u091A\u093E \u0935\u093F\u0935\u0930\u0923 / \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F:
@@ -7766,7 +7713,7 @@ ${customPrompt}
 ` : ""}
 
 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0935\u093F\u0928\u093F\u0930\u094D\u0926\u0947\u0936:
-- \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F: ${tplConfig.name} (${tplConfig.template_id})
+- \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F: ${templateName} (${templateId})
 - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094D\u0937\u092E\u0924\u093E: ${targetMaxLines} \u0932\u093E\u0907\u0928\u094D\u0938
 - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u090F\u0930\u093F\u092F\u093E: ${targetArea}
 
@@ -7813,6 +7760,149 @@ JSON Schema:
   "speakerTitle": ""
 }
 `;
+  return { systemInstruction, prompt };
+}
+function buildMasterNewsEditorialPromptString(params) {
+  const built = buildMasterNewsEditorialPrompt(params);
+  return `${built.systemInstruction}
+
+${built.prompt}`;
+}
+async function scrapeNewsFromUrl(rawUrl) {
+  const extracted = await fetchAndProcessNewsUrl(rawUrl);
+  if (!extracted) {
+    return {
+      snippet: `URL to reference: ${rawUrl}`,
+      pickedImages: {}
+    };
+  }
+  const snippet = `
+URL: ${extracted.sourceUrl || rawUrl}
+Title: ${extracted.title || ""}
+Description: ${extracted.description || ""}
+Content: ${extracted.content ? extracted.content.slice(0, 2e3) : ""}
+  `.trim();
+  const pickedImages = {};
+  if (extracted.images && extracted.images.length > 0) {
+    if (extracted.images[0]) pickedImages.main = `/api/proxy-image?url=${encodeURIComponent(extracted.images[0])}`;
+    if (extracted.images[1]) pickedImages.second = `/api/proxy-image?url=${encodeURIComponent(extracted.images[1])}`;
+    if (extracted.images[2]) pickedImages.third = `/api/proxy-image?url=${encodeURIComponent(extracted.images[2])}`;
+    if (extracted.images[3]) pickedImages.fourth = `/api/proxy-image?url=${encodeURIComponent(extracted.images[3])}`;
+  }
+  return {
+    snippet,
+    pickedImages,
+    extractedMeta: {
+      title: extracted.title,
+      description: extracted.description,
+      content: extracted.content,
+      imageUrl: extracted.images?.[0],
+      linkUrl: extracted.sourceUrl,
+      images: extracted.images
+    }
+  };
+}
+app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
+  const {
+    input,
+    command,
+    linkUrl,
+    imageUrl,
+    customPrompt,
+    template_id,
+    headline_max_lines,
+    headline_area,
+    headline_line_count
+  } = req.body;
+  try {
+    const rawInputText = input || command;
+    if (!rawInputText && !linkUrl && !customPrompt) {
+      return res.status(400).json({ error: "Please provide a command, text, link or prompt" });
+    }
+    const channelUsername = (req.body.channelUsername || req.body.username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
+    const userHashtag = channelUsername ? `#${channelUsername}` : "#AINews";
+    let parsedData = null;
+    const effectiveTemplateId = template_id || "graphic_001";
+    const tplConfig = getTemplateConfig(effectiveTemplateId);
+    const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
+    const targetArea = headline_area || tplConfig.headline_area;
+    let fetchedArticleSnippet = "";
+    let effectiveArticleTitle = "";
+    let effectiveArticleDesc = "";
+    let articleBodySnippets = "";
+    const pickedImages = {};
+    const extractedPhotos = [];
+    let extractedArticleMeta = void 0;
+    let effectiveInput = (rawInputText || "").trim();
+    let rawLink = (linkUrl || "").trim();
+    if (!rawLink && (/^https?:\/\//i.test(effectiveInput) || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}\//i.test(effectiveInput))) {
+      rawLink = effectiveInput;
+      effectiveInput = "";
+    }
+    const isInternalPlatformUrl = rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com") || rawLink.includes("localhost") || rawLink.includes("127.0.0.1");
+    if (rawLink && isInternalPlatformUrl && !effectiveInput) {
+      return res.status(400).json({
+        error: "\u0906\u0902\u0924\u0930\u093F\u0915 \u090F\u092A\u094D\u0932\u093F\u0915\u0947\u0936\u0928 URL \u0915\u094B \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u094D\u0930\u094B\u0924 \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0938\u094D\u0915\u094D\u0930\u0948\u092A \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u093F\u0938\u0940 \u092C\u093E\u0939\u0930\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0915\u093E \u0932\u093F\u0902\u0915 \u092F\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0916\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    if (rawLink && !isInternalPlatformUrl) {
+      if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
+        const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
+        try {
+          const scraped = await scrapeNewsFromUrl(normalizedUrl);
+          if (scraped.extractedMeta) {
+            extractedArticleMeta = scraped.extractedMeta;
+            effectiveArticleTitle = extractedArticleMeta.title || "";
+            effectiveArticleDesc = extractedArticleMeta.description || "";
+            articleBodySnippets = extractedArticleMeta.content || "";
+            if (scraped.pickedImages.main) pickedImages.main = scraped.pickedImages.main;
+            if (scraped.pickedImages.second) pickedImages.second = scraped.pickedImages.second;
+            if (scraped.pickedImages.third) pickedImages.third = scraped.pickedImages.third;
+            if (scraped.pickedImages.fourth) pickedImages.fourth = scraped.pickedImages.fourth;
+            if (extractedArticleMeta.images) {
+              extractedArticleMeta.images.forEach((img) => {
+                const proxied = `/api/proxy-image?url=${encodeURIComponent(img)}`;
+                if (!extractedPhotos.includes(proxied)) extractedPhotos.push(proxied);
+              });
+            }
+            fetchedArticleSnippet = scraped.snippet;
+          }
+        } catch (fetchErr) {
+          console.warn("Could not fetch or parse URL directly:", fetchErr?.message || fetchErr);
+          fetchedArticleSnippet = "";
+        }
+        const hasRealFacts = Boolean(
+          effectiveArticleTitle && effectiveArticleTitle.trim().length > 5 || effectiveArticleDesc && effectiveArticleDesc.trim().length > 10 || articleBodySnippets && articleBodySnippets.trim().length > 20
+        );
+        if (!hasRealFacts) {
+          fetchedArticleSnippet = "";
+        }
+        if (!effectiveInput && !fetchedArticleSnippet && rawLink) {
+          console.log("Could not scrape URL, generating slug-based local fallback draft for:", rawLink);
+          parsedData = createLocalNewsFallback(rawLink, rawLink, targetMaxLines, void 0, channelUsername);
+        }
+      } else {
+        effectiveInput = effectiveInput ? `${effectiveInput}
+
+${rawLink}` : rawLink;
+      }
+    }
+    if (!pickedImages.main && imageUrl && typeof imageUrl === "string" && imageUrl.trim()) {
+      const trimmed = imageUrl.trim();
+      pickedImages.main = trimmed.includes("/api/proxy-image") ? trimmed : `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+    }
+    const promptData = buildMasterNewsEditorialPrompt({
+      effectiveInput,
+      fetchedArticleSnippet,
+      customPrompt: customPrompt ? customPrompt.trim() : void 0,
+      channelUsername,
+      targetMaxLines,
+      targetArea,
+      templateName: tplConfig.name,
+      templateId: tplConfig.template_id
+    });
+    const editorialSystemInstruction = promptData.systemInstruction;
+    const prompt = promptData.prompt;
     const aiProvider = (req.body.aiProvider || "gemini").toLowerCase();
     if (aiProvider === "openai") {
       try {
@@ -7872,39 +7962,7 @@ JSON Schema:
               config: {
                 systemInstruction: editorialSystemInstruction,
                 responseMimeType: "application/json",
-                responseSchema: {
-                  type: import_genai.Type.OBJECT,
-                  properties: {
-                    headline: { type: import_genai.Type.STRING },
-                    headlineOptions: {
-                      type: import_genai.Type.ARRAY,
-                      items: { type: import_genai.Type.STRING }
-                    },
-                    highlightWords: {
-                      type: import_genai.Type.ARRAY,
-                      items: { type: import_genai.Type.STRING }
-                    },
-                    formattedHeadline: { type: import_genai.Type.STRING },
-                    location: { type: import_genai.Type.STRING },
-                    summary: { type: import_genai.Type.STRING },
-                    captionDetailed: { type: import_genai.Type.STRING },
-                    captionBullets: { type: import_genai.Type.STRING },
-                    captionShort: { type: import_genai.Type.STRING },
-                    category: { type: import_genai.Type.STRING },
-                    suggestedImagePrompt: { type: import_genai.Type.STRING },
-                    isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
-                    speakerName: { type: import_genai.Type.STRING },
-                    speakerTitle: { type: import_genai.Type.STRING }
-                  },
-                  required: [
-                    "headline",
-                    "headlineOptions",
-                    "highlightWords",
-                    "formattedHeadline",
-                    "location",
-                    "summary"
-                  ]
-                }
+                responseSchema: GEMINI_NEWS_RESPONSE_SCHEMA
               }
             }
           );
@@ -8292,7 +8350,7 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "") {
 
 ${finalTags.join(" ")}`;
 }
-function sanitizePressNoteFlattery(text) {
+function sanitizePressNoteFlattery(text, isHeadline = false) {
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
   cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "");
@@ -8307,7 +8365,9 @@ function sanitizePressNoteFlattery(text) {
   cleaned = cleaned.replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "");
   cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "");
   cleaned = cleaned.replace(/[ \t]{2,}/g, " ").trim();
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  if (isHeadline) {
+    cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  }
   return cleaned;
 }
 function createEpaperLocalFallback(rawInput, city = "", reporterName = "") {
@@ -9318,12 +9378,18 @@ startServer().catch((err) => {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   DISTRICT_STATE_LIST,
+  GEMINI_NEWS_RESPONSE_SCHEMA,
+  buildMasterNewsEditorialPrompt,
+  buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs,
+  createLocalNewsFallback,
   detectDistrictAndState,
   formatAsJournalisticHeadline,
   formatDistrictWithState,
   generate5JournalisticHeadlines,
   matchDistrictAlias,
+  sanitizePressNoteFlattery,
+  scrapeNewsFromUrl,
   validateHeadlineOption
 });

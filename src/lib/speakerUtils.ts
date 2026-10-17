@@ -669,8 +669,10 @@ export function calculateHeadlineSimilarity(h1: string, h2: string): number {
 
 /**
  * Sanitizes flattering and honorific words from text (Part 3)
+ * Completely eliminates PR flattery & honorifics (श्री, श्रीमती, सुश्री, माननीय, सम्माननीय, आदरणीय, महोदय, जी, पूज्य, परम पूज्य)
+ * STRICT PROTECTION: Never damages genuine names or place words like श्रीवास्तव, श्रीनगर, श्रीराम, श्रीधर
  */
-export function sanitizePressNoteFlattery(text: string): string {
+export function sanitizePressNoteFlattery(text: string, isHeadline: boolean = false): string {
   if (!text || typeof text !== 'string') return text || '';
   let cleaned = text;
   cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, '');
@@ -686,7 +688,9 @@ export function sanitizePressNoteFlattery(text: string): string {
   cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, '');
 
   cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').trim();
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
+  if (isHeadline) {
+    cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
+  }
   return cleaned;
 }
 

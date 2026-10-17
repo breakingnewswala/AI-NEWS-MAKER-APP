@@ -313,10 +313,10 @@ export function processNewsLocally(
     highlightWords,
     formattedHeadline,
     location: detectedLocation,
-    summary: cleanCaptionParagraphs(summary, 'detailed'),
-    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed'),
-    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet'),
-    captionShort: cleanCaptionParagraphs(captionShort, 'short'),
+    summary: cleanCaptionParagraphs(summary, 'detailed', cleanUsername),
+    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed', cleanUsername),
+    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet', cleanUsername),
+    captionShort: cleanCaptionParagraphs(captionShort, 'short', cleanUsername),
     anchorScript,
     categories,
     tags: tagsList,
@@ -327,4 +327,16 @@ export function processNewsLocally(
     speakerTitle: '',
     isLocalFallback: true,
   };
+}
+
+/**
+ * Direct reference-compatible export for createLocalNewsFallback on client
+ */
+export function createLocalNewsFallback(
+  input: string,
+  linkUrl?: string,
+  templateMeta?: HeadlineTemplateMeta,
+  channelUsername?: string
+): AIAnalysisResult {
+  return processNewsLocally(input, linkUrl, templateMeta, channelUsername);
 }

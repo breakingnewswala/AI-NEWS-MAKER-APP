@@ -6715,6 +6715,7 @@ interface ArticleExtractedMetadata {
   content?: string;
   imageUrl?: string;
   linkUrl?: string;
+  images?: string[];
 }
 
 interface ExtractedArticleResult {
@@ -8090,7 +8091,7 @@ function sanitizeCaptionText(
   return ensureHashtagHierarchy(cleanedBody, location, username);
 }
 
-function createLocalNewsFallback(
+export function createLocalNewsFallback(
   input: string,
   linkUrl?: string,
   targetMaxLines: number = 3,
@@ -8526,7 +8527,7 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
     const targetArea = headline_area || tplConfig.headline_area;
 
     const promptText = `
-आप भारत के प्रमुख डिजिटल न्यूज़ चैनल "ब्रेकिंग न्यूज़ वाला" के वरिष्ठ मुख्य संपादक हैं।
+आप भारत के प्रमुख डिजिटल न्यूज़ चैनल "एआई न्यूज़ मेकर" के वरिष्ठ मुख्य संपादक हैं।
 यूज़र ने यह फोटो अपलोड की है और न्यूज़ कार्ड (सोशल मीडिया ग्राफिक कार्ड) बनाना चाहता है।
 
 चयनित न्यूज़ ग्राफ़िक टेम्पलेट विनिर्देश (SELECTED GRAPHIC TEMPLATE METADATA & CAPACITY CONSTRAINTS):
@@ -8571,7 +8572,7 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
       {
         contents,
         config: {
-          systemInstruction: `You are the Senior Editor of Breaking News Wala. Strictly enforce template capacity constraints: Headline layout area "${targetArea}", STRICT MAXIMUM ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}). Strip all PR flattery and honorifics. Output valid JSON.`,
+          systemInstruction: `You are the Senior Editor of AI News Maker. Strictly enforce template capacity constraints: Headline layout area "${targetArea}", STRICT MAXIMUM ${targetMaxLines} lines (${targetMaxLines === 2 ? "8-12 words" : "12-16 words"}). Strip all PR flattery and honorifics. Output valid JSON.`,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -8657,6 +8658,259 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
   }
 });
 
+/**
+ * 1. Strict Gemini JSON Schema Specification for News Command Processing
+ * Guaranteed 5 independent headline options (100-250 characters each)
+ */
+export const GEMINI_NEWS_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    headline: { type: Type.STRING },
+    headlineOptions: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "Exactly 5 independent, distinct journalistic Hindi headlines (100-250 characters each)",
+    },
+    highlightWords: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+    },
+    formattedHeadline: { type: Type.STRING },
+    location: { type: Type.STRING },
+    summary: { type: Type.STRING },
+    captionDetailed: { type: Type.STRING },
+    captionBullets: { type: Type.STRING },
+    captionShort: { type: Type.STRING },
+    category: { type: Type.STRING },
+    suggestedImagePrompt: { type: Type.STRING },
+    isAiGeneratedPhoto: { type: Type.BOOLEAN },
+    speakerName: { type: Type.STRING },
+    speakerTitle: { type: Type.STRING },
+  },
+  required: [
+    "headline",
+    "headlineOptions",
+    "highlightWords",
+    "formattedHeadline",
+    "location",
+    "summary",
+  ],
+};
+
+/**
+ * 2. Parameters for Master News Editorial Prompt Generator
+ */
+export interface MasterNewsPromptParams {
+  effectiveInput: string;
+  fetchedArticleSnippet?: string;
+  customPrompt?: string;
+  channelUsername?: string;
+  targetMaxLines?: number;
+  targetArea?: string;
+  templateName?: string;
+  templateId?: string;
+}
+
+/**
+ * 3. Master Editorial Prompt Generator (MASTER EDITORIAL PROMPT)
+ * Transforms raw scripts, press notes, speeches, government releases, and web articles
+ * into 100% authentic, impartial, impactful Hindi graphic news with exactly 5 independent headlines.
+ */
+export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): {
+  systemInstruction: string;
+  prompt: string;
+} {
+  const {
+    effectiveInput,
+    fetchedArticleSnippet,
+    customPrompt,
+    channelUsername = "",
+    targetMaxLines = 3,
+    targetArea = "center",
+    templateName = "Classic Graphic",
+    templateId = "graphic_001",
+  } = params;
+
+  const cleanUser = (channelUsername || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
+  const userHashtag = cleanUser ? `#${cleanUser}` : "#AINews";
+
+  const systemInstruction = `You are the Chief AI News Editor (चीफ एआई न्यूज़ एडिटर) of "AI News Maker" (एआई न्यूज़ मेकर).
+
+Your task is to analyze the provided news URL, RSS article content, raw news, press note, or script, and create factual, objective, balanced, and impactful Hindi news content.
+
+★ संपादकीय निर्देश (EDITORIAL MANDATE):
+एक अनुभवी हिंदी समाचार संपादक की तरह पहले उपलब्ध समाचार को समझें। उसके बाद पाँच स्वतंत्र, स्वाभाविक, पेशेवर और तथ्यात्मक हिंदी हेडलाइन लिखें। किसी भी विकल्प को मूल हेडलाइन की नकल करके न बनाएँ। पाँचों विकल्प अलग-अलग हों, लेकिन सभी एक ही खबर से जुड़े रहें। कोई नया तथ्य, अप्रमाणित आरोप, काल्पनिक सवाल, अनावश्यक सस्पेंस या मनगढ़ंत परिणाम न जोड़ें।
+
+★ MANDATORY ANTI-FLATTERY & HONORIFIC CLEANUP:
+Completely remove unnecessary formal honorifics and PR flattery such as:
+'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'परम पूज्य', 'पूज्य', and the formal name suffix 'जी'.
+Directly write the designation and name (e.g. "मुख्यमंत्री मोहन यादव", NOT "माननीय मुख्यमंत्री श्री मोहन यादव जी"; "कलेक्टर", NOT "कलेक्टर महोदय").
+CRITICAL: Never alter valid names or places containing 'श्री' like 'श्रीवास्तव', 'श्रीनगर', 'श्रीराम', 'श्रीधर'.
+
+★ TEMPLATE CAPACITY & CONSTRAINTS:
+- Template ID: ${templateId} (${templateName})
+- Headline Layout Area: ${targetArea}
+- Strict Maximum Lines: ${targetMaxLines} lines
+- Headline के अंत में full stop, पूर्णविराम (।), comma, hyphen या कोई विराम चिह्न कभी न लगाएं।
+- NEVER use a URL, domain, or slug as a headline.
+- Do NOT add prefixes like 'Breaking News', 'Live Update', 'News Update', 'खबर अपडेट' to the headline.
+
+★ STRICT 100% PURE DEVANAGARI HINDI (BREAKING NEWS WALA GOLD STANDARD):
+- Every headline and caption MUST be in pure, standard Devanagari Hindi.
+- STRICTLY PROHIBITED: Absolutely ZERO English alphabet letters [A-Za-z] in headlines (except internal highlight tags [yellow]...[/yellow]). Transliterate all English words and abbreviations into Hindi (e.g. AI -> एआई, FIR -> एफआईआर, IT -> आईटी, BHK -> बीएचके, ISRO -> इसरो, NASA -> नासा).
+- NO city-news suffixes (e.g. DO NOT write "- Bhopal News", "- Indore News", "- MP News", or portal names like "Dainik Bhaskar").
+- NO website scraping artifacts (e.g. "कॉपी लिंक", "फाइल फोटो:", "शेयर करें", "क्लिक करें").
+- NO forced city colon prefixes (DO NOT prepend "ग्वालियर: " or "भोपाल: " to every headline). Integrate location naturally into sentences only when contextually relevant.
+- NO naive colon appending. Every headline option must be a crafted, distinct, standalone journalistic headline.
+
+★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINES (100–250 CHARACTERS, TARGET 150–200 CHARS):
+Generate EXACTLY 5 independent, publish-ready Hindi headline options directly derived from the verified facts of the news. DO NOT lock or copy the original news headline:
+- सामान्य लक्ष्य: प्रत्येक हेडलाइन लगभग 150–200 अक्षर (Characters)।
+- न्यूनतम: 100 अक्षर (जहाँ समाचार सामग्री पर्याप्त हो)।
+- अधिकतम: 250 अक्षर।
+- विकल्प 1: अपेक्षाकृत छोटा, स्पष्ट और मुख्य घटना पर केंद्रित (~100–140 अक्षर)
+- विकल्प 2: मुख्य घटना के साथ अधिक जानकारी (~130–170 अक्षर)
+- विकल्प 3: अतिरिक्त सत्यापित तथ्य के साथ विस्तृत (~150–190 अक्षर)
+- विकल्प 4: महत्वपूर्ण संदर्भ, नियम या संबंधित तथ्य वाला विकल्प (~170–220 अक्षर)
+- विकल्प 5: उसी खबर का स्वतंत्र, विस्तृत और तथ्यात्मक वैकल्पिक शीर्षक (~180–245 अक्षर)
+
+★ GRAMMAR & COMPLETENESS RULES:
+- Every headline MUST be grammatically complete. NEVER truncate sentence stems into dangling verbs like "सामना करना पड़", "रोकी जा", "करते", "आते".
+- Transform narrative verb endings into title nouns (e.g. 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
+- NEVER end on dangling postpositions ('ने', 'के', 'की', 'का', 'में', 'पर', 'से', 'को', 'और', 'या', 'कि').
+- UI labels will ONLY display "विकल्प 1", "विकल्प 2", "विकल्प 3", "विकल्प 4", "विकल्प 5" without any extra category labels.
+- Absolutely NO trailing full stop (।) or period (.) at the end of any headline.
+
+★ MULTICOLOR HEADLINE HIGHLIGHTING:
+- Select 2-4 key impactful words from the headline.
+- Wrap them with [yellow]शब्द[/yellow] (or [highlight]शब्द[/highlight]) in formattedHeadline.
+- Include the selected words in highlightWords array. The final highlight color is controlled authoritatively by the user's chosen UI swatch.
+
+★ NEWS CAPTION & 3 STYLES (PURE HINDI ONLY, 2-3 SUBSTANTIVE PARAGRAPHS, ZERO REPETITION):
+All captions must be pure Devanagari Hindi. No English meta-descriptions.
+- Style 1 (Detailed / summary / captionDetailed): Strictly 2 to 3 substantive paragraphs (Para 1: Event/date/place, Para 2: Background, facts & statements, Para 3: Administrative action & current status) separated by real blank lines (\n\n). 3 paragraphs preferred when news facts permit. ZERO repeated sentences between paragraphs. No artificial headings like "पैराग्राफ 1".
+- Style 2 (captionBullets): Short intro + 3-4 bullet points (•) of core facts + status paragraph + hashtags.
+- Style 3 (captionShort): Exactly 2 concise, impactful paragraphs separated by \n\n + hashtags.
+
+★ HASHTAG HIERARCHY (MANDATORY):
+1. First hashtag: ${userHashtag} (based on current user's authenticated username)
+2. Middle: 4-6 relevant location & news hashtags (e.g. #BreakingNews #HindiNews #MPNews)
+3. Last hashtag: #AINewsMaker (strictly #AINewsMaker as the final hashtag)
+- NEVER use #breakingnewswala or #BNWTV.
+
+Output strictly valid JSON.`;
+
+  const prompt = `
+आप "एआई न्यूज़ मेकर" के चीफ एडिटर हैं।
+यूज़र ने यह समाचार इनपुट / लिंक / प्रेस नोट दिया है:
+${effectiveInput ? `कच्चा विवरण / प्रेस नोट:\n${effectiveInput}\n` : ""}
+${fetchedArticleSnippet ? `वेबसाइट आर्टिकल / RSS सामग्री:\n${fetchedArticleSnippet}\n` : ""}
+${customPrompt ? `यूज़र का विशेष निर्देश:\n${customPrompt}\n` : ""}
+
+टेम्पलेट विनिर्देश:
+- टेम्पलेट: ${templateName} (${templateId})
+- हेडलाइन क्षमता: ${targetMaxLines} लाइन्स
+- हेडलाइन एरिया: ${targetArea}
+
+संपादकीय निर्देश (Breaking News Wala गोल्ड स्टैंडर्ड):
+1. हेडलाइन व कैप्शन में 100% शुद्ध देवनागरी हिंदी का प्रयोग करें। हेडलाइन में [yellow]...[/yellow] टैग के अलावा एक भी अंग्रेजी अक्षर [A-Za-z] न हो।
+2. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
+3. किसी भी हेडलाइन में शहर का सफ़िक्स (जैसे - Bhopal News) या वेबसाइट स्क्रैपिंग टेक्स्ट (जैसे कॉपी लिंक, फाइल फोटो) न हो।
+4. किसी भी हेडलाइन के शुरू में जबरन शहर का नाम व कोलन (जैसे "ग्वालियर: ") न जोड़ें। स्थान को केवल वाक्य के भीतर स्वाभाविक रूप से शामिल करें।
+5. ठीक 5 स्वतंत्र, स्वाभाविक और तथ्य-आधारित हेडलाइन विकल्प दें। लंबाई सीमा: 100 से 250 अक्षर (सामान्य लक्ष्य: 150-200 अक्षर):
+   - विकल्प 1: मुख्य घटना पर केंद्रित (~100-140 अक्षर)
+   - विकल्प 2: विस्तारित जानकारी (~130-170 अक्षर)
+   - विकल्प 3: सत्यापित तथ्य व आंकड़े (~150-190 अक्षर)
+   - विकल्प 4: महत्वपूर्ण संदर्भ व नियम (~170-220 अक्षर)
+   - विकल्प 5: स्वतंत्र विस्तृत वैकल्पिक शीर्षक (~180-245 अक्षर)
+6. मूल समाचार की हेडलाइन को इन पाँच विकल्पों में दोहराकर संख्या पूरी न करें। पाँचों विकल्प स्वतंत्र AI हेडलाइन्स हों।
+7. हर हेडलाइन व्याकरण की दृष्टि से पूर्ण हो। किसी भी हेडलाइन का अंत अपूर्ण क्रिया (जैसे 'पड़', 'जा', 'करते', 'आते') या परसर्ग (जैसे 'ने', 'के', 'की', 'का', 'में', 'पर', 'से', 'को') पर न हो।
+8. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें। अंत में पूर्णविराम (।) न लगाएं।
+9. 2-4 मुख्य शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
+10. स्थान (location): जिला, राज्य (उदा. भोपाल, मध्य प्रदेश) वास्तविक घटना अनुसार।
+11. विस्तृत कैप्शन (captionDetailed): 2-3 विस्तृत पैराग्राफ (खबर के अधिक से अधिक वास्तविक बिंदु, आंकड़े व बयान जोड़ें)। किसी भी हालत में 'मामले से जुड़े प्रमुख तथ्यों का गहनता से विश्लेषण...' या 'अग्रिम प्रक्रिया के तहत कदम उठाए जा रहे हैं' जैसे घिसे-पिटे वाक्य न लिखें। पैराग्राफों के बीच खाली लाइन हो।
+12. हैशटैग: सबसे पहला ${userHashtag}, बीच में 4-6 प्रासंगिक न्यूज़ व लोकेशन हैशटैग, सबसे अंतिम #AINewsMaker।
+
+JSON Schema:
+{
+  "headline": "मुख्य हिंदी हेडलाइन (100-250 अक्षर, बिना आदरसूचक शब्दों के, शुद्ध हिंदी)",
+  "headlineOptions": [
+    "विकल्प 1: मुख्य घटना पर केंद्रित हेडलाइन (~100-140 अक्षर)",
+    "विकल्प 2: विस्तारित जानकारी सहित हेडलाइन (~130-170 अक्षर)",
+    "विकल्प 3: सत्यापित तथ्यों सहित हेडलाइन (~150-190 अक्षर)",
+    "विकल्प 4: महत्वपूर्ण संदर्भ व नियमों सहित हेडलाइन (~170-220 अक्षर)",
+    "विकल्प 5: विस्तृत वैकल्पिक तथ्यात्मक हेडलाइन (~180-245 अक्षर)"
+  ],
+  "highlightWords": ["शब्द1", "शब्द2"],
+  "formattedHeadline": "हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow]",
+  "location": "जिला, राज्य",
+  "summary": "पैराग्राफ 1...\\n\\nपैराग्राफ 2...\\n\\nपैराग्राफ 3...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionDetailed": "विस्तृत 2-3 पैराग्राफ कैप्शन (शून्य दोहराव)...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionBullets": "मुख्य घटनाक्रम...\\n\\n• बिंदु 1\\n• बिंदु 2\\n• बिंदु 3\\n\\nप्रशासनिक अमला...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
+  "category": "अपराध / राजनीति / हादसा / प्रशासन / विकास",
+  "suggestedImagePrompt": "Realistic photo prompt in English describing the actual news scene",
+  "isAiGeneratedPhoto": false,
+  "speakerName": "",
+  "speakerTitle": ""
+}
+`;
+
+  return { systemInstruction, prompt };
+}
+
+/**
+ * Single string prompt generator for direct prompt consumers
+ */
+export function buildMasterNewsEditorialPromptString(params: MasterNewsPromptParams): string {
+  const built = buildMasterNewsEditorialPrompt(params);
+  return `${built.systemInstruction}\n\n${built.prompt}`;
+}
+
+/**
+ * 4. Web Link & RSS News Scraper (Link Scraper with SSRF protection)
+ */
+export async function scrapeNewsFromUrl(rawUrl: string): Promise<{
+  snippet: string;
+  pickedImages: { main?: string; second?: string; third?: string; fourth?: string };
+  extractedMeta?: ArticleExtractedMetadata;
+}> {
+  const extracted = await fetchAndProcessNewsUrl(rawUrl);
+  if (!extracted) {
+    return {
+      snippet: `URL to reference: ${rawUrl}`,
+      pickedImages: {},
+    };
+  }
+  const snippet = `
+URL: ${extracted.sourceUrl || rawUrl}
+Title: ${extracted.title || ""}
+Description: ${extracted.description || ""}
+Content: ${extracted.content ? extracted.content.slice(0, 2000) : ""}
+  `.trim();
+
+  const pickedImages: { main?: string; second?: string; third?: string; fourth?: string } = {};
+  if (extracted.images && extracted.images.length > 0) {
+    if (extracted.images[0]) pickedImages.main = `/api/proxy-image?url=${encodeURIComponent(extracted.images[0])}`;
+    if (extracted.images[1]) pickedImages.second = `/api/proxy-image?url=${encodeURIComponent(extracted.images[1])}`;
+    if (extracted.images[2]) pickedImages.third = `/api/proxy-image?url=${encodeURIComponent(extracted.images[2])}`;
+    if (extracted.images[3]) pickedImages.fourth = `/api/proxy-image?url=${encodeURIComponent(extracted.images[3])}`;
+  }
+
+  return {
+    snippet,
+    pickedImages,
+    extractedMeta: {
+      title: extracted.title,
+      description: extracted.description,
+      content: extracted.content,
+      imageUrl: extracted.images?.[0],
+      linkUrl: extracted.sourceUrl,
+      images: extracted.images,
+    },
+  };
+}
+
 // Process News Link or Natural Language Command / Text into News Graphic structure
 app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
   const {
@@ -8722,43 +8976,23 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
         try {
-          const extracted = await fetchAndProcessNewsUrl(normalizedUrl);
-          if (extracted) {
-            effectiveArticleTitle = extracted.title || "";
-            effectiveArticleDesc = extracted.description || "";
-            articleBodySnippets = extracted.content || "";
-
-            if (extracted.images && extracted.images.length > 0) {
-              extracted.images.forEach((img) => {
-                if (img && typeof img === "string" && img.trim()) {
-                  const proxied = `/api/proxy-image?url=${encodeURIComponent(img.trim())}`;
-                  if (!extractedPhotos.includes(proxied)) {
-                    extractedPhotos.push(proxied);
-                  }
-                }
+          const scraped = await scrapeNewsFromUrl(normalizedUrl);
+          if (scraped.extractedMeta) {
+            extractedArticleMeta = scraped.extractedMeta;
+            effectiveArticleTitle = extractedArticleMeta.title || "";
+            effectiveArticleDesc = extractedArticleMeta.description || "";
+            articleBodySnippets = extractedArticleMeta.content || "";
+            if (scraped.pickedImages.main) pickedImages.main = scraped.pickedImages.main;
+            if (scraped.pickedImages.second) pickedImages.second = scraped.pickedImages.second;
+            if (scraped.pickedImages.third) pickedImages.third = scraped.pickedImages.third;
+            if (scraped.pickedImages.fourth) pickedImages.fourth = scraped.pickedImages.fourth;
+            if (extractedArticleMeta.images) {
+              extractedArticleMeta.images.forEach((img) => {
+                const proxied = `/api/proxy-image?url=${encodeURIComponent(img)}`;
+                if (!extractedPhotos.includes(proxied)) extractedPhotos.push(proxied);
               });
-              if (extractedPhotos[0]) pickedImages.main = extractedPhotos[0];
-              if (extractedPhotos[1]) pickedImages.second = extractedPhotos[1];
-              if (extractedPhotos[2]) pickedImages.third = extractedPhotos[2];
-              if (extractedPhotos[3]) pickedImages.fourth = extractedPhotos[3];
             }
-
-            if (effectiveArticleTitle || effectiveArticleDesc || articleBodySnippets) {
-              extractedArticleMeta = {
-                title: effectiveArticleTitle,
-                description: effectiveArticleDesc,
-                content: articleBodySnippets,
-                imageUrl: pickedImages.main,
-                linkUrl: extracted.sourceUrl || normalizedUrl,
-              };
-            }
-
-            fetchedArticleSnippet = `
-Title: ${effectiveArticleTitle}
-Description: ${effectiveArticleDesc}
-Facts & Content: ${articleBodySnippets || effectiveArticleDesc || effectiveArticleTitle}
-Source URL: ${extracted.sourceUrl || normalizedUrl}
-`;
+            fetchedArticleSnippet = scraped.snippet;
           }
         } catch (fetchErr: any) {
           console.warn("Could not fetch or parse URL directly:", fetchErr?.message || fetchErr);
@@ -8791,129 +9025,18 @@ Source URL: ${extracted.sourceUrl || normalizedUrl}
         : `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
     }
 
-    // channelUsername and userHashtag already declared above
-
-    const editorialSystemInstruction = `You are the Chief AI News Editor (चीफ एआई न्यूज़ एडिटर) of "AI News Maker" (एआई न्यूज़ मेकर).
-
-Your task is to analyze the provided news URL, RSS article content, raw news, press note, or script, and create factual, objective, balanced, and impactful Hindi news content.
-
-★ संपादकीय निर्देश (EDITORIAL MANDATE):
-एक अनुभवी हिंदी समाचार संपादक की तरह पहले उपलब्ध समाचार को समझें। उसके बाद पाँच स्वतंत्र, स्वाभाविक, पेशेवर और तथ्यात्मक हिंदी हेडलाइन लिखें। किसी भी विकल्प को मूल हेडलाइन की नकल करके न बनाएँ। पाँचों विकल्प अलग-अलग हों, लेकिन सभी एक ही खबर से जुड़े रहें। कोई नया तथ्य, अप्रमाणित आरोप, काल्पनिक सवाल, अनावश्यक सस्पेंस या मनगढ़ंत परिणाम न जोड़ें।
-
-★ MANDATORY ANTI-FLATTERY & HONORIFIC CLEANUP:
-Completely remove unnecessary formal honorifics and PR flattery such as:
-'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'परम पूज्य', and the formal name suffix 'जी'.
-Directly write the designation and name (e.g. "मुख्यमंत्री मोहन यादव", NOT "माननीय मुख्यमंत्री श्री मोहन यादव जी"; "कलेक्टर", NOT "कलेक्टर महोदय").
-Exception: Only retain words if removing them alters legal meaning or quotes.
-
-★ TEMPLATE CAPACITY & CONSTRAINTS:
-- Template ID: ${tplConfig.template_id} (${tplConfig.name})
-- Headline Layout Area: ${targetArea}
-- Strict Maximum Lines: ${targetMaxLines} lines
-- Headline के अंत में full stop, पूर्णविराम (।), comma, hyphen या कोई विराम चिह्न कभी न लगाएं।
-- NEVER use a URL, domain, or slug as a headline.
-- Do NOT add prefixes like 'Breaking News', 'Live Update', 'News Update', 'खबर अपडेट' to the headline.
-
-★ STRICT 100% PURE DEVANAGARI HINDI (BREAKING NEWS WALA GOLD STANDARD):
-- Every headline and caption MUST be in pure, standard Devanagari Hindi.
-- STRICTLY PROHIBITED: Absolutely ZERO English alphabet letters [A-Za-z] in headlines (except internal highlight tags [yellow]...[/yellow]). Transliterate all English words and abbreviations into Hindi (e.g. AI -> एआई, FIR -> एफआईआर, IT -> आईटी, BHK -> बीएचके, ISRO -> इसरो, NASA -> नासा).
-- NO city-news suffixes (e.g. DO NOT write "- Bhopal News", "- Indore News", "- MP News", or portal names like "Dainik Bhaskar").
-- NO website scraping artifacts (e.g. "कॉपी लिंक", "फाइल फोटो:", "शेयर करें", "क्लिक करें").
-- NO forced city colon prefixes (DO NOT prepend "ग्वालियर: " or "भोपाल: " to every headline). Integrate location naturally into sentences only when contextually relevant.
-- NO naive colon appending. Every headline option must be a crafted, distinct, standalone journalistic headline.
-
-★ EXACTLY 5 DISTINCT JOURNALISTIC HEADLINES (100–250 CHARACTERS, TARGET 150–200 CHARS):
-Generate EXACTLY 5 independent, publish-ready Hindi headline options directly derived from the verified facts of the news. DO NOT lock or copy the original news headline:
-- सामान्य लक्ष्य: प्रत्येक हेडलाइन लगभग 150–200 अक्षर (Characters)।
-- न्यूनतम: 100 अक्षर (जहाँ समाचार सामग्री पर्याप्त हो)।
-- अधिकतम: 250 अक्षर।
-- विकल्प 1: अपेक्षाकृत छोटा, स्पष्ट और मुख्य घटना पर केंद्रित (~100–140 अक्षर)
-- विकल्प 2: मुख्य घटना के साथ अधिक जानकारी (~130–170 अक्षर)
-- विकल्प 3: अतिरिक्त सत्यापित तथ्य के साथ विस्तृत (~150–190 अक्षर)
-- विकल्प 4: महत्वपूर्ण संदर्भ, नियम या संबंधित तथ्य वाला विकल्प (~170–220 अक्षर)
-- विकल्प 5: उसी खबर का स्वतंत्र, विस्तृत और तथ्यात्मक वैकल्पिक शीर्षक (~180–245 अक्षर)
-
-★ GRAMMAR & COMPLETENESS RULES:
-- Every headline MUST be grammatically complete. NEVER truncate sentence stems into dangling verbs like "सामना करना पड़", "रोकी जा", "करते", "आते".
-- Transform narrative verb endings into title nouns (e.g. 'रो-हाउस और प्लॉट पर रोक: सिर्फ फ्लैट को मंजूरी', NOT 'अब औद्योगिक क्षेत्रों में रो-हाउस और प्लॉट नहीं बनेंगे।').
-- NEVER end on dangling postpositions ('ने', 'के', 'की', 'का', 'में', 'पर', 'से', 'को', 'और', 'या', 'कि').
-- UI labels will ONLY display "विकल्प 1", "विकल्प 2", "विकल्प 3", "विकल्प 4", "विकल्प 5" without any extra category labels.
-- Absolutely NO trailing full stop (।) or period (.) at the end of any headline.
-
-★ MULTICOLOR HEADLINE HIGHLIGHTING:
-- Select 2-4 key impactful words from the headline.
-- Wrap them with [yellow]शब्द[/yellow] (or [highlight]शब्द[/highlight]) in formattedHeadline.
-- Include the selected words in highlightWords array. The final highlight color is controlled authoritatively by the user's chosen UI swatch.
-
-★ NEWS CAPTION & 3 STYLES (PURE HINDI ONLY, 2-3 SUBSTANTIVE PARAGRAPHS, ZERO REPETITION):
-All captions must be pure Devanagari Hindi. No English meta-descriptions.
-- Style 1 (Detailed / summary / captionDetailed): Strictly 2 to 3 substantive paragraphs (Para 1: Event/date/place, Para 2: Background, facts & statements, Para 3: Administrative action & current status) separated by real blank lines (\n\n). 3 paragraphs preferred when news facts permit. ZERO repeated sentences between paragraphs. No artificial headings like "पैराग्राफ 1".
-- Style 2 (captionBullets): Short intro + 3-4 bullet points (•) of core facts + status paragraph + hashtags.
-- Style 3 (captionShort): Exactly 2 concise, impactful paragraphs separated by \n\n + hashtags.
-
-★ HASHTAG HIERARCHY (MANDATORY):
-1. First hashtag: ${userHashtag} (based on current user's authenticated username)
-2. Middle: 4-6 relevant location & news hashtags (e.g. #BreakingNews #HindiNews #MPNews)
-3. Last hashtag: #AINewsMaker (strictly #AINewsMaker as the final hashtag)
-- NEVER use #breakingnewswala or #BNWTV.
-
-Output strictly valid JSON.`;
-
-    const prompt = `
-आप "एआई न्यूज़ मेकर" के चीफ एडिटर हैं।
-यूज़र ने यह समाचार इनपुट / लिंक / प्रेस नोट दिया है:
-${effectiveInput ? `कच्चा विवरण / प्रेस नोट:\n${effectiveInput}\n` : ""}
-${fetchedArticleSnippet ? `वेबसाइट आर्टिकल / RSS सामग्री:\n${fetchedArticleSnippet}\n` : ""}
-${customPrompt ? `यूज़र का विशेष निर्देश:\n${customPrompt}\n` : ""}
-
-टेम्पलेट विनिर्देश:
-- टेम्पलेट: ${tplConfig.name} (${tplConfig.template_id})
-- हेडलाइन क्षमता: ${targetMaxLines} लाइन्स
-- हेडलाइन एरिया: ${targetArea}
-
-संपादकीय निर्देश (Breaking News Wala गोल्ड स्टैंडर्ड):
-1. हेडलाइन व कैप्शन में 100% शुद्ध देवनागरी हिंदी का प्रयोग करें। हेडलाइन में [yellow]...[/yellow] टैग के अलावा एक भी अंग्रेजी अक्षर [A-Za-z] न हो।
-2. आदरसूचक व पीआर शब्दों (श्री, श्रीमती, माननीय, महोदय, जी) को पूरी तरह हटाएं।
-3. किसी भी हेडलाइन में शहर का सफ़िक्स (जैसे - Bhopal News) या वेबसाइट स्क्रैपिंग टेक्स्ट (जैसे कॉपी लिंक, फाइल फोटो) न हो।
-4. किसी भी हेडलाइन के शुरू में जबरन शहर का नाम व कोलन (जैसे "ग्वालियर: ") न जोड़ें। स्थान को केवल वाक्य के भीतर स्वाभाविक रूप से शामिल करें।
-5. ठीक 5 स्वतंत्र, स्वाभाविक और तथ्य-आधारित हेडलाइन विकल्प दें। लंबाई सीमा: 100 से 250 अक्षर (सामान्य लक्ष्य: 150-200 अक्षर):
-   - विकल्प 1: मुख्य घटना पर केंद्रित (~100-140 अक्षर)
-   - विकल्प 2: विस्तारित जानकारी (~130-170 अक्षर)
-   - विकल्प 3: सत्यापित तथ्य व आंकड़े (~150-190 अक्षर)
-   - विकल्प 4: महत्वपूर्ण संदर्भ व नियम (~170-220 अक्षर)
-   - विकल्प 5: स्वतंत्र विस्तृत वैकल्पिक शीर्षक (~180-245 अक्षर)
-6. मूल समाचार की हेडलाइन को इन पाँच विकल्पों में दोहराकर संख्या पूरी न करें। पाँचों विकल्प स्वतंत्र AI हेडलाइन्स हों।
-7. हर हेडलाइन व्याकरण की दृष्टि से पूर्ण हो। किसी भी हेडलाइन का अंत अपूर्ण क्रिया (जैसे 'पड़', 'जा', 'करते', 'आते') या परसर्ग (जैसे 'ने', 'के', 'की', 'का', 'में', 'पर', 'से', 'को') पर न हो।
-8. किसी हेडलाइन के आगे 'विकल्प 1:', 'विकल्प 2:' आदि लेबल न लगाएं। केवल शुद्ध हेडलाइन टेक्स्ट दें। अंत में पूर्णविराम (।) न लगाएं।
-9. 2-4 मुख्य शब्द चुनें और formattedHeadline में [yellow]शब्द[/yellow] लगाएं।
-10. स्थान (location): जिला, राज्य (उदा. भोपाल, मध्य प्रदेश) वास्तविक घटना अनुसार।
-11. विस्तृत कैप्शन (captionDetailed): 2-3 विस्तृत पैराग्राफ (खबर के अधिक से अधिक वास्तविक बिंदु, आंकड़े व बयान जोड़ें)। किसी भी हालत में 'मामले से जुड़े प्रमुख तथ्यों का गहनता से विश्लेषण...' या 'अग्रिम प्रक्रिया के तहत कदम उठाए जा रहे हैं' जैसे घिसे-पिटे वाक्य न लिखें। पैराग्राफों के बीच खाली लाइन हो।
-12. हैशटैग: सबसे पहला ${userHashtag}, बीच में 4-6 प्रासंगिक न्यूज़ व लोकेशन हैशटैग, सबसे अंतिम #AINewsMaker।
-
-JSON Schema:
-{
-  "headline": "मुख्य हिंदी हेडलाइन (100-250 अक्षर, बिना आदरसूचक शब्दों के, शुद्ध हिंदी)",
-  "headlineOptions": [
-    "विकल्प 1: मुख्य घटना पर केंद्रित हेडलाइन (~100-140 अक्षर)",
-    "विकल्प 2: विस्तारित जानकारी सहित हेडलाइन (~130-170 अक्षर)",
-    "विकल्प 3: सत्यापित तथ्यों सहित हेडलाइन (~150-190 अक्षर)",
-    "विकल्प 4: महत्वपूर्ण संदर्भ व नियमों सहित हेडलाइन (~170-220 अक्षर)",
-    "विकल्प 5: विस्तृत वैकल्पिक तथ्यात्मक हेडलाइन (~180-245 अक्षर)"
-  ],
-  "highlightWords": ["शब्द1", "शब्द2"],
-  "formattedHeadline": "हेडलाइन में हाइलाइट होने वाले शब्दों के चारों ओर [yellow]शब्द[/yellow]",
-  "location": "जिला, राज्य",
-  "summary": "पैराग्राफ 1...\\n\\nपैराग्राफ 2...\\n\\nपैराग्राफ 3...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
-  "captionDetailed": "विस्तृत 2-3 पैराग्राफ कैप्शन (शून्य दोहराव)...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
-  "captionBullets": "मुख्य घटनाक्रम...\\n\\n• बिंदु 1\\n• बिंदु 2\\n• बिंदु 3\\n\\nप्रशासनिक अमला...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
-  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन...\\n\\n${userHashtag} #BreakingNews #HindiNews #AINewsMaker",
-  "category": "अपराध / राजनीति / हादसा / प्रशासन / विकास",
-  "suggestedImagePrompt": "Realistic photo prompt in English describing the actual news scene",
-  "isAiGeneratedPhoto": false,
-  "speakerName": "",
-  "speakerTitle": ""
-}
-`;
+    const promptData = buildMasterNewsEditorialPrompt({
+      effectiveInput,
+      fetchedArticleSnippet,
+      customPrompt: customPrompt ? customPrompt.trim() : undefined,
+      channelUsername,
+      targetMaxLines,
+      targetArea,
+      templateName: tplConfig.name,
+      templateId: tplConfig.template_id,
+    });
+    const editorialSystemInstruction = promptData.systemInstruction;
+    const prompt = promptData.prompt;
 
     // parsedData declared at top of handler
     const aiProvider = (req.body.aiProvider || "gemini").toLowerCase();
@@ -8977,39 +9100,7 @@ JSON Schema:
               config: {
                 systemInstruction: editorialSystemInstruction,
                 responseMimeType: "application/json",
-                responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                    headline: { type: Type.STRING },
-                    headlineOptions: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
-                    },
-                    highlightWords: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
-                    },
-                    formattedHeadline: { type: Type.STRING },
-                    location: { type: Type.STRING },
-                    summary: { type: Type.STRING },
-                    captionDetailed: { type: Type.STRING },
-                    captionBullets: { type: Type.STRING },
-                    captionShort: { type: Type.STRING },
-                    category: { type: Type.STRING },
-                    suggestedImagePrompt: { type: Type.STRING },
-                    isAiGeneratedPhoto: { type: Type.BOOLEAN },
-                    speakerName: { type: Type.STRING },
-                    speakerTitle: { type: Type.STRING },
-                  },
-                  required: [
-                    "headline",
-                    "headlineOptions",
-                    "highlightWords",
-                    "formattedHeadline",
-                    "location",
-                    "summary",
-                  ],
-                },
+                responseSchema: GEMINI_NEWS_RESPONSE_SCHEMA,
               },
             }
           );
@@ -9516,7 +9607,7 @@ function ensureHashtagHierarchy(summaryText: string, location: string = "", user
 }
 
 // Helper: Clean flattering / formal prefixes from news text (Devanagari Unicode Safe)
-function sanitizePressNoteFlattery(text: string): string {
+export function sanitizePressNoteFlattery(text: string, isHeadline: boolean = false): string {
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
   // 0. Remove prefixes like "यह खबर है", "जानिए", "देखिए", "Breaking News:", "Live Update:", "Khabar Update:"
@@ -9536,8 +9627,10 @@ function sanitizePressNoteFlattery(text: string): string {
   cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "");
 
   cleaned = cleaned.replace(/[ \t]{2,}/g, " ").trim();
-  // 4. Strip trailing punctuation
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  // 4. Strip trailing punctuation only for headlines
+  if (isHeadline) {
+    cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  }
   return cleaned;
 }
 

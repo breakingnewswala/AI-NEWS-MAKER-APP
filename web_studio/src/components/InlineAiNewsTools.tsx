@@ -953,16 +953,27 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   // Switch headline option and auto update card
   const handleSelectHeadline = (opt: string, index: number) => {
     setSelectedHeadlineIndex(index);
+    const cleanOpt = cleanHeadlineText(opt);
+    let formatted = cleanOpt;
+    const highlightWords = result?.highlightWords || [];
+    if (highlightWords.length > 0) {
+      for (const hw of highlightWords) {
+        if (formatted.includes(hw)) {
+          formatted = formatted.replace(new RegExp(`(${hw})`, 'g'), '[yellow]$1[/yellow]');
+          break;
+        }
+      }
+    }
     if (result) {
       setResult({
         ...result,
-        headline: opt,
-        formattedHeadline: opt,
+        headline: cleanOpt,
+        formattedHeadline: formatted,
       });
     }
     onChange({
-      headline: opt,
-      formattedHeadline: opt,
+      headline: cleanOpt,
+      formattedHeadline: formatted,
     });
   };
 

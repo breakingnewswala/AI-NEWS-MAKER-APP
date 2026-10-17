@@ -1084,7 +1084,15 @@ export default function App() {
     };
     (window as any).onAutoFillNewsLink = (newsData: AutoFillNewsData) => {
       if (newsData && (newsData.title || newsData.summary || newsData.url)) {
-        const effectiveLink = newsData.url || (newsData.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(newsData.title.slice(0, 30))}` : 'https://www.ainewsmaker.online');
+        const isExternalUrl = (u?: string) => {
+          if (!u || !u.startsWith('http')) return false;
+          const lower = u.toLowerCase();
+          return !lower.includes('ainewsmaker.online') &&
+                 !lower.includes('breakingnewswala.com') &&
+                 !lower.includes('localhost') &&
+                 !lower.includes('127.0.0.1');
+        };
+        const effectiveLink = isExternalUrl(newsData.url) ? newsData.url : undefined;
         const effectiveLoc = newsData.location || 'मध्य प्रदेश';
 
         setStudioMode('graphic');
@@ -1105,6 +1113,7 @@ export default function App() {
           url: effectiveLink,
           title: newsData.title,
           summary: newsData.summary,
+          fullNews: (newsData as any).fullNews || newsData.summary,
           imageUrl: newsData.imageUrl,
           location: effectiveLoc,
           category: newsData.category,
@@ -1119,8 +1128,12 @@ export default function App() {
         }, 150);
 
         const savedProf = getSavedChannelProfile();
-        const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
-        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}\n\n🔗 पूरा समाचार देखें: ${effectiveLink}\n\n${userTag} #BreakingNews #NewsCard #LiveUpdate`;
+        const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '#AINews';
+        const linkPart = effectiveLink ? `\n\n🔗 पूरा समाचार देखें: ${effectiveLink}` : '';
+        const locClean = effectiveLoc && effectiveLoc !== 'विशेष कवरेज' ? effectiveLoc.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
+        const locTag = locClean ? `#${locClean}` : '';
+        const tags = [userTag, '#BreakingNews', '#HindiNews', locTag, '#AINewsMaker'].filter(Boolean).join(' ');
+        const captionText = `🚨 ${newsData.title || ''}\n\n📍 स्थान: ${effectiveLoc}\n\n📝 मुख्य विवरण:\n${newsData.summary || ''}${linkPart}\n\n${tags}`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(captionText).catch(() => {});
         }
