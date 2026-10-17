@@ -1750,6 +1750,7 @@ export default function App() {
     setCard((prev) => ({
       ...prev,
       sourceNewsId: post.id,
+      originalHeadline: post.title,
       frameDesign: 'graphic_001',
       layout: 'single',
       showDate: false,
@@ -1770,6 +1771,7 @@ export default function App() {
     }));
 
     setAutoFillNews({
+      newsId: post.id,
       url: effectiveLink,
       title: post.title,
       summary: post.summary,

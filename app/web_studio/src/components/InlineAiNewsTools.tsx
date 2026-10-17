@@ -22,11 +22,12 @@ import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
-import { cleanHeadlineText, cleanLocationField, cleanCategoryField } from '../lib/speakerUtils';
+import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, calculateHeadlineSimilarity, cleanCaptionParagraphs } from '../lib/speakerUtils';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
 
 export interface AutoFillNewsData {
+  newsId?: string;
   url?: string;
   title?: string;
   summary?: string;
@@ -86,6 +87,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
   const isExecutingRef = React.useRef<boolean>(false);
   const activeRequestIdRef = React.useRef<number>(0);
+  const activeNewsIdRef = React.useRef<string>('');
   const lastTriggerPayloadRef = React.useRef<string>('');
   const currentAbortControllerRef = React.useRef<AbortController | null>(null);
   const isResetRef = React.useRef<boolean>(false);
@@ -99,6 +101,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       isExecutingRef.current = false;
       isResetRef.current = true;
+      activeNewsIdRef.current = '';
       setLoading(false);
       setLinkUrl('');
       setInputText('');
@@ -137,76 +140,53 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     existing: string[],
     baseH: string,
     summaryText: string = '',
-    locationText: string = ''
+    locationText: string = '',
+    excludeTitle: string = ''
   ): string[] => {
-    const opts: string[] = [];
-    const addOpt = (cand: string) => {
-      const clean = cleanHeadlineText(cand);
-      if (clean && clean.length >= 12 && !opts.includes(clean)) {
-        opts.push(clean);
+    const cleanExclude = excludeTitle ? cleanHeadlineText(excludeTitle).replace(/[।\.\,\!\?\:\-]+$/g, '').trim() : '';
+
+    // If we already have 5 valid options from AI, preserve them (filter out any verbatim duplicate of excludeTitle)
+    if (Array.isArray(existing) && existing.length >= 5) {
+      const sanitized = existing
+        .map((h) => cleanHeadlineText(h).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .filter((h) => h && h.length >= 12 && (!cleanExclude || (h !== cleanExclude && calculateHeadlineSimilarity(h, cleanExclude) < 0.85)));
+      if (sanitized.length >= 5) {
+        return sanitized.slice(0, 5);
+      }
+    }
+
+    const sentences = (summaryText || '')
+      .split(/[।\n]+|\.\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+    const generated = generate5JournalisticHeadlines(baseH || 'ताज़ा समाचार', sentences, locationText, cleanExclude);
+    const combined: string[] = [];
+    const addOpt = (h: string) => {
+      const clean = cleanHeadlineText(h).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+      if (!clean || clean.length < 12) return;
+      if (cleanExclude && (clean === cleanExclude || calculateHeadlineSimilarity(clean, cleanExclude) >= 0.85)) {
+        return;
+      }
+      const isDuplicate = combined.some((existing) => calculateHeadlineSimilarity(existing, clean) >= 0.65);
+      if (!isDuplicate) {
+        combined.push(clean);
       }
     };
 
-    existing.forEach(addOpt);
-    addOpt(baseH);
-
-    // Title parts
-    const parts = baseH.split(/[:|–—]+/).map((p) => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      if (parts[0].length >= 12 && parts[1].length >= 12) {
-        addOpt(`${parts[1]}: ${parts[0]}`);
-      }
-      addOpt(parts[0]);
-      addOpt(parts[1]);
+    if (existing && Array.isArray(existing)) {
+      existing.forEach(addOpt);
     }
-
-    // Extract sentences from summary
-    if (summaryText) {
-      const cleanSummary = summaryText
-        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '')
-        .replace(/#[\w\u0900-\u097F]+/g, '');
-      const sentences = cleanSummary
-        .split(/[।\.\n]+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-
-      for (const sent of sentences) {
-        if (opts.length >= 5) break;
-        let s = sent
-          .replace(/^(?:वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|बता दें कि)[,\s]*/gi, '')
-          .replace(/[।\.\,\!\?\:\-]+$/g, '')
-          .trim();
-        if (s.length > 70) {
-          const cut = s.lastIndexOf(' ', 70);
-          s = s.slice(0, cut > 30 ? cut : 70).trim();
-        }
-        addOpt(s);
-      }
+    if (baseH && combined.length < 5) {
+      addOpt(baseH);
     }
+    generated.forEach(addOpt);
 
-    // Story-based clause rearrangements or location
-    if (opts.length < 5 && locationText && locationText !== 'विशेष कवरेज') {
-      const locClean = locationText.split(',')[0].trim();
-      if (!baseH.includes(locClean) && locClean.length > 2) {
-        addOpt(`${locClean}: ${baseH}`);
-      }
-    }
-
-    while (opts.length < 5) {
-      const seed = opts[0] || 'ताज़ा समाचार अपडेट';
-      const cand = `${seed} - ताज़ा अपडेट`;
-      if (!opts.includes(cand)) {
-        opts.push(cand);
-      } else {
-        break;
-      }
-    }
-
-    return opts.slice(0, 5);
+    return combined.slice(0, 5);
   };
 
   // Structured caption formatter supporting 3 distinct styles with strict hashtag hierarchy:
-  // 1st: #${username}, Middle: location & news tags, Last: #AiNewsMaker
+  // 1st: #${username}, Middle: location & news tags, Last: #AINewsMaker
   const formatCaptionByStyle = (
     style: 'detailed' | 'bullets' | 'short',
     headline: string,
@@ -230,7 +210,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
-      const locTag = loc && loc !== 'विशेष कवरेज' ? `#${loc.replace(/[^\w\u0900-\u097F]/g, '')}News` : '';
+      const locClean = loc && loc !== 'विशेष कवरेज' ? loc.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
+      const locTag = locClean ? `#${locClean}` : '';
       const midTags: string[] = [];
       if (locTag) midTags.push(locTag);
 
@@ -243,7 +224,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           (userTag && lower === userTag.toLowerCase()) ||
           lower.startsWith('#http') ||
           lower.startsWith('#www') ||
-          lower.startsWith('#url')
+          lower.startsWith('#url') ||
+          /News$/i.test(t)
         ) {
           continue;
         }
@@ -259,10 +241,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       return `${cleanBody}\n\n${allTags.join(' ')}`;
     };
 
+    const mode = style === 'short' ? 'short' : style === 'bullets' ? 'bullet' : 'detailed';
+
     if (currentRes) {
-      if (style === 'detailed' && currentRes.captionDetailed) return ensureStrictHashtags(currentRes.captionDetailed);
-      if (style === 'bullets' && currentRes.captionBullets) return ensureStrictHashtags(currentRes.captionBullets);
-      if (style === 'short' && currentRes.captionShort) return ensureStrictHashtags(currentRes.captionShort);
+      if (style === 'detailed' && currentRes.captionDetailed) return cleanCaptionParagraphs(ensureStrictHashtags(currentRes.captionDetailed), mode);
+      if (style === 'bullets' && currentRes.captionBullets) return cleanCaptionParagraphs(ensureStrictHashtags(currentRes.captionBullets), mode);
+      if (style === 'short' && currentRes.captionShort) return cleanCaptionParagraphs(ensureStrictHashtags(currentRes.captionShort), mode);
     }
 
     const hashtagRegex = /#[\w\u0900-\u097F]+/g;
@@ -283,20 +267,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         `तथ्यों के आधार पर अग्रिम दिशा-निर्देश दिए गए हैं।`,
       ]).map((b) => `• ${b}`);
       const closing = `पूरे घटनाक्रम को लेकर आगामी आधिकारिक दिशा-निर्देशों की प्रतीक्षा है।`;
-      return ensureStrictHashtags(`${intro}\n\n${bulletItems.join('\n')}\n\n${closing}`);
+      return cleanCaptionParagraphs(ensureStrictHashtags(`${intro}\n\n${bulletItems.join('\n')}\n\n${closing}`), 'bullet');
     }
 
     if (style === 'short') {
       const shortP1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} ताजा घटनाक्रम में महत्वपूर्ण जानकारी सामने आई है। ${sentences[0] || 'मामले को लेकर संबंधित स्तर पर संज्ञान लिया गया है।'}`;
       const shortP2 = `${sentences[1] || 'संबंधित पक्षों द्वारा स्थिति की समीक्षा की जा रही है और आवश्यक कदम उठाए जा रहे हैं।'}`;
-      return ensureStrictHashtags(`${shortP1}\n\n${shortP2}`);
+      return cleanCaptionParagraphs(ensureStrictHashtags(`${shortP1}\n\n${shortP2}`), 'short');
     }
 
     // Default: Detailed (3 full paragraphs)
     const p1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} मुख्य घटनाक्रम को लेकर ताजा जानकारी सामने आई है। ${sentences[0] || 'मामले की पूरी पृष्ठभूमि की समीक्षा की जा रही है।'}`;
     const p2 = sentences.slice(1, 3).join('। ') || 'प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और नियम सामने आ रहे हैं। संबंधित पक्षों के अनुसार घटनाक्रम से जुड़े प्रभाव का विस्तार से आकलन किया जा रहा है।';
     const p3 = sentences.slice(3, 5).join('। ') || 'इस संबंध में आवश्यक दिशा-निर्देश जारी किए गए हैं और आगामी फैसलों को लेकर संबंधित विभागों की निगरानी जारी है।';
-    return ensureStrictHashtags(`${p1}\n\n${p2}\n\n${p3}`);
+    return cleanCaptionParagraphs(ensureStrictHashtags(`${p1}\n\n${p2}\n\n${p3}`), 'detailed');
   };
 
   const handleSwitchCaptionStyle = (newStyle: 'detailed' | 'bullets' | 'short') => {
@@ -352,16 +336,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       lastProcessedTimeRef.current = autoFillNews.timestamp;
     }
 
-    const rawUrl = autoFillNews.url || (autoFillNews.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(autoFillNews.title.slice(0, 30))}` : '');
-    const effectiveTargetUrl = normalizeInputUrl(rawUrl);
+    const currentNewsId = autoFillNews.newsId || autoFillNews.url || autoFillNews.title || '';
+    if (activeNewsIdRef.current && currentNewsId && activeNewsIdRef.current !== currentNewsId) {
+      if (currentAbortControllerRef.current) {
+        try {
+          currentAbortControllerRef.current.abort();
+        } catch {}
+        currentAbortControllerRef.current = null;
+      }
+      activeRequestIdRef.current++;
+      setResult(null);
+      setHeadlineOptions([]);
+      setSelectedHeadlineIndex(0);
+      setError(null);
+      setCaptionCopied(false);
+      lastTriggerPayloadRef.current = '';
+    }
+    activeNewsIdRef.current = currentNewsId;
+
+    const hasExternalSource = Boolean(
+      autoFillNews.url &&
+      autoFillNews.url.startsWith('http') &&
+      !autoFillNews.url.includes('ainewsmaker.online') &&
+      !autoFillNews.url.includes('breakingnewswala.com') &&
+      !autoFillNews.url.includes('localhost') &&
+      !autoFillNews.url.includes('127.0.0.1')
+    );
+    const effectiveTargetUrl = hasExternalSource ? normalizeInputUrl(autoFillNews.url!) : '';
     const rawContent = autoFillNews.fullNews || autoFillNews.summary || autoFillNews.title || '';
     
-    if (autoFillNews.url) {
+    if (effectiveTargetUrl) {
       setActiveTab('link');
-    } else if (autoFillNews.fullNews) {
-      setActiveTab('command');
     } else {
-      setActiveTab('link');
+      setActiveTab('command');
     }
     
     setLinkUrl(effectiveTargetUrl);
@@ -489,9 +496,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         extractedArticlePhotos: extraPhotos.length > 0 ? extraPhotos : card.extractedArticlePhotos,
       });
 
-      const baseImmediate = cleanHeadlineText(immediateHeadline);
-      const immOpts = buildFiveStoryOptions([], baseImmediate, immediateSummary, immediateLocation);
-      setHeadlineOptions(immOpts);
+      // Keep headlineOptions empty while AI generates 5 independent options
+      setHeadlineOptions([]);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!immediateImage);
     }
@@ -523,7 +529,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
       clearTimeout(timeoutId);
 
-      if (isResetRef.current || activeRequestIdRef.current !== requestId) {
+      if (
+        isResetRef.current ||
+        activeRequestIdRef.current !== requestId ||
+        (extraData?.newsId && activeNewsIdRef.current && extraData.newsId !== activeNewsIdRef.current)
+      ) {
         return;
       }
 
@@ -548,19 +558,27 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       if (res.headline) {
         const cleanMain = cleanHeadlineText(res.headline);
-        if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
+        if (cleanMain && !opts.includes(cleanMain)) {
+          if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
+            opts.push(cleanMain);
+          }
+        }
       }
+
+      // Build 5 distinct headline options purely generated by AI
       const finalOpts = buildFiveStoryOptions(
         opts,
-        cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार'),
-        res.summary || extraData?.summary || '',
-        res.location || extraData?.location || ''
+        cleanHeadlineText(opts[0] || res.headline || 'ताज़ा समाचार'),
+        extraData?.summary || res.summary || '',
+        res.location || extraData?.location || '',
+        extraData?.title || ''
       );
       setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
-      const finalHeadline = cleanHeadlineText(opts[0] || res.headline || extraData?.title || card.headline);
+      // Selected headline for graphic: Option 1 from AI, fully selectable & editable
+      const finalHeadline = cleanHeadlineText(finalOpts[0] || res.headline || card.headline);
       const finalLoc = cleanLocationField(res.location || extraData?.location || card.location || '');
       const safeProxy = (u?: string) => {
         if (!u || !u.trim()) return '';
@@ -607,7 +625,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        res.summary || extraData?.summary || '',
+        extraData?.summary || res.summary || '',
         res,
         effectiveLink || url
       );
@@ -632,7 +650,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
     } catch (err: any) {
-      if (isResetRef.current || activeRequestIdRef.current !== requestId) {
+      if (
+        isResetRef.current ||
+        activeRequestIdRef.current !== requestId ||
+        (extraData?.newsId && activeNewsIdRef.current && extraData.newsId !== activeNewsIdRef.current)
+      ) {
         return;
       }
       console.warn('API error, executing client AI fallback:', err);
@@ -650,13 +672,19 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       if (fallbackResult.headline) {
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
-        if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
+        if (cleanMain && !opts.includes(cleanMain)) {
+          if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
+            opts.push(cleanMain);
+          }
+        }
       }
+
       const finalOpts = buildFiveStoryOptions(
         opts,
-        cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || 'ताज़ा समाचार'),
-        fallbackResult.summary || extraData?.summary || '',
-        fallbackResult.location || extraData?.location || ''
+        cleanHeadlineText(opts[0] || fallbackResult.headline || 'ताज़ा समाचार'),
+        extraData?.summary || fallbackResult.summary || '',
+        fallbackResult.location || extraData?.location || '',
+        extraData?.title || ''
       );
 
       setResult(fallbackResult);
@@ -664,7 +692,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
-      const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || card.headline);
+      const finalHeadline = cleanHeadlineText(finalOpts[0] || fallbackResult.headline || card.headline);
       const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || card.location || '');
       const finalImage = (extraData?.imageUrl && !extraData.imageUrl.includes('placeholder'))
         ? extraData.imageUrl
@@ -674,7 +702,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        fallbackResult.summary || extraData?.summary || '',
+        extraData?.summary || fallbackResult.summary || '',
         fallbackResult,
         effectiveLink || url
       );
@@ -1378,15 +1406,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <span>हेडलाइन संपादित करें (Edit):</span>
               <VoiceInputButton
                 onTranscript={(transcript) => {
-                  setResult((prev) =>
-                    prev
+                  setResult((prev) => {
+                    const newText = prev?.headline ? `${prev.headline} ${transcript}` : transcript;
+                    onChange({ headline: newText, formattedHeadline: newText });
+                    return prev
                       ? {
                           ...prev,
-                          headline: prev.headline ? `${prev.headline} ${transcript}` : transcript,
-                          formattedHeadline: prev.headline ? `${prev.headline} ${transcript}` : transcript,
+                          headline: newText,
+                          formattedHeadline: newText,
                         }
-                      : null
-                  );
+                      : null;
+                  });
                 }}
                 title="बोलकर हेडलाइन संपादित करें"
               />
@@ -1397,6 +1427,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               onChange={(e) => {
                 const val = e.target.value;
                 setResult((prev) => (prev ? { ...prev, headline: val, formattedHeadline: val } : null));
+                onChange({ headline: val, formattedHeadline: val });
               }}
               className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-white font-extrabold text-xs sm:text-sm font-['Noto_Sans_Devanagari'] focus:border-yellow-400 focus:outline-none leading-relaxed"
             />

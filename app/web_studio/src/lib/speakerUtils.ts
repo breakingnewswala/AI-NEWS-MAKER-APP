@@ -26,10 +26,14 @@ export function cleanHeadlineText(text: string): string {
     ' '
   );
 
-  // 3. Remove publisher, portal and city-news suffixes (e.g. "- Bhopal News", "- Indore News", "- MP News")
+  // 3. Remove publisher, portal, city-news suffixes (e.g. "- Bhopal News", "Bhopal News", "Dainik Bhaskar")
   cleaned = cleaned
     .replace(
-      /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat).*$/i,
+      /\s*(?:[|\-–—:,]\s*)?(?:(?:Bhopal|Indore|Dewas|Jabalpur|Gwalior|Ujjain|Raipur|Jaipur|Lucknow|Delhi|Patna|MP|UP|National|State|City|Local)\s*News|News\s*Update[s]?|Latest\s*News|Latest\s*Update[s]?|Breaking\s*News|Dainik\s*Bhaskar|Bhaskar|Aaj\s*Tak|NDTV(?:\s*India)?|Amar\s*Ujala|News18|Zee\s*News|Patrika|Navbharat(?:\s*Times)?|Hindustan|Live\s*Hindustan|Oneindia|ABP\s*News|Dainik\s*Jagran|Jagran|TV9)\b.*$/i,
+      ''
+    )
+    .replace(
+      /\s*(?:[|\-–—:,]\s*)?(?:भोपाल\s*न्यूज़|इंदौर\s*न्यूज़|देवास\s*न्यूज़|जबलपुर\s*न्यूज़|ग्वालियर\s*न्यूज़|एमपी\s*न्यूज़|दैनिक\s*भास्कर|भास्कर|आज\s*तक|अमर\s*उजाला|पत्रिका|नवभारत(?:\s*टाइम्स)?|एनडीटीवी|बीबीसी\s*हिंदी|ताज़ा\s*अपडेट|लेटेस्ट\s*अपडेट|बड़ी\s*खबर).*$/i,
       ''
     )
     .replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, '')
@@ -99,6 +103,20 @@ export function cleanHeadlineText(text: string): string {
     [/\bUSA\b/g, 'यूएसए'],
     [/\bUK\b/g, 'यूके'],
     [/\bCEO\b/g, 'सीईओ'],
+    [/\bRBI\b/g, 'आरबीआई'],
+    [/\bSBI\b/g, 'एसबीआई'],
+    [/\bIAS\b/g, 'आईएएस'],
+    [/\bIPS\b/g, 'आईपीएस'],
+    [/\bRERA\b/g, 'रेरा'],
+    [/\bNOC\b/g, 'एनओसी'],
+    [/\bFSI\b/g, 'एफएसआई'],
+    [/\bFAR\b/g, 'एफएआर'],
+    [/\bPWD\b/g, 'पीडब्ल्यूडी'],
+    [/\bNHAI\b/g, 'एनएचएआई'],
+    [/\bOTP\b/g, 'ओटीपी'],
+    [/\bLPG\b/g, 'एलपीजी'],
+    [/\bCNG\b/g, 'सीएनजी'],
+    [/\bEV\b/g, 'ईवी'],
   ];
   for (const [pattern, devanagari] of acronyms) {
     cleaned = cleaned.replace(pattern, devanagari);
@@ -544,15 +562,19 @@ export function formatAsJournalisticHeadline(raw: string): string {
   // 2. Strip leading English junk (without stripping numbers like 40 or 250)
   h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
 
-  // 3. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
+  // 3. Strip trailing interrogative/question clauses
+  h = h.replace(/[,;–—\-]?\s*(?:अब तक क्या-क्या पता है|क्या है पूरा मामला|जानिए पूरी बात|कौन था|क्यों हुआ|कैसे हुआ|क्या है वजह|क्या हुआ था|किसने किया)[?।.\s]*$/u, '');
+
+  // 4. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, '$1 पर रोक');
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:होगा|होंगे)\s+([^,:।\n]+)/gu, '$1 पर पाबंदी');
 
-  // 4. Transform declarative closing verb phrases into journalistic headline nouns/action tags
+  // 5. Transform declarative closing verb phrases into journalistic headline nouns/action tags
   h = h
     .replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, ' पर रोक')
-    .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
-    .replace(/(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' तय')
+    .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली|को\s*मंजूरी\s*दी\s*है)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
+    .replace(/(?:का\s+)?(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' तय')
+    .replace(/(?:का\s+)?(?:निर्णय\s*लिया\s*गया|फैसला\s*लिया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का निर्णय')
     .replace(/(?:लागू\s*किए\s*गए\s*हैं|लागू\s*किया\s*गया|लागू\s*होगा)(?:\s*हैं|\s*है)?$/u, ' लागू')
     .replace(/(?:\s*अतिरिक्त)?\s*(?:सहायता|छूट|राहत)\s*(?:दी\s*जाएगी|मिलेगी|का\s*प्रावधान)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
     .replace(/(?:दी\s*जाएगी|छूट\s*मिलेगी|प्रावधान\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
@@ -570,29 +592,41 @@ export function formatAsJournalisticHeadline(raw: string): string {
     .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का बड़ा ऐलान')
     .replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, ' के नए नियम');
 
-  // 5. Strip auxiliary/past verb endings if still lingering at the end
+  if (!h.includes('का मामला')) {
+    h = h.replace(/(?:सामने\s*आया\s*है|सामने\s*आई\s*है|सामने\s*आए\s*हैं)$/u, ' का मामला');
+  }
+  if (!h.includes('आरोप')) {
+    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, ' पर गंभीर आरोप');
+  }
+  if (!h.includes('खुलासा')) {
+    h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, ' पर बड़ा खुलासा');
+  }
+
+  // 6. Strip auxiliary/past verb endings if still lingering at the end
   h = h
     .replace(/\s+(?:हो\s*गया|हो\s*गई|हो\s*गए|किया\s*गया|किए\s*गए|की\s*गई|दिया\s*गया|दिए\s*गए|ली\s*गई|लिया\s*गया)$/u, '')
     .replace(/\s+(?:रहा\s*है|रही\s*है|रहे\s*हैं|रहा\s*था|रही\s*थी|रहे\s*थे|हो\s*रहा\s*है|हो\s*रही\s*है)$/u, '')
     .replace(/\s+(?:हैं|है|था|थी|थे)$/u, '');
 
-  // 6. Strip trailing prepositions/connectives that leave an incomplete sentence fragment
-  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक)$/u, '');
+  // 7. Strip trailing prepositions/connectives/fragments
+  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u, '');
 
-  // 7. Clean duplicate particles like "की की", "को को"
+  // 8. Clean duplicate particles like "की की", "को को", "का का"
   h = h
-    .replace(/(?:^|[^\p{L}\p{M}])(को|की|का|के|में|पर|से|ने)\s+\1(?=[^\p{L}\p{M}]|$)/gu, ' $1 ')
+    .replace(/\b(का|के|की|को|में|पर|से|ने)\s+\1\b/gu, '$1')
     .replace(/\s+/g, ' ');
 
-  // 8. Final cleanup of any punctuation marks at end
+  // 9. Strip surrounding quotes & final cleanup
+  h = h.replace(/^['"‘“]+|['"’”]+$/g, '').trim();
   h = h.replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
 
   return h;
 }
 
-function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
-  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2));
-  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2));
+export function calculateHeadlineSimilarity(h1: string, h2: string): number {
+  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी', 'हुए', 'हुआ', 'है', 'हैं', 'था', 'थी', 'थे']);
+  const words1 = new Set(h1.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const words2 = new Set(h2.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   if (words1.size === 0 || words2.size === 0) return 0;
   let common = 0;
   for (const w of words1) {
@@ -603,90 +637,201 @@ function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
 
 /**
  * Generates exactly 5 publishable, distinct journalistic headlines in pure Hindi.
- * Guaranteed: zero full stops, zero incomplete sentence cuts, dynamic extraction from facts.
+ * Guaranteed: zero full stops, zero colon-swapping, zero incomplete sentence cuts, dynamic extraction from facts.
  */
 export function generate5JournalisticHeadlines(
   baseTitle: string,
   sentences: string[] = [],
-  location: string = ''
+  location: string = '',
+  excludeTitle: string = ''
 ): string[] {
   const options: string[] = [];
   const locClean = location && location !== 'विशेष कवरेज' ? location.split(',')[0].trim() : '';
+  const cleanExclude = excludeTitle ? cleanHeadlineText(excludeTitle).replace(/[।\.\,\!\?\:\-]+$/g, '').trim() : '';
 
-  const addIfValid = (text: string) => {
+  const addIfValid = (text: string): boolean => {
+    if (!text) return false;
     const formatted = formatAsJournalisticHeadline(text);
-    if (!formatted || formatted.length < 14) return;
-    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return;
+    if (!formatted || formatted.length < 16 || formatted.length > 95) return false;
+    if (/[।\.\,\!\?\:\-]$/.test(formatted)) return false;
+    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u.test(formatted)) return false;
+    // Disallow fragmented question clauses or cut numbers
+    if (/^(?:अब तक क्या-क्या पता|जानिए पूरी बात|क्या है वजह|कौन था|कैसे हुआ)$/u.test(formatted)) return false;
+    if (/\d+$/u.test(formatted) && formatted.length < 35) return false;
+    // Strict exclusion check against original headline
+    if (cleanExclude && (formatted === cleanExclude || calculateHeadlineSimilarity(formatted, cleanExclude) >= 0.72)) {
+      return false;
+    }
     for (const opt of options) {
-      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.8) {
-        return;
+      if (opt === formatted || calculateHeadlineSimilarity(opt, formatted) > 0.60) {
+        return false;
       }
     }
     options.push(formatted);
+    return true;
   };
 
-  // 1. Process base title: Convert into active title
-  const cleanTitle = formatAsJournalisticHeadline(baseTitle);
-  addIfValid(cleanTitle);
+  // 1. Extract clean factual clauses from sentences only (NOT splitting numbers on commas)
+  const allClauses: string[] = [];
+  const rawSentences = sentences
+    .join('\n')
+    .replace(/\s*[^\s\n]*\.\.\..*$/gm, '') // Strip incomplete words cut by ellipsis
+    .split(/[।\n\?\!]+|(?<=[^\d])\.\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  // 2. Structured title combinations (if baseTitle had multiple parts)
-  const rawParts = baseTitle
-    .split(/[:|–—,]+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length >= 8);
-
-  if (rawParts.length >= 2) {
-    const part0 = formatAsJournalisticHeadline(rawParts[0]);
-    const part1 = formatAsJournalisticHeadline(rawParts[1]);
-    if (part0 && part1) {
-      addIfValid(`${part1}: ${part0}`);
-    }
-  }
-
-  // 3. Extract facts from body sentences (numbers, metrics, regulations, actions)
-  for (const sent of sentences) {
-    if (options.length >= 5) break;
-
-    const hasNumbers = /\d+/.test(sent);
-    const hasKeyAction = /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा/u.test(sent);
-
-    if (hasNumbers || hasKeyAction) {
-      const clauses = sent.split(/[,;।\n]+/).map((c) => c.trim()).filter((c) => c.length >= 12);
-      for (const clause of clauses) {
-        if (options.length >= 5) break;
-        const candidate = formatAsJournalisticHeadline(clause);
-        if (candidate.length >= 15 && candidate.length <= 80) {
-          addIfValid(candidate);
-        }
+  for (const sent of rawSentences) {
+    // Split on comma only if NOT preceded/followed by digit (protect 2,201)
+    const parts = sent.split(/(?<!\d)[,;–—|]+(?!\d)/).map((p) => p.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (part.length >= 16 && part.length <= 85) {
+        allClauses.push(part);
+      } else if (part.length > 85) {
+        const subParts = part.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत|को लेकर|के बाद)\s+/).map((p) => p.trim()).filter(Boolean);
+        allClauses.push(...subParts);
       }
     }
   }
 
-  // 4. Create Location-Anchored Headline
-  if (options.length < 5 && locClean) {
-    if (!cleanTitle.includes(locClean)) {
-      addIfValid(`${locClean}: ${cleanTitle}`);
+  // 2. High-priority factual clauses (numbers, key regulatory/incident words)
+  for (const clause of allClauses) {
+    if (options.length >= 5) break;
+    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल|हमला|चाकू|प्रोटेस्ट|हिरासत|कार्रवाई|बयान|आरोप|प्रशासन|सुरक्षा|पुलिस/u.test(clause)) {
+      addIfValid(clause);
     }
   }
 
-  // 5. Create "बड़ा फैसला / नए नियम" perspective if still under 5
-  if (options.length < 5 && rawParts.length > 0) {
-    addIfValid(`बड़ा फैसला: ${formatAsJournalisticHeadline(rawParts[0])}`);
-  }
-  if (options.length < 5 && rawParts.length > 1) {
-    addIfValid(`नई गाइडलाइन: ${formatAsJournalisticHeadline(rawParts[1])}`);
+  // 3. Secondary pass over other extracted clauses
+  for (const clause of allClauses) {
+    if (options.length >= 5) break;
+    addIfValid(clause);
   }
 
-  // 6. Remaining sentences if still under 5
-  for (const sent of sentences) {
-    if (options.length >= 5) break;
-    const candidate = formatAsJournalisticHeadline(sent);
-    if (candidate.length >= 15 && candidate.length <= 80) {
-      addIfValid(candidate);
+  // 4. Extract core subject entity from baseTitle & body
+  const cleanBase = cleanHeadlineText(baseTitle)
+    .replace(/^['"‘“]+|['"’”]+$/g, '')
+    .replace(/['"‘“’”]+/g, '')
+    .replace(/[,:;–—|?].*$/, '')
+    .trim();
+  const subjectWords = cleanBase
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !/^(?:पर|में|से|को|का|की|के|ने|यह|वह|कि|भी|नए|नया|बड़ा|बड़ी|और)$/.test(w));
+  const mainSubject = subjectWords.slice(0, 3).join(' ').trim();
+
+  // 5. Build dynamic journalistic perspectives from facts if still < 5
+  if (options.length < 5 && mainSubject.length >= 4) {
+    const journalisticAngles = [
+      `${mainSubject}: मामले में बड़ा खुलासा, जांच में जुटी पुलिस टीम`,
+      `${mainSubject} को लेकर प्रशासनिक सतर्कता: घटनाक्रम पर नजर`,
+      `${mainSubject} पर उठे गंभीर सवाल: संबंधित पक्षों ने रखी अपनी बात`,
+      `${mainSubject} के बाद स्थिति नियंत्रण में: सुरक्षा के पुख्ता इंतजाम`,
+      `${mainSubject} मामले में विस्तृत जांच शुरू: सामने आए कई अहम तथ्य`,
+      `${mainSubject} से जुड़ा पूरा घटनाक्रम: दिशा-निर्देश जारी`
+    ];
+
+    for (const h of journalisticAngles) {
+      if (options.length >= 5) break;
+      addIfValid(h);
+    }
+  }
+
+  // 6. Guarantee exactly 5 distinct options under all circumstances
+  if (options.length < 5) {
+    const locPrefix = locClean ? `${locClean}: ` : '';
+    const safeSubject = mainSubject || 'ताज़ा समाचार घटनाक्रम';
+    const emergencyList = [
+      `${locPrefix}${safeSubject}: पूरे घटनाक्रम की समीक्षा बैठक`,
+      `${locPrefix}${safeSubject} को लेकर उच्च स्तरीय जांच के निर्देश`,
+      `${locPrefix}${safeSubject}: मौके पर पहुंचे प्रशासनिक अधिकारी`,
+      `${locPrefix}${safeSubject} मामले में नियमों के पालन के निर्देश`,
+      `${locPrefix}${safeSubject} से जुड़ी मुख्य बातें आईं सामने`
+    ];
+    for (const fb of emergencyList) {
+      if (options.length >= 5) break;
+      addIfValid(fb);
     }
   }
 
   return options.slice(0, 5);
+}
+
+export function cleanCaptionParagraphs(
+  caption: string,
+  mode: 'detailed' | 'short' | 'bullet' = 'detailed'
+): string {
+  if (!caption) return '';
+  // Extract and strip hashtags
+  const hashtagRegex = /#[\w\u0900-\u097F]+/g;
+  const rawTags = caption.match(hashtagRegex) || [];
+  const bodyOnly = caption.replace(hashtagRegex, '').trim();
+
+  // Strip leading English SEO metadata if prepended
+  const cleanBody = bodyOnly
+    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
+    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
+    .trim();
+
+  // Clean tags: purge #BhopalNews or english-suffixed location tags
+  const cleanTags: string[] = [];
+  for (const t of rawTags) {
+    if (
+      /News$/i.test(t) &&
+      !['#BreakingNews', '#HindiNews', '#TopNews', '#LatestNews'].some((k) => k.toLowerCase() === t.toLowerCase())
+    ) {
+      continue;
+    }
+    const lower = t.toLowerCase();
+    if (lower === '#breakingnewswala' || lower === '#bnwtv') continue;
+    if (!cleanTags.includes(t)) cleanTags.push(t);
+  }
+  if (!cleanTags.some((t) => t.toLowerCase() === '#breakingnews')) cleanTags.push('#BreakingNews');
+  if (!cleanTags.some((t) => t.toLowerCase() === '#hindinews')) cleanTags.push('#HindiNews');
+  if (!cleanTags.some((t) => t.toLowerCase() === '#ainewsmaker')) cleanTags.push('#AINewsMaker');
+
+  const tagsString = cleanTags.join(' ');
+
+  if (mode === 'bullet') {
+    return `${cleanBody}\n\n${tagsString}`;
+  }
+
+  // Split into genuine paragraphs
+  const rawParagraphs = cleanBody
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (mode === 'short') {
+    if (rawParagraphs.length >= 2) {
+      return `${rawParagraphs[0]}\n\n${rawParagraphs[1]}\n\n${tagsString}`;
+    }
+    const sentences = cleanBody.split(/[।\.\n]+/).map((s) => s.trim()).filter((s) => s.length > 10);
+    const mid = Math.ceil(sentences.length / 2);
+    const p1 = sentences.slice(0, mid).join('। ') + '।';
+    const p2 = sentences.slice(mid).join('। ') + '।';
+    return `${p1}\n\n${p2}\n\n${tagsString}`;
+  }
+
+  // Detailed: exactly 3 substantive paragraphs
+  if (rawParagraphs.length === 3) {
+    return `${rawParagraphs[0]}\n\n${rawParagraphs[1]}\n\n${rawParagraphs[2]}\n\n${tagsString}`;
+  }
+  if (rawParagraphs.length > 3) {
+    const p1 = rawParagraphs[0];
+    const p2 = rawParagraphs.slice(1, rawParagraphs.length - 1).join(' ');
+    const p3 = rawParagraphs[rawParagraphs.length - 1];
+    return `${p1}\n\n${p2}\n\n${p3}\n\n${tagsString}`;
+  }
+
+  // If fewer than 3 paragraphs, divide sentences smoothly into 3 paragraphs
+  const sentences = cleanBody.split(/[।\.\n]+/).map((s) => s.trim()).filter((s) => s.length > 8);
+  if (sentences.length >= 3) {
+    const p1 = sentences.slice(0, Math.ceil(sentences.length / 3)).join('। ') + '।';
+    const p2 = sentences.slice(Math.ceil(sentences.length / 3), Math.ceil((2 * sentences.length) / 3)).join('। ') + '।';
+    const p3 = sentences.slice(Math.ceil((2 * sentences.length) / 3)).join('। ') + '।';
+    return `${p1}\n\n${p2}\n\n${p3}\n\n${tagsString}`;
+  }
+
+  return `${cleanBody}\n\n${tagsString}`;
 }
 
 /**

@@ -6886,54 +6886,45 @@ ${tagsString}`.trim();
 
 ${tagsString}`.trim();
 }
-function generate5JournalisticHeadlines(baseTitle, sentences = [], location = "") {
+function generate5JournalisticHeadlines(baseTitle, sentences = [], location = "", excludeTitle = "") {
   const options = [];
   const locClean = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? location.split(",")[0].trim() : "";
+  const cleanExclude = excludeTitle ? cleanHeadlineText(excludeTitle).replace(/[।\.\,\!\?\:\-]+$/g, "").trim() : "";
   const addIfValid = (text) => {
     if (!text) return false;
     const formatted = formatAsJournalisticHeadline(text);
     if (!formatted || formatted.length < 16 || formatted.length > 95) return false;
     if (/[।\.\,\!\?\:\-]$/.test(formatted)) return false;
-    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u.test(formatted)) return false;
+    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u.test(formatted)) return false;
+    if (/^(?:अब तक क्या-क्या पता|जानिए पूरी बात|क्या है वजह|कौन था|कैसे हुआ)$/u.test(formatted)) return false;
+    if (/\d+$/u.test(formatted) && formatted.length < 35) return false;
+    if (cleanExclude && (formatted === cleanExclude || calculateHeadlineSimilarityInternal(formatted, cleanExclude) >= 0.72)) {
+      return false;
+    }
     for (const opt of options) {
-      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.65) {
+      if (opt === formatted || calculateHeadlineSimilarityInternal(opt, formatted) > 0.6) {
         return false;
       }
     }
     options.push(formatted);
     return true;
   };
-  const cleanTitle = formatAsJournalisticHeadline(baseTitle);
-  addIfValid(cleanTitle);
-  const rawParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter((p) => p.length >= 10);
-  for (const part of rawParts) {
-    if (options.length >= 5) break;
-    addIfValid(part);
-  }
   const allClauses = [];
-  for (const sent of sentences) {
-    const puncClauses = sent.split(/[,;।\n|–—]+/).map((s) => s.trim()).filter(Boolean);
-    for (const c of puncClauses) {
-      if (c.length <= 85) {
-        allClauses.push(c);
-      } else {
-        const subClauses = c.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत)\s+/).map((s) => s.trim()).filter(Boolean);
-        if (subClauses.length > 1) {
-          allClauses.push(...subClauses);
-        } else {
-          const phraseSubs = c.split(/\s+(?:के लिए|को लेकर|की अध्यक्षता में)\s+/).map((s) => s.trim()).filter(Boolean);
-          if (phraseSubs.length > 1) {
-            allClauses.push(...phraseSubs);
-          } else {
-            allClauses.push(c);
-          }
-        }
+  const rawSentences = sentences.join("\n").replace(/\s*[^\s\n]*\.\.\..*$/gm, "").split(/[।\n\?\!]+|(?<=[^\d])\.\s+/).map((s) => s.trim()).filter(Boolean);
+  for (const sent of rawSentences) {
+    const parts = sent.split(/(?<!\d)[,;–—|]+(?!\d)/).map((p) => p.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (part.length >= 16 && part.length <= 85) {
+        allClauses.push(part);
+      } else if (part.length > 85) {
+        const subParts = part.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत|को लेकर|के बाद)\s+/).map((p) => p.trim()).filter(Boolean);
+        allClauses.push(...subParts);
       }
     }
   }
   for (const clause of allClauses) {
     if (options.length >= 5) break;
-    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल/u.test(clause)) {
+    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल|हमला|चाकू|प्रोटेस्ट|हिरासत|कार्रवाई|बयान|आरोप|प्रशासन|सुरक्षा|पुलिस/u.test(clause)) {
       addIfValid(clause);
     }
   }
@@ -6941,25 +6932,36 @@ function generate5JournalisticHeadlines(baseTitle, sentences = [], location = ""
     if (options.length >= 5) break;
     addIfValid(clause);
   }
-  if (options.length < 5 && locClean && options.length > 0) {
-    const firstOpt = options[0];
-    if (!firstOpt.includes(locClean)) {
-      addIfValid(`${locClean}: ${firstOpt}`);
+  const cleanBase = cleanHeadlineText(baseTitle).replace(/^['"‘“]+|['"’”]+$/g, "").replace(/['"‘“’”]+/g, "").replace(/[,:;–—|?].*$/, "").trim();
+  const subjectWords = cleanBase.split(/\s+/).filter((w) => w.length > 2 && !/^(?:पर|में|से|को|का|की|के|ने|यह|वह|कि|भी|नए|नया|बड़ा|बड़ी|और)$/.test(w));
+  const mainSubject = subjectWords.slice(0, 3).join(" ").trim();
+  if (options.length < 5 && mainSubject.length >= 4) {
+    const journalisticAngles = [
+      `${mainSubject}: \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092C\u0921\u093C\u093E \u0916\u0941\u0932\u093E\u0938\u093E, \u091C\u093E\u0902\u091A \u092E\u0947\u0902 \u091C\u0941\u091F\u0940 \u092A\u0941\u0932\u093F\u0938 \u091F\u0940\u092E`,
+      `${mainSubject} \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u0924\u0930\u094D\u0915\u0924\u093E: \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0928\u091C\u0930`,
+      `${mainSubject} \u092A\u0930 \u0909\u0920\u0947 \u0917\u0902\u092D\u0940\u0930 \u0938\u0935\u093E\u0932: \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0928\u0947 \u0930\u0916\u0940 \u0905\u092A\u0928\u0940 \u092C\u093E\u0924`,
+      `${mainSubject} \u0915\u0947 \u092C\u093E\u0926 \u0938\u094D\u0925\u093F\u0924\u093F \u0928\u093F\u092F\u0902\u0924\u094D\u0930\u0923 \u092E\u0947\u0902: \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u0947 \u092A\u0941\u0916\u094D\u0924\u093E \u0907\u0902\u0924\u091C\u093E\u092E`,
+      `${mainSubject} \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0902\u091A \u0936\u0941\u0930\u0942: \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0915\u0908 \u0905\u0939\u092E \u0924\u0925\u094D\u092F`,
+      `${mainSubject} \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u092A\u0942\u0930\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940`
+    ];
+    for (const h of journalisticAngles) {
+      if (options.length >= 5) break;
+      addIfValid(h);
     }
   }
-  let idx = 0;
-  while (options.length < 5 && idx < options.length) {
-    const opt = options[idx++];
-    if (opt.includes("\u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940") && !options.some((o) => o.includes("\u092A\u0930 \u0932\u0917\u0940 \u092E\u0941\u0939\u0930"))) {
-      addIfValid(opt.replace("\u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940", "\u092A\u0930 \u0932\u0917\u0940 \u092E\u0941\u0939\u0930"));
-    } else if (opt.includes("\u0915\u0940 \u092E\u0902\u091C\u0942\u0930\u0940") && !options.some((o) => o.includes("\u0939\u0941\u0908 \u0938\u094D\u0935\u0940\u0915\u0943\u0924"))) {
-      addIfValid(opt.replace("\u0915\u0940 \u092E\u0902\u091C\u0942\u0930\u0940", "\u0939\u0941\u0908 \u0938\u094D\u0935\u0940\u0915\u0943\u0924"));
-    } else if (opt.includes("\u0915\u093E \u0928\u093F\u0930\u094D\u0923\u092F") && !options.some((o) => o.includes("\u0915\u0940 \u0924\u0948\u092F\u093E\u0930\u0940"))) {
-      addIfValid(opt.replace("\u0915\u093E \u0928\u093F\u0930\u094D\u0923\u092F", "\u0915\u0940 \u0924\u0948\u092F\u093E\u0930\u0940"));
-    } else if (opt.includes("\u0924\u092F") && !options.some((o) => o.includes("\u0915\u093E \u0932\u0915\u094D\u0937\u094D\u092F \u0924\u092F"))) {
-      addIfValid(opt.replace("\u0924\u092F", "\u0915\u093E \u0932\u0915\u094D\u0937\u094D\u092F \u0924\u092F"));
-    } else if (opt.includes("\u092C\u093F\u091B\u093E\u0908 \u091C\u093E\u090F\u0917\u0940") && !options.some((o) => o.includes("\u092C\u093F\u091B\u093E\u0928\u0947 \u0915\u0940 \u0924\u0948\u092F\u093E\u0930\u0940"))) {
-      addIfValid(opt.replace("\u092C\u093F\u091B\u093E\u0908 \u091C\u093E\u090F\u0917\u0940", "\u092C\u093F\u091B\u093E\u0928\u0947 \u0915\u0940 \u0924\u0948\u092F\u093E\u0930\u0940"));
+  if (options.length < 5) {
+    const locPrefix = locClean ? `${locClean}: ` : "";
+    const safeSubject = mainSubject || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E";
+    const emergencyList = [
+      `${locPrefix}${safeSubject}: \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u092C\u0948\u0920\u0915`,
+      `${locPrefix}${safeSubject} \u0915\u094B \u0932\u0947\u0915\u0930 \u0909\u091A\u094D\u091A \u0938\u094D\u0924\u0930\u0940\u092F \u091C\u093E\u0902\u091A \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`,
+      `${locPrefix}${safeSubject}: \u092E\u094C\u0915\u0947 \u092A\u0930 \u092A\u0939\u0941\u0902\u091A\u0947 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u0927\u093F\u0915\u093E\u0930\u0940`,
+      `${locPrefix}${safeSubject} \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u092F\u092E\u094B\u0902 \u0915\u0947 \u092A\u093E\u0932\u0928 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`,
+      `${locPrefix}${safeSubject} \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u092E\u0941\u0916\u094D\u092F \u092C\u093E\u0924\u0947\u0902 \u0906\u0908\u0902 \u0938\u093E\u092E\u0928\u0947`
+    ];
+    for (const fb of emergencyList) {
+      if (options.length >= 5) break;
+      addIfValid(fb);
     }
   }
   return options.slice(0, 5);
@@ -7491,6 +7493,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     let effectiveInput = (rawInputText || "").trim();
     const rawLink = (linkUrl || "").trim();
     const isInternalPlatformUrl = rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com") || rawLink.includes("localhost") || rawLink.includes("127.0.0.1");
+    if (rawLink && isInternalPlatformUrl && !effectiveInput) {
+      return res.status(400).json({
+        error: "\u0906\u0902\u0924\u0930\u093F\u0915 \u090F\u092A\u094D\u0932\u093F\u0915\u0947\u0936\u0928 URL \u0915\u094B \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u094D\u0930\u094B\u0924 \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0938\u094D\u0915\u094D\u0930\u0948\u092A \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u093F\u0938\u0940 \u092C\u093E\u0939\u0930\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0915\u093E \u0932\u093F\u0902\u0915 \u092F\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0916\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
     if (rawLink && !isInternalPlatformUrl) {
       if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
@@ -7560,6 +7567,9 @@ ${rawLink}` : rawLink;
     const editorialSystemInstruction = `You are the Chief AI News Editor (\u091A\u0940\u092B \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0921\u093F\u091F\u0930) of "AI News Maker" (\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930).
 
 Your task is to analyze the provided news URL, RSS article content, raw news, press note, or script, and create factual, objective, balanced, and impactful Hindi news content.
+
+\u2605 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u0930\u094D\u0926\u0947\u0936 (EDITORIAL MANDATE):
+\u090F\u0915 \u0905\u0928\u0941\u092D\u0935\u0940 \u0939\u093F\u0902\u0926\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u092A\u093E\u0926\u0915 \u0915\u0940 \u0924\u0930\u0939 \u092A\u0939\u0932\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u094B \u0938\u092E\u091D\u0947\u0902\u0964 \u0909\u0938\u0915\u0947 \u092C\u093E\u0926 \u092A\u093E\u0901\u091A \u0938\u094D\u0935\u0924\u0902\u0924\u094D\u0930, \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915, \u092A\u0947\u0936\u0947\u0935\u0930 \u0914\u0930 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u093F\u0916\u0947\u0902\u0964 \u0915\u093F\u0938\u0940 \u092D\u0940 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u094B \u092E\u0942\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0940 \u0928\u0915\u0932 \u0915\u0930\u0915\u0947 \u0928 \u092C\u0928\u093E\u090F\u0901\u0964 \u092A\u093E\u0901\u091A\u094B\u0902 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u0932\u0917-\u0905\u0932\u0917 \u0939\u094B\u0902, \u0932\u0947\u0915\u093F\u0928 \u0938\u092D\u0940 \u090F\u0915 \u0939\u0940 \u0916\u092C\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u0947\u0902\u0964 \u0915\u094B\u0908 \u0928\u092F\u093E \u0924\u0925\u094D\u092F, \u0905\u092A\u094D\u0930\u092E\u093E\u0923\u093F\u0924 \u0906\u0930\u094B\u092A, \u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u0938\u0935\u093E\u0932, \u0905\u0928\u093E\u0935\u0936\u094D\u092F\u0915 \u0938\u0938\u094D\u092A\u0947\u0902\u0938 \u092F\u093E \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u092A\u0930\u093F\u0923\u093E\u092E \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964
 
 \u2605 MANDATORY ANTI-FLATTERY & HONORIFIC CLEANUP:
 Completely remove unnecessary formal honorifics and PR flattery such as:
@@ -7814,13 +7824,13 @@ JSON Schema:
           cleanOptions.push(cleanNoPunct);
         }
       };
-      if (parsedData.headline) {
-        addOptionIfValid(parsedData.headline);
-      }
       if (Array.isArray(parsedData.headlineOptions)) {
         for (const h of parsedData.headlineOptions) {
           addOptionIfValid(h);
         }
+      }
+      if (parsedData.headline) {
+        addOptionIfValid(parsedData.headline);
       }
       if (cleanOptions.length < 5) {
         const factSentences = (fetchedArticleSnippet || rawInputText || parsedData.summary || "").split(/[।\n]+|\.\s+/).map((s) => s.trim()).filter((s) => s.length > 15);

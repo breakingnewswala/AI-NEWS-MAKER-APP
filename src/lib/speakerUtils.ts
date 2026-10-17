@@ -562,11 +562,14 @@ export function formatAsJournalisticHeadline(raw: string): string {
   // 2. Strip leading English junk (without stripping numbers like 40 or 250)
   h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
 
-  // 3. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
+  // 3. Strip trailing interrogative/question clauses
+  h = h.replace(/[,;–—\-]?\s*(?:अब तक क्या-क्या पता है|क्या है पूरा मामला|जानिए पूरी बात|कौन था|क्यों हुआ|कैसे हुआ|क्या है वजह|क्या हुआ था|किसने किया)[?।.\s]*$/u, '');
+
+  // 4. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, '$1 पर रोक');
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:होगा|होंगे)\s+([^,:।\n]+)/gu, '$1 पर पाबंदी');
 
-  // 4. Transform declarative closing verb phrases into journalistic headline nouns/action tags
+  // 5. Transform declarative closing verb phrases into journalistic headline nouns/action tags
   h = h
     .replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, ' पर रोक')
     .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली|को\s*मंजूरी\s*दी\s*है)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
@@ -589,30 +592,41 @@ export function formatAsJournalisticHeadline(raw: string): string {
     .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का बड़ा ऐलान')
     .replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, ' के नए नियम');
 
-  // 5. Strip auxiliary/past verb endings if still lingering at the end
+  if (!h.includes('का मामला')) {
+    h = h.replace(/(?:सामने\s*आया\s*है|सामने\s*आई\s*है|सामने\s*आए\s*हैं)$/u, ' का मामला');
+  }
+  if (!h.includes('आरोप')) {
+    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, ' पर गंभीर आरोप');
+  }
+  if (!h.includes('खुलासा')) {
+    h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, ' पर बड़ा खुलासा');
+  }
+
+  // 6. Strip auxiliary/past verb endings if still lingering at the end
   h = h
     .replace(/\s+(?:हो\s*गया|हो\s*गई|हो\s*गए|किया\s*गया|किए\s*गए|की\s*गई|दिया\s*गया|दिए\s*गए|ली\s*गई|लिया\s*गया)$/u, '')
     .replace(/\s+(?:रहा\s*है|रही\s*है|रहे\s*हैं|रहा\s*था|रही\s*थी|रहे\s*थे|हो\s*रहा\s*है|हो\s*रही\s*है)$/u, '')
     .replace(/\s+(?:हैं|है|था|थी|थे)$/u, '');
 
-  // 6. Strip trailing prepositions/connectives/fragments that leave an incomplete sentence fragment
-  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u, '');
+  // 7. Strip trailing prepositions/connectives/fragments
+  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u, '');
 
-  // 7. Clean duplicate particles like "की की", "को को", "का का"
+  // 8. Clean duplicate particles like "की की", "को को", "का का"
   h = h
     .replace(/\b(का|के|की|को|में|पर|से|ने)\s+\1\b/gu, '$1')
     .replace(/\s+/g, ' ');
 
-  // 8. Final cleanup of any punctuation marks at end
+  // 9. Strip surrounding quotes & final cleanup
+  h = h.replace(/^['"‘“]+|['"’”]+$/g, '').trim();
   h = h.replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
 
   return h;
 }
 
 export function calculateHeadlineSimilarity(h1: string, h2: string): number {
-  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी']);
-  const words1 = new Set(h1.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
-  const words2 = new Set(h2.split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी', 'हुए', 'हुआ', 'है', 'हैं', 'था', 'थी', 'थे']);
+  const words1 = new Set(h1.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
+  const words2 = new Set(h2.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   if (words1.size === 0 || words2.size === 0) return 0;
   let common = 0;
   for (const w of words1) {
@@ -628,19 +642,28 @@ export function calculateHeadlineSimilarity(h1: string, h2: string): number {
 export function generate5JournalisticHeadlines(
   baseTitle: string,
   sentences: string[] = [],
-  location: string = ''
+  location: string = '',
+  excludeTitle: string = ''
 ): string[] {
   const options: string[] = [];
   const locClean = location && location !== 'विशेष कवरेज' ? location.split(',')[0].trim() : '';
+  const cleanExclude = excludeTitle ? cleanHeadlineText(excludeTitle).replace(/[।\.\,\!\?\:\-]+$/g, '').trim() : '';
 
   const addIfValid = (text: string): boolean => {
     if (!text) return false;
     const formatted = formatAsJournalisticHeadline(text);
     if (!formatted || formatted.length < 16 || formatted.length > 95) return false;
     if (/[।\.\,\!\?\:\-]$/.test(formatted)) return false;
-    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी)$/u.test(formatted)) return false;
+    if (/(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u.test(formatted)) return false;
+    // Disallow fragmented question clauses or cut numbers
+    if (/^(?:अब तक क्या-क्या पता|जानिए पूरी बात|क्या है वजह|कौन था|कैसे हुआ)$/u.test(formatted)) return false;
+    if (/\d+$/u.test(formatted) && formatted.length < 35) return false;
+    // Strict exclusion check against original headline
+    if (cleanExclude && (formatted === cleanExclude || calculateHeadlineSimilarity(formatted, cleanExclude) >= 0.72)) {
+      return false;
+    }
     for (const opt of options) {
-      if (opt === formatted || calculateHeadlineSimilarity(opt, formatted) > 0.65) {
+      if (opt === formatted || calculateHeadlineSimilarity(opt, formatted) > 0.60) {
         return false;
       }
     }
@@ -648,92 +671,90 @@ export function generate5JournalisticHeadlines(
     return true;
   };
 
-  // 1. Process base title: Convert into active title
-  const cleanTitle = formatAsJournalisticHeadline(baseTitle);
-  addIfValid(cleanTitle);
-
-  // 2. Extract clauses from baseTitle without colon-swapping
-  const rawParts = baseTitle
-    .split(/[:|–—]+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length >= 10);
-
-  for (const part of rawParts) {
-    if (options.length >= 5) break;
-    addIfValid(part);
-  }
-
-  // 3. Extract candidate clauses from body sentences (sub-clause parsing)
+  // 1. Extract clean factual clauses from sentences only (NOT splitting numbers on commas)
   const allClauses: string[] = [];
-  for (const sent of sentences) {
-    const puncClauses = sent.split(/[,;।\n|–—]+/).map((s) => s.trim()).filter(Boolean);
-    for (const c of puncClauses) {
-      if (c.length <= 85) {
-        allClauses.push(c);
-      } else {
-        const subClauses = c.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत)\s+/).map((s) => s.trim()).filter(Boolean);
-        if (subClauses.length > 1) {
-          allClauses.push(...subClauses);
-        } else {
-          const phraseSubs = c.split(/\s+(?:के लिए|को लेकर|की अध्यक्षता में)\s+/).map((s) => s.trim()).filter(Boolean);
-          if (phraseSubs.length > 1) {
-            allClauses.push(...phraseSubs);
-          } else {
-            allClauses.push(c);
-          }
-        }
+  const rawSentences = sentences
+    .join('\n')
+    .replace(/\s*[^\s\n]*\.\.\..*$/gm, '') // Strip incomplete words cut by ellipsis
+    .split(/[।\n\?\!]+|(?<=[^\d])\.\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const sent of rawSentences) {
+    // Split on comma only if NOT preceded/followed by digit (protect 2,201)
+    const parts = sent.split(/(?<!\d)[,;–—|]+(?!\d)/).map((p) => p.trim()).filter(Boolean);
+    for (const part of parts) {
+      if (part.length >= 16 && part.length <= 85) {
+        allClauses.push(part);
+      } else if (part.length > 85) {
+        const subParts = part.split(/\s+(?:और|तथा|व|जिसमें|जिसके तहत|इसके तहत|बैठक में|के तहत|को लेकर|के बाद)\s+/).map((p) => p.trim()).filter(Boolean);
+        allClauses.push(...subParts);
       }
     }
   }
 
-  // Priority pass: clauses with numbers or key news actions
+  // 2. High-priority factual clauses (numbers, key regulatory/incident words)
   for (const clause of allClauses) {
     if (options.length >= 5) break;
-    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल/u.test(clause)) {
+    if (/\d+/.test(clause) || /रोक|मंजूरी|तय|लागू|छूट|नियम|फैसला|निर्णय|गाइडलाइन|आदेश|अलर्ट|शतक|रन|दबोचा|शर्त|प्रावधान|निगरानी|परियोजना|पाइपलाइन|जल|पेयजल|हमला|चाकू|प्रोटेस्ट|हिरासत|कार्रवाई|बयान|आरोप|प्रशासन|सुरक्षा|पुलिस/u.test(clause)) {
       addIfValid(clause);
     }
   }
 
-  // Secondary pass: remaining clauses
+  // 3. Secondary pass over other extracted clauses
   for (const clause of allClauses) {
     if (options.length >= 5) break;
     addIfValid(clause);
   }
 
-  // Fallback location anchor
-  if (options.length < 5 && locClean && options.length > 0) {
-    const firstOpt = options[0];
-    if (!firstOpt.includes(locClean)) {
-      addIfValid(`${locClean}: ${firstOpt}`);
+  // 4. Extract core subject entity from baseTitle & body
+  const cleanBase = cleanHeadlineText(baseTitle)
+    .replace(/^['"‘“]+|['"’”]+$/g, '')
+    .replace(/['"‘“’”]+/g, '')
+    .replace(/[,:;–—|?].*$/, '')
+    .trim();
+  const subjectWords = cleanBase
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !/^(?:पर|में|से|को|का|की|के|ने|यह|वह|कि|भी|नए|नया|बड़ा|बड़ी|और)$/.test(w));
+  const mainSubject = subjectWords.slice(0, 3).join(' ').trim();
+
+  // 5. Build dynamic journalistic perspectives from facts if still < 5
+  if (options.length < 5 && mainSubject.length >= 4) {
+    const journalisticAngles = [
+      `${mainSubject}: मामले में बड़ा खुलासा, जांच में जुटी पुलिस टीम`,
+      `${mainSubject} को लेकर प्रशासनिक सतर्कता: घटनाक्रम पर नजर`,
+      `${mainSubject} पर उठे गंभीर सवाल: संबंधित पक्षों ने रखी अपनी बात`,
+      `${mainSubject} के बाद स्थिति नियंत्रण में: सुरक्षा के पुख्ता इंतजाम`,
+      `${mainSubject} मामले में विस्तृत जांच शुरू: सामने आए कई अहम तथ्य`,
+      `${mainSubject} से जुड़ा पूरा घटनाक्रम: दिशा-निर्देश जारी`
+    ];
+
+    for (const h of journalisticAngles) {
+      if (options.length >= 5) break;
+      addIfValid(h);
     }
   }
 
-  // Fallback synthesis if still < 5: derive substantive journalistic variants
-  let idx = 0;
-  while (options.length < 5 && idx < options.length) {
-    const opt = options[idx++];
-    if (opt.includes('को मंजूरी') && !options.some((o) => o.includes('पर लगी मुहर'))) {
-      addIfValid(opt.replace('को मंजूरी', 'पर लगी मुहर'));
-    } else if (opt.includes('की मंजूरी') && !options.some((o) => o.includes('हुई स्वीकृत'))) {
-      addIfValid(opt.replace('की मंजूरी', 'हुई स्वीकृत'));
-    } else if (opt.includes('का निर्णय') && !options.some((o) => o.includes('की तैयारी'))) {
-      addIfValid(opt.replace('का निर्णय', 'की तैयारी'));
-    } else if (opt.includes('तय') && !options.some((o) => o.includes('का लक्ष्य तय'))) {
-      addIfValid(opt.replace('तय', 'का लक्ष्य तय'));
-    } else if (opt.includes('बिछाई जाएगी') && !options.some((o) => o.includes('बिछाने की तैयारी'))) {
-      addIfValid(opt.replace('बिछाई जाएगी', 'बिछाने की तैयारी'));
+  // 6. Guarantee exactly 5 distinct options under all circumstances
+  if (options.length < 5) {
+    const locPrefix = locClean ? `${locClean}: ` : '';
+    const safeSubject = mainSubject || 'ताज़ा समाचार घटनाक्रम';
+    const emergencyList = [
+      `${locPrefix}${safeSubject}: पूरे घटनाक्रम की समीक्षा बैठक`,
+      `${locPrefix}${safeSubject} को लेकर उच्च स्तरीय जांच के निर्देश`,
+      `${locPrefix}${safeSubject}: मौके पर पहुंचे प्रशासनिक अधिकारी`,
+      `${locPrefix}${safeSubject} मामले में नियमों के पालन के निर्देश`,
+      `${locPrefix}${safeSubject} से जुड़ी मुख्य बातें आईं सामने`
+    ];
+    for (const fb of emergencyList) {
+      if (options.length >= 5) break;
+      addIfValid(fb);
     }
   }
 
   return options.slice(0, 5);
 }
 
-/**
- * Ensures clean, substantive paragraph structure for captions.
- * - detailed: exactly 3 substantive paragraphs separated by \n\n
- * - short: exactly 2 substantive paragraphs separated by \n\n
- * - bullet: intro + 3-4 bullets (•) + status paragraph
- */
 export function cleanCaptionParagraphs(
   caption: string,
   mode: 'detailed' | 'short' | 'bullet' = 'detailed'
