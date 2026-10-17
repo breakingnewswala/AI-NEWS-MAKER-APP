@@ -76,15 +76,15 @@ export interface TemplatePlanConfig {
 export const GRAPHIC_1_DEFINITION: GraphicTemplateDefinition = {
   graphicNumber: 1,
   id: 'graphic_001',
-  name: 'Graphic 1',
-  titleHi: 'Graphic 1 (बेसिक 4:5 न्यूज़ जैकेट)',
-  subtitle: 'बेसिक प्लान: 4:5 पोर्ट्रेट, 270° रोटेटेड डेट, लोकेशन व लोगो बॉक्स, पूरी खबर डिस्क्रिप्शन में CTA, फिक्स्ड येलो फुटर',
+  name: 'Basic Graphic — Default',
+  titleHi: 'Basic Graphic — Default',
+  subtitle: 'बेसिक प्लान: 4:5 पोर्ट्रेट, डिफॉल्ट ग्राफिक',
   planCategory: 'BASIC',
   aspectRatio: '4:5',
   headlineMaxLines: 3,
   headline_max_lines: 3,
   headline_line_count: 3,
-  headline_area: '3-Line Headline Area (बॉटम व्हाइट पॉलीगॉन)',
+  headline_area: '3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)',
   hasDescriptionCTA: true,
   descriptionCTAText: 'पूरी खबर डिस्क्रिप्शन में',
   descriptionCTAPosition: 'below_headline',
@@ -93,8 +93,8 @@ export const GRAPHIC_1_DEFINITION: GraphicTemplateDefinition = {
   logoPlacement: 'top_right_box',
   photoLayout: 'top_half',
   footerType: 'fixed_yellow',
-  description: 'Graphic 1 (BASIC PLAN): शीर्ष 53% न्यूज़ फोटो, टॉप-लेफ्ट लोकेशन बॉक्स (रेड बॉर्डर), टॉप-राइट लोगो बॉक्स (#FFE600), लेफ्ट 270° रोटेटेड डेट, बॉटम 47% व्हाइट पॉलीगॉन एरिया में 3-लाइन हेडलाइन, "पूरी खबर डिस्क्रिप्शन में" रेड पिल CTA और बॉटम फिक्स्ड येलो सोशल फुटर।',
-  tags: ['basic', '4:5', 'photo-news', 'fixed-footer', 'graphic-1'],
+  description: 'Graphic 1 (BASIC PLAN): शीर्ष 53% न्यूज़ फोटो, टॉप-लेफ्ट लोकेशन बॉक्स, टॉप-राइट लोगो बॉक्स, वाटरमार्क व डेट, बॉटम 3-लाइन हेडलाइन एरिया और सोशल फुटर।',
+  tags: ['basic', '4:5', 'photo-news', 'fixed-footer', 'graphic-1', 'default'],
 };
 
 export const GRAPHIC_2_DEFINITION: GraphicTemplateDefinition = {
@@ -337,7 +337,7 @@ export function getTemplateHeadlineConfig(templateId?: string): TemplateConfig &
 
 export const DEFAULT_TEMPLATE_PLAN_CONFIGS: Record<string, TemplatePlanConfig> = {
   graphic_001: {
-    allowedPlans: ['BASIC'],
+    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
     isActive: true,
     version: 'v1.0',
   },
@@ -392,9 +392,22 @@ export function saveTemplateConfig(templateId: string, update: Partial<TemplateP
       isActive: true,
       version: 'v1.0',
     };
-    configs[templateId] = { ...current, ...update };
+    const updatedConfig = { ...current, ...update };
+    configs[templateId] = updatedConfig;
     localStorage.setItem(STORAGE_KEY_TEMPLATE_CONFIGS, JSON.stringify(configs));
-    window.dispatchEvent(new CustomEvent('template_plans_updated', { detail: { templateId, config: configs[templateId] } }));
+    window.dispatchEvent(new CustomEvent('template_plans_updated', { detail: { templateId, config: updatedConfig } }));
+
+    // Async sync with cloud backend API
+    fetch('/api/admin/save-template-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        templateId,
+        allowedPlans: updatedConfig.allowedPlans,
+        isActive: updatedConfig.isActive,
+        customName: updatedConfig.customName,
+      }),
+    }).catch((err) => console.warn('Cloud template sync warning:', err));
   } catch (e) {
     console.error('Failed to save template config', e);
   }
@@ -415,6 +428,8 @@ export function isTemplateAvailableForUserPlan(
   isAdmin: boolean = false
 ): boolean {
   if (isAdmin) return true;
+  // Primary Graphic Template (graphic_001) is available for all four user categories (Basic to VIP Desk)
+  if (templateId === 'graphic_001') return true;
   if (templateId === 'custom-png') {
     const userCat = normalizeUserPlanTier(userPlanTier);
     return userCat === 'PRO' || userCat === 'VIP DESK';

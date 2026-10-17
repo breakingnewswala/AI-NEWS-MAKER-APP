@@ -138,6 +138,67 @@ export function saveDraft(
   return newDraft;
 }
 
+export function saveVideoDraft(
+  videoData: any,
+  extraMeta?: {
+    title?: string;
+    existingDraftId?: string;
+  }
+): NewsDraft {
+  const drafts = getSavedDrafts();
+  const now = Date.now();
+  const draftId = extraMeta?.existingDraftId || `video-draft-${now}-${Math.random().toString(36).substring(2, 6)}`;
+  
+  const title = extraMeta?.title || videoData.headline1 || 'वीडियो प्रोजेक्ट ड्राफ्ट';
+  const headline = videoData.headline1 || videoData.videoCaption || 'ताज़ा वीडियो समाचार';
+  const category = 'वीडियो';
+  const location = videoData.location || '';
+  const summary = videoData.videoCaption || '';
+  const tags = ['#VideoNews', '#Reels', '#AINewsMaker'];
+  const thumbnailUrl = videoData.channelLogoUrl || '';
+
+  const newDraft: NewsDraft = {
+    id: draftId,
+    title,
+    headline,
+    category,
+    location,
+    summary,
+    tags,
+    draftType: 'video',
+    videoData: { ...videoData },
+    thumbnailUrl,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const existingIdx = drafts.findIndex((d) => d.id === draftId);
+  let updatedDrafts: NewsDraft[];
+  if (existingIdx >= 0) {
+    newDraft.createdAt = drafts[existingIdx].createdAt;
+    updatedDrafts = [...drafts];
+    updatedDrafts[existingIdx] = newDraft;
+  } else {
+    updatedDrafts = [newDraft, ...drafts];
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(updatedDrafts));
+      window.dispatchEvent(new CustomEvent('ai_news_drafts_updated', { detail: updatedDrafts }));
+      fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft: newDraft }),
+      }).catch(() => {});
+    } catch (err) {
+      console.error('Error saving video draft to localStorage:', err);
+    }
+  }
+
+  return newDraft;
+}
+
 export function deleteDraft(id: string): void {
   const drafts = getSavedDrafts();
   const filtered = drafts.filter((d) => d.id !== id);

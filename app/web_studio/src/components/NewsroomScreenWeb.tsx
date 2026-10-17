@@ -24,6 +24,7 @@ import {
   ExternalLink,
   X,
   Eye,
+  ChevronDown,
 } from 'lucide-react';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft } from '../lib/draftsManager';
@@ -52,8 +53,23 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   onNavigateToVideos,
   currentUser,
 }) => {
-  // Navigation & Sub-Tabs: 'drafts' or 'support'
-  const [activeTab, setActiveTab] = useState<'drafts' | 'support'>('drafts');
+  // Expandable Accordion sections: drafts, support, epaper
+  const [expandedSections, setExpandedSections] = useState<{
+    drafts: boolean;
+    support: boolean;
+    epaper: boolean;
+  }>({
+    drafts: false,
+    support: false,
+    epaper: false,
+  });
+
+  const toggleSection = (section: 'drafts' | 'support' | 'epaper') => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
 
   // Drafts state
   const [drafts, setDrafts] = useState<NewsDraft[]>(() => getSavedDrafts());
@@ -343,132 +359,72 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   return (
     <div className="w-full max-w-full lg:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-white overflow-x-hidden">
       {/* 1. Header Banner */}
-      <div className="w-full bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/50 border border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="w-full bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/50 border border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center shadow-lg text-white shrink-0">
             <Newspaper className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg sm:text-2xl font-black text-white truncate">
-                न्यूज़ रूम (संपादकीय डेस्क)
-              </h2>
-              <span className="px-2 py-0.5 bg-red-600/90 text-white text-[10px] font-black rounded uppercase animate-pulse shrink-0">
-                लाइव
-              </span>
-              {isAdmin && (
-                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black rounded shrink-0">
-                  एडमिन डेस्क
-                </span>
-              )}
-            </div>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1 line-clamp-2 sm:line-clamp-1">
-              संपादकीय डेस्क, सहेजे गए ड्राफ्ट प्रोजेक्ट्स, सपोर्ट इनबॉक्स व त्वरित प्रोडक्शन हब
+            <h2 className="text-lg sm:text-2xl font-black text-white">
+              न्यूज़रूम संपादकीय डेस्क
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-1">
+              संपादकीय ड्राफ्ट प्रोजेक्ट्स, सहायता केंद्र व ई-पेपर प्रबंधन
             </p>
           </div>
         </div>
-
-        {/* Quick Production Actions */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
-          <button
-            type="button"
-            onClick={onNavigateToStudio}
-            className="px-3.5 py-2.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4 text-slate-950 shrink-0" />
-            <span>ग्राफिक स्टूडियो</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onNavigateToVideos}
-            className="px-3.5 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
-          >
-            <Film className="w-4 h-4 text-white shrink-0" />
-            <span>वीडियो न्यूज़</span>
-          </button>
-        </div>
       </div>
 
-      {/* 2. Three Main Options in Exact Sequence: 1. Drafts & Projects, 2. Support Inbox, 3. E-Paper (Disabled Coming Soon) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl">
-        {/* First: Drafts & Projects */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('drafts')}
-          className={`py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-            activeTab === 'drafts'
-              ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-              : 'text-slate-400 hover:text-white bg-slate-950/40'
-          }`}
-        >
-          <FolderOpen className="w-4 h-4 shrink-0" />
-          <span>ड्राफ्ट्स एवं प्रोजेक्ट्स</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-            activeTab === 'drafts' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'
-          }`}>
-            {drafts.length}
-          </span>
-        </button>
-
-        {/* Second: Support Inbox */}
-        <button
-          type="button"
-          onClick={() => setActiveTab('support')}
-          className={`py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-            activeTab === 'support'
-              ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-              : 'text-slate-400 hover:text-white bg-slate-950/40'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4 shrink-0" />
-          <span>सपोर्ट इनबॉक्स</span>
-          {pendingCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse">
-              {pendingCount}
-            </span>
-          )}
-        </button>
-
-        {/* Third: E-Paper (Bottom/3rd position, highlighted with COMING SOON, disabled & non-interactive) */}
-        <div
-          aria-disabled="true"
-          title="ई-पेपर फीचर जल्द उपलब्ध होगा"
-          className="py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-950/60 border border-slate-800/80 text-slate-500 opacity-60 cursor-not-allowed select-none flex items-center justify-center gap-2"
-        >
-          <Newspaper className="w-4 h-4 shrink-0 text-slate-500" />
-          <span>ई-पेपर (E-Paper)</span>
-          <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 font-black tracking-wider uppercase">
-            COMING SOON
-          </span>
-        </div>
-      </div>
-
-      {/* 3A. TAB 1: Drafts & Saved News Projects */}
-      {activeTab === 'drafts' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-            <div className="min-w-0">
-              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate">
-                <FolderOpen className="w-5 h-5 text-amber-400 shrink-0" />
-                <span>सहेजे गए ड्राफ्ट्स एवं प्रोजेक्ट्स ({filteredDrafts.length})</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5 truncate">
-                किसी भी प्रोजेक्ट पर क्लिक करके सीधे ग्राफिक स्टूडियो में एडिट व एक्सपोर्ट करें
-              </p>
+      {/* 2. Three Expandable Sections: 1. Drafts & Projects, 2. Support Inbox, 3. ePaper (Coming Soon) */}
+      <div className="space-y-4">
+        {/* Section 1: Drafts & Projects */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+          <button
+            type="button"
+            onClick={() => toggleSection('drafts')}
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <FolderOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-black text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स (Drafts & Projects)</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    {drafts.length}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">सहेजे गए सभी समाचार ड्राफ्ट्स व प्रोडक्शन प्रोजेक्ट्स</p>
+              </div>
             </div>
+            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.drafts ? 'rotate-180 text-amber-400' : ''}`} />
+          </button>
 
-            <div className="relative w-full sm:w-auto sm:min-w-[260px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={draftSearchQuery}
-                onChange={(e) => setDraftSearchQuery(e.target.value)}
-                placeholder="प्रोजेक्ट या हेडलाइन खोजें..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
-              />
-            </div>
-          </div>
+          {expandedSections.drafts && (
+            <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-950/60 animate-in fade-in slide-in-from-top-1 duration-200 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate">
+                    <FolderOpen className="w-5 h-5 text-amber-400 shrink-0" />
+                    <span>सहेजे गए ड्राफ्ट्स एवं प्रोजेक्ट्स ({filteredDrafts.length})</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5 truncate">
+                    किसी भी प्रोजेक्ट पर क्लिक करके सीधे ग्राफिक स्टूडियो में एडिट व एक्सपोर्ट करें
+                  </p>
+                </div>
+
+                <div className="relative w-full sm:w-auto sm:min-w-[260px]">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={draftSearchQuery}
+                    onChange={(e) => setDraftSearchQuery(e.target.value)}
+                    placeholder="प्रोजेक्ट या हेडलाइन खोजें..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
+                  />
+                </div>
+              </div>
 
           {filteredDrafts.length === 0 ? (
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-10 text-center space-y-3">
@@ -497,8 +453,12 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 >
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800/80 pb-2">
-                      <span className="px-2 py-0.5 bg-slate-800 text-amber-300 font-bold rounded-md text-[10px]">
-                        {draft.category || 'ब्रेकिंग'}
+                      <span className={`px-2 py-0.5 font-bold rounded-md text-[10px] flex items-center gap-1 ${
+                        draft.draftType === 'video' 
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/40' 
+                          : 'bg-slate-800 text-amber-300'
+                      }`}>
+                        {draft.draftType === 'video' ? '🎬 वीडियो प्रोजेक्ट' : (draft.category || 'ब्रेकिंग')}
                       </span>
                       <span className="flex items-center gap-1 text-[11px]">
                         <Clock className="w-3 h-3 text-slate-500" />
@@ -551,12 +511,38 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               ))}
             </div>
           )}
+            </div>
+          )}
         </div>
-      )}
 
-      {/* 3B. TAB 2: Support & Help Inbox */}
-      {activeTab === 'support' && (
-        <div className="space-y-6">
+        {/* Section 2: Support Inbox */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+          <button
+            type="button"
+            onClick={() => toggleSection('support')}
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-black text-white">सपोर्ट इनबॉक्स (Support Inbox)</h3>
+                  {pendingCount > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse">
+                      {pendingCount} पेंडिंग
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">सपोर्ट टिकट, वॉइस नोट्स, पूछताछ एवं समाधान</p>
+              </div>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.support ? 'rotate-180 text-amber-400' : ''}`} />
+          </button>
+
+          {expandedSections.support && (
+            <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-950/60 animate-in fade-in slide-in-from-top-1 duration-200 space-y-6">
           {/* Header Stats Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
@@ -911,8 +897,46 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               })}
             </div>
           )}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Section 3: ePaper (Coming Soon) */}
+        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl transition-all">
+          <button
+            type="button"
+            onClick={() => toggleSection('epaper')}
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
+                <Newspaper className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-black text-white">ई-पेपर (ePaper)</h3>
+                  <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 font-black tracking-wider uppercase">
+                    COMING SOON
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">दैनिक समाचार पत्र एवं डिजिटल ई-पेपर पब्लिशिंग सिस्टम</p>
+              </div>
+            </div>
+            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.epaper ? 'rotate-180 text-amber-400' : ''}`} />
+          </button>
+          {expandedSections.epaper && (
+            <div className="p-8 border-t border-slate-800 bg-slate-950/60 text-center space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                <Newspaper className="w-7 h-7" />
+              </div>
+              <h4 className="text-base font-black text-white">ई-पेपर पब्लिशिंग डेस्क — जल्द आ रहा है (Coming Soon)</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                इस मॉड्यूल के माध्यम से आप अपने चैनल का मल्टी-पेज डिजिटल ई-पेपर (PDF & Web View) सीधे लेआउट जनरेटर से बना सकेंगे। यह सुविधा आगामी अपडेट में उपलब्ध होगी।
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Full Size In-App Attachment Preview Modal */}
       {previewAttachment && (

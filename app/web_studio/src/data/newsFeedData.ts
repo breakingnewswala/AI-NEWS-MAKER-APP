@@ -18,6 +18,11 @@ export interface NewsFeedPost {
   manualThumbnailUrl?: string;
   additionalPhotos?: string[];
   status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  isBonus?: boolean;
+  rewardCoins?: number;
+  coinValue?: number;
+  coinCost?: number;
+  restrictedPlans?: string[];
 }
 
 export interface VideoFeedItem {
@@ -32,16 +37,30 @@ export interface VideoFeedItem {
   videoUrl: string;
   thumbnailUrl: string;
   category: string;
+  isBonus?: boolean;
+  rewardCoins?: number;
+  coinValue?: number;
+  coinCost?: number;
+  restrictedPlans?: string[];
 }
 
-// 4-Day Auto Delete Rule: Videos older than 4 days (96 hours) are automatically removed
-export const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+// 7-Day Auto Delete Rule: Videos & News older than 7 days (168 hours) are automatically removed
+export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+export const FOUR_DAYS_MS = SEVEN_DAYS_MS; // Backwards compatibility alias
 
 export function filterActiveVideos(videos: VideoFeedItem[]): VideoFeedItem[] {
   const now = Date.now();
   return videos.filter((v) => {
     if (!v.createdAt) return true;
-    return now - v.createdAt < FOUR_DAYS_MS;
+    return now - v.createdAt < SEVEN_DAYS_MS;
+  });
+}
+
+export function filterActiveNews(posts: NewsFeedPost[]): NewsFeedPost[] {
+  const now = Date.now();
+  return posts.filter((p) => {
+    if (!p.timestamp) return true;
+    return now - p.timestamp < SEVEN_DAYS_MS;
   });
 }
 
@@ -84,7 +103,10 @@ export const INITIAL_CATEGORIES = [
   { id: 'state', name: '📍 राज्य / स्थानीय' },
 ];
 
-export const INITIAL_NEWS_POSTS: NewsFeedPost[] = [
+// Production feed starts empty so dummy seed cards are never shown as real news
+export const INITIAL_NEWS_POSTS: NewsFeedPost[] = [];
+
+export const SAMPLE_TEMPLATE_PRESETS: NewsFeedPost[] = [
   {
     id: 'live-post-1',
     title: 'भारत ने लॉन्च किया नया AI सुपरकंप्यूटिंग नेटवर्क, वैश्विक स्तर पर बनी नई पहचान',
@@ -278,7 +300,9 @@ export const INITIAL_VIDEOS: VideoFeedItem[] = [
     views: '89K देखा गया',
     videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1517976487507-5b3b11329582?w=800&auto=format&fit=crop',
-    category: 'tech'
+    category: 'tech',
+    isBonus: true,
+    rewardCoins: 50
   },
   {
     id: 'vid-3',
@@ -304,7 +328,9 @@ export const INITIAL_VIDEOS: VideoFeedItem[] = [
     views: '42K देखा गया',
     videoUrl: 'https://www.w3schools.com/html/mov_bbb.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop',
-    category: 'business'
+    category: 'business',
+    isBonus: true,
+    rewardCoins: 75
   },
   {
     id: 'vid-5',

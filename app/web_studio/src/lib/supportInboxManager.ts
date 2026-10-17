@@ -31,9 +31,31 @@ export function getSupportInquiries(): SupportInquiry[] {
   }
 }
 
+export async function fetchRemoteSupportInquiries(userId?: string, role?: string): Promise<SupportInquiry[]> {
+  try {
+    const params = new URLSearchParams();
+    if (userId) params.set('userId', userId);
+    if (role) params.set('role', role);
+    const res = await fetch(`/api/support/requests?${params.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.requests)) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_INQUIRIES, JSON.stringify(data.requests));
+        }
+        return data.requests;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch remote support inquiries:', e);
+  }
+  return getSupportInquiries();
+}
+
 export function saveSupportInquiry(data: Omit<SupportInquiry, 'id' | 'createdAt' | 'status'>): SupportInquiry {
   const newInquiry: SupportInquiry = {
     id: `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    userId: data.userId || '',
     userName: data.userName || 'अनाम यूज़र',
     userEmail: data.userEmail || '',
     userMobile: data.userMobile || '',
@@ -52,8 +74,15 @@ export function saveSupportInquiry(data: Omit<SupportInquiry, 'id' | 'createdAt'
       localStorage.setItem(STORAGE_KEY_INQUIRIES, JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent('ai_news_support_inquiry_added', { detail: newInquiry }));
     } catch (e) {
-      console.warn('Error saving inquiry:', e);
+      console.warn('Error saving inquiry locally:', e);
     }
+
+    // Remote sync
+    fetch('/api/support/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newInquiry),
+    }).catch((err) => console.warn('Remote inquiry sync failed:', err));
   }
 
   return newInquiry;
@@ -79,6 +108,13 @@ export function updateInquiryStatus(
     });
     localStorage.setItem(STORAGE_KEY_INQUIRIES, JSON.stringify(updated));
     window.dispatchEvent(new CustomEvent('ai_news_support_inquiry_updated'));
+
+    // Remote sync
+    fetch(`/api/support/requests/${encodeURIComponent(inquiryId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, adminResponse }),
+    }).catch((err) => console.warn('Remote inquiry update failed:', err));
   } catch (e) {
     console.warn('Error updating inquiry status:', e);
   }

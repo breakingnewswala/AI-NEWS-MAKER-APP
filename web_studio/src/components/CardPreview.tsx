@@ -401,23 +401,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       ? '#000000'
       : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'))));
 
-    const highlightColor = customHighlight || (isGraphic1
-      ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
-      : isGraphic3
-      ? (card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600')
-      : isGraphic4
-      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
+    const defaultTemplateHighlight = isGraphic4
+      ? '#DC2626'
       : isGraphic2
-      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C')
+      ? '#EA580C'
       : isIvory
-      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#B45309')
+      ? '#B45309'
       : isEmerald
       ? '#FACC15'
-      : isMorning
-      ? (card.highlightColor || '#FFE600')
       : isLightTemplate
-      ? (card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626')
-      : (card.highlightColor || '#FFE600'));
+      ? '#DC2626'
+      : '#FFE600';
+
+    const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
 
     const effectiveFontSize = Math.max(13, Math.round(canonicalLayout.fontSize * previewScale));
     const effectiveLineHeight = Math.max(16, Math.round(canonicalLayout.lineHeight * previewScale));

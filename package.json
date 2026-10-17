@@ -23,6 +23,8 @@
     "openai": "^7.10.0"
   },
   "devDependencies": {
-    "@firebase/eslint-plugin-security-rules": "^0.0.2"
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 }

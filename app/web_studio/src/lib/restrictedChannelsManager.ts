@@ -140,6 +140,25 @@ export function getRestrictedChannels(): RestrictedChannel[] {
   return DEFAULT_RESTRICTED_CHANNELS;
 }
 
+export async function fetchRemoteRestrictedChannels(): Promise<RestrictedChannel[]> {
+  try {
+    const res = await fetch('/api/channels');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.channels) && data.channels.length > 0) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_RESTRICTED_CHANNELS, JSON.stringify(data.channels));
+          window.dispatchEvent(new CustomEvent('ai_news_restricted_channels_updated', { detail: data.channels }));
+        }
+        return data.channels;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch remote channels:', e);
+  }
+  return getRestrictedChannels();
+}
+
 export function saveRestrictedChannels(list: RestrictedChannel[]): void {
   if (typeof window === 'undefined') return;
   try {
@@ -158,11 +177,12 @@ export function addRestrictedChannel(data: {
   reason?: string;
 }): RestrictedChannel {
   const current = getRestrictedChannels();
+  const cleanUser = cleanUsername(data.username);
   const newChannel: RestrictedChannel = {
     id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     channelName: data.channelName.trim(),
     websiteUrl: cleanDomain(data.websiteUrl),
-    username: cleanUsername(data.username),
+    username: cleanUser,
     logoUrl: data.logoUrl || '',
     reason: data.reason || 'प्रतिबंधित आधिकारिक चैनल',
     createdAt: Date.now(),
@@ -170,7 +190,35 @@ export function addRestrictedChannel(data: {
 
   const updated = [newChannel, ...current];
   saveRestrictedChannels(updated);
+
+  // Sync with Backend
+  fetch('/api/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(newChannel),
+  }).catch((err) => console.warn('Remote add channel failed:', err));
+
   return newChannel;
+}
+
+export function editRestrictedChannel(id: string, updates: Partial<RestrictedChannel>): boolean {
+  const current = getRestrictedChannels();
+  const idx = current.findIndex((c) => c.id === id);
+  if (idx >= 0) {
+    const updated = [...current];
+    updated[idx] = { ...updated[idx], ...updates };
+    saveRestrictedChannels(updated);
+
+    // Sync with Backend
+    fetch(`/api/channels/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch((err) => console.warn('Remote edit channel failed:', err));
+
+    return true;
+  }
+  return false;
 }
 
 export function deleteRestrictedChannel(id: string): boolean {
@@ -178,6 +226,12 @@ export function deleteRestrictedChannel(id: string): boolean {
   const updated = current.filter((c) => c.id !== id);
   if (updated.length !== current.length) {
     saveRestrictedChannels(updated);
+
+    // Sync with Backend
+    fetch(`/api/channels/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).catch((err) => console.warn('Remote delete channel failed:', err));
+
     return true;
   }
   return false;

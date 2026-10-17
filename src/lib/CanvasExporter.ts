@@ -706,7 +706,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     ctx.restore();
 
     // Headline Text (Centered between divider and above-footer strip)
-    const hlColor = card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626';
+    const hlColor = card.highlightColor || '#DC2626';
     const headlineTopBound = dividerY + 32;
     const headlineBottomBound = aboveFooterY - 24;
     const availableHeadlineSpace = headlineBottomBound - headlineTopBound;
@@ -778,7 +778,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     drawPhotoDisclaimerWatermark(ctx, width, height, card);
 
     // 2-Line Headline inside the white box with comfortable top breathing space (never touching ribbon)
-    const hlColor = card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626';
+    const hlColor = card.highlightColor || '#DC2626';
     const headlineTextY = superBreakingHeadlineTextY;
     drawRenderedHeadlineLines(
       ctx,
@@ -1957,7 +1957,7 @@ async function drawGraphic001Canvas(
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = (card.highlightColor && card.highlightColor !== '#DC2626') ? card.highlightColor : '#FFE600';
+    const highlightColor = card.highlightColor || '#FFE600';
 
     const layout = computeCanonicalHeadlineLayout({
       headline: rawHeadline,
@@ -2498,7 +2498,7 @@ async function drawGraphic002Canvas(
     ctx.save();
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#EA580C';
+    const highlightColor = card.highlightColor || '#EA580C';
 
     const layout = computeCanonicalHeadlineLayout({
       headline: rawHeadline,
@@ -2888,7 +2888,7 @@ async function drawGraphic003Canvas(
   } else {
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor && card.highlightColor !== '#DC2626' ? card.highlightColor : '#FFE600';
+    const highlightColor = card.highlightColor || '#FFE600';
 
     const layout = computeCanonicalHeadlineLayout({
       headline: rawHeadline,
@@ -3076,7 +3076,7 @@ async function drawGraphic004Canvas(
   } else {
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor && card.highlightColor !== '#FFE600' ? card.highlightColor : '#DC2626';
+    const highlightColor = card.highlightColor || '#DC2626';
 
     const layout = computeCanonicalHeadlineLayout({
       headline: rawHeadline,
@@ -3786,7 +3786,7 @@ async function drawMorningJacketContent(
   }
 
   // 4. Headline (White & Yellow or Dark Charcoal & Ruby in Ivory)
-  const hlColor = isIvory ? (card.highlightColor || '#B45309') : (isEmerald ? '#FACC15' : (card.highlightColor || '#FFE600'));
+  const hlColor = card.highlightColor || (isIvory ? '#B45309' : (isEmerald ? '#FACC15' : '#FFE600'));
   drawRenderedHeadlineLines(
     ctx,
     tokenLines,

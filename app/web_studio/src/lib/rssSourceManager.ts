@@ -14,76 +14,199 @@ export interface AdminRssSource {
 }
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
+const STORAGE_KEY_DELETED_SOURCE_IDS = 'ai_news_admin_deleted_rss_source_ids_v1';
 
 export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
   {
-    id: 'src_aajtak_rss',
-    name: 'आज तक (Aaj Tak Hindi News)',
-    url: 'https://www.aajtak.in/rssfeeds/?id=home',
-    type: 'rss',
-    category: 'देश',
+    id: "src_aajtak_live",
+    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "देश",
     isActive: true,
-    createdAt: Date.now() - 86400000,
-    itemsFetchedCount: 12,
+    createdAt: 1726000000000
   },
   {
-    id: 'src_bbchindi_rss',
-    name: 'बीबीसी हिंदी (BBC Hindi News)',
-    url: 'https://feeds.bbci.co.uk/hindi/rss.xml',
-    type: 'rss',
-    category: 'अंतरराष्ट्रीय',
+    id: "src_amarujala_live",
+    name: "अमर उजाला (Amar Ujala) - देश",
+    url: "https://www.amarujala.com/rss/breaking-news.xml",
+    type: "rss",
+    category: "देश",
     isActive: true,
-    createdAt: Date.now() - 43200000,
-    itemsFetchedCount: 8,
+    createdAt: 1726000001000
   },
   {
-    id: 'src_ndtv_rss',
-    name: 'NDTV इंडिया (NDTV India Live)',
-    url: 'https://feeds.feedburner.com/ndtvkhabar',
-    type: 'rss',
-    category: 'राजनीति',
+    id: "src_ndtv_live",
+    name: "NDTV इंडिया - लाइव समाचार",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "देश",
     isActive: true,
-    createdAt: Date.now() - 21600000,
-    itemsFetchedCount: 10,
+    createdAt: 1726000002000
   },
   {
-    id: 'src_pib_web',
-    name: 'प्रेस सूचना ब्यूरो (PIB National Desk)',
-    url: 'https://pib.gov.in/PressReleasePage.aspx',
-    type: 'web',
-    category: 'देश',
+    id: "src_bbc_live",
+    name: "बीबीसी हिंदी (BBC Hindi)",
+    url: "https://feeds.bbci.co.uk/hindi/rss.xml",
+    type: "rss",
+    category: "अंतरराष्ट्रीय",
     isActive: true,
-    createdAt: Date.now() - 10000000,
-    itemsFetchedCount: 5,
+    createdAt: 1726000003000
   },
+  {
+    id: "src_nbt_live",
+    name: "नवभारत टाइम्स (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "राज्य",
+    isActive: true,
+    createdAt: 1726000004000
+  }
 ];
 
-export function getAdminRssSources(): AdminRssSource[] {
-  if (typeof window === 'undefined') return DEFAULT_RSS_SOURCES;
+export function getDeletedSourceIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(DEFAULT_RSS_SOURCES));
-      return DEFAULT_RSS_SOURCES;
+    const raw = localStorage.getItem(STORAGE_KEY_DELETED_SOURCE_IDS);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function addDeletedSourceId(id: string) {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const current = getDeletedSourceIds();
+    current.add(id);
+    localStorage.setItem(STORAGE_KEY_DELETED_SOURCE_IDS, JSON.stringify(Array.from(current)));
+  } catch {}
+}
+
+let memoryRssSources: AdminRssSource[] = [];
+
+export function getAdminRssSources(): AdminRssSource[] {
+  const deletedIds = getDeletedSourceIds();
+  let list: AdminRssSource[] = memoryRssSources;
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_RSS_SOURCES);
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          list = parsed;
+        }
+      }
+    } catch {
+      // ignore
     }
-    const list = JSON.parse(raw);
-    return Array.isArray(list) && list.length > 0 ? list : DEFAULT_RSS_SOURCES;
-  } catch {
-    return DEFAULT_RSS_SOURCES;
   }
+
+  // If memory and local storage are both empty, provide default reliable sources
+  if ((!list || list.length === 0) && deletedIds.size === 0) {
+    list = DEFAULT_RSS_SOURCES;
+  }
+
+  const cleaned = (list || []).filter((s) => s && s.url && !deletedIds.has(s.id));
+  memoryRssSources = cleaned;
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
+    } catch {}
+  }
+  return cleaned;
+}
+
+export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
+  const deletedIds = getDeletedSourceIds();
+  try {
+    const res = await fetch(getApiUrl('/api/admin/rss-sources'));
+    if (res.ok) {
+      const data = await res.json();
+      const serverSources = (data && data.success && Array.isArray(data.sources)) ? data.sources : [];
+      const localSources = getAdminRssSources();
+
+      // Non-destructive bidirectional merge:
+      // Map by URL or ID so neither client nor server ever silently deletes the admin's sources
+      const sourceMap = new Map<string, AdminRssSource>();
+
+      // 1. Add valid server sources (not explicitly deleted by user)
+      serverSources.forEach((s: AdminRssSource) => {
+        if (s && s.url && !deletedIds.has(s.id)) {
+          sourceMap.set(s.url.trim(), s);
+        }
+      });
+
+      // 2. Add local sources not already in server
+      let hasLocalUnsynced = false;
+      localSources.forEach((s: AdminRssSource) => {
+        if (s && s.url && !deletedIds.has(s.id)) {
+          const key = s.url.trim();
+          if (!sourceMap.has(key)) {
+            sourceMap.set(key, s);
+            hasLocalUnsynced = true;
+          }
+        }
+      });
+
+      let merged = Array.from(sourceMap.values());
+      if (merged.length === 0 && deletedIds.size === 0) {
+        merged = DEFAULT_RSS_SOURCES;
+        hasLocalUnsynced = true;
+      }
+
+      memoryRssSources = merged;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: merged }));
+      }
+
+      // If local storage had sources missing from server (e.g. after a redeploy/update), restore them to backend
+      if (hasLocalUnsynced) {
+        saveAdminRssSources(merged);
+      }
+
+      return merged;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch RSS sources from backend, preserving local sources:', err);
+  }
+  return getAdminRssSources();
 }
 
 export function saveAdminRssSources(sources: AdminRssSource[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(sources));
-    window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: sources }));
-    fetch('/api/admin/rss-sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sources }),
-    }).catch(() => {});
-  } catch {}
+  const deletedIds = getDeletedSourceIds();
+  const cleaned = sources.filter((s) => s && s.url && !deletedIds.has(s.id));
+  memoryRssSources = cleaned;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
+      window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: cleaned }));
+    } catch {}
+  }
+
+  // Persist permanently to backend database with auto-retry
+  fetch(getApiUrl('/api/admin/rss-sources'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+      ...getAdminAuthHeaders(),
+    },
+    body: JSON.stringify({ sources: cleaned, userRole: 'admin' }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (data && data.success && Array.isArray(data.sources)) {
+        memoryRssSources = data.sources;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
+        }
+      }
+    })
+    .catch((err) => {
+      console.warn('Backend saveAdminRssSources warning:', err);
+    });
 }
 
 export function addAdminRssSource(
@@ -102,7 +225,7 @@ export function addAdminRssSource(
     createdAt: Date.now(),
     itemsFetchedCount: 0,
   };
-  const list = [newSource, ...getAdminRssSources()];
+  const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id && s.url !== newSource.url)];
   saveAdminRssSources(list);
   // Trigger background live sync immediately
   syncAllSourcesLive().catch(() => {});
@@ -118,15 +241,33 @@ export function toggleAdminRssSource(id: string): AdminRssSource[] {
 }
 
 export function deleteAdminRssSource(id: string): AdminRssSource[] {
+  addDeletedSourceId(id);
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
+  fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+      ...getAdminAuthHeaders(),
+    },
+    body: JSON.stringify({ userRole: 'admin' }),
+  }).catch(() => {});
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+  }
   return list;
 }
 
+import { getApiUrl, getAuthHeaders } from './apiConfig';
 import type { NewsFeedPost } from '../data/newsFeedData';
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
 const STORAGE_KEY_APPROVED_RSS_IDS = 'ai_news_approved_rss_post_ids_v1';
+
+export function getAdminAuthHeaders(): Record<string, string> {
+  return getAuthHeaders();
+}
 
 export function getApprovedRssIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -141,15 +282,16 @@ export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>)
   if (!post) return false;
   if (post.status === 'REJECTED') return false;
   if (post.status === 'APPROVED') return true;
-  const set = approvedIds || getApprovedRssIds();
-  if (post.id && set.has(post.id)) return true;
+  if (approvedIds && post.id && approvedIds.has(post.id)) return true;
   const isFeedSource = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
-  if (isFeedSource) return false;
+  if (isFeedSource) {
+    return false; // RSS/Web feeds MUST be approved by Admin
+  }
   return post.status !== 'PENDING_APPROVAL';
 }
 
-export function approveRssPost(postId: string): void {
-  if (typeof window === 'undefined') return;
+export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
   try {
     const approved = getApprovedRssIds();
     approved.add(postId);
@@ -157,23 +299,98 @@ export function approveRssPost(postId: string): void {
 
     // Update locally cached synced RSS posts
     const cached = getActiveRssNewsPosts();
+    const target = postData || cached.find((p) => p.id === postId);
     const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'APPROVED' as const } : p));
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
 
-    // Call server to persist approval in news database
-    fetch(`/api/admin/approve-news/${encodeURIComponent(postId)}`, { method: 'POST' }).catch(() => {
-      fetch(`/api/news-posts/${encodeURIComponent(postId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'APPROVED' }),
-      }).catch(() => {});
+    // Call server with verified API URL, Admin headers and full post data
+    const url = getApiUrl(`/api/admin/approve-news/${encodeURIComponent(postId)}`);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(target || {}),
     });
 
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+    return res.ok;
   } catch (e) {
     console.error('Error approving RSS post:', e);
+    return false;
   }
+}
+
+export async function rejectRssPost(postId: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const approved = getApprovedRssIds();
+    approved.delete(postId);
+    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+
+    const cached = getActiveRssNewsPosts();
+    const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'REJECTED' as const } : p));
+    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+
+    const url = getApiUrl(`/api/admin/reject-news/${encodeURIComponent(postId)}`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+    });
+
+    window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+    return res.ok;
+  } catch (e) {
+    console.error('Error rejecting RSS post:', e);
+    return false;
+  }
+}
+
+export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
+  if (typeof window === 'undefined') return new Set();
+  const localApproved = getApprovedRssIds();
+  const adminHeaders = getAdminAuthHeaders();
+
+  // If client has local approved IDs and admin Bearer token, migrate them safely to server
+  if (localApproved.size > 0 && adminHeaders['Authorization']) {
+    try {
+      const url = getApiUrl('/api/admin/migrate-approvals');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({ approvedIds: Array.from(localApproved) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.approvedIds)) {
+          const authoritative = new Set<string>(data.approvedIds);
+          localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
+          return authoritative;
+        }
+      }
+    } catch {}
+  }
+
+  // Fetch authoritative approved IDs from server
+  try {
+    const url = getApiUrl('/api/admin/approved-news-ids');
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.approvedIds)) {
+        const authoritative = new Set<string>(data.approvedIds);
+        localApproved.forEach((id) => authoritative.add(id));
+        localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
+        return authoritative;
+      }
+    }
+  } catch {}
+
+  return localApproved;
 }
 
 export function getActiveRssNewsPosts(): NewsFeedPost[] {
@@ -183,20 +400,7 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const approvedSet = getApprovedRssIds();
-        return parsed.map((p) => {
-          if (p.id && p.id.startsWith('rss-')) {
-            const isApproved = p.status === 'APPROVED' || approvedSet.has(p.id);
-            return {
-              ...p,
-              status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
-            };
-          }
-          return {
-            ...p,
-            status: 'APPROVED' as const,
-          };
-        });
+        return parsed;
       }
     }
   } catch {}
@@ -217,7 +421,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
       }
       return {
         ...p,
-        status: 'APPROVED' as const,
+        status: (p.status || 'APPROVED') as any,
       };
     });
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(normalized));
@@ -228,23 +432,28 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
 
 export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {
   try {
-    const res = await fetch('/api/admin/rss-sync', { method: 'POST' });
+    const syncUrl = getApiUrl('/api/admin/rss-sync');
+    const res = await fetch(syncUrl, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+    });
     if (res.ok) {
       const data = await res.json();
       // Fetch latest production posts from /api/news-posts to update active synced feed
       try {
-        const postsRes = await fetch('/api/news-posts');
+        const postsUrl = getApiUrl('/api/news-posts');
+        const postsRes = await fetch(postsUrl);
         if (postsRes.ok) {
-          const allPosts = await postsRes.json();
-          if (Array.isArray(allPosts)) {
-            const rssAndWebOnly = allPosts.filter(
-              (p: any) => p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-'))
+          const rawPosts = await postsRes.json();
+          const postsList = Array.isArray(rawPosts) ? rawPosts : (rawPosts?.posts || []);
+          if (Array.isArray(postsList)) {
+            const rssAndWebOnly = postsList.filter(
+              (p: any) => p && p.id && (String(p.id).startsWith('rss-') || String(p.id).startsWith('web-'))
             );
             setSyncedRssNewsPosts(rssAndWebOnly);
           }
         }
       } catch {}
-
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
@@ -253,10 +462,10 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
       return { success: true, totalNewItems: data.count || data.totalNewItems || 0 };
     }
   } catch (err: any) {
+    console.warn('Live RSS sync error:', err);
     return { success: false, error: err?.message || 'सिंक त्रुटि' };
   }
-
-  return { success: true, totalNewItems: 0 };
+  return { success: false, error: 'सिंक विफल रहा' };
 }
 
 

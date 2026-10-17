@@ -61,16 +61,55 @@ export function saveNotifications(list: AppNotification[]) {
   } catch {}
 }
 
-export function markAllNotificationsAsRead(): AppNotification[] {
+export function markAllNotificationsAsRead(userEmail?: string): AppNotification[] {
   const current = getNotifications().map((n) => ({ ...n, unread: false }));
   saveNotifications(current);
+  if (typeof window !== 'undefined') {
+    fetch('/api/notifications/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true, email: userEmail || '' }),
+    }).catch(() => {});
+  }
   return current;
 }
 
 export function markNotificationAsRead(id: string): AppNotification[] {
   const current = getNotifications().map((n) => (n.id === id ? { ...n, unread: false } : n));
   saveNotifications(current);
+  if (typeof window !== 'undefined') {
+    fetch('/api/notifications/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {});
+  }
   return current;
+}
+
+export async function fetchNotificationsFromServer(userEmail?: string): Promise<AppNotification[]> {
+  if (typeof window === 'undefined') return getNotifications();
+  try {
+    const emailParam = userEmail ? `?email=${encodeURIComponent(userEmail.trim())}` : '';
+    const res = await fetch(`/api/notifications${emailParam}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.notifications)) {
+        const serverNotifs: AppNotification[] = data.notifications;
+        const localList = getNotifications();
+        const serverIds = new Set(serverNotifs.map((n) => n.id));
+        const merged = [
+          ...serverNotifs,
+          ...localList.filter((n) => !serverIds.has(n.id)),
+        ].slice(0, 50);
+        saveNotifications(merged);
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching notifications from server:', err);
+  }
+  return getNotifications();
 }
 
 export function addNotification(notif: Omit<AppNotification, 'id' | 'timestamp' | 'unread'> & { id?: string; unread?: boolean }): AppNotification {

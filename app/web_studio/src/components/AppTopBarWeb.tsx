@@ -13,6 +13,7 @@ import {
   UserCheck,
   FileSpreadsheet,
   Smartphone,
+  Coins,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import {
@@ -34,6 +35,7 @@ import {
   fetchNotificationsFromServer,
   AppNotification,
 } from '../lib/notificationManager';
+import { getApiUrl } from '../lib/apiConfig';
 
 interface AppTopBarWebProps {
   currentTab: string;
@@ -104,6 +106,50 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       window.removeEventListener('ai_news_notification_permission_changed', handleUpdate);
     };
   }, [currentUser?.email]);
+
+  // Wallet Coin Balance for Authenticated Users (Real-time sync)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [isWalletLoading, setIsWalletLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const email = (currentUser?.email || '').toLowerCase().trim();
+    const userId = (currentUser?.userId || (currentUser as any)?.uid || email).trim();
+    if (!email && !userId) {
+      setIsWalletLoading(false);
+      return;
+    }
+
+    const fetchBalance = () => {
+      fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(userId)}`))
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success && data?.wallet) {
+            setWalletBalance(data.wallet.coinBalance ?? 0);
+            setIsWalletLoading(false);
+          }
+        })
+        .catch(() => {
+          setIsWalletLoading(false);
+        });
+    };
+
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 10000);
+    const handleWalletEvent = () => fetchBalance();
+
+    window.addEventListener('ai_news_wallet_updated', handleWalletEvent);
+    window.addEventListener('wallet_balance_updated', handleWalletEvent);
+    window.addEventListener('storage', handleWalletEvent);
+    window.addEventListener('focus', handleWalletEvent);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('ai_news_wallet_updated', handleWalletEvent);
+      window.removeEventListener('wallet_balance_updated', handleWalletEvent);
+      window.removeEventListener('storage', handleWalletEvent);
+      window.removeEventListener('focus', handleWalletEvent);
+    };
+  }, [currentUser?.email, (currentUser as any)?.userId, (currentUser as any)?.uid]);
 
   // Format plan name for display
   const planDisplay = React.useMemo(() => {
@@ -215,10 +261,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
                     {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
                   </span>
-                  <span className="text-slate-600">•</span>
-                  <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[9px] font-black rounded whitespace-nowrap shadow-xs">
-                    {planDisplay === 'Admin' ? 'एडमिन' : planDisplay}
-                  </span>
                 </div>
               </div>
             </div>
@@ -280,29 +322,37 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-            {/* Install PWA Button on Web */}
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('open_pwa_install_modal'));
-                }
-              }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition cursor-pointer active:scale-95 shrink-0"
-              title="वेब ऐप को होम स्क्रीन पर जोड़ें"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-slate-950" />
-              <span>ऐप जोड़ें</span>
-            </button>
+            {/* Wallet Coin Balance Button */}
+            {(!isAdminUser || adminSystemMode === 'test') && (
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigateToTab('profile');
+                  if (typeof window !== 'undefined') {
+                    window.location.hash = 'profile';
+                    window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
+                  }
+                }}
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-500/40 font-bold rounded-xl text-xs shadow-xs transition cursor-pointer shrink-0"
+                title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
+              >
+                <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="font-mono font-black min-w-[20px] text-center">
+                  {walletBalance !== null ? walletBalance : (isWalletLoading ? '···' : '0')}
+                </span>
+                <span className="text-[10px] hidden sm:inline">कॉइन्स</span>
+              </button>
+            )}
 
             {/* Refresh Button - Hidden on Control Panel, Studio, and Newsroom (Part H) */}
             {!isControlPanel && currentTab !== 'studio' && currentTab !== 'newsroom' && (
               <button
                 onClick={handleRefreshClick}
-                className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer"
+                className="px-2.5 py-1.5 text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 font-bold shrink-0"
                 title="फ़ीड रीफ्रेश करें"
               >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+                <span>रिफ्रेश</span>
               </button>
             )}
 

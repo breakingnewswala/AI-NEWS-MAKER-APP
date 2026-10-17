@@ -129,6 +129,9 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
 
     const middleTags = existingTags.filter((t) => {
       const lower = t.toLowerCase();
+      if (/News$/i.test(t) && !['#breakingnews', '#hindinews', '#topnews', '#latestnews'].includes(lower)) {
+        return false;
+      }
       return lower !== '#breakingnewswala' &&
         lower !== '#bnwtv' &&
         lower !== '#ainewsmaker' &&
@@ -140,7 +143,8 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
 
     if (middleTags.length === 0) {
       if (location && location !== 'विशेष कवरेज') {
-        const locTag = `#${location.replace(/[^\w\u0900-\u097F]/g, '')}News`;
+        const cleanLoc = location.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+        const locTag = cleanLoc ? `#${cleanLoc}` : '';
         if (locTag.length > 2) middleTags.push(locTag);
       }
       middleTags.push('#BreakingNews', '#HindiNews');

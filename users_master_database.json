@@ -220,5 +220,31 @@
     "expiresAt": 1792497512618,
     "activatedVia": "Free 7-Day VIP Trial",
     "lastLoginAt": 1791892712618
+  },
+  {
+    "userId": "usr_1792222418504_p6dk",
+    "email": "autotest_1792199395884@example.com",
+    "name": "यूज़र",
+    "fullName": "",
+    "username": "reporter_2",
+    "channelName": "",
+    "channelNameHi": "",
+    "channelNameEn": "",
+    "channelLogoUrl": "",
+    "channelLogoPngUrl": "",
+    "channelLogoGifUrl": "",
+    "channelLogoType": "png",
+    "mobile": "9899395884",
+    "mobileNumber": "9899395884",
+    "district": "",
+    "websiteUrl": "",
+    "role": "user",
+    "tier": "basic",
+    "planName": "BASIC",
+    "isBlocked": false,
+    "createdAt": 1792199395887,
+    "trialStartedAt": 1792199395887,
+    "trialEndsAt": 1792804195887,
+    "lastLoginAt": 1792199395887
   }
 ]

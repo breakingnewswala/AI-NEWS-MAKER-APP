@@ -58,40 +58,41 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
     initialProfile?.channelLogoType || 'png'
   );
 
-  // Social Icons to show
+  // Social Icons to show (Strictly 5 platforms: YouTube, Facebook, Instagram, X, LinkedIn)
   const [socialIcons, setSocialIcons] = useState<{
     youtube: boolean;
     facebook: boolean;
     instagram: boolean;
     twitter: boolean;
-    telegram: boolean;
-    whatsapp: boolean;
+    linkedin: boolean;
   }>({
     youtube: initialProfile?.socialIcons?.youtube ?? true,
     facebook: initialProfile?.socialIcons?.facebook ?? true,
     instagram: initialProfile?.socialIcons?.instagram ?? true,
-    twitter: initialProfile?.socialIcons?.twitter ?? true,
-    telegram: initialProfile?.socialIcons?.telegram ?? false,
-    whatsapp: initialProfile?.socialIcons?.whatsapp ?? true,
+    twitter: initialProfile?.socialIcons?.twitter ?? false,
+    linkedin: initialProfile?.socialIcons?.linkedin ?? false,
   });
 
   // Username: Auto initialized from English channel name
   const [username, setUsername] = useState<string>(
-    initialProfile?.username || 'ainewsmaker'
+    initialProfile?.username || ''
   );
   const [isUsernameCustomized, setIsUsernameCustomized] = useState<boolean>(false);
 
   // Mobile number & visibility
   const [mobileNumber, setMobileNumber] = useState<string>(
-    initialProfile?.mobileNumber || '9669802408'
+    initialProfile?.mobileNumber || ''
   );
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     initialProfile?.showMobileNumber ?? true
   );
 
-  // Website address (strictly clean domain without https:// or www)
+  // Website address & visibility
   const [websiteUrl, setWebsiteUrl] = useState<string>(
-    initialProfile?.websiteUrl || 'ainewsmaker.online'
+    initialProfile?.websiteUrl || ''
+  );
+  const [showWebsite, setShowWebsite] = useState<boolean>(
+    initialProfile?.showWebsite ?? true
   );
 
   // Logo Cropper Modal State
@@ -183,30 +184,37 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
       e.preventDefault();
     }
 
-    const finalFullName = (fullName || userName || 'मुख्य संपादक').trim();
-    const finalHi = (channelNameHi || 'एआई न्यूज़ मेकर').trim();
-    const finalEn = (channelNameEn || 'AI News Maker').trim();
-    const finalUser = (username || finalEn).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'ainewsmaker';
+    const finalFullName = (fullName || userName || '').trim();
+    const finalHi = channelNameHi.trim();
+    const finalEn = channelNameEn.trim();
+    const finalUser = (username || finalEn || finalHi).replace(/^@/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
 
     setErrorMsg('');
 
-    // Check account uniqueness and restricted brands
-    const uniqCheck = checkAccountUniqueness({
-      username: finalUser,
-      websiteUrl: websiteUrl.trim(),
-      channelName: finalHi,
-      currentEmail: (initialProfile as any)?.email,
-    });
-    if (!uniqCheck.valid) {
-      setErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+    if (!finalHi && !finalFullName) {
+      setErrorMsg('कृपया अपना नाम एवं चैनल का नाम दर्ज करें।');
       return;
+    }
+
+    // Check account uniqueness and restricted brands
+    if (finalUser) {
+      const uniqCheck = checkAccountUniqueness({
+        username: finalUser,
+        websiteUrl: websiteUrl.trim(),
+        channelName: finalHi,
+        currentEmail: (initialProfile as any)?.email,
+      });
+      if (!uniqCheck.valid) {
+        setErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+        return;
+      }
     }
 
     const profile: ChannelProfile = {
       fullName: finalFullName,
       channelNameHi: finalHi,
       channelNameEn: finalEn,
-      channelLogoUrl: channelLogoUrl || channelLogoPngUrl || channelLogoGifUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoUrl: channelLogoUrl || channelLogoPngUrl || channelLogoGifUrl || '',
       channelLogoPngUrl,
       channelLogoGifUrl,
       channelLogoType,
@@ -215,6 +223,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
       mobileNumber: mobileNumber.trim(),
       showMobileNumber,
       websiteUrl: websiteUrl.trim(),
+      showWebsite,
     };
 
     try {
@@ -475,7 +484,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
               <label className="block text-xs font-bold text-neutral-300 mb-2 font-['Noto_Sans_Devanagari']">
                 4. शो सोशल मीडिया आइकन (जिन आइकन्स को कार्ड के नीचे दिखाना है, उन्हें टिक करें)
               </label>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {/* YouTube */}
                 <button
                   type="button"
@@ -532,32 +541,18 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
                   <span className="text-[10px]">{socialIcons.twitter ? '✅ ऑन' : 'ऑफ'}</span>
                 </button>
 
-                {/* Telegram */}
+                {/* LinkedIn */}
                 <button
                   type="button"
-                  onClick={() => toggleSocialIcon('telegram')}
+                  onClick={() => toggleSocialIcon('linkedin')}
                   className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition text-center cursor-pointer ${
-                    socialIcons.telegram
+                    socialIcons.linkedin
                       ? 'bg-sky-950/60 border-sky-500 text-sky-200'
                       : 'bg-neutral-800 border-neutral-700 text-neutral-500 opacity-60'
                   }`}
                 >
-                  <span className="text-xs font-bold">Telegram</span>
-                  <span className="text-[10px]">{socialIcons.telegram ? '✅ ऑन' : 'ऑफ'}</span>
-                </button>
-
-                {/* WhatsApp */}
-                <button
-                  type="button"
-                  onClick={() => toggleSocialIcon('whatsapp')}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition text-center cursor-pointer ${
-                    socialIcons.whatsapp
-                      ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200'
-                      : 'bg-neutral-800 border-neutral-700 text-neutral-500 opacity-60'
-                  }`}
-                >
-                  <span className="text-xs font-bold">WhatsApp</span>
-                  <span className="text-[10px]">{socialIcons.whatsapp ? '✅ ऑन' : 'ऑफ'}</span>
+                  <span className="text-xs font-bold">LinkedIn</span>
+                  <span className="text-[10px]">{socialIcons.linkedin ? '✅ ऑन' : 'ऑफ'}</span>
                 </button>
               </div>
             </div>
@@ -634,6 +629,18 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
               <p className="text-[10px] text-neutral-400 mt-1">
                 (नोट: https:// या www लगाने की आवश्यकता नहीं है, सीधा डोमेन नाम कार्ड पर दिखेगा)
               </p>
+              {/* Checkbox: Website Visible or Not */}
+              <label className="flex items-center gap-2 cursor-pointer pt-1 select-none">
+                <input
+                  type="checkbox"
+                  checked={showWebsite}
+                  onChange={(e) => setShowWebsite(e.target.checked)}
+                  className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                />
+                <span className="text-xs text-neutral-200 font-bold font-['Noto_Sans_Devanagari']">
+                  कार्ड / ग्राफ़िक्स पर वेबसाइट लिंक दिखाएं (Visible on Card)
+                </span>
+              </label>
             </div>
 
             {/* Submit Button: Enter App */}

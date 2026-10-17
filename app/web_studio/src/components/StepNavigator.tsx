@@ -10,13 +10,13 @@ export interface StepItem {
 }
 
 export const DEFAULT_STEPS: StepItem[] = [
-  { step: 1, id: 'step-frame', label: 'फ्रेम्स', shortLabel: 'फ्रेम्स', icon: '🎨' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '✨' },
-  { step: 3, id: 'step-headline', label: 'हेडलाइन', shortLabel: 'हेडलाइन', icon: '📝' },
-  { step: 4, id: 'step-photo', label: 'फोटो', shortLabel: 'फोटो', icon: '📷' },
-  { step: 5, id: 'step-location-date', label: 'लोकेशन, तारीख और वॉटरमार्क', shortLabel: 'लोकेशन-तारीख', icon: '📍' },
-  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📌' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड व एक्सपोर्ट', shortLabel: 'डाउनलोड', icon: '💾' },
+  { step: 1, id: 'step-frame', label: '1. फ्रेम्स', shortLabel: 'फ्रेम्स', icon: '🎨' },
+  { step: 2, id: 'step-ai', label: '2. एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '✨' },
+  { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '📝' },
+  { step: 4, id: 'step-photo', label: '4. फोटो व वॉटरमार्क', shortLabel: 'फोटो-वॉटरमार्क', icon: '📷' },
+  { step: 5, id: 'step-location', label: '5. स्थान व दिनांक', shortLabel: 'स्थान-दिनांक', icon: '📍' },
+  { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📌' },
+  { step: 7, id: 'step-download', label: '7. डाउनलोड व कैप्शन', shortLabel: 'डाउनलोड-कैप्शन', icon: '💾' },
 ];
 
 interface StepNavigatorProps {
@@ -33,7 +33,10 @@ interface StepNavigatorProps {
 export const scrollToStepById = (stepId: string) => {
   requestAnimationFrame(() => {
     setTimeout(() => {
-      const el = document.getElementById(stepId);
+      let el = document.getElementById(stepId);
+      if (!el && stepId.startsWith('step-location')) {
+        el = document.getElementById('step-location') || document.getElementById('step-location-date') || document.getElementById('step-location-date-watermark');
+      }
       if (!el) return;
 
       const topBar = document.querySelector('header');

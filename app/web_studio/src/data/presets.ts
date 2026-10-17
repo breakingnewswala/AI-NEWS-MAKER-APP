@@ -1,7 +1,7 @@
 import { NewsCardData } from '../types';
 
 // Crisp SVG demo images matching user samples
-export const PLACEHOLDER_NEWS_IMG = '/assets/placeholder_news_search_square.jpg';
+export const PLACEHOLDER_NEWS_IMG = '/assets/preview_placeholder.jpg';
 export const SAMPLE_BUS_IMG = '/assets/sample_news_bus.svg';
 export const SAMPLE_TRUCK_IMG = 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=900&auto=format&fit=crop&q=80';
 export const SAMPLE_WAREHOUSE_IMG = 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=900&auto=format&fit=crop&q=80';
@@ -12,13 +12,13 @@ export const SAMPLE_STUDENTS_IMG = 'https://images.unsplash.com/photo-1577896851
 export const INITIAL_PRESETS: NewsCardData[] = [
   {
     id: 'preset-graphic-1',
-    title: 'Graphic 1 (Default 4:5 Template)',
+    title: 'Basic Graphic — Default',
     headline: '',
     formattedHeadline: '',
     highlightWords: [],
     headlineAlign: 'center',
     location: '',
-    summary: 'Graphic 1 - Default 4:5 Template',
+    summary: 'Basic Graphic - Default 4:5 Template',
     category: 'ताज़ा खबर',
     brandName: '',
     brandTagline: '',
@@ -27,9 +27,9 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: false,
     newsUpdateBadge: '',
     showNewsUpdateBadge: false,
-    socialHandle: '/@UserName',
-    websiteUrl: 'yourwebsite.com',
-    whatsappNumber: '+91 98765 43210',
+    socialHandle: '',
+    websiteUrl: '',
+    whatsappNumber: '',
     frameDesign: 'graphic_001',
     layout: 'single',
     images: {
@@ -42,7 +42,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     darkOverlayOpacity: 0,
     showDate: false,
     dateStr: '',
-    showLocation: false,
+    showLocation: true,
+    showMasterBranding: true,
   },
   {
     id: 'preset-2',
@@ -60,8 +61,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'NEWS UPDATE',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     layout: 'split-v',
     images: {
       main: SAMPLE_BUS_IMG,
@@ -89,8 +90,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'NEWS UPDATE',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     layout: 'grid-3',
     images: {
       main: SAMPLE_WAREHOUSE_IMG,
@@ -119,8 +120,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'NEWS UPDATE',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     layout: 'double',
     images: {
       main: SAMPLE_RALLY_IMG,
@@ -148,12 +149,12 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'NEWS UPDATE',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
-    layout: 'inset-circle',
+    socialHandle: '',
+    whatsappNumber: '',
+    layout: 'double',
     images: {
       main: SAMPLE_RALLY_IMG,
-      insetCircle: SAMPLE_MINISTER_IMG,
+      second: SAMPLE_MINISTER_IMG,
     },
     insetPosition: { x: 76, y: 55 },
     aspectRatio: '4:5',
@@ -177,8 +178,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'NEWS UPDATE',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     layout: 'grid-3-bottom',
     images: {
       main: SAMPLE_RALLY_IMG,
@@ -207,8 +208,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'NEWS UPDATE',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     layout: 'grid-4',
     images: {
       main: SAMPLE_WAREHOUSE_IMG,
@@ -238,8 +239,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'BREAKING',
     showNewsUpdateBadge: false,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     frameDesign: 'jacket-text-breaking',
     layout: 'single',
     insetPosition: { x: 50, y: 50 },
@@ -270,8 +271,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: true,
     newsUpdateBadge: 'THOUGHT OF THE DAY',
     showNewsUpdateBadge: true,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     frameDesign: 'jacket-morning',
     layout: 'single',
     insetPosition: { x: 50, y: 50 },
@@ -297,7 +298,7 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     highlightWords: ['प्रशासन का बड़ा एक्शन'],
     location: '',
     showLocation: false,
-    summary: 'निवाड़ी जिले में बेतवा नदी तट पर चल रहे अवैध रेत खनन पर खनिज विभाग और पुलिस टीम ने संयुक्त कार्रवाई करते हुए पांच डंपर और दो पोकलेन मशीनें जब्त की हैं।\n\n#ainewsmaker #Epaper #NiwariNews #BreakingNews #AINewsMaker',
+    summary: 'निवाड़ी जिले में बेतवा नदी तट पर चल रहे अवैध रेत खनन पर खनिज विभाग और पुलिस टीम ने संयुक्त कार्रवाई करते हुए पांच डंपर और दो पोकलेन मशीनें जब्त की हैं।\n\n#ainewsmaker #Epaper #निवाड़ी #BreakingNews #AINewsMaker',
     category: 'कार्रवाई',
     brandName: 'AI News Maker',
     brandTagline: 'भारत के जिलों से आपके दिलों तक',
@@ -306,8 +307,8 @@ export const INITIAL_PRESETS: NewsCardData[] = [
     showCallout: false,
     newsUpdateBadge: 'ई-पेपर विशेष',
     showNewsUpdateBadge: false,
-    socialHandle: '@ainewsmaker',
-    whatsappNumber: '+91 96698 02408',
+    socialHandle: '',
+    whatsappNumber: '',
     frameDesign: 'jacket-epaper',
     layout: 'single',
     insetPosition: { x: 50, y: 50 },

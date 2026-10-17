@@ -50,27 +50,50 @@ export function getFormattedHindiDate(inputDate?: Date | string | number): strin
   return `${day} ${month} ${year}, ${dayOfWeek}`;
 }
 
-let fallbackDownloadCounter = 0;
+/**
+ * Secure 6-digit random numeric ID generator for collision-resistant filenames:
+ * e.g. 583104, 920731, 417286
+ */
+export function generateNumericId(digits: number = 6): string {
+  const min = Math.pow(10, digits - 1);
+  const max = Math.pow(10, digits) - 1;
+  const num = Math.floor(min + Math.random() * (max - min + 1));
+  return String(num);
+}
 
 /**
- * Sequential graphic download filename as per MASTER SPECIFICATION:
- * "AI-News-Maker-001.jpg", "AI-News-Maker-002.jpg", etc.
+ * Graphic download filename as per MASTER SPECIFICATION:
+ * "AI-Graphic-<random-numeric-id>.jpg" (e.g. AI-Graphic-583104.jpg)
  */
-export function generateGraphicDownloadFileName(): string {
-  try {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('ai_news_maker_dl_counter') : null;
-    let current = saved ? parseInt(saved, 10) : 0;
-    if (isNaN(current) || current < 0) current = 0;
-    current += 1;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ai_news_maker_dl_counter', String(current));
-    }
-    const padded = String(current).padStart(3, '0');
-    return `AI-News-Maker-${padded}.jpg`;
-  } catch {
-    fallbackDownloadCounter += 1;
-    const padded = String(fallbackDownloadCounter).padStart(3, '0');
-    return `AI-News-Maker-${padded}.jpg`;
-  }
+export function generateGraphicDownloadFileName(customExt: string = 'jpg'): string {
+  const ext = (customExt || 'jpg').replace(/^\./, '').toLowerCase();
+  const numericId = generateNumericId(6);
+  return `AI-Graphic-${numericId}.${ext}`;
+}
+
+/**
+ * Video download filename as per MASTER SPECIFICATION:
+ * "AI-Video-<random-numeric-id>.mp4" (e.g. AI-Video-738194.mp4)
+ */
+export function generateVideoDownloadFileName(customExt: string = 'mp4'): string {
+  const ext = (customExt || 'mp4').replace(/^\./, '').toLowerCase();
+  const numericId = generateNumericId(6);
+  return `AI-Video-${numericId}.${ext}`;
+}
+
+/**
+ * Formats date cleanly for filenames without forbidden characters:
+ * e.g. "2026-10-16_01-24-33"
+ */
+export function formatFileNameDate(inputDate?: Date | string | number): string {
+  const d = inputDate ? new Date(inputDate) : new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  const seconds = pad(d.getSeconds());
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
 }
 
