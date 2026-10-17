@@ -269,37 +269,39 @@ export function processNewsLocally(
 
   const locPrefix = locStr ? `${locStr} में ` : '';
 
-  // Style 1: Detailed (exactly 3 full factual paragraphs separated by \n\n)
-  const dPara1 = allSentences[0]
-    ? `${locPrefix}${headline}। ${allSentences[0]}।`
-    : `${locPrefix}${headline} को लेकर महत्वपूर्ण जानकारी सामने आई है। इस पूरे मामले को लेकर संबंधित पक्षों में चर्चा तेज हो गई है।`;
+  // Style 1: Detailed (strictly 2-3 substantive paragraphs from actual facts, ZERO fake boilerplate)
+  let dPara1 = '';
+  let dPara2 = '';
+  let dPara3 = '';
+  if (allSentences.length >= 4) {
+    dPara1 = `${allSentences[0]}। ${allSentences[1]}।`;
+    dPara2 = `${allSentences[2]}। ${allSentences[3]}।`;
+    dPara3 = `${allSentences.slice(4).join('। ')}।`;
+  } else if (allSentences.length === 3) {
+    dPara1 = `${allSentences[0]}।`;
+    dPara2 = `${allSentences[1]}।`;
+    dPara3 = `${allSentences[2]}।`;
+  } else if (allSentences.length === 2) {
+    dPara1 = `${allSentences[0]}।`;
+    dPara2 = `${allSentences[1]}।`;
+  } else if (allSentences.length === 1) {
+    dPara1 = `${allSentences[0]}।`;
+  } else {
+    dPara1 = `${headline}।`;
+  }
 
-  const dPara2 = allSentences.slice(1, 4).join('। ') ||
-    'मामले के तथ्यों के अनुसार पूरे घटनाक्रम से जुड़े नए नियम और मुख्य बिंदु सामने आए हैं। संबंधित अधिकारियों और जानकारों द्वारा स्थिति का विस्तृत विश्लेषण किया जा रहा है।';
-
-  const dPara3 = allSentences[4]
-    ? `${allSentences.slice(4, 7).join('। ')}। इस संबंध में आगे की कार्यवाही और आधिकारिक दिशा-निर्देशों पर नजर बनी हुई है।`
-    : 'इस घटनाक्रम को लेकर आवश्यक दिशा-निर्देश जारी किए गए हैं और आगामी फैसलों को लेकर संबंधित विभागों की निगरानी जारी है।';
-
-  const cleanDPara1 = dPara1.replace(/[।\.\s]+$/, '');
-  const cleanDPara2 = dPara2.replace(/[।\.\s]+$/, '');
-  const cleanDPara3 = dPara3.replace(/[।\.\s]+$/, '');
-  const captionDetailed = `${cleanDPara1}।\n\n${cleanDPara2}।\n\n${cleanDPara3}।\n\n${tagsStr}`;
+  const detailedBody = [dPara1, dPara2, dPara3].filter(Boolean).map((p) => p.replace(/[।\.\s]+$/, '') + '।').join('\n\n');
+  const captionDetailed = `${detailedBody}\n\n${tagsStr}`;
 
   // Style 2: Bullets
-  const bulletItems = allSentences.slice(0, 4).map((s) => `• ${s}`);
-  if (bulletItems.length < 3) {
-    bulletItems.push(`• मुख्य घटनाक्रम: ${headline}`);
-    bulletItems.push('• मामले से जुड़े प्रमुख तथ्यों और दिशा-निर्देशों की समीक्षा जारी है');
-  }
-  const captionBullets = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${locStr || 'ताज़ा समाचार'}\n\n${bulletItems.join('\n')}\n\nपूरे मामले पर आगामी अपडेट और आधिकारिक दिशा-निर्देशों की प्रतीक्षा है।\n\n${tagsStr}`;
+  const bulletItems = (allSentences.length > 0 ? allSentences.slice(0, 4) : [headline]).map((s) => `• ${s}`);
+  const captionBullets = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${locStr || 'ताज़ा समाचार'}\n\n${bulletItems.join('\n')}\n\n${tagsStr}`;
 
   // Style 3: Short (2 paragraphs)
-  const sPara1 = `${locPrefix}${headline}। ${allSentences[0] || 'इस विषय को लेकर महत्वपूर्ण तथ्य और दिशा-निर्देश सामने आए हैं।'}`;
-  const sPara2 = `${allSentences[1] ? `${allSentences[1]}। ` : ''}संबंधित पक्षों द्वारा स्थिति की समीक्षा की जा रही है और आवश्यक कदम उठाए जा रहे हैं।`;
-  const cleanSPara1 = sPara1.replace(/[।\.\s]+$/, '');
-  const cleanSPara2 = sPara2.replace(/[।\.\s]+$/, '');
-  const captionShort = `${cleanSPara1}।\n\n${cleanSPara2}।\n\n${tagsStr}`;
+  const sPara1 = allSentences[0] ? `${allSentences[0]}।` : `${headline}।`;
+  const sPara2 = allSentences[1] ? `${allSentences[1]}।` : '';
+  const shortBody = [sPara1, sPara2].filter(Boolean).map((p) => p.replace(/[।\.\s]+$/, '') + '।').join('\n\n');
+  const captionShort = `${shortBody}\n\n${tagsStr}`;
 
   const summary = captionDetailed;
 

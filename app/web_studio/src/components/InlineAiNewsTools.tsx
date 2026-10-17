@@ -266,26 +266,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     if (style === 'bullets') {
       const intro = `मुख्य घटनाक्रम: ${headline}\nस्थान: ${loc}`;
-      const bulletItems = (sentences.length >= 3 ? sentences.slice(0, 4) : [
-        `घटनाक्रम को लेकर मुख्य विवरण संज्ञान में लिया गया है।`,
-        `संबंधित विभाग और अधिकारियों द्वारा आवश्यक जांच की जा रही है।`,
-        `तथ्यों के आधार पर अग्रिम दिशा-निर्देश दिए गए हैं।`,
-      ]).map((b) => `• ${b}`);
-      const closing = `पूरे घटनाक्रम को लेकर आगामी आधिकारिक दिशा-निर्देशों की प्रतीक्षा है।`;
-      return cleanCaptionParagraphs(ensureStrictHashtags(`${intro}\n\n${bulletItems.join('\n')}\n\n${closing}`), 'bullet', cleanUser);
+      const bulletItems = (sentences.length > 0 ? sentences.slice(0, 4) : [headline]).map((b) => `• ${b}`);
+      return cleanCaptionParagraphs(ensureStrictHashtags(`${intro}\n\n${bulletItems.join('\n')}`), 'bullet', cleanUser);
     }
 
     if (style === 'short') {
-      const shortP1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} ताजा घटनाक्रम में महत्वपूर्ण जानकारी सामने आई है। ${sentences[0] || 'मामले को लेकर संबंधित स्तर पर संज्ञान लिया गया है।'}`;
-      const shortP2 = `${sentences[1] || 'संबंधित पक्षों द्वारा स्थिति की समीक्षा की जा रही है और आवश्यक कदम उठाए जा रहे हैं।'}`;
-      return cleanCaptionParagraphs(ensureStrictHashtags(`${shortP1}\n\n${shortP2}`), 'short', cleanUser);
+      const shortP1 = sentences[0] ? `${sentences[0]}।` : `${headline}।`;
+      const shortP2 = sentences[1] ? `${sentences[1]}।` : '';
+      const body = [shortP1, shortP2].filter(Boolean).join('\n\n');
+      return cleanCaptionParagraphs(ensureStrictHashtags(body), 'short', cleanUser);
     }
 
-    // Default: Detailed (3 full paragraphs)
-    const p1 = `${headline}। ${loc ? `${loc} से संबंधित` : 'इस'} मुख्य घटनाक्रम को लेकर ताजा जानकारी सामने आई है। ${sentences[0] || 'मामले की पूरी पृष्ठभूमि की समीक्षा की जा रही है।'}`;
-    const p2 = sentences.slice(1, 3).join('। ') || 'प्राप्त जानकारी के अनुसार मामले की पृष्ठभूमि में कई अहम तथ्य और नियम सामने आ रहे हैं। संबंधित पक्षों के अनुसार घटनाक्रम से जुड़े प्रभाव का विस्तार से आकलन किया जा रहा है।';
-    const p3 = sentences.slice(3, 5).join('। ') || 'इस संबंध में आवश्यक दिशा-निर्देश जारी किए गए हैं और आगामी फैसलों को लेकर संबंधित विभागों की निगरानी जारी है।';
-    return cleanCaptionParagraphs(ensureStrictHashtags(`${p1}\n\n${p2}\n\n${p3}`), 'detailed', cleanUser);
+    // Default: Detailed (strictly 2-3 substantive paragraphs from actual facts, ZERO fake boilerplate)
+    let p1 = '';
+    let p2 = '';
+    let p3 = '';
+    if (sentences.length >= 4) {
+      p1 = `${sentences[0]}। ${sentences[1]}।`;
+      p2 = `${sentences[2]}। ${sentences[3]}।`;
+      p3 = `${sentences.slice(4).join('। ')}।`;
+    } else if (sentences.length === 3) {
+      p1 = `${sentences[0]}।`;
+      p2 = `${sentences[1]}।`;
+      p3 = `${sentences[2]}।`;
+    } else if (sentences.length === 2) {
+      p1 = `${sentences[0]}।`;
+      p2 = `${sentences[1]}।`;
+    } else if (sentences.length === 1) {
+      p1 = `${sentences[0]}।`;
+    } else {
+      p1 = `${headline}।`;
+    }
+    const detailedBody = [p1, p2, p3].filter(Boolean).join('\n\n');
+    return cleanCaptionParagraphs(ensureStrictHashtags(detailedBody), 'detailed', cleanUser);
   };
 
   const handleSwitchCaptionStyle = (newStyle: 'detailed' | 'bullets' | 'short') => {
