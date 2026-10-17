@@ -1660,6 +1660,20 @@ app.get("/api/news-posts", (req, res) => {
     }
     return true;
   });
+  if (activePosts.length < 20) {
+    const activeIds = new Set(activePosts.map((p) => p.id));
+    const backfillCandidates = posts.filter((p) => {
+      if (String(p.id).startsWith("live-post-")) return false;
+      if (activeIds.has(p.id)) return false;
+      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+      if (isFeedSource && p.status !== "APPROVED" && p.status !== void 0) {
+        if (role !== "admin" && role !== "superadmin" && !includePending) return false;
+      }
+      return true;
+    });
+    backfillCandidates.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+    activePosts.push(...backfillCandidates.slice(0, 30 - activePosts.length));
+  }
   activePosts.sort((a, b) => {
     const timeA = Number(a.timestamp) || 0;
     const timeB = Number(b.timestamp) || 0;
@@ -7476,7 +7490,8 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     let extractedArticleMeta = void 0;
     let effectiveInput = (rawInputText || "").trim();
     const rawLink = (linkUrl || "").trim();
-    if (rawLink) {
+    const isInternalPlatformUrl = rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com") || rawLink.includes("localhost") || rawLink.includes("127.0.0.1");
+    if (rawLink && !isInternalPlatformUrl) {
       if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
         try {

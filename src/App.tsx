@@ -379,21 +379,23 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
-        if (Array.isArray(apiPosts)) {
+        if (Array.isArray(apiPosts) && apiPosts.length > 0) {
           const cleanApi = apiPosts.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
-          cleanApi.sort((a: NewsFeedPost, b: NewsFeedPost) => {
-            const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
-            const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
-            if ((timeB || 0) !== (timeA || 0)) {
-              return (timeB || 0) - (timeA || 0);
-            }
-            return String(b.id).localeCompare(String(a.id));
-          });
-          setPosts(cleanApi);
-          try {
-            localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
-          } catch {}
-          loaded = true;
+          if (cleanApi.length > 0) {
+            cleanApi.sort((a: NewsFeedPost, b: NewsFeedPost) => {
+              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
+              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+              if ((timeB || 0) !== (timeA || 0)) {
+                return (timeB || 0) - (timeA || 0);
+              }
+              return String(b.id).localeCompare(String(a.id));
+            });
+            setPosts(cleanApi);
+            try {
+              localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
+            } catch {}
+            loaded = true;
+          }
         }
       }
     } catch (err) {
@@ -1666,7 +1668,15 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
-    const effectiveLink = post.sourceUrl || (post.id ? `https://www.ainewsmaker.online/news/${post.id}` : 'https://www.ainewsmaker.online');
+    const hasExternalSource = Boolean(
+      post.sourceUrl &&
+      post.sourceUrl.startsWith('http') &&
+      !post.sourceUrl.includes('ainewsmaker.online') &&
+      !post.sourceUrl.includes('breakingnewswala.com') &&
+      !post.sourceUrl.includes('localhost') &&
+      !post.sourceUrl.includes('127.0.0.1')
+    );
+    const effectiveLink = hasExternalSource ? post.sourceUrl : '';
     const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');

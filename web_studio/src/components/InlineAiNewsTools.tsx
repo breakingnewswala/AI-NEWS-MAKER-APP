@@ -327,16 +327,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       lastProcessedTimeRef.current = autoFillNews.timestamp;
     }
 
-    const rawUrl = autoFillNews.url || (autoFillNews.title ? `https://www.ainewsmaker.online/news/${encodeURIComponent(autoFillNews.title.slice(0, 30))}` : '');
-    const effectiveTargetUrl = normalizeInputUrl(rawUrl);
+    const hasExternalSource = Boolean(
+      autoFillNews.url &&
+      autoFillNews.url.startsWith('http') &&
+      !autoFillNews.url.includes('ainewsmaker.online') &&
+      !autoFillNews.url.includes('breakingnewswala.com') &&
+      !autoFillNews.url.includes('localhost') &&
+      !autoFillNews.url.includes('127.0.0.1')
+    );
+    const effectiveTargetUrl = hasExternalSource ? normalizeInputUrl(autoFillNews.url!) : '';
     const rawContent = autoFillNews.fullNews || autoFillNews.summary || autoFillNews.title || '';
     
-    if (autoFillNews.url) {
+    if (effectiveTargetUrl) {
       setActiveTab('link');
-    } else if (autoFillNews.fullNews) {
-      setActiveTab('command');
     } else {
-      setActiveTab('link');
+      setActiveTab('command');
     }
     
     setLinkUrl(effectiveTargetUrl);
@@ -525,17 +530,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
+      const cleanOriginalTitle = extraData?.title ? cleanHeadlineText(extraData.title) : '';
+      if (cleanOriginalTitle && !opts.includes(cleanOriginalTitle)) {
+        opts.unshift(cleanOriginalTitle);
+      }
       const finalOpts = buildFiveStoryOptions(
         opts,
-        cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार'),
-        res.summary || extraData?.summary || '',
+        cleanHeadlineText(cleanOriginalTitle || opts[0] || res.headline || 'ताज़ा समाचार'),
+        extraData?.summary || res.summary || '',
         res.location || extraData?.location || ''
       );
       setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
-      const finalHeadline = cleanHeadlineText(opts[0] || res.headline || extraData?.title || card.headline);
+      const finalHeadline = cleanOriginalTitle || cleanHeadlineText(opts[0] || res.headline || card.headline);
       const finalLoc = cleanLocationField(res.location || extraData?.location || card.location || '');
       const safeProxy = (u?: string) => {
         if (!u || !u.trim()) return '';
@@ -582,14 +591,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        res.summary || extraData?.summary || '',
+        extraData?.summary || res.summary || '',
         res,
         effectiveLink || url
       );
 
       onChange({
         headline: finalHeadline,
-        formattedHeadline: res.formattedHeadline || finalHeadline,
+        formattedHeadline: cleanOriginalTitle ? finalHeadline : (res.formattedHeadline || finalHeadline),
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -627,10 +636,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
         if (cleanMain && !opts.includes(cleanMain)) opts.unshift(cleanMain);
       }
+      const cleanOriginalTitle = extraData?.title ? cleanHeadlineText(extraData.title) : '';
+      if (cleanOriginalTitle && !opts.includes(cleanOriginalTitle)) {
+        opts.unshift(cleanOriginalTitle);
+      }
       const finalOpts = buildFiveStoryOptions(
         opts,
-        cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || 'ताज़ा समाचार'),
-        fallbackResult.summary || extraData?.summary || '',
+        cleanHeadlineText(cleanOriginalTitle || opts[0] || fallbackResult.headline || 'ताज़ा समाचार'),
+        extraData?.summary || fallbackResult.summary || '',
         fallbackResult.location || extraData?.location || ''
       );
 
@@ -639,7 +652,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!extraData?.imageUrl);
 
-      const finalHeadline = cleanHeadlineText(opts[0] || fallbackResult.headline || extraData?.title || card.headline);
+      const finalHeadline = cleanOriginalTitle || cleanHeadlineText(opts[0] || fallbackResult.headline || card.headline);
       const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || card.location || '');
       const finalImage = (extraData?.imageUrl && !extraData.imageUrl.includes('placeholder'))
         ? extraData.imageUrl
@@ -649,7 +662,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        fallbackResult.summary || extraData?.summary || '',
+        extraData?.summary || fallbackResult.summary || '',
         fallbackResult,
         effectiveLink || url
       );

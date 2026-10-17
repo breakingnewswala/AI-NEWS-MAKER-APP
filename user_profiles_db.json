@@ -16,7 +16,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1792183505574
+    "updatedAt": 1792199395747
   },
   "breakingnewswala.com@gmail.com": {
     "username": "breakingnewswala",
@@ -35,7 +35,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "breakingnewswala.com",
-    "updatedAt": 1792183505575
+    "updatedAt": 1792199395748
   },
   "khabridasnews@gmail.com": {
     "username": "khabridasnews",
@@ -54,7 +54,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9876543210",
     "websiteUrl": "https://khabridasnews.com",
-    "updatedAt": 1792183505576
+    "updatedAt": 1792199395749
   },
   "riturajtomarorchha@gmail.com": {
     "username": "riturajtomarorchha",
@@ -73,7 +73,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9876543211",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1792183505578
+    "updatedAt": 1792199395750
   },
   "digital.anmolsandesh@gmail.com": {
     "username": "anmolsandesh",
@@ -92,7 +92,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9425000998",
     "websiteUrl": "anmolsandesh.com",
-    "updatedAt": 1792183505579
+    "updatedAt": 1792199395751
   },
   "regular_user_1792183548728@test.com": {
     "username": "reporter",
@@ -115,6 +115,37 @@
       "instagram": false,
       "whatsapp": false
     },
-    "updatedAt": 1792183548732
+    "updatedAt": 1792199395745
+  },
+  "autotest_1792199395884@example.com": {
+    "name": "Auto Test User",
+    "email": "autotest_1792199395884@example.com",
+    "mobileNumber": "9899395884",
+    "role": "user",
+    "tier": "basic",
+    "updatedAt": 1792199395887
+  },
+  "regular_user_1792199401585@test.com": {
+    "username": "reporter_1",
+    "fullName": "यूज़र",
+    "role": "reporter",
+    "userId": "user_test_1792199401585",
+    "uid": "user_test_1792199401585",
+    "tier": "basic",
+    "email": "regular_user_1792199401585@test.com",
+    "district": "",
+    "channelNameHi": "",
+    "channelNameEn": "",
+    "channelLogoUrl": "",
+    "channelLogoType": "png",
+    "mobileNumber": "",
+    "websiteUrl": "",
+    "socialIcons": {
+      "youtube": false,
+      "facebook": false,
+      "instagram": false,
+      "whatsapp": false
+    },
+    "updatedAt": 1792199401588
   }
 }

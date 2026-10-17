@@ -1,6 +1,54 @@
 {
   "claims": [
     {
+      "id": "claim-1792199395967-fcbo",
+      "claimId": "claim-1792199395967-fcbo",
+      "userId": "autotest_1792199395884@example.com",
+      "userEmail": "autotest_1792199395884@example.com",
+      "userName": "यूज़र",
+      "username": "autotest_1792199395884",
+      "newsItemId": "post-1792199395951",
+      "postId": "post-1792199395951",
+      "newsTitle": "बोनस समाचार",
+      "postTitle": "बोनस समाचार",
+      "rewardCoins": 10,
+      "graphicDownloadedAt": 1792199395967,
+      "screenshotUrl": "/uploads/screenshots/claim-1792199395922-1fae1508.jpg",
+      "screenshotUrls": [
+        "/uploads/screenshots/claim-1792199395922-1fae1508.jpg"
+      ],
+      "submittedAt": 1792199395967,
+      "createdAt": 1792199395967,
+      "status": "rejected",
+      "rejectionReason": "अस्पष्ट स्क्रीनशॉट",
+      "reviewedBy": "admin.ainewsmaker@gmail.com",
+      "reviewedAt": 1792199395969
+    },
+    {
+      "id": "claim-1792199395926-6p47",
+      "claimId": "claim-1792199395926-6p47",
+      "userId": "autotest_1792199395884@example.com",
+      "userEmail": "autotest_1792199395884@example.com",
+      "userName": "Auto Test User",
+      "username": "Auto Test User",
+      "newsItemId": "post-1792199395900",
+      "postId": "post-1792199395900",
+      "newsTitle": "ऑटो टेस्ट ब्रेकिंग न्यूज़ 1792199395898",
+      "postTitle": "ऑटो टेस्ट ब्रेकिंग न्यूज़ 1792199395898",
+      "rewardCoins": 25,
+      "graphicDownloadedAt": 1792199395926,
+      "screenshotUrl": "/uploads/screenshots/claim-1792199395922-1fae1508.jpg",
+      "screenshotUrls": [
+        "/uploads/screenshots/claim-1792199395922-1fae1508.jpg"
+      ],
+      "submittedAt": 1792199395926,
+      "createdAt": 1792199395926,
+      "status": "approved",
+      "reviewedBy": "admin.ainewsmaker@gmail.com",
+      "reviewedAt": 1792199395939,
+      "walletTransactionId": "tx-1792199395939-3a3p"
+    },
+    {
       "id": "claim-1792183505854-zt7n",
       "claimId": "claim-1792183505854-zt7n",
       "userId": "autotest_1792183505774@example.com",
@@ -51,6 +99,24 @@
   ],
   "transactions": [
     {
+      "id": "tx-1792199395939-3a3p",
+      "transactionId": "tx-1792199395939-3a3p",
+      "userId": "autotest_1792199395884@example.com",
+      "userEmail": "autotest_1792199395884@example.com",
+      "claimId": "claim-1792199395926-6p47",
+      "newsItemId": "post-1792199395900",
+      "newsTitle": "ऑटो टेस्ट ब्रेकिंग न्यूज़ 1792199395898",
+      "description": "बोनस रिवॉर्ड स्वीकृत: ऑटो टेस्ट ब्रेकिंग न्यूज़ 1792199395898",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 25,
+      "amount": 25,
+      "balanceAfter": 25,
+      "status": "completed",
+      "createdAt": 1792199395939,
+      "createdBy": "admin.ainewsmaker@gmail.com"
+    },
+    {
       "id": "tx-1792183505826-2768",
       "transactionId": "tx-1792183505826-2768",
       "userId": "autotest_1792183505774@example.com",
@@ -70,6 +136,24 @@
     }
   ],
   "downloadEvents": [
+    {
+      "eventId": "dl-1792199395964-5hll",
+      "userId": "autotest_1792199395884@example.com",
+      "userEmail": "autotest_1792199395884@example.com",
+      "newsItemId": "post-1792199395951",
+      "newsTitle": "ऑटो टेस्ट दूसरा बोनस न्यूज़ 1792199395948",
+      "rewardCoins": 10,
+      "downloadedAt": 1792199395964
+    },
+    {
+      "eventId": "dl-1792199395916-hwue",
+      "userId": "autotest_1792199395884@example.com",
+      "userEmail": "autotest_1792199395884@example.com",
+      "newsItemId": "post-1792199395900",
+      "newsTitle": "ऑटो टेस्ट ब्रेकिंग न्यूज़ 1792199395898",
+      "rewardCoins": 25,
+      "downloadedAt": 1792199395916
+    },
     {
       "eventId": "dl-1792183505851-xjcu",
       "userId": "autotest_1792183505774@example.com",
@@ -91,6 +175,11 @@
   ],
   "wallets": {
     "autotest_1792183505774@example.com": {
+      "coinBalance": 25,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 25
+    },
+    "autotest_1792199395884@example.com": {
       "coinBalance": 25,
       "pendingCoins": 0,
       "totalEarnedCoins": 25

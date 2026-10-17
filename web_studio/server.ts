@@ -1074,6 +1074,22 @@ app.get("/api/news-posts", (req, res) => {
     return true;
   });
 
+  // 3b. Backfill safeguard: If fewer than 20 active posts remain due to 3-day time window, backfill from latest approved posts so live feed is NEVER empty
+  if (activePosts.length < 20) {
+    const activeIds = new Set(activePosts.map((p) => p.id));
+    const backfillCandidates = posts.filter((p) => {
+      if (String(p.id).startsWith("live-post-")) return false;
+      if (activeIds.has(p.id)) return false;
+      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+      if (isFeedSource && p.status !== "APPROVED" && p.status !== undefined) {
+        if (role !== "admin" && role !== "superadmin" && !includePending) return false;
+      }
+      return true;
+    });
+    backfillCandidates.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+    activePosts.push(...backfillCandidates.slice(0, 30 - activePosts.length));
+  }
+
   // 4. Sort newest-first: newest approved/published news at the top, older progressively lower
   activePosts.sort((a, b) => {
     const timeA = Number(a.timestamp) || 0;
@@ -8489,7 +8505,13 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     let effectiveInput = (rawInputText || "").trim();
     const rawLink = (linkUrl || "").trim();
 
-    if (rawLink) {
+    const isInternalPlatformUrl =
+      rawLink.includes("ainewsmaker.online") ||
+      rawLink.includes("breakingnewswala.com") ||
+      rawLink.includes("localhost") ||
+      rawLink.includes("127.0.0.1");
+
+    if (rawLink && !isInternalPlatformUrl) {
       if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
         try {
