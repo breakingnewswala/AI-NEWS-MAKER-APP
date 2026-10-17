@@ -734,19 +734,14 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: ADMIN ACCESS CONTROL (ADMIN ONLY)                                  */}
+        {/* TAB 3: ADMIN TIER ACCESS CONTROL & CUSTOM HF APPROVAL (PART 4 & PART 6)    */}
         {/* ========================================================================= */}
-        {activeTab === 'admin' && isAdmin && (
-          <div className="space-y-3">
+        {(activeTab === 'admin' || activeTab === 'custom_hf') && isAdmin && (
+          <div className="space-y-8">
             <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
-          </div>
-        )}
 
-        {/* ========================================================================= */}
-        {/* TAB 4: CUSTOM HEADER & FOOTER APPROVAL & ASSIGNMENT (PART L)              */}
-        {/* ========================================================================= */}
-        {activeTab === 'custom_hf' && isAdmin && (
-          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Custom Header & Footer Approval placed at the very bottom of Template Manager */}
+            <div id="custom-hf-approval-section" className="pt-6 border-t-2 border-slate-800 space-y-6 animate-in fade-in duration-200">
             {/* Header info card */}
             <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/40 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1228,6 +1223,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 </div>
               </div>
             )}
+            </div>
           </div>
         )}
       </div>

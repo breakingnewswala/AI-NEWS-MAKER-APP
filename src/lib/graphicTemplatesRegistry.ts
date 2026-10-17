@@ -66,11 +66,41 @@ export function normalizeUserPlanTier(tier?: string | null): GraphicPlanCategory
   return 'BASIC';
 }
 
+export const FRAME_CATEGORIES = [
+  'Regular Frame',
+  'Package Frame',
+  'Super Breaking Frame',
+  'Text Breaking Frame',
+  'बयानबाज़ी फ्रेम',
+  'Special Frame',
+  'Bonus Frame',
+  'Custom Frame',
+] as const;
+
+export type FrameCategory = (typeof FRAME_CATEGORIES)[number];
+
+export function getCascadingAllowedPlans(selectedTier: string): GraphicPlanCategory[] {
+  const t = (selectedTier || '').toUpperCase().trim();
+  if (t === 'BASIC') return ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'];
+  if (t === 'ADVANCED' || t === 'ADVANCE') return ['ADVANCED', 'PRO', 'VIP DESK'];
+  if (t === 'PRO' || t === 'PROFESSIONAL') return ['PRO', 'VIP DESK'];
+  if (t === 'VIP DESK' || t === 'ULTRA') return ['VIP DESK'];
+  return ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'];
+}
+
 export interface TemplatePlanConfig {
   allowedPlans: GraphicPlanCategory[];
   isActive: boolean;
   version: string;
   customName?: string;
+  category?: string;
+  selectedTier?: string;
+  coinPrice?: number;
+  assetUrl?: string;
+  previewUrl?: string;
+  headlineArea?: string;
+  locationArea?: string;
+  logoArea?: string;
 }
 
 export const GRAPHIC_1_DEFINITION: GraphicTemplateDefinition = {
@@ -337,24 +367,52 @@ export function getTemplateHeadlineConfig(templateId?: string): TemplateConfig &
 
 export const DEFAULT_TEMPLATE_PLAN_CONFIGS: Record<string, TemplatePlanConfig> = {
   graphic_001: {
+    customName: 'Regular Clean News Frame',
+    category: 'Regular Frame',
+    selectedTier: 'BASIC',
     allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+    coinPrice: 0,
     isActive: true,
     version: 'v1.0',
+    headlineArea: '3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)',
+    locationArea: 'top_left_box',
+    logoArea: 'top_right_box',
   },
   graphic_002: {
-    allowedPlans: ['ADVANCED'],
+    customName: 'Package Standard Frame',
+    category: 'Package Frame',
+    selectedTier: 'ADVANCED',
+    allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
+    coinPrice: 50,
     isActive: true,
     version: 'v1.0',
+    headlineArea: '2-Line Headline Area (डार्क ब्लू स्ट्रिप)',
+    locationArea: 'top_left_box',
+    logoArea: 'top_right_box',
   },
   graphic_003: {
-    allowedPlans: ['PRO'],
+    customName: 'Super Breaking News Frame',
+    category: 'Super Breaking Frame',
+    selectedTier: 'PRO',
+    allowedPlans: ['PRO', 'VIP DESK'],
+    coinPrice: 100,
     isActive: true,
     version: 'v1.0',
+    headlineArea: '3-Line Red Ribbon Headline Area',
+    locationArea: 'top_strip',
+    logoArea: 'top_right_box',
   },
   graphic_004: {
+    customName: 'Special Edition Frame',
+    category: 'Special Frame',
+    selectedTier: 'VIP DESK',
     allowedPlans: ['VIP DESK'],
+    coinPrice: 150,
     isActive: true,
     version: 'v1.0',
+    headlineArea: '2-Line Premium Gold Headline Area',
+    locationArea: 'top_left_box',
+    logoArea: 'top_right_box',
   },
 };
 
@@ -430,8 +488,16 @@ export function saveTemplateConfig(templateId: string, update: Partial<TemplateP
       body: JSON.stringify({
         templateId,
         allowedPlans: updatedConfig.allowedPlans,
+        selectedTier: updatedConfig.selectedTier,
         isActive: updatedConfig.isActive,
         customName: updatedConfig.customName,
+        category: updatedConfig.category,
+        coinPrice: updatedConfig.coinPrice,
+        assetUrl: updatedConfig.assetUrl,
+        previewUrl: updatedConfig.previewUrl,
+        headlineArea: updatedConfig.headlineArea,
+        locationArea: updatedConfig.locationArea,
+        logoArea: updatedConfig.logoArea,
       }),
     }).catch((err) => console.warn('Cloud template sync warning:', err));
   } catch (e) {

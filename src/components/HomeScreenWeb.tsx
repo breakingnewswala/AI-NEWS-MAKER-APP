@@ -317,8 +317,40 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [coinConfigPlans, setCoinConfigPlans] = useState<string[]>(['Basic']);
   const [coinConfigSaving, setCoinConfigSaving] = useState<boolean>(false);
 
+  // Daily graphic download status & exhaustion modal state
+  const [downloadStatus, setDownloadStatus] = useState<{
+    isExhausted: boolean;
+    remainingDownloads: number;
+    dailyQuota: number;
+    todayCount: number;
+    planTier: string;
+  } | null>(null);
+  const [showLimitExhaustedModal, setShowLimitExhaustedModal] = useState<boolean>(false);
+  const [isRequestingLimitIncrease, setIsRequestingLimitIncrease] = useState<boolean>(false);
+  const [limitIncreaseRequested, setLimitIncreaseRequested] = useState<boolean>(false);
+
+  const fetchDownloadStatus = async () => {
+    if (!currentUser?.email) return;
+    try {
+      const res = await fetch(getApiUrl(`/api/user-download-status?email=${encodeURIComponent(currentUser.email)}`));
+      if (res.ok) {
+        const data = await res.json();
+        setDownloadStatus(data);
+      }
+    } catch {}
+  };
+
+  const handleOpenStudioSafe = (post: NewsFeedPost) => {
+    if (downloadStatus?.isExhausted && !post.isBonus && !isEffectiveAdmin(currentUser)) {
+      setShowLimitExhaustedModal(true);
+      return;
+    }
+    onOpenStudioWithNews(post);
+  };
+
   useEffect(() => {
     if (!currentUser?.email) return;
+    fetchDownloadStatus();
     const fetchWalletAndUnlocks = async () => {
       try {
         const wRes = await fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(currentUser.email)}`));
@@ -1384,7 +1416,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div>
                     {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
                     <div
-                      onClick={() => onOpenStudioWithNews(post)}
+                      onClick={() => handleOpenStudioSafe(post)}
                       className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 mb-2.5 cursor-pointer group/img shadow-inner border border-slate-800/80"
                       title="क्लिक करके स्टूडियो में कार्ड बनाएं"
                     >
@@ -1769,11 +1801,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 ? 'border-2 border-indigo-400/80 ring-1 ring-indigo-400/30 shadow-lg shadow-indigo-500/10'
                 : 'border border-slate-700/90 hover:border-slate-500/80 shadow-md';
 
+              const isCardExhausted = Boolean(downloadStatus?.isExhausted && !isBonus && !canModerate);
+
               return (
                 <div
                   key={post.id}
-                  className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass}`}
+                  className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass} ${
+                    isCardExhausted ? 'opacity-40 hover:opacity-70' : ''
+                  }`}
                 >
+                  {isCardExhausted && (
+                    <div
+                      onClick={() => setShowLimitExhaustedModal(true)}
+                      className="bg-amber-950/90 border-b border-amber-600/50 px-3 py-1.5 text-[11px] text-amber-300 font-bold flex items-center justify-between cursor-pointer hover:bg-amber-900/90 select-none z-10"
+                    >
+                      <span className="flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>दैनिक लिमिट समाप्त</span>
+                      </span>
+                      <span className="text-[10px] underline">लिमिट बढ़ाएं</span>
+                    </div>
+                  )}
                   {/* Admin Moderation Bar (Visible strictly to authenticated Admin in Admin Mode) */}
                   {canModerate && (
                     <div className="bg-slate-950/95 border-b border-slate-800/80 px-3 py-1.5 flex items-center justify-between gap-2 z-10">
@@ -2008,7 +2056,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             if (isPostRestricted(post)) {
                               handleUnlockNewsPost(post);
                             } else {
-                              onOpenStudioWithNews(post);
+                              handleOpenStudioSafe(post);
                             }
                           }}
                           className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
@@ -2150,7 +2198,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </button>
                       ) : (
                         <button
-                          onClick={() => onOpenStudioWithNews(post)}
+                          onClick={() => handleOpenStudioSafe(post)}
                           className={`flex-1 py-2 px-3 ${
                             isNewsGraphicCreated(currentUser?.email, post.id)
                               ? 'bg-gradient-to-r from-emerald-600/30 to-teal-600/30 border-emerald-500/40 text-emerald-300 hover:text-white'
@@ -3328,6 +3376,91 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 <span>{coinConfigSaving ? 'सेव हो रहा है...' : 'सेव करें'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Download Limit Exhaustion Hindi Modal */}
+      {showLimitExhaustedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-neutral-900 border border-amber-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-center relative">
+            <button
+              type="button"
+              onClick={() => setShowLimitExhaustedModal(false)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-white p-1 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-14 h-14 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-2xl border border-amber-500/40">
+              ⏳
+            </div>
+            
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-black text-white">
+                आज की ग्राफिक डाउनलोड लिमिट समाप्त हो गई है
+              </h3>
+              <p className="text-xs text-neutral-300 leading-relaxed">
+                आपने आज के अपने <strong>{downloadStatus?.planTier || 'पैकेज'}</strong> की सभी दैनिक डाउनलोड सीमा ({downloadStatus?.todayCount || 0}/{downloadStatus?.dailyQuota || 0}) पूरी कर ली है। आप बोनस खबरें अभी भी निःशुल्क बना सकते हैं।
+              </p>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLimitExhaustedModal(false);
+                  setAdminBonusOnly(true);
+                  const bonusSection = document.getElementById('bonus-news-section');
+                  if (bonusSection) {
+                    bonusSection.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>🎁</span>
+                <span>बोनस खबरें देखें</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isRequestingLimitIncrease || limitIncreaseRequested}
+                onClick={async () => {
+                  if (!currentUser?.email) return;
+                  try {
+                    setIsRequestingLimitIncrease(true);
+                    const res = await fetch(getApiUrl('/api/request-limit-increase'), {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: currentUser.email, requestedLimit: 10 }),
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                      setLimitIncreaseRequested(true);
+                      alert('लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है!');
+                    } else {
+                      alert(data.error || 'अनुरोध भेजने में समस्या आई।');
+                    }
+                  } catch (err: any) {
+                    alert(err.message || 'नेटवर्क समस्या।');
+                  } finally {
+                    setIsRequestingLimitIncrease(false);
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>🚀</span>
+                <span>{limitIncreaseRequested ? '✓ अनुरोध भेजा गया' : isRequestingLimitIncrease ? 'भेज रहे हैं...' : 'लिमिट बढ़ाने का अनुरोध'}</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowLimitExhaustedModal(false)}
+              className="text-xs text-neutral-400 hover:text-white underline cursor-pointer pt-1"
+            >
+              बंद करें
+            </button>
           </div>
         </div>
       )}

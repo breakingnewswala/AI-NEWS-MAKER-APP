@@ -1669,9 +1669,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       {/* Plan Name & Pricing */}
                       <div>
                         <h4 className="text-sm font-black text-white">{plan.nameHi}</h4>
-                        <div className="mt-2 flex items-baseline gap-1">
-                          <span className="text-2xl font-black text-amber-400">{plan.priceDisplay}</span>
-                          <span className="text-[11px] text-slate-400">/{plan.period}</span>
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 line-through font-bold">
+                              {plan.regularPriceDisplay || (plan.id === 'basic' ? '₹2,999' : plan.id === 'advanced' ? '₹4,999' : plan.id === 'professional' ? '₹6,999' : '₹9,999')}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xs">
+                              Launching Offer ({plan.discountPercent || (plan.id === 'basic' ? 67 : plan.id === 'advanced' ? 50 : plan.id === 'professional' ? 40 : 35)}%)
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-2xl font-black text-amber-400">{plan.priceDisplay}</span>
+                            <span className="text-[11px] text-slate-400">/{plan.period}</span>
+                          </div>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-1 min-h-[32px] leading-tight">
                           {plan.tagline}

@@ -1327,7 +1327,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       ) : (
                         <div className="flex items-baseline justify-between">
                           <div>
-                            <span className="text-xl font-black text-white font-mono">{plan.priceDisplay}</span>
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className="text-xs text-slate-500 line-through font-bold">
+                                {plan.regularPriceDisplay || (plan.id === 'basic' ? '₹2,999' : plan.id === 'advanced' ? '₹4,999' : plan.id === 'professional' ? '₹6,999' : '₹9,999')}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-gradient-to-r from-red-600 to-amber-600 text-white">
+                                Launching Offer ({plan.discountPercent || (plan.id === 'basic' ? 67 : plan.id === 'advanced' ? 50 : plan.id === 'professional' ? 40 : 35)}%)
+                              </span>
+                            </div>
+                            <span className="text-xl font-black text-amber-400 font-mono">{plan.priceDisplay}</span>
                             <span className="text-[10px] text-slate-400 ml-1">/ {plan.validityLabel}</span>
                           </div>
                           <button

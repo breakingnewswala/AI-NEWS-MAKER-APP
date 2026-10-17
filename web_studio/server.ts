@@ -690,6 +690,7 @@ interface ServerRewardsDatabase {
   wallets: Record<string, { coinBalance: number; pendingCoins: number; totalEarnedCoins: number }>;
   welcomeRewards?: Record<string, { graphicClaimed?: boolean; videoClaimed?: boolean }>;
   unlockedItems?: Record<string, string[]>;
+  frameUnlocks?: Record<string, Record<string, { unlockedAt: number; expiresAt: number; dateStr: string }>>;
 }
 
 function loadRewardsDatabase(): ServerRewardsDatabase {
@@ -704,12 +705,13 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
         wallets: parsed.wallets && typeof parsed.wallets === 'object' ? parsed.wallets : {},
         welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === 'object' ? parsed.welcomeRewards : {},
         unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === 'object' ? parsed.unlockedItems : {},
+        frameUnlocks: parsed.frameUnlocks && typeof parsed.frameUnlocks === 'object' ? parsed.frameUnlocks : {},
       };
     }
   } catch (err: any) {
     console.error("Error reading rewards_database.json:", err.message);
   }
-  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {} };
+  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {}, frameUnlocks: {} };
 }
 
 function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
@@ -10578,6 +10580,58 @@ Strictly return valid JSON object matching these keys.`;
 
 // Template Manager Configuration & Plan Assignment Persistence
 const TEMPLATE_CONFIGS_FILE = path.join(process.cwd(), "news_template_configs.json");
+const LIMIT_INCREASE_REQUESTS_FILE = path.join(process.cwd(), "limit_increase_requests.json");
+
+// Exactly 8 Frame Categories as defined by specification
+const FRAME_CATEGORIES = [
+  "Regular Frame",
+  "Package Frame",
+  "Super Breaking Frame",
+  "Text Breaking Frame",
+  "बयानबाज़ी फ्रेम",
+  "Special Frame",
+  "Bonus Frame",
+  "Custom Frame",
+] as const;
+
+// Helper to calculate Asia/Kolkata server time date string and end-of-day expiry (23:59:59.999 IST)
+function getAsiaKolkataDateAndExpiry(nowMs = Date.now()) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(new Date(nowMs));
+    const partMap: Record<string, string> = {};
+    for (const p of parts) partMap[p.type] = p.value;
+    const dateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
+    const kolkataDateMidnight = new Date(`${dateStr}T23:59:59.999+05:30`);
+    const expiryMs = kolkataDateMidnight.getTime();
+    return { dateStr, expiryMs };
+  } catch {
+    // Fallback if timezone not available
+    const d = new Date(nowMs);
+    const dateStr = d.toISOString().slice(0, 10);
+    const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+    return { dateStr, expiryMs: endOfDay };
+  }
+}
+
+// Cascading allowed plans calculation
+function getCascadingAllowedPlans(selectedTier: string): string[] {
+  const t = (selectedTier || "").toUpperCase().trim();
+  if (t === "BASIC") return ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
+  if (t === "ADVANCED" || t === "ADVANCE") return ["ADVANCED", "PRO", "VIP DESK"];
+  if (t === "PRO" || t === "PROFESSIONAL") return ["PRO", "VIP DESK"];
+  if (t === "VIP DESK" || t === "ULTRA") return ["VIP DESK"];
+  return ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
+}
 
 function getStoredTemplateConfigs(): Record<string, any> {
   try {
@@ -10589,10 +10643,54 @@ function getStoredTemplateConfigs(): Record<string, any> {
     console.warn("Failed to read news_template_configs.json:", e);
   }
   return {
-    graphic_001: { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" },
-    graphic_002: { allowedPlans: ["ADVANCED"], isActive: true, version: "v1.0" },
-    graphic_003: { allowedPlans: ["PRO"], isActive: true, version: "v1.0" },
-    graphic_004: { allowedPlans: ["VIP DESK"], isActive: true, version: "v1.0" },
+    graphic_001: {
+      customName: "Regular Clean News Frame",
+      category: "Regular Frame",
+      selectedTier: "BASIC",
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      coinPrice: 0,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
+      locationArea: "top_left_box",
+      logoArea: "top_right_box",
+    },
+    graphic_002: {
+      customName: "Package Standard Frame",
+      category: "Package Frame",
+      selectedTier: "ADVANCED",
+      allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+      coinPrice: 50,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "2-Line Headline Area (डार्क ब्लू स्ट्रिप)",
+      locationArea: "top_left_box",
+      logoArea: "top_right_box",
+    },
+    graphic_003: {
+      customName: "Super Breaking News Frame",
+      category: "Super Breaking Frame",
+      selectedTier: "PRO",
+      allowedPlans: ["PRO", "VIP DESK"],
+      coinPrice: 100,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "3-Line Red Ribbon Headline Area",
+      locationArea: "top_strip",
+      logoArea: "top_right_box",
+    },
+    graphic_004: {
+      customName: "Special Edition Frame",
+      category: "Special Frame",
+      selectedTier: "VIP DESK",
+      allowedPlans: ["VIP DESK"],
+      coinPrice: 150,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "2-Line Premium Gold Headline Area",
+      locationArea: "top_left_box",
+      logoArea: "top_right_box",
+    },
   };
 }
 
@@ -10600,32 +10698,399 @@ app.get("/api/template-configs", (_req, res) => {
   res.json({
     success: true,
     configs: getStoredTemplateConfigs(),
+    categories: FRAME_CATEGORIES,
   });
 });
 
 app.post("/api/admin/save-template-config", (req, res) => {
   try {
-    const { templateId, allowedPlans, isActive, customName } = req.body;
+    const {
+      templateId,
+      allowedPlans,
+      selectedTier,
+      isActive,
+      customName,
+      category,
+      coinPrice,
+      assetUrl,
+      previewUrl,
+      headlineArea,
+      locationArea,
+      logoArea,
+    } = req.body;
     if (!templateId) {
       return res.status(400).json({ error: "templateId is required" });
     }
     const current = getStoredTemplateConfigs();
-    const existing = current[templateId] || { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" };
+    const existing = current[templateId] || {
+      customName: `Frame ${templateId}`,
+      category: "Regular Frame",
+      selectedTier: "BASIC",
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      coinPrice: 0,
+      isActive: true,
+      version: "v1.0",
+    };
+
+    // Calculate cascading plans if selectedTier provided, or use provided allowedPlans
+    let finalAllowedPlans = existing.allowedPlans;
+    let finalSelectedTier = existing.selectedTier || "BASIC";
+
+    if (selectedTier) {
+      finalSelectedTier = String(selectedTier).toUpperCase().trim();
+      finalAllowedPlans = getCascadingAllowedPlans(finalSelectedTier);
+    } else if (allowedPlans && Array.isArray(allowedPlans) && allowedPlans.length > 0) {
+      finalAllowedPlans = allowedPlans;
+    }
+
+    // Validate category is one of the 8 specified categories
+    let finalCategory = existing.category || "Regular Frame";
+    if (category && typeof category === "string") {
+      const trimmedCat = category.trim();
+      if ((FRAME_CATEGORIES as readonly string[]).includes(trimmedCat)) {
+        finalCategory = trimmedCat;
+      }
+    }
+
     current[templateId] = {
       ...existing,
-      ...(allowedPlans && Array.isArray(allowedPlans) ? { allowedPlans } : {}),
+      category: finalCategory,
+      selectedTier: finalSelectedTier,
+      allowedPlans: finalAllowedPlans,
+      coinPrice: typeof coinPrice === "number" && coinPrice >= 0 ? coinPrice : (existing.coinPrice || 0),
       ...(typeof isActive === "boolean" ? { isActive } : {}),
       ...(customName ? { customName: String(customName).trim() } : {}),
+      ...(assetUrl ? { assetUrl: String(assetUrl).trim() } : {}),
+      ...(previewUrl ? { previewUrl: String(previewUrl).trim() } : {}),
+      ...(headlineArea ? { headlineArea: String(headlineArea).trim() } : {}),
+      ...(locationArea ? { locationArea: String(locationArea).trim() } : {}),
+      ...(logoArea ? { logoArea: String(logoArea).trim() } : {}),
+      updatedAt: Date.now(),
     };
+
     fs.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
       message: `Template config updated for ${templateId}`,
+      config: current[templateId],
       configs: current,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
+});
+
+// Admin Create/Upload new frame
+app.post("/api/admin/create-frame", (req, res) => {
+  try {
+    const {
+      name,
+      category,
+      selectedTier = "BASIC",
+      coinPrice = 0,
+      assetUrl,
+      previewUrl,
+      headlineArea = "3-Line Headline Area",
+      locationArea = "top_left_box",
+      logoArea = "top_right_box",
+      creatorEmail,
+    } = req.body || {};
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: "Frame name is required" });
+    }
+
+    const current = getStoredTemplateConfigs();
+    const frameId = `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const validCat = (FRAME_CATEGORIES as readonly string[]).includes(String(category).trim())
+      ? String(category).trim()
+      : "Regular Frame";
+    const allowed = getCascadingAllowedPlans(selectedTier);
+
+    current[frameId] = {
+      id: frameId,
+      templateId: frameId,
+      customName: String(name).trim(),
+      category: validCat,
+      selectedTier: String(selectedTier).toUpperCase().trim(),
+      allowedPlans: allowed,
+      coinPrice: Number(coinPrice) >= 0 ? Number(coinPrice) : 0,
+      assetUrl: assetUrl ? String(assetUrl).trim() : "",
+      previewUrl: previewUrl ? String(previewUrl).trim() : (assetUrl ? String(assetUrl).trim() : ""),
+      headlineArea: String(headlineArea).trim(),
+      locationArea: String(locationArea).trim(),
+      logoArea: String(logoArea).trim(),
+      isActive: true,
+      version: "v1.0",
+      creatorEmail: creatorEmail ? String(creatorEmail).trim() : "admin",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    fs.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
+    return res.json({
+      success: true,
+      message: `New frame created successfully with ID ${frameId}`,
+      frameId,
+      frame: current[frameId],
+      configs: current,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Admin Credit Coins Endpoint
+app.post("/api/admin/credit-coins", (req, res) => {
+  try {
+    const { email, userId, coins = 0, reason = "Admin credit" } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!walletKey) {
+      return res.status(400).json({ error: "email or userId is required" });
+    }
+    const rDb = loadRewardsDatabase();
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    const amount = Number(coins) || 0;
+    rDb.wallets[walletKey].coinBalance += amount;
+    if (amount > 0) {
+      rDb.wallets[walletKey].totalEarnedCoins += amount;
+    }
+    const txId = `tx-credit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: reason,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: amount,
+      amount: amount,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "admin",
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `${amount} coins credited successfully`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Coin-Based Daily Frame Unlock with Asia/Kolkata expiry
+app.post("/api/wallet/unlock-frame", (req, res) => {
+  try {
+    const { email, userId, frameId, frameName } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const cleanFrameId = (frameId || "").toString().trim();
+
+    if (!cleanFrameId || (!cleanEmail && !cleanUserId)) {
+      return res.status(400).json({ error: "frameId and user identification are required" });
+    }
+
+    const configs = getStoredTemplateConfigs();
+    const frameConfig = configs[cleanFrameId];
+    if (!frameConfig) {
+      return res.status(404).json({ error: "Frame not found in configuration catalog" });
+    }
+
+    const price = Number(frameConfig.coinPrice) || 0;
+    if (price <= 0) {
+      return res.status(400).json({
+        error: "इस फ्रेम पर कॉइन-आधारित अनलॉक सक्रिय नहीं है। यह फ़्रेम निःशुल्क या केवल पैकेज आधारित है।",
+      });
+    }
+
+    const { dateStr, expiryMs } = getAsiaKolkataDateAndExpiry();
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.frameUnlocks) {
+      rDb.frameUnlocks = {};
+    }
+    if (!rDb.frameUnlocks[walletKey]) {
+      rDb.frameUnlocks[walletKey] = {};
+    }
+
+    const existingUnlock = rDb.frameUnlocks[walletKey][cleanFrameId];
+    // Check if already unlocked and currently valid today in Asia/Kolkata
+    if (existingUnlock && existingUnlock.expiresAt > Date.now()) {
+      return res.json({
+        success: true,
+        alreadyUnlocked: true,
+        unlocked: true,
+        frameId: cleanFrameId,
+        expiresAt: existingUnlock.expiresAt,
+        dateStr: existingUnlock.dateStr,
+        wallet: rDb.wallets[walletKey],
+        message: "यह फ्रेम आज (11:59 PM तक) पहले से अनलॉक है।",
+      });
+    }
+
+    // Check user balance
+    const currentBalance = rDb.wallets[walletKey].coinBalance;
+    if (currentBalance < price) {
+      return res.status(400).json({
+        success: false,
+        error: `अपर्याप्त कॉइन बैलेंस! फ्रेम अनलॉक करने के लिए ${price} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${currentBalance} कॉइन्स हैं।`,
+        required: price,
+        available: currentBalance,
+      });
+    }
+
+    // Atomic debit
+    rDb.wallets[walletKey].coinBalance -= price;
+    rDb.frameUnlocks[walletKey][cleanFrameId] = {
+      unlockedAt: Date.now(),
+      expiresAt: expiryMs,
+      dateStr,
+    };
+
+    const txId = `tx-frame-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const chosenName = frameName || frameConfig.customName || cleanFrameId;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      newsItemId: cleanFrameId,
+      newsTitle: chosenName,
+      description: `फ्रेम अनलॉक (आज 11:59 PM तक): ${chosenName} (-${price} कॉइन्स)`,
+      transactionType: "debit",
+      type: "debit",
+      coinAmount: -price,
+      amount: -price,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system",
+    };
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      unlocked: true,
+      frameId: cleanFrameId,
+      expiresAt: expiryMs,
+      dateStr,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `फ्रेम "${chosenName}" आज 11:59:59 PM (IST) तक सफलतापूर्वक अनलॉक हो गया! ${price} कॉइन्स काटे गए।`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Fetch user active frame unlocks
+app.get("/api/wallet/frame-unlocks", (req, res) => {
+  try {
+    const email = (req.query.email || "").toString().toLowerCase().trim();
+    if (!email) {
+      return res.json({ success: true, unlocks: [] });
+    }
+    const rDb = loadRewardsDatabase();
+    const userUnlocks = rDb.frameUnlocks?.[email] || {};
+    const now = Date.now();
+    const activeFrameIds = Object.keys(userUnlocks).filter((fId) => userUnlocks[fId]?.expiresAt > now);
+    return res.json({
+      success: true,
+      unlocks: activeFrameIds,
+      unlockedFrameIds: activeFrameIds,
+      details: userUnlocks,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Limit Increase Request Endpoints
+function loadLimitIncreaseRequests(): any[] {
+  try {
+    if (fs.existsSync(LIMIT_INCREASE_REQUESTS_FILE)) {
+      const data = fs.readFileSync(LIMIT_INCREASE_REQUESTS_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch {}
+  return [];
+}
+
+function saveLimitIncreaseRequests(reqs: any[]): void {
+  try {
+    fs.writeFileSync(LIMIT_INCREASE_REQUESTS_FILE, JSON.stringify(reqs, null, 2), "utf-8");
+  } catch {}
+}
+
+app.post("/api/request-limit-increase", (req, res) => {
+  try {
+    const { email, userId, reason, tier, currentLimit } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (!cleanEmail) {
+      return res.status(400).json({ error: "User email required" });
+    }
+
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const requests = loadLimitIncreaseRequests();
+
+    // Prevent duplicate pending requests for same user on same day
+    const alreadyRequested = requests.find(
+      (r) => r.email === cleanEmail && r.dateStr === dateStr && r.status === "pending"
+    );
+    if (alreadyRequested) {
+      return res.json({
+        success: true,
+        alreadyRequested: true,
+        message: "आपका लिमिट बढ़ाने का अनुरोध पहले से दर्ज है। व्यवस्थापक जल्द ही समीक्षा करेंगे।",
+      });
+    }
+
+    const newReq = {
+      id: `req-limit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      email: cleanEmail,
+      userId: userId || cleanEmail,
+      tier: tier || "basic",
+      currentLimit: currentLimit || 10,
+      reason: reason || "दैनिक डाउनलोड सीमा समाप्त",
+      dateStr,
+      requestedAt: Date.now(),
+      status: "pending",
+    };
+
+    requests.unshift(newReq);
+    saveLimitIncreaseRequests(requests);
+
+    return res.json({
+      success: true,
+      message: "आपका दैनिक लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है।",
+      request: newReq,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.get("/api/admin/limit-increase-requests", (_req, res) => {
+  res.json({
+    success: true,
+    requests: loadLimitIncreaseRequests(),
+  });
 });
 
 // Centralized Dynamic Category Management & Persistence
@@ -10700,26 +11165,30 @@ const DEFAULT_PLANS_CATALOG = [
     planKey: 'BASIC',
     nameHi: 'बेसिक (BASIC)',
     nameEn: 'BASIC',
-    priceDisplay: '₹0',
-    priceNum: 0,
-    durationDays: 7,
-    validityLabel: '7 दिन फ्री ट्रायल',
-    period: '7 दिन निःशुल्क',
-    badge: 'प्रारंभिक / ट्रायल',
-    tagline: '7 दिन का निःशुल्क ट्रायल — सभी बेसिक फीचर्स देखें व बनाएं',
+    regularPriceNum: 2999,
+    regularPriceDisplay: '₹2,999',
+    priceDisplay: '₹999',
+    priceNum: 999,
+    discountPercent: 67,
+    durationDays: 30,
+    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
+    period: 'प्रति माह',
+    badge: 'लॉन्चिंग ऑफर 67% OFF',
+    tagline: 'बेसिक न्यूज़ ग्राफिक क्रिएटर (10 ग्राफिक प्रतिदिन)',
     hasWatermark: true,
     graphicExportResolution: '720p',
-    maxGraphicsPerDay: 5,
+    maxGraphicsPerDay: 10,
     hasVideoStudio: false,
     hasAiTools: false,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '✅ 7 दिन का पूर्ण फ्री ट्रायल',
+      '✅ 10 ग्राफिक प्रतिदिन डाउनलोड सीमा',
+      '✅ केवल Hind फॉन्ट उपयोग योग्य',
+      '✅ 1 फोटो अपलोड व रिप्लेसमेंट',
       '✅ बेसिक न्यूज़ टेम्पलेट्स व स्टाइल्स',
-      '✅ लाइव कार्ड प्रीव्यू व लेआउट कस्टमाइज़ेशन',
-      '⚠️ ग्राफिक पर "AI News Maker App" वॉटरमार्क रहेगा',
-      '⚠️ सीमित 720p एक्सपोर्ट (5 ग्राफिक प्रतिदिन)',
+      '⚠️ डिफ़ॉल्ट सफेद फूटर व काला टेक्स्ट',
+      '⚠️ मास्टर ब्रांडिंग लॉक',
     ],
   },
   {
@@ -10727,14 +11196,17 @@ const DEFAULT_PLANS_CATALOG = [
     planKey: 'ADVANCE',
     nameHi: 'एडवांस (ADVANCE)',
     nameEn: 'ADVANCE',
-    priceDisplay: '₹499',
-    priceNum: 499,
+    regularPriceNum: 4999,
+    regularPriceDisplay: '₹4,999',
+    priceDisplay: '₹2,499',
+    priceNum: 2499,
+    discountPercent: 50,
     durationDays: 30,
-    validityLabel: '30 दिन (प्रति माह)',
+    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
-    badge: 'सबसे लोकप्रिय',
+    badge: 'लॉन्चिंग ऑफर 50% OFF',
     popular: true,
-    tagline: 'वॉटरमार्क रहित फुल एचडी डिजिटल न्यूज़ कार्ड क्रिएटर',
+    tagline: '25 ग्राफिक प्रतिदिन — 5 फॉन्ट, 2-फोटो लेआउट व AI सिम्बॉलिक वॉटरमार्क',
     hasWatermark: false,
     graphicExportResolution: '1080p',
     maxGraphicsPerDay: 25,
@@ -10743,12 +11215,12 @@ const DEFAULT_PLANS_CATALOG = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '🚫 वॉटरमार्क पूरी तरह से हटाया जाएगा (No Watermark)',
-      '⚡ 1080p Full HD अल्ट्रा-शार्प डाउनलोड',
-      '✨ कस्टम चैनल लोगो, हेडर व वॉटरमार्क नियंत्रण',
-      '🤖 ChatGPT (GPT-4o-mini) हेडलाइन व समरी टूल्स',
-      '🎨 सभी सोशल मीडिया साइज़ (1:1, 4:5, 9:16, 16:9)',
-      '⚡ प्राथमिकता आधारित त्वरित रेंडरिंग (25 ग्राफिक प्रतिदिन)',
+      '⚡ 25 ग्राफिक प्रतिदिन डाउनलोड सीमा',
+      '🔤 5 देवनागरी फॉन्ट (Hind, खंड, साहित्य, बालू, अनेक देवनागरी)',
+      '🎨 5 हाईलाइट कलर्स व 5 फूटर बैकग्राउंड कलर्स',
+      '🖼️ 1 व 2 फोटो लेआउट सपोर्ट',
+      '✨ AI / प्रतीकात्मक फोटो वॉटरमार्क सपोर्ट',
+      '🌐 फूटर वेबसाइट हाइड टॉगल (WhatsApp ऑन)',
     ],
   },
   {
@@ -10756,27 +11228,31 @@ const DEFAULT_PLANS_CATALOG = [
     planKey: 'PRO',
     nameHi: 'प्रो (PRO)',
     nameEn: 'PRO',
-    priceDisplay: '₹999',
-    priceNum: 999,
+    regularPriceNum: 6999,
+    regularPriceDisplay: '₹6,999',
+    priceDisplay: '₹4,199',
+    priceNum: 4199,
+    discountPercent: 40,
     durationDays: 30,
-    validityLabel: '30 दिन (प्रति माह)',
+    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
-    badge: 'पत्रकार व चैनल चॉइस',
-    tagline: 'ग्राफिक + फुल वीडियो डिज़ाइन स्टूडियो (रील्स व टीवी जैकेट)',
+    badge: 'लॉन्चिंग ऑफर 40% OFF',
+    tagline: '50 ग्राफिक प्रतिदिन — सभी मानक फॉन्ट, कस्टम वॉटरमार्क व इंटरनेट सर्च',
     hasWatermark: false,
     graphicExportResolution: '1080p',
-    maxGraphicsPerDay: 100,
+    maxGraphicsPerDay: 50,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '🚫 100% वॉटरमार्क रहित (No Watermark)',
-      '🎬 फुल वीडियो स्टूडियो (9:16 रील्स/शॉर्ट्स व 16:9 टीवी जैकेट)',
-      '🔊 लाइव न्यूज़ ब्रेकिंग ऑडियो स्टिंग्स व साउंड इफेक्ट्स',
-      '📺 लाइव न्यूज़ टिकर व हेडलाइन स्क्रोलर',
-      '📍 विशेष जिला / ब्यूरो डेस्क बैज व प्रेस कार्ड',
-      '⚡ एडवांस के सभी फीचर्स शामिल (100 ग्राफिक प्रतिदिन)',
+      '⚡ 50 ग्राफिक प्रतिदिन डाउनलोड सीमा',
+      '🔤 सभी मानक फॉन्ट कलेक्शन व कलर हाईलाइट्स (प्राइमरी कलर सिलेक्शन)',
+      '🏷️ कस्टम टेक्स्ट वॉटरमार्क व AI सिम्बॉलिक वॉटरमार्क',
+      '🖼️ सभी मल्टी-फोटो ग्रिड लेआउट्स व इंटरनेट इमेज सर्च',
+      '🎨 सभी फूटर बैकग्राउंड व टेक्स्ट कलर्स',
+      '🌐 वेबसाइट व WhatsApp दोनों ऑन/ऑफ टॉगल',
+      '👑 कस्टम फ्रेम होने पर मास्टर ब्रांडिंग ऑफ टॉगल',
     ],
   },
   {
@@ -10784,27 +11260,30 @@ const DEFAULT_PLANS_CATALOG = [
     planKey: 'VIP DESK',
     nameHi: 'वीआईपी डेस्क (VIP DESK)',
     nameEn: 'VIP DESK',
-    priceDisplay: '₹1,999',
-    priceNum: 1999,
+    regularPriceNum: 9999,
+    regularPriceDisplay: '₹9,999',
+    priceDisplay: '₹6,499',
+    priceNum: 6499,
+    discountPercent: 35,
     durationDays: 30,
-    validityLabel: '30 दिन (प्रति माह)',
+    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
-    badge: 'असीमित पावर',
-    tagline: 'मल्टी-रिपोर्टर नेटवर्क, 4K एक्सपोर्ट व ऑटो RSS पब्लिशर',
+    badge: 'लॉन्चिंग ऑफर 35% OFF',
+    tagline: 'असीमित डाउनलोड — कस्टम फॉन्ट अपलोड, कस्टम कलर्स, WhatsApp नंबर ओवरराइड',
     hasWatermark: false,
     graphicExportResolution: '4K',
-    maxGraphicsPerDay: 9999,
+    maxGraphicsPerDay: 99999,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: true,
     isActive: true,
     features: [
-      '🚫 100% वॉटरमार्क रहित (No Watermark)',
-      '👑 अनलिमिटेड 4K अल्ट्रा एचडी एक्सपोर्ट',
-      '⭐ VIP DESK विशेष प्रीमियम फ्रेम्स (Graphic 4, VIP Jackets)',
-      '👥 मल्टी-रिपोर्टर व सब-एडिटर टीम अकाउंट्स',
-      '🎯 कस्टम डेडिकेटेड चैनल टेम्पलेट व ग्राफिक सपोर्ट',
-      '⭐ 24x7 वीआईपी व्हाट्सएप व फोन सपोर्ट',
+      '👑 असीमित ग्राफिक डाउनलोड (Unlimited Downloads)',
+      '🔤 सभी मानक फॉन्ट + कस्टम फॉन्ट (.ttf/.otf) अपलोड',
+      '🎨 कस्टम हाईलाइट कलर, फूटर कलर व टेक्स्ट कलर पिकर',
+      '📱 प्रति-ग्राफिक WhatsApp नंबर ओवरराइड इनपुट',
+      '🖼️ सभी फोटो लेआउट्स, इंटरनेट सर्च व कस्टम टेक्स्ट वॉटरमार्क',
+      '⭐ VIP DESK विशेष फ्रेम्स व कस्टम फ्रेम सपोर्ट',
     ],
   },
 ];
@@ -10853,9 +11332,53 @@ app.post("/api/admin/plans", (req, res) => {
 // Authoritative Download Entitlement & Quota Verification
 const dailyDownloadsTracker = new Map<string, { date: string; count: number }>();
 
+app.get("/api/user-download-status", (req, res) => {
+  try {
+    const email = (req.query.email || "").toString().toLowerCase().trim();
+    if (!email) {
+      return res.json({ allowed: true, maxAllowed: 10, dailyQuota: 10, downloadsToday: 0, remainingToday: 10, remainingDownloads: 10, unlimited: false });
+    }
+    if (isProtectedAdminAccount(email)) {
+      return res.json({ allowed: true, plan: "ultra", planName: "VIP DESK", maxAllowed: 99999, dailyQuota: 99999, downloadsToday: 0, remainingToday: 99999, remainingDownloads: 99999, unlimited: true });
+    }
+    const users = loadUsersMasterDatabase();
+    const matchedUser = users.find(u =>
+      (u.email && u.email.toLowerCase().trim() === email) ||
+      (email && u.userId && u.userId.toLowerCase().trim() === email)
+    );
+    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    const catalog = loadPlansCatalogDatabase();
+    const planDetail = catalog.find(p => p.id === tier);
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined ? planDetail.maxGraphicsPerDay : (tier === 'ultra' ? 99999 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const userKey = email;
+    const currentRecord = dailyDownloadsTracker.get(userKey);
+    let downloadsToday = 0;
+    if (currentRecord && currentRecord.date === dateStr) {
+      downloadsToday = currentRecord.count;
+    }
+    const isExhausted = maxAllowed < 99999 && downloadsToday >= maxAllowed;
+    const remainingCount = maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday);
+    return res.json({
+      success: true,
+      plan: tier,
+      maxAllowed,
+      dailyQuota: maxAllowed,
+      downloadsToday,
+      remainingToday: remainingCount,
+      remainingDownloads: remainingCount,
+      isExhausted,
+      unlimited: maxAllowed >= 99999,
+      dateStr,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 app.post("/api/verify-download-entitlement", (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, frameId, checkOnly } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
 
     // 1. Privileged accounts (Super Admin & Admin) have unlimited VIP access
@@ -10865,7 +11388,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         plan: "ultra",
         planName: "VIP DESK",
         role: "admin",
-        remainingToday: 9999,
+        remainingToday: 99999,
         unlimited: true,
       });
     }
@@ -10884,38 +11407,53 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       });
     }
 
-    // 3. Subscription & Trial expiry checks
+    // 3. User tier
     const tier = (matchedUser?.tier || "basic").toLowerCase();
-    const now = Date.now();
-    const trialStartedAt = matchedUser?.trialStartedAt || matchedUser?.createdAt || now;
-    const trialEndsAt = matchedUser?.trialEndsAt || (trialStartedAt + 7 * 24 * 60 * 60 * 1000);
 
-    if (tier === "basic") {
-      if (now > trialEndsAt) {
-        return res.status(403).json({
-          error: "आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कार्ड डाउनलोड करने के लिए कृपया मेंबरशिप प्लान चुनें।",
-          trialExpired: true,
-        });
+    // 4. Verify Frame Entitlement if frameId provided
+    if (frameId) {
+      const templateConfigs = getStoredTemplateConfigs();
+      const frameConfig = templateConfigs[frameId];
+      if (frameConfig) {
+        const userPlanKey = tier === 'ultra' ? 'VIP DESK' : tier === 'professional' ? 'PRO' : tier === 'advanced' ? 'ADVANCED' : 'BASIC';
+        const allowedPlans = frameConfig.allowedPlans || getCascadingAllowedPlans(frameConfig.selectedTier || 'BASIC');
+        const isPlanAllowed = allowedPlans.includes(userPlanKey);
+
+        if (!isPlanAllowed) {
+          // Check if unlocked today in Asia/Kolkata via coins
+          const rDb = loadRewardsDatabase();
+          const userUnlocks = rDb.frameUnlocks?.[cleanEmail] || {};
+          const unlockRecord = userUnlocks[frameId];
+          const isUnlocked = unlockRecord && unlockRecord.expiresAt > Date.now();
+          if (!isUnlocked) {
+            return res.status(403).json({
+              error: `यह फ्रेम (${frameConfig.customName || frameId}) आपके पैकेज में उपलब्ध नहीं है। यह ${frameConfig.selectedTier || allowedPlans.join(', ')} के लिए आरक्षित है। आप इसे ${frameConfig.coinPrice || 0} कॉइन्स में अनलॉक कर सकते हैं।`,
+              frameLocked: true,
+              requiredTier: frameConfig.selectedTier,
+              coinPrice: frameConfig.coinPrice || 0,
+            });
+          }
+        }
       }
     }
 
-    // 4. Daily download limits per tier
+    // 5. Daily download limits per tier (using Asia/Kolkata date)
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined ? planDetail.maxGraphicsPerDay : (tier === 'ultra' ? 9999 : tier === 'professional' ? 100 : tier === 'advanced' ? 25 : 5);
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined ? planDetail.maxGraphicsPerDay : (tier === 'ultra' ? 99999 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
     const currentRecord = dailyDownloadsTracker.get(userKey);
 
     let downloadsToday = 0;
-    if (currentRecord && currentRecord.date === todayStr) {
+    if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
     } else {
-      dailyDownloadsTracker.set(userKey, { date: todayStr, count: 0 });
+      dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
     }
 
-    if (downloadsToday >= maxAllowed && maxAllowed < 9999) {
+    if (downloadsToday >= maxAllowed && maxAllowed < 99999) {
       return res.status(403).json({
         error: `आपकी दैनिक डाउनलोड सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया अगले दिन प्रयास करें या प्लान अपग्रेड करें।`,
         quotaExceeded: true,
@@ -10924,15 +11462,19 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       });
     }
 
-    // Record verified download quota usage
-    dailyDownloadsTracker.set(userKey, { date: todayStr, count: downloadsToday + 1 });
+    // Record verified download quota usage only if not checkOnly
+    if (!checkOnly) {
+      dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday + 1 });
+      downloadsToday += 1;
+    }
 
     return res.json({
       allowed: true,
       plan: tier,
       maxAllowed,
-      downloadsToday: downloadsToday + 1,
-      remainingToday: maxAllowed >= 9999 ? 9999 : Math.max(0, maxAllowed - (downloadsToday + 1)),
+      downloadsToday,
+      remainingToday: maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday),
+      unlimited: maxAllowed >= 99999,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

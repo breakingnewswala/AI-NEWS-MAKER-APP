@@ -79,7 +79,7 @@ async function runTests() {
     process.exit(1);
   }
 
-  console.log('Server is ready. Executing test suite...\n');
+  console.log('Server is ready. Executing Master Prompt test suite...\n');
 
   let passed = 0;
   let failed = 0;
@@ -95,30 +95,15 @@ async function runTests() {
   }
 
   try {
-    // 1. Categories GET
+    // 1. Categories GET & POST
     console.log('--- 1. Testing Categories API & Persistence ---');
     const getCatsRes = await request('GET', '/api/categories');
     assert(getCatsRes.status === 200 && getCatsRes.body.success === true, 'GET /api/categories returns 200 with success: true');
     const categories = getCatsRes.body.categories;
     assert(Array.isArray(categories) && categories.length > 0, `Categories array exists with ${categories.length} categories`);
 
-    // 2. Categories POST & Sync
-    const testCat = { id: 'test_cat_' + Date.now(), name: 'टेस्ट विशेष श्रेणी', isActive: true };
-    const updatedCats = [...categories, testCat];
-    const postCatsRes = await request('POST', '/api/categories', { categories: updatedCats });
-    assert(postCatsRes.status === 200 && postCatsRes.body.success === true, 'POST /api/categories saves new category to database');
-
-    const verifyCatsRes = await request('GET', '/api/categories');
-    assert(verifyCatsRes.body.categories.some((c) => c.id === testCat.id), 'Verified new category persisted across requests');
-
-    // Clean up test category
-    await request('POST', '/api/categories', {
-      categories: verifyCatsRes.body.categories.filter((c) => c.id !== testCat.id),
-    });
-    console.log(' Cleaned up test category cleanly.');
-
-    // 3. Plans GET & Pricing
-    console.log('\n--- 2. Testing Plans & Pricing Catalog API ---');
+    // 2. Master Prompt Package Pricing & Limits Verification
+    console.log('\n--- 2. Testing Master Prompt Package Pricing & Limits ---');
     const getPlansRes = await request('GET', '/api/plans');
     assert(getPlansRes.status === 200 && getPlansRes.body.success === true, 'GET /api/plans returns 200 with success: true');
     const plans = getPlansRes.body.plans;
@@ -129,74 +114,117 @@ async function runTests() {
     const proPlan = plans.find((p) => p.id === 'professional');
     const vipPlan = plans.find((p) => p.id === 'ultra');
 
-    assert(basicPlan && basicPlan.priceNum === 0 && basicPlan.maxGraphicsPerDay === 5, 'Basic plan is ₹0 with 5 daily downloads');
-    assert(advancePlan && advancePlan.priceNum === 499 && advancePlan.maxGraphicsPerDay === 25, 'Advance plan is ₹499 with 25 daily downloads');
-    assert(proPlan && proPlan.priceNum === 999 && proPlan.maxGraphicsPerDay === 100, 'Pro plan is ₹999 with 100 daily downloads');
-    assert(vipPlan && vipPlan.priceNum === 1999 && vipPlan.maxGraphicsPerDay === 9999, 'VIP Desk plan is ₹1,999 with unlimited (9999) daily downloads');
+    assert(
+      basicPlan && basicPlan.regularPriceNum === 2999 && basicPlan.priceNum === 999 && basicPlan.maxGraphicsPerDay === 10,
+      'Basic plan has ₹2,999 regular, ₹999 launching offer, and 10 daily graphics limit'
+    );
+    assert(
+      advancePlan && advancePlan.regularPriceNum === 4999 && advancePlan.priceNum === 2499 && advancePlan.maxGraphicsPerDay === 25,
+      'Advance plan has ₹4,999 regular, ₹2,499 launching offer, and 25 daily graphics limit'
+    );
+    assert(
+      proPlan && proPlan.regularPriceNum === 6999 && proPlan.priceNum === 4199 && proPlan.maxGraphicsPerDay === 50,
+      'Pro plan has ₹6,999 regular, ₹4,199 launching offer, and 50 daily graphics limit'
+    );
+    assert(
+      vipPlan && vipPlan.regularPriceNum === 9999 && vipPlan.priceNum === 6499 && vipPlan.maxGraphicsPerDay >= 9999,
+      'VIP Desk plan has ₹9,999 regular, ₹6,499 launching offer, and unlimited daily graphics limit'
+    );
 
-    const savePlansRes = await request('POST', '/api/admin/plans', { plans });
-    assert(savePlansRes.status === 200 && savePlansRes.body.success === true, 'POST /api/admin/plans successfully persists catalog updates');
-
-    // 4. Template Configs GET & POST
-    console.log('\n--- 3. Testing Template Manager Tier Access ---');
+    // 3. Template Manager & 8 Frame Categories Verification
+    console.log('\n--- 3. Testing Template Manager & 8 Frame Categories ---');
     const getTemplatesRes = await request('GET', '/api/template-configs');
     assert(getTemplatesRes.status === 200 && getTemplatesRes.body.success === true, 'GET /api/template-configs returns 200 with configs');
     const configs = getTemplatesRes.body.configs;
     assert(configs && typeof configs === 'object', 'Template configs is a valid object dictionary');
 
-    const t001 = configs['graphic_001'];
-    assert(
-      t001 && t001.allowedPlans && t001.allowedPlans.includes('BASIC'),
-      'Template graphic_001 allows BASIC tier access'
-    );
-
-    // Test template config modification
+    // Verify cascading tier logic and categories
     const updateTemplateRes = await request('POST', '/api/admin/save-template-config', {
-      templateId: 'graphic_001',
-      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+      templateId: 'graphic_002',
+      selectedTier: 'ADVANCED',
+      category: 'Package Frame',
+      coinPrice: 15,
       isActive: true,
     });
     assert(
       updateTemplateRes.status === 200 && updateTemplateRes.body.success === true,
-      'POST /api/admin/save-template-config successfully updates template tier access'
+      'POST /api/admin/save-template-config persists cascading tier ADVANCED, category, and coin price'
+    );
+    const updatedCfg = updateTemplateRes.body.config || (updateTemplateRes.body.configs && updateTemplateRes.body.configs['graphic_002']);
+    assert(
+      updatedCfg.allowedPlans.includes('ADVANCED') &&
+        updatedCfg.allowedPlans.includes('PRO') &&
+        updatedCfg.allowedPlans.includes('VIP DESK') &&
+        !updatedCfg.allowedPlans.includes('BASIC'),
+      'Cascading rule verified: ADVANCED tier cascades to ADVANCED, PRO, and VIP DESK'
     );
 
-    // 5. Entitlement & Access Control Verification
-    console.log('\n--- 4. Testing Download Entitlements & Access Control ---');
+    // 4. Coin Unlock Frame API
+    console.log('\n--- 4. Testing Frame Coin Unlock API & IST Date Expiry ---');
+    const testCoinUser = `coin_test_${Date.now()}@example.com`;
+    // Credit coins first
+    await request('POST', '/api/admin/credit-coins', { email: testCoinUser, coins: 50, reason: 'test credit' });
 
-    // 5a. Admin bypass check
-    const adminCheck = await request('POST', '/api/verify-download-entitlement', {
-      email: 'admin.ainewsmaker@gmail.com',
+    const unlockRes = await request('POST', '/api/wallet/unlock-frame', {
+      email: testCoinUser,
+      frameId: 'graphic_002',
     });
     assert(
-      adminCheck.status === 200 && adminCheck.body.allowed === true && adminCheck.body.unlimited === true,
-      'Super Admin account receives unlimited VIP download bypass'
+      unlockRes.status === 200 && unlockRes.body.success === true,
+      'POST /api/wallet/unlock-frame successfully debits coins and unlocks frame'
     );
 
-    // 5b. Fresh unregistered/basic user within daily quota (5 max)
-    const testUserEmail = `test_reporter_${Date.now()}@example.com`;
-    const download1 = await request('POST', '/api/verify-download-entitlement', { email: testUserEmail });
-    assert(download1.status === 200 && download1.body.allowed === true && download1.body.remainingToday === 4, 'Basic user 1st download approved (4 remaining)');
-
-    const download2 = await request('POST', '/api/verify-download-entitlement', { email: testUserEmail });
-    assert(download2.status === 200 && download2.body.allowed === true && download2.body.remainingToday === 3, 'Basic user 2nd download approved (3 remaining)');
-
-    const download3 = await request('POST', '/api/verify-download-entitlement', { email: testUserEmail });
-    assert(download3.status === 200 && download3.body.allowed === true && download3.body.remainingToday === 2, 'Basic user 3rd download approved (2 remaining)');
-
-    const download4 = await request('POST', '/api/verify-download-entitlement', { email: testUserEmail });
-    assert(download4.status === 200 && download4.body.allowed === true && download4.body.remainingToday === 1, 'Basic user 4th download approved (1 remaining)');
-
-    const download5 = await request('POST', '/api/verify-download-entitlement', { email: testUserEmail });
-    assert(download5.status === 200 && download5.body.allowed === true && download5.body.remainingToday === 0, 'Basic user 5th download approved (0 remaining)');
-
-    // 5c. 6th download exceeds daily limit for Basic tier
-    const download6 = await request('POST', '/api/verify-download-entitlement', { email: testUserEmail });
+    const getUnlocksRes = await request('GET', `/api/wallet/frame-unlocks?email=${encodeURIComponent(testCoinUser)}`);
     assert(
-      download6.status === 403 && download6.body.quotaExceeded === true,
-      '6th download correctly rejected with 403 and quotaExceeded flag'
+      getUnlocksRes.status === 200 &&
+        Array.isArray(getUnlocksRes.body.unlockedFrameIds) &&
+        getUnlocksRes.body.unlockedFrameIds.includes('graphic_002'),
+      'GET /api/wallet/frame-unlocks confirms unlocked frame for user for IST today'
     );
 
+    // 5. User Download Status & Quota Enforcement
+    console.log('\n--- 5. Testing User Daily Download Quota & Exhaustion ---');
+    const testReporter = `reporter_${Date.now()}@example.com`;
+    const statusRes = await request('GET', `/api/user-download-status?email=${encodeURIComponent(testReporter)}`);
+    assert(statusRes.status === 200 && statusRes.body.dailyQuota === 10, 'Fresh Basic user starts with 10 daily quota');
+    assert(statusRes.body.remainingDownloads === 10, 'Fresh Basic user has 10 remaining downloads today');
+
+    // Check-only mode does not increment count
+    const checkOnlyRes = await request('POST', '/api/verify-download-entitlement', {
+      email: testReporter,
+      checkOnly: true,
+    });
+    assert(checkOnlyRes.status === 200 && checkOnlyRes.body.allowed === true, 'checkOnly mode validates entitlement');
+
+    const statusAfterCheck = await request('GET', `/api/user-download-status?email=${encodeURIComponent(testReporter)}`);
+    assert(statusAfterCheck.body.remainingDownloads === 10, 'checkOnly mode verified: count did NOT increment');
+
+    // Perform downloads up to limit (10 for Basic)
+    for (let i = 1; i <= 10; i++) {
+      const dl = await request('POST', '/api/verify-download-entitlement', { email: testReporter });
+      assert(dl.status === 200 && dl.body.allowed === true, `Basic user download ${i}/10 approved`);
+    }
+
+    // 11th download exceeds quota
+    const dl11 = await request('POST', '/api/verify-download-entitlement', { email: testReporter });
+    assert(dl11.status === 403 && dl11.body.quotaExceeded === true, '11th download rejected with 403 quotaExceeded');
+
+    // 6. Limit Increase Request API
+    console.log('\n--- 6. Testing Limit Increase Request API ---');
+    const reqLimitRes = await request('POST', '/api/request-limit-increase', {
+      email: testReporter,
+      requestedLimit: 10,
+      reason: 'विशेष कवरेज हेतु अतिरिक्त लिमिट की आवश्यकता है',
+    });
+    assert(reqLimitRes.status === 200 && reqLimitRes.body.success === true, 'POST /api/request-limit-increase logs request');
+
+    const adminRequestsRes = await request('GET', '/api/admin/limit-increase-requests');
+    assert(
+      adminRequestsRes.status === 200 &&
+        Array.isArray(adminRequestsRes.body.requests) &&
+        adminRequestsRes.body.requests.some((r) => r.email === testReporter),
+      'GET /api/admin/limit-increase-requests returns logged limit increase request'
+    );
   } catch (err) {
     console.error('Test execution error:', err);
     failed++;

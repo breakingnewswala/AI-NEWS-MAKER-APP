@@ -89,11 +89,25 @@ export const BUILTIN_HEADLINE_FONTS: HeadlineFontOption[] = [
     badge: 'हेरिटेज',
   },
   {
-    id: 'sarala',
-    name: 'Sarala (सिंपल व बोल्ड)',
-    family: '"Sarala", sans-serif',
-    previewHindi: 'सीधा जनता से संवाद',
-    badge: 'सिंपल',
+    id: 'khand',
+    name: 'Khand (खंड - कड़क बोल्ड)',
+    family: '"Khand", sans-serif',
+    previewHindi: 'अखंड समाचार बुलेटिन',
+    badge: 'कड़क',
+  },
+  {
+    id: 'sahitya',
+    name: 'Sahitya (साहित्य - क्लासिक)',
+    family: '"Sahitya", serif',
+    previewHindi: 'साहित्यिक व गंभीर रिपोर्ट',
+    badge: 'क्लासिक',
+  },
+  {
+    id: 'anek-devanagari',
+    name: 'Anek Devanagari (अनेक - आधुनिक)',
+    family: '"Anek Devanagari", sans-serif',
+    previewHindi: 'आधुनिक स्पष्ट डिज़ाइन',
+    badge: 'मॉडर्न',
   },
 ];
 
@@ -203,28 +217,71 @@ export function canUserUploadCustomFont(userTier?: string | null, isAdmin: boole
 
 /**
  * Package-based headline font access system.
- * System is prepared for exact per-package font mapping to be provided in next instruction.
- * Without inventing arbitrary mappings now, this architecture isolates access per package.
+ * BASIC: Hind only
+ * ADVANCE: Hind, खंड (khand), साहित्य (sahitya), बालू 2 (baloo-2), अनेक देवनागरी (anek-devanagari)
+ * PRO: All standard fonts
+ * VIP DESK: All standard fonts + custom font upload (.ttf, .otf, .woff)
  */
 export function getHeadlineFontsForPackage(userTier?: string | null, isAdmin: boolean = false): HeadlineFontOption[] {
   const allFonts = getAllHeadlineFonts();
   if (isAdmin) return allFonts;
 
-  // Custom fonts are strictly accessible only to VIP DESK users
-  const isVipDesk = canUserUploadCustomFont(userTier, isAdmin);
-  if (!isVipDesk) {
-    return allFonts.filter((f) => !f.isCustom);
+  const t = (userTier || '').toLowerCase().trim();
+  let tierKey: FontPackageTier = 'BASIC';
+  if (t === 'ultra' || t === 'vip desk' || t === 'vip_desk' || t === 'vip') {
+    tierKey = 'VIP DESK';
+  } else if (t === 'professional' || t === 'pro') {
+    tierKey = 'PRO';
+  } else if (t === 'advanced' || t === 'advance') {
+    tierKey = 'ADVANCE';
   }
-  return allFonts;
+
+  const allowedIds = PACKAGE_FONT_MAPPING[tierKey] || ['hind'];
+  const isVipDesk = canUserUploadCustomFont(userTier, isAdmin);
+
+  return allFonts.filter((f) => {
+    if (f.isCustom) return isVipDesk;
+    if (tierKey === 'PRO' || tierKey === 'VIP DESK') return true;
+    return allowedIds.includes(f.id);
+  });
 }
 
 /**
  * Package Font Mapping structure.
- * Ready for future mapping instructions without inventing arbitrary assignments.
  */
 export const PACKAGE_FONT_MAPPING: Record<FontPackageTier, string[]> = {
-  BASIC: [],
-  ADVANCE: [],
-  PRO: [],
-  'VIP DESK': [],
+  BASIC: ['hind'],
+  ADVANCE: ['hind', 'khand', 'sahitya', 'baloo-2', 'anek-devanagari'],
+  PRO: [
+    'baloo-2',
+    'noto-sans-devanagari',
+    'poppins',
+    'rozha-one',
+    'mukta',
+    'hind',
+    'rajdhani',
+    'kalam',
+    'tiro-devanagari',
+    'gotu',
+    'yatra-one',
+    'khand',
+    'sahitya',
+    'anek-devanagari',
+  ],
+  'VIP DESK': [
+    'baloo-2',
+    'noto-sans-devanagari',
+    'poppins',
+    'rozha-one',
+    'mukta',
+    'hind',
+    'rajdhani',
+    'kalam',
+    'tiro-devanagari',
+    'gotu',
+    'yatra-one',
+    'khand',
+    'sahitya',
+    'anek-devanagari',
+  ],
 };

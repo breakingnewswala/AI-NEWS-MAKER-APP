@@ -1399,13 +1399,14 @@ function loadRewardsDatabase() {
         downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
         wallets: parsed.wallets && typeof parsed.wallets === "object" ? parsed.wallets : {},
         welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === "object" ? parsed.welcomeRewards : {},
-        unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === "object" ? parsed.unlockedItems : {}
+        unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === "object" ? parsed.unlockedItems : {},
+        frameUnlocks: parsed.frameUnlocks && typeof parsed.frameUnlocks === "object" ? parsed.frameUnlocks : {}
       };
     }
   } catch (err) {
     console.error("Error reading rewards_database.json:", err.message);
   }
-  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {} };
+  return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {}, frameUnlocks: {} };
 }
 function saveRewardsDatabase(db) {
   try {
@@ -9137,6 +9138,51 @@ Strictly return valid JSON object matching these keys.`;
   }
 });
 var TEMPLATE_CONFIGS_FILE = import_path.default.join(process.cwd(), "news_template_configs.json");
+var LIMIT_INCREASE_REQUESTS_FILE = import_path.default.join(process.cwd(), "limit_increase_requests.json");
+var FRAME_CATEGORIES = [
+  "Regular Frame",
+  "Package Frame",
+  "Super Breaking Frame",
+  "Text Breaking Frame",
+  "\u092C\u092F\u093E\u0928\u092C\u093E\u091C\u093C\u0940 \u092B\u094D\u0930\u0947\u092E",
+  "Special Frame",
+  "Bonus Frame",
+  "Custom Frame"
+];
+function getAsiaKolkataDateAndExpiry(nowMs = Date.now()) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    });
+    const parts = formatter.formatToParts(new Date(nowMs));
+    const partMap = {};
+    for (const p of parts) partMap[p.type] = p.value;
+    const dateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
+    const kolkataDateMidnight = /* @__PURE__ */ new Date(`${dateStr}T23:59:59.999+05:30`);
+    const expiryMs = kolkataDateMidnight.getTime();
+    return { dateStr, expiryMs };
+  } catch {
+    const d = new Date(nowMs);
+    const dateStr = d.toISOString().slice(0, 10);
+    const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+    return { dateStr, expiryMs: endOfDay };
+  }
+}
+function getCascadingAllowedPlans(selectedTier) {
+  const t = (selectedTier || "").toUpperCase().trim();
+  if (t === "BASIC") return ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
+  if (t === "ADVANCED" || t === "ADVANCE") return ["ADVANCED", "PRO", "VIP DESK"];
+  if (t === "PRO" || t === "PROFESSIONAL") return ["PRO", "VIP DESK"];
+  if (t === "VIP DESK" || t === "ULTRA") return ["VIP DESK"];
+  return ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
+}
 function getStoredTemplateConfigs() {
   try {
     if (import_fs.default.existsSync(TEMPLATE_CONFIGS_FILE)) {
@@ -9147,41 +9193,408 @@ function getStoredTemplateConfigs() {
     console.warn("Failed to read news_template_configs.json:", e);
   }
   return {
-    graphic_001: { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" },
-    graphic_002: { allowedPlans: ["ADVANCED"], isActive: true, version: "v1.0" },
-    graphic_003: { allowedPlans: ["PRO"], isActive: true, version: "v1.0" },
-    graphic_004: { allowedPlans: ["VIP DESK"], isActive: true, version: "v1.0" }
+    graphic_001: {
+      customName: "Regular Clean News Frame",
+      category: "Regular Frame",
+      selectedTier: "BASIC",
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      coinPrice: 0,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "3-Line Headline Area (\u092C\u0949\u091F\u092E \u0935\u094D\u0939\u093E\u0908\u091F \u092A\u0949\u0932\u0940\u0917\u0949\u0928)",
+      locationArea: "top_left_box",
+      logoArea: "top_right_box"
+    },
+    graphic_002: {
+      customName: "Package Standard Frame",
+      category: "Package Frame",
+      selectedTier: "ADVANCED",
+      allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+      coinPrice: 50,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "2-Line Headline Area (\u0921\u093E\u0930\u094D\u0915 \u092C\u094D\u0932\u0942 \u0938\u094D\u091F\u094D\u0930\u093F\u092A)",
+      locationArea: "top_left_box",
+      logoArea: "top_right_box"
+    },
+    graphic_003: {
+      customName: "Super Breaking News Frame",
+      category: "Super Breaking Frame",
+      selectedTier: "PRO",
+      allowedPlans: ["PRO", "VIP DESK"],
+      coinPrice: 100,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "3-Line Red Ribbon Headline Area",
+      locationArea: "top_strip",
+      logoArea: "top_right_box"
+    },
+    graphic_004: {
+      customName: "Special Edition Frame",
+      category: "Special Frame",
+      selectedTier: "VIP DESK",
+      allowedPlans: ["VIP DESK"],
+      coinPrice: 150,
+      isActive: true,
+      version: "v1.0",
+      headlineArea: "2-Line Premium Gold Headline Area",
+      locationArea: "top_left_box",
+      logoArea: "top_right_box"
+    }
   };
 }
 app.get("/api/template-configs", (_req, res) => {
   res.json({
     success: true,
-    configs: getStoredTemplateConfigs()
+    configs: getStoredTemplateConfigs(),
+    categories: FRAME_CATEGORIES
   });
 });
 app.post("/api/admin/save-template-config", (req, res) => {
   try {
-    const { templateId, allowedPlans, isActive, customName } = req.body;
+    const {
+      templateId,
+      allowedPlans,
+      selectedTier,
+      isActive,
+      customName,
+      category,
+      coinPrice,
+      assetUrl,
+      previewUrl,
+      headlineArea,
+      locationArea,
+      logoArea
+    } = req.body;
     if (!templateId) {
       return res.status(400).json({ error: "templateId is required" });
     }
     const current = getStoredTemplateConfigs();
-    const existing = current[templateId] || { allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"], isActive: true, version: "v1.0" };
+    const existing = current[templateId] || {
+      customName: `Frame ${templateId}`,
+      category: "Regular Frame",
+      selectedTier: "BASIC",
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      coinPrice: 0,
+      isActive: true,
+      version: "v1.0"
+    };
+    let finalAllowedPlans = existing.allowedPlans;
+    let finalSelectedTier = existing.selectedTier || "BASIC";
+    if (selectedTier) {
+      finalSelectedTier = String(selectedTier).toUpperCase().trim();
+      finalAllowedPlans = getCascadingAllowedPlans(finalSelectedTier);
+    } else if (allowedPlans && Array.isArray(allowedPlans) && allowedPlans.length > 0) {
+      finalAllowedPlans = allowedPlans;
+    }
+    let finalCategory = existing.category || "Regular Frame";
+    if (category && typeof category === "string") {
+      const trimmedCat = category.trim();
+      if (FRAME_CATEGORIES.includes(trimmedCat)) {
+        finalCategory = trimmedCat;
+      }
+    }
     current[templateId] = {
       ...existing,
-      ...allowedPlans && Array.isArray(allowedPlans) ? { allowedPlans } : {},
+      category: finalCategory,
+      selectedTier: finalSelectedTier,
+      allowedPlans: finalAllowedPlans,
+      coinPrice: typeof coinPrice === "number" && coinPrice >= 0 ? coinPrice : existing.coinPrice || 0,
       ...typeof isActive === "boolean" ? { isActive } : {},
-      ...customName ? { customName: String(customName).trim() } : {}
+      ...customName ? { customName: String(customName).trim() } : {},
+      ...assetUrl ? { assetUrl: String(assetUrl).trim() } : {},
+      ...previewUrl ? { previewUrl: String(previewUrl).trim() } : {},
+      ...headlineArea ? { headlineArea: String(headlineArea).trim() } : {},
+      ...locationArea ? { locationArea: String(locationArea).trim() } : {},
+      ...logoArea ? { logoArea: String(logoArea).trim() } : {},
+      updatedAt: Date.now()
     };
     import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
       message: `Template config updated for ${templateId}`,
+      config: current[templateId],
       configs: current
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
+});
+app.post("/api/admin/create-frame", (req, res) => {
+  try {
+    const {
+      name,
+      category,
+      selectedTier = "BASIC",
+      coinPrice = 0,
+      assetUrl,
+      previewUrl,
+      headlineArea = "3-Line Headline Area",
+      locationArea = "top_left_box",
+      logoArea = "top_right_box",
+      creatorEmail
+    } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: "Frame name is required" });
+    }
+    const current = getStoredTemplateConfigs();
+    const frameId = `frame_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const validCat = FRAME_CATEGORIES.includes(String(category).trim()) ? String(category).trim() : "Regular Frame";
+    const allowed = getCascadingAllowedPlans(selectedTier);
+    current[frameId] = {
+      id: frameId,
+      templateId: frameId,
+      customName: String(name).trim(),
+      category: validCat,
+      selectedTier: String(selectedTier).toUpperCase().trim(),
+      allowedPlans: allowed,
+      coinPrice: Number(coinPrice) >= 0 ? Number(coinPrice) : 0,
+      assetUrl: assetUrl ? String(assetUrl).trim() : "",
+      previewUrl: previewUrl ? String(previewUrl).trim() : assetUrl ? String(assetUrl).trim() : "",
+      headlineArea: String(headlineArea).trim(),
+      locationArea: String(locationArea).trim(),
+      logoArea: String(logoArea).trim(),
+      isActive: true,
+      version: "v1.0",
+      creatorEmail: creatorEmail ? String(creatorEmail).trim() : "admin",
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
+    return res.json({
+      success: true,
+      message: `New frame created successfully with ID ${frameId}`,
+      frameId,
+      frame: current[frameId],
+      configs: current
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/credit-coins", (req, res) => {
+  try {
+    const { email, userId, coins = 0, reason = "Admin credit" } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!walletKey) {
+      return res.status(400).json({ error: "email or userId is required" });
+    }
+    const rDb = loadRewardsDatabase();
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    const amount = Number(coins) || 0;
+    rDb.wallets[walletKey].coinBalance += amount;
+    if (amount > 0) {
+      rDb.wallets[walletKey].totalEarnedCoins += amount;
+    }
+    const txId = `tx-credit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: reason,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: amount,
+      amount,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "admin"
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `${amount} coins credited successfully`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/wallet/unlock-frame", (req, res) => {
+  try {
+    const { email, userId, frameId, frameName } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    const cleanFrameId = (frameId || "").toString().trim();
+    if (!cleanFrameId || !cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "frameId and user identification are required" });
+    }
+    const configs = getStoredTemplateConfigs();
+    const frameConfig = configs[cleanFrameId];
+    if (!frameConfig) {
+      return res.status(404).json({ error: "Frame not found in configuration catalog" });
+    }
+    const price = Number(frameConfig.coinPrice) || 0;
+    if (price <= 0) {
+      return res.status(400).json({
+        error: "\u0907\u0938 \u092B\u094D\u0930\u0947\u092E \u092A\u0930 \u0915\u0949\u0907\u0928-\u0906\u0927\u093E\u0930\u093F\u0924 \u0905\u0928\u0932\u0949\u0915 \u0938\u0915\u094D\u0930\u093F\u092F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u092F\u0939 \u092B\u093C\u094D\u0930\u0947\u092E \u0928\u093F\u0903\u0936\u0941\u0932\u094D\u0915 \u092F\u093E \u0915\u0947\u0935\u0932 \u092A\u0948\u0915\u0947\u091C \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u0948\u0964"
+      });
+    }
+    const { dateStr, expiryMs } = getAsiaKolkataDateAndExpiry();
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.frameUnlocks) {
+      rDb.frameUnlocks = {};
+    }
+    if (!rDb.frameUnlocks[walletKey]) {
+      rDb.frameUnlocks[walletKey] = {};
+    }
+    const existingUnlock = rDb.frameUnlocks[walletKey][cleanFrameId];
+    if (existingUnlock && existingUnlock.expiresAt > Date.now()) {
+      return res.json({
+        success: true,
+        alreadyUnlocked: true,
+        unlocked: true,
+        frameId: cleanFrameId,
+        expiresAt: existingUnlock.expiresAt,
+        dateStr: existingUnlock.dateStr,
+        wallet: rDb.wallets[walletKey],
+        message: "\u092F\u0939 \u092B\u094D\u0930\u0947\u092E \u0906\u091C (11:59 PM \u0924\u0915) \u092A\u0939\u0932\u0947 \u0938\u0947 \u0905\u0928\u0932\u0949\u0915 \u0939\u0948\u0964"
+      });
+    }
+    const currentBalance = rDb.wallets[walletKey].coinBalance;
+    if (currentBalance < price) {
+      return res.status(400).json({
+        success: false,
+        error: `\u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0915\u0949\u0907\u0928 \u092C\u0948\u0932\u0947\u0902\u0938! \u092B\u094D\u0930\u0947\u092E \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F ${price} \u0915\u0949\u0907\u0928\u094D\u0938 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902, \u091C\u092C\u0915\u093F \u0906\u092A\u0915\u0947 \u092A\u093E\u0938 \u0915\u0947\u0935\u0932 ${currentBalance} \u0915\u0949\u0907\u0928\u094D\u0938 \u0939\u0948\u0902\u0964`,
+        required: price,
+        available: currentBalance
+      });
+    }
+    rDb.wallets[walletKey].coinBalance -= price;
+    rDb.frameUnlocks[walletKey][cleanFrameId] = {
+      unlockedAt: Date.now(),
+      expiresAt: expiryMs,
+      dateStr
+    };
+    const txId = `tx-frame-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const chosenName = frameName || frameConfig.customName || cleanFrameId;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      newsItemId: cleanFrameId,
+      newsTitle: chosenName,
+      description: `\u092B\u094D\u0930\u0947\u092E \u0905\u0928\u0932\u0949\u0915 (\u0906\u091C 11:59 PM \u0924\u0915): ${chosenName} (-${price} \u0915\u0949\u0907\u0928\u094D\u0938)`,
+      transactionType: "debit",
+      type: "debit",
+      coinAmount: -price,
+      amount: -price,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system"
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      unlocked: true,
+      frameId: cleanFrameId,
+      expiresAt: expiryMs,
+      dateStr,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `\u092B\u094D\u0930\u0947\u092E "${chosenName}" \u0906\u091C 11:59:59 PM (IST) \u0924\u0915 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u0928\u0932\u0949\u0915 \u0939\u094B \u0917\u092F\u093E! ${price} \u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E\u091F\u0947 \u0917\u090F\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/wallet/frame-unlocks", (req, res) => {
+  try {
+    const email = (req.query.email || "").toString().toLowerCase().trim();
+    if (!email) {
+      return res.json({ success: true, unlocks: [] });
+    }
+    const rDb = loadRewardsDatabase();
+    const userUnlocks = rDb.frameUnlocks?.[email] || {};
+    const now = Date.now();
+    const activeFrameIds = Object.keys(userUnlocks).filter((fId) => userUnlocks[fId]?.expiresAt > now);
+    return res.json({
+      success: true,
+      unlocks: activeFrameIds,
+      unlockedFrameIds: activeFrameIds,
+      details: userUnlocks
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+function loadLimitIncreaseRequests() {
+  try {
+    if (import_fs.default.existsSync(LIMIT_INCREASE_REQUESTS_FILE)) {
+      const data = import_fs.default.readFileSync(LIMIT_INCREASE_REQUESTS_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch {
+  }
+  return [];
+}
+function saveLimitIncreaseRequests(reqs) {
+  try {
+    import_fs.default.writeFileSync(LIMIT_INCREASE_REQUESTS_FILE, JSON.stringify(reqs, null, 2), "utf-8");
+  } catch {
+  }
+}
+app.post("/api/request-limit-increase", (req, res) => {
+  try {
+    const { email, userId, reason, tier, currentLimit } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (!cleanEmail) {
+      return res.status(400).json({ error: "User email required" });
+    }
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const requests = loadLimitIncreaseRequests();
+    const alreadyRequested = requests.find(
+      (r) => r.email === cleanEmail && r.dateStr === dateStr && r.status === "pending"
+    );
+    if (alreadyRequested) {
+      return res.json({
+        success: true,
+        alreadyRequested: true,
+        message: "\u0906\u092A\u0915\u093E \u0932\u093F\u092E\u093F\u091F \u092C\u0922\u093C\u093E\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0926\u0930\u094D\u091C \u0939\u0948\u0964 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u091C\u0932\u094D\u0926 \u0939\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0917\u0947\u0964"
+      });
+    }
+    const newReq = {
+      id: `req-limit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      email: cleanEmail,
+      userId: userId || cleanEmail,
+      tier: tier || "basic",
+      currentLimit: currentLimit || 10,
+      reason: reason || "\u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u0938\u092E\u093E\u092A\u094D\u0924",
+      dateStr,
+      requestedAt: Date.now(),
+      status: "pending"
+    };
+    requests.unshift(newReq);
+    saveLimitIncreaseRequests(requests);
+    return res.json({
+      success: true,
+      message: "\u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0932\u093F\u092E\u093F\u091F \u092C\u0922\u093C\u093E\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u090F\u0921\u092E\u093F\u0928 \u0915\u094B \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964",
+      request: newReq
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/limit-increase-requests", (_req, res) => {
+  res.json({
+    success: true,
+    requests: loadLimitIncreaseRequests()
+  });
 });
 var CATEGORIES_DB_FILE = import_path.default.join(process.cwd(), "categories_database.json");
 var DEFAULT_CATEGORIES_PRESET = [
@@ -9246,26 +9659,30 @@ var DEFAULT_PLANS_CATALOG = [
     planKey: "BASIC",
     nameHi: "\u092C\u0947\u0938\u093F\u0915 (BASIC)",
     nameEn: "BASIC",
-    priceDisplay: "\u20B90",
-    priceNum: 0,
-    durationDays: 7,
-    validityLabel: "7 \u0926\u093F\u0928 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932",
-    period: "7 \u0926\u093F\u0928 \u0928\u093F\u0903\u0936\u0941\u0932\u094D\u0915",
-    badge: "\u092A\u094D\u0930\u093E\u0930\u0902\u092D\u093F\u0915 / \u091F\u094D\u0930\u093E\u092F\u0932",
-    tagline: "7 \u0926\u093F\u0928 \u0915\u093E \u0928\u093F\u0903\u0936\u0941\u0932\u094D\u0915 \u091F\u094D\u0930\u093E\u092F\u0932 \u2014 \u0938\u092D\u0940 \u092C\u0947\u0938\u093F\u0915 \u092B\u0940\u091A\u0930\u094D\u0938 \u0926\u0947\u0916\u0947\u0902 \u0935 \u092C\u0928\u093E\u090F\u0902",
+    regularPriceNum: 2999,
+    regularPriceDisplay: "\u20B92,999",
+    priceDisplay: "\u20B9999",
+    priceNum: 999,
+    discountPercent: 67,
+    durationDays: 30,
+    validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
+    period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
+    badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 67% OFF",
+    tagline: "\u092C\u0947\u0938\u093F\u0915 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u094D\u0930\u093F\u090F\u091F\u0930 (10 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)",
     hasWatermark: true,
     graphicExportResolution: "720p",
-    maxGraphicsPerDay: 5,
+    maxGraphicsPerDay: 10,
     hasVideoStudio: false,
     hasAiTools: false,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      "\u2705 7 \u0926\u093F\u0928 \u0915\u093E \u092A\u0942\u0930\u094D\u0923 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932",
+      "\u2705 10 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E",
+      "\u2705 \u0915\u0947\u0935\u0932 Hind \u092B\u0949\u0928\u094D\u091F \u0909\u092A\u092F\u094B\u0917 \u092F\u094B\u0917\u094D\u092F",
+      "\u2705 1 \u092B\u094B\u091F\u094B \u0905\u092A\u0932\u094B\u0921 \u0935 \u0930\u093F\u092A\u094D\u0932\u0947\u0938\u092E\u0947\u0902\u091F",
       "\u2705 \u092C\u0947\u0938\u093F\u0915 \u0928\u094D\u092F\u0942\u091C\u093C \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F\u094D\u0938 \u0935 \u0938\u094D\u091F\u093E\u0907\u0932\u094D\u0938",
-      "\u2705 \u0932\u093E\u0907\u0935 \u0915\u093E\u0930\u094D\u0921 \u092A\u094D\u0930\u0940\u0935\u094D\u092F\u0942 \u0935 \u0932\u0947\u0906\u0909\u091F \u0915\u0938\u094D\u091F\u092E\u093E\u0907\u091C\u093C\u0947\u0936\u0928",
-      '\u26A0\uFE0F \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u0930 "AI News Maker App" \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u0947\u0917\u093E',
-      "\u26A0\uFE0F \u0938\u0940\u092E\u093F\u0924 720p \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F (5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)"
+      "\u26A0\uFE0F \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0938\u092B\u0947\u0926 \u092B\u0942\u091F\u0930 \u0935 \u0915\u093E\u0932\u093E \u091F\u0947\u0915\u094D\u0938\u094D\u091F",
+      "\u26A0\uFE0F \u092E\u093E\u0938\u094D\u091F\u0930 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u0932\u0949\u0915"
     ]
   },
   {
@@ -9273,14 +9690,17 @@ var DEFAULT_PLANS_CATALOG = [
     planKey: "ADVANCE",
     nameHi: "\u090F\u0921\u0935\u093E\u0902\u0938 (ADVANCE)",
     nameEn: "ADVANCE",
-    priceDisplay: "\u20B9499",
-    priceNum: 499,
+    regularPriceNum: 4999,
+    regularPriceDisplay: "\u20B94,999",
+    priceDisplay: "\u20B92,499",
+    priceNum: 2499,
+    discountPercent: 50,
     durationDays: 30,
-    validityLabel: "30 \u0926\u093F\u0928 (\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939)",
+    validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
-    badge: "\u0938\u092C\u0938\u0947 \u0932\u094B\u0915\u092A\u094D\u0930\u093F\u092F",
+    badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 50% OFF",
     popular: true,
-    tagline: "\u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u093F\u0924 \u092B\u0941\u0932 \u090F\u091A\u0921\u0940 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0915\u093E\u0930\u094D\u0921 \u0915\u094D\u0930\u093F\u090F\u091F\u0930",
+    tagline: "25 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 5 \u092B\u0949\u0928\u094D\u091F, 2-\u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
     hasWatermark: false,
     graphicExportResolution: "1080p",
     maxGraphicsPerDay: 25,
@@ -9289,12 +9709,12 @@ var DEFAULT_PLANS_CATALOG = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      "\u{1F6AB} \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0938\u0947 \u0939\u091F\u093E\u092F\u093E \u091C\u093E\u090F\u0917\u093E (No Watermark)",
-      "\u26A1 1080p Full HD \u0905\u0932\u094D\u091F\u094D\u0930\u093E-\u0936\u093E\u0930\u094D\u092A \u0921\u093E\u0909\u0928\u0932\u094B\u0921",
-      "\u2728 \u0915\u0938\u094D\u091F\u092E \u091A\u0948\u0928\u0932 \u0932\u094B\u0917\u094B, \u0939\u0947\u0921\u0930 \u0935 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0928\u093F\u092F\u0902\u0924\u094D\u0930\u0923",
-      "\u{1F916} ChatGPT (GPT-4o-mini) \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0938\u092E\u0930\u0940 \u091F\u0942\u0932\u094D\u0938",
-      "\u{1F3A8} \u0938\u092D\u0940 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0938\u093E\u0907\u091C\u093C (1:1, 4:5, 9:16, 16:9)",
-      "\u26A1 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E \u0906\u0927\u093E\u0930\u093F\u0924 \u0924\u094D\u0935\u0930\u093F\u0924 \u0930\u0947\u0902\u0921\u0930\u093F\u0902\u0917 (25 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)"
+      "\u26A1 25 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E",
+      "\u{1F524} 5 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092B\u0949\u0928\u094D\u091F (Hind, \u0916\u0902\u0921, \u0938\u093E\u0939\u093F\u0924\u094D\u092F, \u092C\u093E\u0932\u0942, \u0905\u0928\u0947\u0915 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940)",
+      "\u{1F3A8} 5 \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0915\u0932\u0930\u094D\u0938 \u0935 5 \u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0915\u0932\u0930\u094D\u0938",
+      "\u{1F5BC}\uFE0F 1 \u0935 2 \u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F \u0938\u092A\u094B\u0930\u094D\u091F",
+      "\u2728 AI / \u092A\u094D\u0930\u0924\u0940\u0915\u093E\u0924\u094D\u092E\u0915 \u092B\u094B\u091F\u094B \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0938\u092A\u094B\u0930\u094D\u091F",
+      "\u{1F310} \u092B\u0942\u091F\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0939\u093E\u0907\u0921 \u091F\u0949\u0917\u0932 (WhatsApp \u0911\u0928)"
     ]
   },
   {
@@ -9302,27 +9722,31 @@ var DEFAULT_PLANS_CATALOG = [
     planKey: "PRO",
     nameHi: "\u092A\u094D\u0930\u094B (PRO)",
     nameEn: "PRO",
-    priceDisplay: "\u20B9999",
-    priceNum: 999,
+    regularPriceNum: 6999,
+    regularPriceDisplay: "\u20B96,999",
+    priceDisplay: "\u20B94,199",
+    priceNum: 4199,
+    discountPercent: 40,
     durationDays: 30,
-    validityLabel: "30 \u0926\u093F\u0928 (\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939)",
+    validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
-    badge: "\u092A\u0924\u094D\u0930\u0915\u093E\u0930 \u0935 \u091A\u0948\u0928\u0932 \u091A\u0949\u0907\u0938",
-    tagline: "\u0917\u094D\u0930\u093E\u092B\u093F\u0915 + \u092B\u0941\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093F\u091C\u093C\u093E\u0907\u0928 \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B (\u0930\u0940\u0932\u094D\u0938 \u0935 \u091F\u0940\u0935\u0940 \u091C\u0948\u0915\u0947\u091F)",
+    badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 40% OFF",
+    tagline: "50 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F, \u0915\u0938\u094D\u091F\u092E \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A",
     hasWatermark: false,
     graphicExportResolution: "1080p",
-    maxGraphicsPerDay: 100,
+    maxGraphicsPerDay: 50,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      "\u{1F6AB} 100% \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u093F\u0924 (No Watermark)",
-      "\u{1F3AC} \u092B\u0941\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B (9:16 \u0930\u0940\u0932\u094D\u0938/\u0936\u0949\u0930\u094D\u091F\u094D\u0938 \u0935 16:9 \u091F\u0940\u0935\u0940 \u091C\u0948\u0915\u0947\u091F)",
-      "\u{1F50A} \u0932\u093E\u0907\u0935 \u0928\u094D\u092F\u0942\u091C\u093C \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0911\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u093F\u0902\u0917\u094D\u0938 \u0935 \u0938\u093E\u0909\u0902\u0921 \u0907\u092B\u0947\u0915\u094D\u091F\u094D\u0938",
-      "\u{1F4FA} \u0932\u093E\u0907\u0935 \u0928\u094D\u092F\u0942\u091C\u093C \u091F\u093F\u0915\u0930 \u0935 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0938\u094D\u0915\u094D\u0930\u094B\u0932\u0930",
-      "\u{1F4CD} \u0935\u093F\u0936\u0947\u0937 \u091C\u093F\u0932\u093E / \u092C\u094D\u092F\u0942\u0930\u094B \u0921\u0947\u0938\u094D\u0915 \u092C\u0948\u091C \u0935 \u092A\u094D\u0930\u0947\u0938 \u0915\u093E\u0930\u094D\u0921",
-      "\u26A1 \u090F\u0921\u0935\u093E\u0902\u0938 \u0915\u0947 \u0938\u092D\u0940 \u092B\u0940\u091A\u0930\u094D\u0938 \u0936\u093E\u092E\u093F\u0932 (100 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)"
+      "\u26A1 50 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E",
+      "\u{1F524} \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F \u0915\u0932\u0947\u0915\u094D\u0936\u0928 \u0935 \u0915\u0932\u0930 \u0939\u093E\u0908\u0932\u093E\u0907\u091F\u094D\u0938 (\u092A\u094D\u0930\u093E\u0907\u092E\u0930\u0940 \u0915\u0932\u0930 \u0938\u093F\u0932\u0947\u0915\u094D\u0936\u0928)",
+      "\u{1F3F7}\uFE0F \u0915\u0938\u094D\u091F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
+      "\u{1F5BC}\uFE0F \u0938\u092D\u0940 \u092E\u0932\u094D\u091F\u0940-\u092B\u094B\u091F\u094B \u0917\u094D\u0930\u093F\u0921 \u0932\u0947\u0906\u0909\u091F\u094D\u0938 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0907\u092E\u0947\u091C \u0938\u0930\u094D\u091A",
+      "\u{1F3A8} \u0938\u092D\u0940 \u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0935 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930\u094D\u0938",
+      "\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0935 WhatsApp \u0926\u094B\u0928\u094B\u0902 \u0911\u0928/\u0911\u092B \u091F\u0949\u0917\u0932",
+      "\u{1F451} \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E \u0939\u094B\u0928\u0947 \u092A\u0930 \u092E\u093E\u0938\u094D\u091F\u0930 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u0911\u092B \u091F\u0949\u0917\u0932"
     ]
   },
   {
@@ -9330,27 +9754,30 @@ var DEFAULT_PLANS_CATALOG = [
     planKey: "VIP DESK",
     nameHi: "\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 (VIP DESK)",
     nameEn: "VIP DESK",
-    priceDisplay: "\u20B91,999",
-    priceNum: 1999,
+    regularPriceNum: 9999,
+    regularPriceDisplay: "\u20B99,999",
+    priceDisplay: "\u20B96,499",
+    priceNum: 6499,
+    discountPercent: 35,
     durationDays: 30,
-    validityLabel: "30 \u0926\u093F\u0928 (\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939)",
+    validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
-    badge: "\u0905\u0938\u0940\u092E\u093F\u0924 \u092A\u093E\u0935\u0930",
-    tagline: "\u092E\u0932\u094D\u091F\u0940-\u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0930 \u0928\u0947\u091F\u0935\u0930\u094D\u0915, 4K \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F \u0935 \u0911\u091F\u094B RSS \u092A\u092C\u094D\u0932\u093F\u0936\u0930",
+    badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 35% OFF",
+    tagline: "\u0905\u0938\u0940\u092E\u093F\u0924 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u2014 \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F \u0905\u092A\u0932\u094B\u0921, \u0915\u0938\u094D\u091F\u092E \u0915\u0932\u0930\u094D\u0938, WhatsApp \u0928\u0902\u092C\u0930 \u0913\u0935\u0930\u0930\u093E\u0907\u0921",
     hasWatermark: false,
     graphicExportResolution: "4K",
-    maxGraphicsPerDay: 9999,
+    maxGraphicsPerDay: 99999,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: true,
     isActive: true,
     features: [
-      "\u{1F6AB} 100% \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0930\u0939\u093F\u0924 (No Watermark)",
-      "\u{1F451} \u0905\u0928\u0932\u093F\u092E\u093F\u091F\u0947\u0921 4K \u0905\u0932\u094D\u091F\u094D\u0930\u093E \u090F\u091A\u0921\u0940 \u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F",
-      "\u2B50 VIP DESK \u0935\u093F\u0936\u0947\u0937 \u092A\u094D\u0930\u0940\u092E\u093F\u092F\u092E \u092B\u094D\u0930\u0947\u092E\u094D\u0938 (Graphic 4, VIP Jackets)",
-      "\u{1F465} \u092E\u0932\u094D\u091F\u0940-\u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0930 \u0935 \u0938\u092C-\u090F\u0921\u093F\u091F\u0930 \u091F\u0940\u092E \u0905\u0915\u093E\u0909\u0902\u091F\u094D\u0938",
-      "\u{1F3AF} \u0915\u0938\u094D\u091F\u092E \u0921\u0947\u0921\u093F\u0915\u0947\u091F\u0947\u0921 \u091A\u0948\u0928\u0932 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0935 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0938\u092A\u094B\u0930\u094D\u091F",
-      "\u2B50 24x7 \u0935\u0940\u0906\u0908\u092A\u0940 \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A \u0935 \u092B\u094B\u0928 \u0938\u092A\u094B\u0930\u094D\u091F"
+      "\u{1F451} \u0905\u0938\u0940\u092E\u093F\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 (Unlimited Downloads)",
+      "\u{1F524} \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F + \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F (.ttf/.otf) \u0905\u092A\u0932\u094B\u0921",
+      "\u{1F3A8} \u0915\u0938\u094D\u091F\u092E \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0915\u0932\u0930, \u092B\u0942\u091F\u0930 \u0915\u0932\u0930 \u0935 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930 \u092A\u093F\u0915\u0930",
+      "\u{1F4F1} \u092A\u094D\u0930\u0924\u093F-\u0917\u094D\u0930\u093E\u092B\u093F\u0915 WhatsApp \u0928\u0902\u092C\u0930 \u0913\u0935\u0930\u0930\u093E\u0907\u0921 \u0907\u0928\u092A\u0941\u091F",
+      "\u{1F5BC}\uFE0F \u0938\u092D\u0940 \u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F\u094D\u0938, \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A \u0935 \u0915\u0938\u094D\u091F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
+      "\u2B50 VIP DESK \u0935\u093F\u0936\u0947\u0937 \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u0935 \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E \u0938\u092A\u094B\u0930\u094D\u091F"
     ]
   }
 ];
@@ -9392,9 +9819,51 @@ app.post("/api/admin/plans", (req, res) => {
   }
 });
 var dailyDownloadsTracker = /* @__PURE__ */ new Map();
+app.get("/api/user-download-status", (req, res) => {
+  try {
+    const email = (req.query.email || "").toString().toLowerCase().trim();
+    if (!email) {
+      return res.json({ allowed: true, maxAllowed: 10, dailyQuota: 10, downloadsToday: 0, remainingToday: 10, remainingDownloads: 10, unlimited: false });
+    }
+    if (isProtectedAdminAccount(email)) {
+      return res.json({ allowed: true, plan: "ultra", planName: "VIP DESK", maxAllowed: 99999, dailyQuota: 99999, downloadsToday: 0, remainingToday: 99999, remainingDownloads: 99999, unlimited: true });
+    }
+    const users = loadUsersMasterDatabase();
+    const matchedUser = users.find(
+      (u) => u.email && u.email.toLowerCase().trim() === email || email && u.userId && u.userId.toLowerCase().trim() === email
+    );
+    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    const catalog = loadPlansCatalogDatabase();
+    const planDetail = catalog.find((p) => p.id === tier);
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : tier === "ultra" ? 99999 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const userKey = email;
+    const currentRecord = dailyDownloadsTracker.get(userKey);
+    let downloadsToday = 0;
+    if (currentRecord && currentRecord.date === dateStr) {
+      downloadsToday = currentRecord.count;
+    }
+    const isExhausted = maxAllowed < 99999 && downloadsToday >= maxAllowed;
+    const remainingCount = maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday);
+    return res.json({
+      success: true,
+      plan: tier,
+      maxAllowed,
+      dailyQuota: maxAllowed,
+      downloadsToday,
+      remainingToday: remainingCount,
+      remainingDownloads: remainingCount,
+      isExhausted,
+      unlimited: maxAllowed >= 99999,
+      dateStr
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/verify-download-entitlement", (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, frameId, checkOnly } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
     if (cleanEmail && isProtectedAdminAccount(cleanEmail)) {
       return res.json({
@@ -9402,7 +9871,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         plan: "ultra",
         planName: "VIP DESK",
         role: "admin",
-        remainingToday: 9999,
+        remainingToday: 99999,
         unlimited: true
       });
     }
@@ -9417,30 +9886,42 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       });
     }
     const tier = (matchedUser?.tier || "basic").toLowerCase();
-    const now = Date.now();
-    const trialStartedAt = matchedUser?.trialStartedAt || matchedUser?.createdAt || now;
-    const trialEndsAt = matchedUser?.trialEndsAt || trialStartedAt + 7 * 24 * 60 * 60 * 1e3;
-    if (tier === "basic") {
-      if (now > trialEndsAt) {
-        return res.status(403).json({
-          error: "\u0906\u092A\u0915\u093E 7-\u0926\u093F\u0928 \u0915\u093E \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u093E\u0930\u094D\u0921 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u0943\u092A\u092F\u093E \u092E\u0947\u0902\u092C\u0930\u0936\u093F\u092A \u092A\u094D\u0932\u093E\u0928 \u091A\u0941\u0928\u0947\u0902\u0964",
-          trialExpired: true
-        });
+    if (frameId) {
+      const templateConfigs = getStoredTemplateConfigs();
+      const frameConfig = templateConfigs[frameId];
+      if (frameConfig) {
+        const userPlanKey = tier === "ultra" ? "VIP DESK" : tier === "professional" ? "PRO" : tier === "advanced" ? "ADVANCED" : "BASIC";
+        const allowedPlans = frameConfig.allowedPlans || getCascadingAllowedPlans(frameConfig.selectedTier || "BASIC");
+        const isPlanAllowed = allowedPlans.includes(userPlanKey);
+        if (!isPlanAllowed) {
+          const rDb = loadRewardsDatabase();
+          const userUnlocks = rDb.frameUnlocks?.[cleanEmail] || {};
+          const unlockRecord = userUnlocks[frameId];
+          const isUnlocked = unlockRecord && unlockRecord.expiresAt > Date.now();
+          if (!isUnlocked) {
+            return res.status(403).json({
+              error: `\u092F\u0939 \u092B\u094D\u0930\u0947\u092E (${frameConfig.customName || frameId}) \u0906\u092A\u0915\u0947 \u092A\u0948\u0915\u0947\u091C \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u092F\u0939 ${frameConfig.selectedTier || allowedPlans.join(", ")} \u0915\u0947 \u0932\u093F\u090F \u0906\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u0948\u0964 \u0906\u092A \u0907\u0938\u0947 ${frameConfig.coinPrice || 0} \u0915\u0949\u0907\u0928\u094D\u0938 \u092E\u0947\u0902 \u0905\u0928\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964`,
+              frameLocked: true,
+              requiredTier: frameConfig.selectedTier,
+              coinPrice: frameConfig.coinPrice || 0
+            });
+          }
+        }
       }
     }
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : tier === "ultra" ? 9999 : tier === "professional" ? 100 : tier === "advanced" ? 25 : 5;
-    const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : tier === "ultra" ? 99999 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
     const currentRecord = dailyDownloadsTracker.get(userKey);
     let downloadsToday = 0;
-    if (currentRecord && currentRecord.date === todayStr) {
+    if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
     } else {
-      dailyDownloadsTracker.set(userKey, { date: todayStr, count: 0 });
+      dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
     }
-    if (downloadsToday >= maxAllowed && maxAllowed < 9999) {
+    if (downloadsToday >= maxAllowed && maxAllowed < 99999) {
       return res.status(403).json({
         error: `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0947 \u0926\u093F\u0928 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
         quotaExceeded: true,
@@ -9448,13 +9929,17 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         downloadsToday
       });
     }
-    dailyDownloadsTracker.set(userKey, { date: todayStr, count: downloadsToday + 1 });
+    if (!checkOnly) {
+      dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday + 1 });
+      downloadsToday += 1;
+    }
     return res.json({
       allowed: true,
       plan: tier,
       maxAllowed,
-      downloadsToday: downloadsToday + 1,
-      remainingToday: maxAllowed >= 9999 ? 9999 : Math.max(0, maxAllowed - (downloadsToday + 1))
+      downloadsToday,
+      remainingToday: maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday),
+      unlimited: maxAllowed >= 99999
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
