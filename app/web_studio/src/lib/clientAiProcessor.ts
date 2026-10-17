@@ -1,5 +1,5 @@
 import { AIAnalysisResult } from '../types';
-import { cleanHeadlineText, cleanLocationField, detectDistrictAndState, formatDistrictWithState, formatAsJournalisticHeadline, generate5JournalisticHeadlines } from './speakerUtils';
+import { cleanHeadlineText, cleanLocationField, detectDistrictAndState, formatDistrictWithState, formatAsJournalisticHeadline, generate5JournalisticHeadlines, cleanCaptionParagraphs } from './speakerUtils';
 import { TemplateConfig, getGraphicTemplateConfig } from './graphicTemplatesRegistry';
 
 export type HeadlineTemplateMeta = Partial<TemplateConfig> | {
@@ -77,27 +77,12 @@ export function processNewsLocally(
       .trim();
   }
 
-  // If title is empty, check URL slug
+  // If title is empty, check URL slug or content
   const targetUrl = linkUrl || (clean.startsWith('http') ? clean : undefined);
   if (!extractedTitle && targetUrl) {
     const slugWords = extractSlugKeywords(targetUrl);
     if (slugWords.length > 0) {
-      const slugLower = slugWords.join(' ').toLowerCase();
-      if (slugLower.includes('trump') && slugLower.includes('green card')) {
-        extractedTitle = 'ट्रम्प ने ग्रीन कार्ड प्रोसेस पर लगाई रोक: भारतीय आईटी कंपनियों व पेशेवरों पर बड़ा असर';
-      } else if (slugLower.includes('accident') || slugLower.includes('crash')) {
-        extractedTitle = 'सड़क हादसे में बड़ा नुकसान: मौके पर प्रशासनिक अमला व बचाव दल रवाना';
-      } else if (slugLower.includes('housing') || slugLower.includes('flat') || slugLower.includes('industrial') || slugLower.includes('policy')) {
-        extractedTitle = 'औद्योगिक क्षेत्रों में आवास नीति के नए नियम लागू: जमीन की कीमतें और विकास मानक तय';
-      } else if (slugLower.includes('metro') || slugLower.includes('train') || slugLower.includes('rail')) {
-        extractedTitle = 'मेट्रो रेल प्रोजेक्ट को लेकर बड़ा अपडेट: आगामी ट्रायल रन और रूट की तैयारी तेज';
-      } else if (slugLower.includes('crime') || slugLower.includes('police') || slugLower.includes('murder') || slugLower.includes('arrest')) {
-        extractedTitle = 'गंभीर मामले में पुलिस का बड़ा एक्शन: मुख्य आरोपियों की घेराबंदी कर किया गिरफ्तार';
-      } else if (slugLower.includes('election') || slugLower.includes('bjp') || slugLower.includes('congress') || slugLower.includes('minister')) {
-        extractedTitle = 'सियासी गलियारों में बड़ी हलचल: शीर्ष नेतृत्व के अहम बयान के बाद सियासी घमासान तेज';
-      } else {
-        extractedTitle = 'महत्वपूर्ण मामले को लेकर बड़ा फैसला: उच्च स्तर पर समीक्षा और नए दिशा-निर्देश जारी';
-      }
+      extractedTitle = 'ताज़ा समाचार: घटनाक्रम को लेकर महत्वपूर्ण अपडेट';
     }
   }
 
@@ -144,9 +129,13 @@ export function processNewsLocally(
   let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent, targetUrl);
   if (!detectedLocation) {
     const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ''}`;
-    if (/अमेरिका|वाशिंगटन|व्हाइट हाउस|रूस|मास्को/i.test(fullCorpus)) {
+    if (/(?:वाशिंगटन|व्हाइट[\s\-]*हाउस|white[\s\-]*house|washington)/i.test(fullCorpus)) {
       detectedLocation = 'वाशिंगटन';
-    } else if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट)/i.test(fullCorpus)) {
+    } else if (/(?:मास्को|moscow)/i.test(fullCorpus)) {
+      detectedLocation = 'मास्को';
+    } else if (/(?:लंदन|london)/i.test(fullCorpus)) {
+      detectedLocation = 'लंदन';
+    } else if (/(?:संसद[\s\-]*भवन|राष्ट्रपति[\s\-]*भवन|सुप्रीम[\s\-]*कोर्ट|राजधानी[\s\-]*दिल्ली|जंतर[\s\-]*मंतर|नई[\s\-]*दिल्ली|इंडिया[\s\-]*गेट)/i.test(fullCorpus)) {
       detectedLocation = 'नई दिल्ली';
     }
   }
@@ -322,10 +311,10 @@ export function processNewsLocally(
     highlightWords,
     formattedHeadline,
     location: detectedLocation,
-    summary,
-    captionDetailed,
-    captionBullets,
-    captionShort,
+    summary: cleanCaptionParagraphs(summary, 'detailed'),
+    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed'),
+    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet'),
+    captionShort: cleanCaptionParagraphs(captionShort, 'short'),
     anchorScript,
     categories,
     tags: tagsList,

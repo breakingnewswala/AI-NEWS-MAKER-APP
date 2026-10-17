@@ -129,9 +129,13 @@ export function processNewsLocally(
   let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent, targetUrl);
   if (!detectedLocation) {
     const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ''}`;
-    if (/अमेरिका|वाशिंगटन|व्हाइट हाउस|रूस|मास्को/i.test(fullCorpus)) {
+    if (/(?:वाशिंगटन|व्हाइट[\s\-]*हाउस|white[\s\-]*house|washington)/i.test(fullCorpus)) {
       detectedLocation = 'वाशिंगटन';
-    } else if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट)/i.test(fullCorpus)) {
+    } else if (/(?:मास्को|moscow)/i.test(fullCorpus)) {
+      detectedLocation = 'मास्को';
+    } else if (/(?:लंदन|london)/i.test(fullCorpus)) {
+      detectedLocation = 'लंदन';
+    } else if (/(?:संसद[\s\-]*भवन|राष्ट्रपति[\s\-]*भवन|सुप्रीम[\s\-]*कोर्ट|राजधानी[\s\-]*दिल्ली|जंतर[\s\-]*मंतर|नई[\s\-]*दिल्ली|इंडिया[\s\-]*गेट)/i.test(fullCorpus)) {
       detectedLocation = 'नई दिल्ली';
     }
   }

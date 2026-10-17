@@ -5099,7 +5099,7 @@ app.post("/api/auth/login", authRateLimiter, (req, res) => {
     };
 
     const token = generateAuthToken({
-      userId: user.userId || user.uid,
+      userId: user.userId || (user as any).uid,
       email: user.email || targetEmail,
       role: user.role || "user",
       username: user.username,
@@ -7291,6 +7291,13 @@ export const DISTRICT_STATE_LIST: DistrictStateEntry[] = [
   { district: 'वडोदरा', state: 'गुजरात', aliases: ['vadodara', 'baroda', 'वडोदरा'] },
   { district: 'राजकोट', state: 'गुजरात', aliases: ['rajkot', 'राजकोट'] },
 
+  // West Bengal
+  { district: 'कोलकाता', state: 'पश्चिम बंगाल', aliases: ['kolkata', 'calcutta', 'कोलकाता', 'कलकत्ता'] },
+  { district: 'हावड़ा', state: 'पश्चिम बंगाल', aliases: ['howrah', 'हावड़ा'] },
+  { district: 'सिलीगुड़ी', state: 'पश्चिम बंगाल', aliases: ['siliguri', 'सिलीगुड़ी'] },
+  { district: 'आसनसोल', state: 'पश्चिम बंगाल', aliases: ['asansol', 'आसनसोल'] },
+  { district: 'दुर्गापुर', state: 'पश्चिम बंगाल', aliases: ['durgapur', 'दुर्गापुर'] },
+
   // Haryana / Punjab / Delhi
   { district: 'चंडीगढ़', state: 'पंजाब/हरियाणा', aliases: ['chandigarh', 'चंडीगढ़'] },
   { district: 'गुरुग्राम', state: 'हरियाणा', aliases: ['gurugram', 'gurgaon', 'गुरुग्राम', 'गुड़गांव'] },
@@ -7422,14 +7429,18 @@ export function detectDistrictAndState(
 
   // 4. International places
   const primaryText = `${cleanTitle} ${cleanDesc} ${url}`.toLowerCase();
-  if (/वाशिंगटन|व्हाइट हाउस|अमेरिका|trump|व्हाइटहाउस|white house|washington/i.test(primaryText)) {
+  if (/(?:वाशिंगटन|व्हाइट\s*हाउस|white\s*house|washington)/i.test(primaryText)) {
     return 'वाशिंगटन';
   }
-  if (/रूस|मास्को|moscow/i.test(primaryText)) return 'मास्को';
-  if (/ब्रिटेन|लंदन|london/i.test(primaryText)) return 'लंदन';
+  if (/(?:मास्को|moscow)/i.test(primaryText)) return 'मास्को';
+  if (/(?:लंदन|london)/i.test(primaryText)) return 'लंदन';
 
-  // 5. Genuine Delhi
-  if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट|नई\s*दिल्ली|राजधानी\s*दिल्ली)/i.test(primaryText)) {
+  // 5. Genuine Delhi (check primary text and clean content landmarks)
+  const delhiLandmarkRegex = /(?:संसद[\s\-]*भवन|राष्ट्रपति[\s\-]*भवन|सुप्रीम[\s\-]*कोर्ट|जंतर[\s\-]*मंतर|राजधानी[\s\-]*दिल्ली|इंडिया[\s\-]*गेट)/i;
+  if (delhiLandmarkRegex.test(primaryText) || (cleanContent && delhiLandmarkRegex.test(cleanContent))) {
+    return 'नई दिल्ली';
+  }
+  if (/(?:नई\s*दिल्ली|new\s*delhi)/i.test(primaryText)) {
     return 'नई दिल्ली';
   }
 
@@ -7444,6 +7455,7 @@ export function detectDistrictAndState(
     { state: 'महाराष्ट्र', capital: 'मुंबई, महाराष्ट्र', aliases: ['महाराष्ट्र', 'maharashtra'] },
     { state: 'गुजरात', capital: 'गांधीनगर, गुजरात', aliases: ['गुजरात', 'gujarat'] },
     { state: 'झारखंड', capital: 'रांची, झारखंड', aliases: ['झारखंड', 'jharkhand'] },
+    { state: 'पश्चिम बंगाल', capital: 'कोलकाता, पश्चिम बंगाल', aliases: ['पश्चिम बंगाल', 'west bengal', 'bengal'] },
     { state: 'पंजाब', capital: 'चंडीगढ़', aliases: ['पंजाब', 'punjab'] },
     { state: 'हरियाणा', capital: 'चंडीगढ़', aliases: ['हरियाणा', 'haryana'] },
   ];
@@ -7514,18 +7526,16 @@ export function formatAsJournalisticHeadline(raw: string): string {
     .replace(/(?:आदेश\s*दिए\s*गए|आदेश\s*जारी\s*किए|निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, ' के सख्त आदेश')
     .replace(/(?:निधन\s*हो\s*गया)(?:\s*हैं|\s*है)?$/u, ' का निधन')
     .replace(/(?:जांच\s*शुरू\s*कर\s*दी\s*गई|जांच\s*के\s*निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, ' की जांच शुरू')
-    .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का बड़ा ऐलान')
+    .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
     .replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, ' के नए नियम');
 
   if (!h.includes('का मामला')) {
     h = h.replace(/(?:सामने\s*आया\s*है|सामने\s*आई\s*है|सामने\s*आए\s*हैं)$/u, ' का मामला');
   }
   if (!h.includes('आरोप')) {
-    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, ' पर गंभीर आरोप');
+    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, ' के आरोप');
   }
-  if (!h.includes('खुलासा')) {
-    h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, ' पर बड़ा खुलासा');
-  }
+  h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, ' की जानकारी दी');
 
   // 5. INTELLIGENT REPAIR OF HANGING/TRUNCATED AUXILIARY VERBS (NEVER LEAVE DANGLING VERB STEMS)
   // Fix "सामना करना पड़ रहा है" -> "सामना करना पड़ा" (NOT truncated to "सामना करना पड़")
@@ -8105,9 +8115,13 @@ function createLocalNewsFallback(
   let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent, targetUrl);
   if (!detectedLocation) {
     const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
-    if (/अमेरिका|यूएस|यूएसए|वाशिंगटन|ट्रम्प|Trump|व्हाइट हाउस|रूस|चीन|कनाडा|ब्रिटेन|यूके|इजराइल|गाजा|ईरान|विदेश|अंतरराष्ट्रीय|international/i.test(fullCorpus)) {
+    if (/(?:वाशिंगटन|व्हाइट[\s\-]*हाउस|white[\s\-]*house|washington)/i.test(fullCorpus)) {
       detectedLocation = "वाशिंगटन";
-    } else if (/(?:संसद\s*भवन|राष्ट्रपति\s*भवन|सुप्रीम\s*कोर्ट|राजधानी\s*दिल्ली)/i.test(fullCorpus)) {
+    } else if (/(?:मास्को|moscow)/i.test(fullCorpus)) {
+      detectedLocation = "मास्को";
+    } else if (/(?:लंदन|london)/i.test(fullCorpus)) {
+      detectedLocation = "लंदन";
+    } else if (/(?:संसद[\s\-]*भवन|राष्ट्रपति[\s\-]*भवन|सुप्रीम[\s\-]*कोर्ट|राजधानी[\s\-]*दिल्ली|जंतर[\s\-]*मंतर|नई[\s\-]*दिल्ली|इंडिया[\s\-]*गेट)/i.test(fullCorpus)) {
       detectedLocation = "नई दिल्ली";
     }
   }
