@@ -1095,11 +1095,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     if (navigator.share) {
       navigator.share({
         title: post.title,
-        text: post.summary,
+        text: `${post.summary || post.title}\n\n#BreakingNews #HindiNews #AINewsMaker`,
         url: window.location.href,
       }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(`${post.title}\n\n${post.summary}\n\n- AI News Maker`);
+      navigator.clipboard.writeText(`${post.title}\n\n${post.summary || ''}\n\n#BreakingNews #HindiNews #AINewsMaker`.trim());
       setCopiedId(post.id);
       setTimeout(() => setCopiedId(null), 2000);
     }

@@ -9575,6 +9575,9 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
 
+  // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
+
   // Strip press note flattery using Attachment 5
   rawBody = sanitizePressNoteFlattery(rawBody, false);
   rawBody = sanitizeFlattery(rawBody);
@@ -9734,22 +9737,29 @@ export function ensureHashtagHierarchy(
 
   const middleSlice = filteredMiddleTags.slice(0, 6);
 
-  const finalTags: string[] = [];
-  if (userTag) {
-    finalTags.push(userTag);
+  const cleanFinalTags: string[] = [];
+  if (userTag && userTag.toLowerCase() !== "#ainewsmaker" && userTag.toLowerCase() !== "#ai_news_maker") {
+    cleanFinalTags.push(userTag);
   }
-  finalTags.push(...middleSlice);
-  finalTags.push("#AINewsMaker");
+  for (const t of middleSlice) {
+    const lower = t.toLowerCase();
+    if (lower !== "#ainewsmaker" && lower !== "#ai_news_maker") {
+      cleanFinalTags.push(t);
+    }
+  }
 
   const seen = new Set<string>();
   const orderedTags: string[] = [];
-  for (const t of finalTags) {
+  for (const t of cleanFinalTags) {
     const lower = t.toLowerCase();
     if (!seen.has(lower)) {
       seen.add(lower);
       orderedTags.push(t);
     }
   }
+
+  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
+  orderedTags.push("#AINewsMaker");
 
   return `${finalBodyText}\n\n${orderedTags.join(" ")}`.trim();
 }

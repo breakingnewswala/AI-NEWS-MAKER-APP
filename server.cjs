@@ -8354,6 +8354,7 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "", mode 
   rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|शीर्षक|हेडलाइन|विवरण|सामग्री|कैप्शन|खबर|विस्तृत\s*कैप्शन|संक्षिप्त\s*कैप्शन|बुलेट\s*पॉइंट्स?)\s*[:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
   rawBody = sanitizePressNoteFlattery(rawBody, false);
   rawBody = sanitizeFlattery(rawBody);
   if (headlineToStrip && headlineToStrip.trim()) {
@@ -8477,21 +8478,26 @@ ${sentences[1]}\u0964`;
     }
   }
   const middleSlice = filteredMiddleTags.slice(0, 6);
-  const finalTags = [];
-  if (userTag) {
-    finalTags.push(userTag);
+  const cleanFinalTags = [];
+  if (userTag && userTag.toLowerCase() !== "#ainewsmaker" && userTag.toLowerCase() !== "#ai_news_maker") {
+    cleanFinalTags.push(userTag);
   }
-  finalTags.push(...middleSlice);
-  finalTags.push("#AINewsMaker");
+  for (const t of middleSlice) {
+    const lower = t.toLowerCase();
+    if (lower !== "#ainewsmaker" && lower !== "#ai_news_maker") {
+      cleanFinalTags.push(t);
+    }
+  }
   const seen = /* @__PURE__ */ new Set();
   const orderedTags = [];
-  for (const t of finalTags) {
+  for (const t of cleanFinalTags) {
     const lower = t.toLowerCase();
     if (!seen.has(lower)) {
       seen.add(lower);
       orderedTags.push(t);
     }
   }
+  orderedTags.push("#AINewsMaker");
   return `${finalBodyText}
 
 ${orderedTags.join(" ")}`.trim();

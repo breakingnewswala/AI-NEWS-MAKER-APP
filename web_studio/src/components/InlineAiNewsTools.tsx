@@ -89,6 +89,54 @@ export function getActiveCaptionUsername(card?: NewsCardData, currentUser?: Repo
   return '';
 }
 
+export const PERSISTED_AI_SESSION_KEY = 'ai_tools_persisted_session_v2';
+
+export interface PersistedAiSession {
+  result: AIAnalysisResult | null;
+  headlineOptions: string[];
+  selectedHeadlineIndex: number;
+  linkUrl: string;
+  inputText: string;
+  customPrompt: string;
+  activeTab: 'link' | 'command';
+  canonicalContext: any;
+  activeGeneratedProvider?: 'gemini' | 'openai' | null;
+  generatedAiImageUrl?: string | null;
+  timestamp?: number;
+}
+
+export function getSavedAiSession(): PersistedAiSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(PERSISTED_AI_SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && (parsed.result || (Array.isArray(parsed.headlineOptions) && parsed.headlineOptions.length > 0))) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function saveAiSession(data: Partial<PersistedAiSession>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = getSavedAiSession() || {
+      result: null,
+      headlineOptions: [],
+      selectedHeadlineIndex: 0,
+      linkUrl: '',
+      inputText: '',
+      customPrompt: '',
+      activeTab: 'link',
+      canonicalContext: null,
+    };
+    const updated = { ...existing, ...data, timestamp: Date.now() };
+    localStorage.setItem(PERSISTED_AI_SESSION_KEY, JSON.stringify(updated));
+  } catch {}
+}
+
 export function cleanAiToolsMemory(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -104,8 +152,12 @@ export function cleanAiToolsMemory(): void {
       'ai_tools_memory',
       'ai_tools_cache_v1',
       'ai_tools_history',
+      PERSISTED_AI_SESSION_KEY,
     ];
     keysToRemove.forEach((k) => localStorage.removeItem(k));
+    try {
+      sessionStorage.removeItem('ai_news_auto_triggered_keys');
+    } catch {}
   } catch {}
 }
 
@@ -122,28 +174,79 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const isAdminOrSuperAdmin = isUserAdmin(currentUser) || isUserSuperAdmin(currentUser);
   const userPlan = (currentUser?.package || currentUser?.role || currentUser?.tier || 'basic').toLowerCase().trim();
   const canUseOpenAi = ['pro', 'professional', 'vip_dash', 'vip-dash', 'ultra', 'vip desk', 'admin', 'superadmin'].includes(userPlan) || isAdminOrSuperAdmin;
-  const [activeTab, setActiveTab] = useState<'link' | 'command'>('link');
+
+  // Restore previous session from localStorage so headlines are preserved across view/tab changes
+  const [activeTab, setActiveTab] = useState<'link' | 'command'>(() => {
+    const s = getSavedAiSession();
+    if (s?.activeTab) return s.activeTab;
+    return autoFillNews?.url ? 'link' : 'link';
+  });
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai'>('gemini');
-  const [activeGeneratedProvider, setActiveGeneratedProvider] = useState<'gemini' | 'openai' | null>(null);
-  const [linkUrl, setLinkUrl] = useState<string>('');
-  const [inputText, setInputText] = useState<string>('');
-  const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [activeGeneratedProvider, setActiveGeneratedProvider] = useState<'gemini' | 'openai' | null>(() => {
+    return getSavedAiSession()?.activeGeneratedProvider || null;
+  });
+  const [linkUrl, setLinkUrl] = useState<string>(() => {
+    const s = getSavedAiSession();
+    return s?.linkUrl || autoFillNews?.url || card.websiteUrl || '';
+  });
+  const [inputText, setInputText] = useState<string>(() => {
+    const s = getSavedAiSession();
+    return s?.inputText || '';
+  });
+  const [customPrompt, setCustomPrompt] = useState<string>(() => {
+    const s = getSavedAiSession();
+    return s?.customPrompt || '';
+  });
   const [showPromptBox, setShowPromptBox] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Result state
-  const [result, setResult] = useState<AIAnalysisResult | null>(null);
-  const [headlineOptions, setHeadlineOptions] = useState<string[]>([]);
-  const [selectedHeadlineIndex, setSelectedHeadlineIndex] = useState<number>(0);
+  // Result state - automatically restored from persistent session across tab switches!
+  const [result, setResult] = useState<AIAnalysisResult | null>(() => {
+    const s = getSavedAiSession();
+    if (s?.result) return s.result;
+    if (card.headline && card.headline.trim()) {
+      return {
+        headline: cleanHeadlineText(card.headline),
+        headlineOptions: [cleanHeadlineText(card.headline)],
+        formattedHeadline: cleanHeadlineText(card.headline),
+        highlightWords: card.highlightWords || [],
+        location: card.location || '',
+        category: card.category || '',
+        summary: card.summary || '',
+      };
+    }
+    return null;
+  });
+
+  const [headlineOptions, setHeadlineOptions] = useState<string[]>(() => {
+    const s = getSavedAiSession();
+    if (s?.headlineOptions && s.headlineOptions.length > 0) {
+      return s.headlineOptions;
+    }
+    if (card.headline && card.headline.trim()) {
+      return [cleanHeadlineText(card.headline)];
+    }
+    return [];
+  });
+
+  const [selectedHeadlineIndex, setSelectedHeadlineIndex] = useState<number>(() => {
+    const s = getSavedAiSession();
+    return typeof s?.selectedHeadlineIndex === 'number' ? s.selectedHeadlineIndex : 0;
+  });
+
   const [useWebsitePhoto, setUseWebsitePhoto] = useState<boolean>(true);
-  const [canonicalContext, setCanonicalContext] = useState<any>(null);
+  const [canonicalContext, setCanonicalContext] = useState<any>(() => {
+    return getSavedAiSession()?.canonicalContext || null;
+  });
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
   const [regenSuccessMsg, setRegenSuccessMsg] = useState<string | null>(null);
 
   // AI Photo state inside result
   const [generatingAiPhoto, setGeneratingAiPhoto] = useState<boolean>(false);
-  const [generatedAiImageUrl, setGeneratedAiImageUrl] = useState<string | null>(null);
+  const [generatedAiImageUrl, setGeneratedAiImageUrl] = useState<string | null>(() => {
+    return getSavedAiSession()?.generatedAiImageUrl || null;
+  });
   const [aiPhotoPrompt, setAiPhotoPrompt] = useState<string>('');
   const [captionCopied, setCaptionCopied] = useState<boolean>(false);
 
@@ -160,9 +263,37 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const currentAbortControllerRef = React.useRef<AbortController | null>(null);
   const isResetRef = React.useRef<boolean>(false);
 
-  // Wipe stale memory on mount and listen for studio reset event from App.tsx
+  // Synchronize state changes to localStorage so navigation across tabs preserves generated headlines
   useEffect(() => {
-    cleanAiToolsMemory();
+    if (result || headlineOptions.length > 0 || linkUrl || inputText) {
+      saveAiSession({
+        result,
+        headlineOptions,
+        selectedHeadlineIndex,
+        linkUrl,
+        inputText,
+        customPrompt,
+        activeTab,
+        canonicalContext,
+        activeGeneratedProvider,
+        generatedAiImageUrl,
+      });
+    }
+  }, [
+    result,
+    headlineOptions,
+    selectedHeadlineIndex,
+    linkUrl,
+    inputText,
+    customPrompt,
+    activeTab,
+    canonicalContext,
+    activeGeneratedProvider,
+    generatedAiImageUrl,
+  ]);
+
+  // Listen for studio reset / refresh event from App.tsx - ONLY clears when user explicitly clicks Refresh / Reset button!
+  useEffect(() => {
     const handleStudioReset = () => {
       cleanAiToolsMemory();
       if (currentAbortControllerRef.current) {
@@ -306,10 +437,19 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const lastProcessedTimeRef = React.useRef<number>(0);
   const lastTriggeredNewsKeyRef = React.useRef<string>('');
 
-  // Automation: When autoFillNews is supplied, paste into Step 2A and auto-trigger if requested
+  // Automation: When autoFillNews is supplied, paste into Step 2A and auto-trigger ONLY ONCE
+  // Does NOT re-trigger when returning to Studio from other tabs (Videos, Newsroom, Control Room)
   React.useEffect(() => {
     if (!autoFillNews) return;
     const triggerKey = `${autoFillNews.newsId || ''}_${autoFillNews.timestamp || ''}_${autoFillNews.url || ''}_${autoFillNews.title || ''}`;
+    
+    let processedKeys: string[] = [];
+    try {
+      processedKeys = JSON.parse(sessionStorage.getItem('ai_news_auto_triggered_keys') || '[]');
+    } catch {}
+
+    const isAlreadyTriggered = processedKeys.includes(triggerKey);
+
     if (lastTriggeredNewsKeyRef.current === triggerKey) return;
     lastTriggeredNewsKeyRef.current = triggerKey;
     if (autoFillNews.timestamp) {
@@ -372,7 +512,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
     }
 
-    if (autoFillNews.autoTrigger) {
+    // Only auto-trigger once per triggerKey. If already triggered or if headlines already exist for this session, DO NOT re-trigger!
+    if (autoFillNews.autoTrigger && !isAlreadyTriggered) {
+      try {
+        processedKeys.push(triggerKey);
+        sessionStorage.setItem('ai_news_auto_triggered_keys', JSON.stringify(processedKeys.slice(-20)));
+      } catch {}
+      autoFillNews.autoTrigger = false;
       triggerProcessDirectly(effectiveTargetUrl, rawContent, autoFillNews);
     }
   }, [autoFillNews]);

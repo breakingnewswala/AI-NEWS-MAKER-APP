@@ -64,6 +64,8 @@ export const ExportScreenWeb: React.FC<ExportScreenWebProps> = ({
   const catTag = catClean && catClean.toLowerCase() !== 'news' ? `#${catClean}` : '';
 
   // Auto-formatted social media caption with hashtags
+  const exportTags = ['#BreakingNews', '#HindiNews', locTag, catTag].filter(Boolean).filter(t => t.toLowerCase() !== '#ainewsmaker');
+  exportTags.push('#AINewsMaker');
   const captionText = `${card.headline || 'ताज़ा समाचार'}
 
 ${card.summary || ''}
@@ -71,7 +73,7 @@ ${card.summary || ''}
 📍 स्थान: ${card.location || 'मध्य प्रदेश'}
 📅 दिनांक: ${card.date || 'आज'}
 
-#BreakingNews #HindiNews ${locTag} ${catTag}`.replace(/\s+/g, ' ').replace(/\n\s+\n/g, '\n\n').trim();
+${exportTags.join(' ')}`.trim();
 
   const anchorScriptText = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर आ रही है ${card.location || 'मध्य प्रदेश'} से। ${card.headline || ''}। अधिकारियों द्वारा आवश्यक संज्ञान लेकर अग्रिम कार्रवाई की जा रही है। आइए देखते हैं पूरी रिपोर्ट।`;
 
