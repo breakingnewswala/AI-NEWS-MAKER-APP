@@ -1,0 +1,134 @@
+[
+  {
+    "id": "notif_exp_user_usr_khabridas_101_1792497512618",
+    "title": "🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है",
+    "message": "नमस्ते खबरिदास न्यूज़ (Khabridas News), आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।",
+    "time": "अभी",
+    "timestamp": 1792498002827,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "khabridasnews@gmail.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_admin_usr_khabridas_101_1792497512618",
+    "title": "🚫 ट्रायल समाप्त: खबरिदास न्यूज़ (Khabridas News)",
+    "message": "उपयोगकर्ता 'खबरिदास न्यूज़ (Khabridas News)' (khabridasnews@gmail.com) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।",
+    "time": "अभी",
+    "timestamp": 1792498002827,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_user_usr_rituraj_102_1792497512618",
+    "title": "🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है",
+    "message": "नमस्ते ऋतुराज तोमर (ओरछा), आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।",
+    "time": "अभी",
+    "timestamp": 1792498002827,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "riturajtomarorchha@gmail.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_admin_usr_rituraj_102_1792497512618",
+    "title": "🚫 ट्रायल समाप्त: ऋतुराज तोमर (ओरछा)",
+    "message": "उपयोगकर्ता 'ऋतुराज तोमर (ओरछा)' (riturajtomarorchha@gmail.com) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।",
+    "time": "अभी",
+    "timestamp": 1792498002827,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_user_usr_anmolsandesh_103_1792497512618",
+    "title": "🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है",
+    "message": "नमस्ते Anmol Sandesh, आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।",
+    "time": "अभी",
+    "timestamp": 1792498002827,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "digital.anmolsandesh@gmail.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_admin_usr_anmolsandesh_103_1792497512618",
+    "title": "🚫 ट्रायल समाप्त: Anmol Sandesh",
+    "message": "उपयोगकर्ता 'Anmol Sandesh' (digital.anmolsandesh@gmail.com) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।",
+    "time": "अभी",
+    "timestamp": 1792498002827,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_user_usr_khabridas_101_1792497512618",
+    "title": "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+    "message": "नमस्ते खबरिदास न्यूज़ (Khabridas News), आपका 7-दिवसीय फ्री ट्रायल कल (20 अक्तू॰ 2026, 05:28 pm) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",
+    "time": "अभी",
+    "timestamp": 1792477972842,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "khabridasnews@gmail.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_admin_usr_khabridas_101_1792497512618",
+    "title": "🔔 ट्रायल चेतावनी: खबरिदास न्यूज़ (Khabridas News)",
+    "message": "उपयोगकर्ता 'खबरिदास न्यूज़ (Khabridas News)' (khabridasnews@gmail.com) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: 20 अक्तू॰ 2026, 05:28 pm।",
+    "time": "अभी",
+    "timestamp": 1792477972842,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_user_usr_rituraj_102_1792497512618",
+    "title": "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+    "message": "नमस्ते ऋतुराज तोमर (ओरछा), आपका 7-दिवसीय फ्री ट्रायल कल (20 अक्तू॰ 2026, 05:28 pm) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",
+    "time": "अभी",
+    "timestamp": 1792477972842,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "riturajtomarorchha@gmail.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_admin_usr_rituraj_102_1792497512618",
+    "title": "🔔 ट्रायल चेतावनी: ऋतुराज तोमर (ओरछा)",
+    "message": "उपयोगकर्ता 'ऋतुराज तोमर (ओरछा)' (riturajtomarorchha@gmail.com) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: 20 अक्तू॰ 2026, 05:28 pm।",
+    "time": "अभी",
+    "timestamp": 1792477972842,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_user_usr_anmolsandesh_103_1792497512618",
+    "title": "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+    "message": "नमस्ते Anmol Sandesh, आपका 7-दिवसीय फ्री ट्रायल कल (20 अक्तू॰ 2026, 05:28 pm) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",
+    "time": "अभी",
+    "timestamp": 1792477972842,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "digital.anmolsandesh@gmail.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_admin_usr_anmolsandesh_103_1792497512618",
+    "title": "🔔 ट्रायल चेतावनी: Anmol Sandesh",
+    "message": "उपयोगकर्ता 'Anmol Sandesh' (digital.anmolsandesh@gmail.com) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: 20 अक्तू॰ 2026, 05:28 pm।",
+    "time": "अभी",
+    "timestamp": 1792477972842,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  }
+]

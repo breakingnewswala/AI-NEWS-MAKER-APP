@@ -1,0 +1,108 @@
+{
+  "headlineRegeneration": {
+    "enabled": true,
+    "allowedTiers": [
+      "advanced",
+      "advance",
+      "pro",
+      "professional",
+      "vip",
+      "vip-dash",
+      "vip_dash",
+      "vip desk",
+      "vip_desk",
+      "admin"
+    ],
+    "maxRegenerationsPerSession": 10,
+    "requireAuthentication": false
+  },
+  "aiModelAccess": {
+    "gemini": {
+      "name": "Gemini AI",
+      "enabled": true,
+      "allowedTiers": [
+        "basic",
+        "advanced",
+        "advance",
+        "pro",
+        "professional",
+        "vip",
+        "vip-dash",
+        "vip_dash",
+        "vip desk",
+        "vip_desk",
+        "admin"
+      ]
+    },
+    "openai": {
+      "name": "ChatGPT",
+      "enabled": true,
+      "allowedTiers": [
+        "pro",
+        "professional",
+        "vip",
+        "vip-dash",
+        "vip_dash",
+        "vip desk",
+        "vip_desk",
+        "admin"
+      ]
+    }
+  },
+  "fontAccessPolicy": {
+    "basic": {
+      "allowedFonts": [
+        "hind"
+      ],
+      "allowCustomUpload": false
+    },
+    "advance": {
+      "allowedFonts": [
+        "hind",
+        "khand",
+        "baloo-2",
+        "sahitya",
+        "anek-devanagari"
+      ],
+      "allowCustomUpload": false
+    },
+    "pro": {
+      "allowedFonts": [
+        "hind",
+        "khand",
+        "baloo-2",
+        "sahitya",
+        "anek-devanagari",
+        "noto-sans-devanagari",
+        "mukta",
+        "poppins",
+        "rozha-one",
+        "rajdhani"
+      ],
+      "allowCustomUpload": false
+    },
+    "vip-dash": {
+      "allowedFonts": "all",
+      "allowCustomUpload": true
+    },
+    "vip_dash": {
+      "allowedFonts": "all",
+      "allowCustomUpload": true
+    }
+  },
+  "permissions": {
+    "regenerateHeadlines": {
+      "allowedTiers": [
+        "advanced",
+        "advance",
+        "pro",
+        "professional",
+        "vip",
+        "vip-dash",
+        "vip_dash",
+        "vip_desk"
+      ],
+      "allowAllTiers": false
+    }
+  }
+}

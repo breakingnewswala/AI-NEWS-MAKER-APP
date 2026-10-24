@@ -1,0 +1,98 @@
+[
+  {
+    "id": "breaking",
+    "name": "⚡ ब्रेकिंग न्यूज़",
+    "isActive": true,
+    "order": 1
+  },
+  {
+    "id": "politics",
+    "name": "🏛️ राजनीति व चुनाव",
+    "isActive": true,
+    "order": 2
+  },
+  {
+    "id": "state",
+    "name": "📍 मध्य प्रदेश",
+    "isActive": true,
+    "order": 3
+  },
+  {
+    "id": "national",
+    "name": "🇮🇳 देश / राष्ट्रीय",
+    "isActive": true,
+    "order": 4
+  },
+  {
+    "id": "up",
+    "name": "📍 उत्तर प्रदेश",
+    "isActive": true,
+    "order": 5
+  },
+  {
+    "id": "bihar",
+    "name": "📍 बिहार",
+    "isActive": true,
+    "order": 6
+  },
+  {
+    "id": "rajasthan",
+    "name": "📍 राजस्थान",
+    "isActive": true,
+    "order": 7
+  },
+  {
+    "id": "tech",
+    "name": "💻 टेक्नोलॉजी",
+    "isActive": true,
+    "order": 8
+  },
+  {
+    "id": "business",
+    "name": "📈 कारोबार व व्यापार",
+    "isActive": true,
+    "order": 9
+  },
+  {
+    "id": "sports",
+    "name": "🏏 खेल",
+    "isActive": true,
+    "order": 10
+  },
+  {
+    "id": "entertainment",
+    "name": "🎬 मनोरंजन",
+    "isActive": true,
+    "order": 11
+  },
+  {
+    "id": "crime",
+    "name": "🚨 क्राइम / अपराध",
+    "isActive": true,
+    "order": 12
+  },
+  {
+    "id": "accident",
+    "name": "🚨 हादसा व दुर्घटना",
+    "isActive": true,
+    "order": 13
+  },
+  {
+    "id": "agriculture",
+    "name": "🌾 खेती-किसानी",
+    "isActive": true,
+    "order": 14
+  },
+  {
+    "id": "health",
+    "name": "🏥 स्वास्थ्य",
+    "isActive": true,
+    "order": 15
+  },
+  {
+    "id": "special",
+    "name": "📑 विशेष रिपोर्ट",
+    "isActive": true,
+    "order": 16
+  }
+]
