@@ -1,0 +1,40 @@
+{
+  "name": "ai-news-maker-app",
+  "private": true,
+  "version": "1.2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0 <=24.x"
+  },
+  "scripts": {
+    "dev": "node dev.cjs",
+    "start": "node dev.cjs",
+    "prebuild": "npm --prefix web_studio install",
+    "build": "node web_studio/build_and_sync.js",
+    "studio:dev": "npm --prefix web_studio run dev",
+    "studio:build": "npm --prefix web_studio run build",
+    "lint": "npm --prefix web_studio run lint",
+    "test": "node test_system_verification.cjs",
+    "sync-apk": "node web_studio/build_and_sync.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "dotenv": "^17.2.3",
+    "express": "^4.22.3",
+    "openai": "^7.10.0"
+  },
+  "devDependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "firebase": "^11.3.0",
+    "html2canvas": "^1.4.1",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^6.2.3"
+  }
+}

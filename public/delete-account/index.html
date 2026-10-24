@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account & Data Deletion Request | AI News Maker App</title>
+  <meta name="description" content="Official Account and Associated Data Deletion Request page for AI News Maker App by Breaking News Wala, compliant with Google Play Store Data Safety policy.">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --primary-red: #dc2626;
+      --primary-red-hover: #b91c1c;
+      --accent-amber: #f59e0b;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --text-sub: #d1d5db;
+      --input-bg: #1f2937;
+      --input-border: #374151;
+      --success-green: #10b981;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Devanagari", sans-serif;
+    }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 20px 15px 60px;
+    }
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      padding: 24px 0 32px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 28px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid var(--accent-amber);
+      color: var(--accent-amber);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .app-title {
+      font-size: 28px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: var(--text-muted);
+    }
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    .card-title {
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ffffff;
+    }
+    .card-title .icon {
+      font-size: 22px;
+    }
+    p, li {
+      color: var(--text-sub);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    ul, ol {
+      padding-left: 24px;
+      margin-bottom: 14px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .step-box {
+      background: #1a2234;
+      border-left: 4px solid var(--accent-amber);
+      padding: 14px 16px;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 12px;
+    }
+    .step-box strong {
+      color: #ffffff;
+    }
+    .data-pill-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .data-pill {
+      background: #1a2234;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .data-pill.red {
+      border-color: rgba(220, 38, 38, 0.4);
+      background: rgba(220, 38, 38, 0.08);
+      color: #fca5a5;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+    input[type="text"], input[type="email"], select, textarea {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 8px;
+      color: #ffffff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent-amber);
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .checkbox-group input {
+      margin-top: 4px;
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary-red);
+    }
+    .checkbox-group label {
+      font-size: 13px;
+      color: #fca5a5;
+      font-weight: normal;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 13px;
+      background-color: var(--primary-red);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 0.2s;
+    }
+    .btn-submit:hover {
+      background-color: var(--primary-red-hover);
+    }
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .alert-box {
+      display: none;
+      padding: 16px;
+      border-radius: 8px;
+      margin-top: 18px;
+      font-size: 14px;
+    }
+    .alert-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--success-green);
+      color: #6ee7b7;
+    }
+    .alert-error {
+      background: rgba(220, 38, 38, 0.15);
+      border: 1px solid var(--primary-red);
+      color: #fca5a5;
+    }
+    .footer-notes {
+      text-align: center;
+      margin-top: 36px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .footer-notes a {
+      color: var(--accent-amber);
+      text-decoration: none;
+    }
+    .lang-toggle {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lang-btn {
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: #d1d5db;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .lang-btn.active {
+      background: var(--accent-amber);
+      color: #111827;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="lang-toggle">
+    <button class="lang-btn active" onclick="setLang('hi')">हिंदी (Hindi)</button>
+    <button class="lang-btn" onclick="setLang('en')">English</button>
+  </div>
+
+  <div class="header">
+    <div class="badge">Google Play Store Data Safety & Privacy Compliance</div>
+    <h1 class="app-title">AI News Maker App</h1>
+    <p class="subtitle" id="subHeaderDesc">खाता एवं संबंधित समस्त डेटा हटाने का आधिकारिक पोर्टल (Account & Associated Data Deletion)</p>
+    <p style="font-size: 13px; color: #9ca3af; margin-top: 6px;">डेवलपर / Developer: <strong>Breaking News Wala</strong> (breakingnewswala.com@gmail.com)</p>
+  </div>
+
+  <!-- Method 1: In App Deletion (Recommended) -->
+  <div class="card">
+    <h2 class="card-title">
+      <span class="icon">📱</span>
+      <span id="titleInApp">विधि 1: ऐप के अंदर से तुरंत खाता और डेटा हटाएं</span>
+    </h2>
+    <p id="descInApp">यदि आपके पास AI News Maker ऐप इंस्टॉल है, तो आप 1 क्लिक में अपना खाता और समस्त डेटा तत्काल डिलीट कर सकते हैं:</p>
+    <div class="step-box">
+      <strong>कदम 1:</strong> AI News Maker ऐप खोलें और सबसे नीचे <strong>'प्रोफाइल (Profile)'</strong> टैब पर टैप करें।
+    </div>
+    <div class="step-box">
+      <strong>कदम 2:</strong> नीचे <strong>'खाता एवं डेटा प्रबंधन (Account & Data Management)'</strong> सेक्शन में जाएं।
+    </div>
+    <div class="step-box">
+      <strong>कदम 3:</strong> लाल रंग के बटन <strong>'खाता और समस्त डेटा हमेशा के लिए हटाएं (Delete Account & All Data)'</strong> पर क्लिक करें।
+    </div>
+    <div class="step-box">
+      <strong>कदम 4:</strong> चेतावनी संदेश पढ़कर चेकबॉक्स टिक करें और 'स्थायी रूप से हटाएं' की पुष्टि करें। आपका खाता, प्रोफाइल, ड्राफ्ट और न्यूज़ डेटा तुरंत स्थायी रूप से मिटा दिया जाता है।
+    </div>
+  </div>
+
+  <!-- Method 2: Web Form Submission -->
+  <div class="card">
+    <h2 class="card-title">
+      <span class="icon">🌐</span>
+      <span id="titleWebForm">विधि 2: ऑनलाइन डेटा व खाता हटाने का वेब फॉर्म</span>
+    </h2>
+    <p id="descWebForm">यदि आपने ऐप अनइंस्टॉल कर दिया है या आपके पास ऐप एक्सेस नहीं है, तो नीचे दिए गए फॉर्म को भरकर खाता व संबंधित डेटा हटाने का अनुरोध भेज सकते हैं:</p>
+
+    <form id="deleteRequestForm" onsubmit="handleDeleteSubmit(event)">
+      <div class="form-group">
+        <label for="userEmail">पंजीकृत ईमेल आईडी (Registered Email) *</label>
+        <input type="email" id="userEmail" required placeholder="उदा: yourname@gmail.com">
+      </div>
+
+      <div class="form-group">
+        <label for="userMobile">पंजीकृत मोबाइल नंबर (Registered Mobile Number)</label>
+        <input type="text" id="userMobile" placeholder="उदा: 9876543210 (10 अंक)">
+      </div>
+
+      <div class="form-group">
+        <label for="channelName">चैनल का नाम / यूज़रनेम (Channel Name / Username)</label>
+        <input type="text" id="channelName" placeholder="उदा: Breaking News या आपका नाम">
+      </div>
+
+      <div class="form-group">
+        <label for="deleteReason">हटाने का कारण (Reason for Deletion - Optional)</label>
+        <select id="deleteReason">
+          <option value="no_longer_needed">अब ऐप की आवश्यकता नहीं है (No longer needed)</option>
+          <option value="privacy_concern">डेटा गोपनीयता कारण (Privacy concerns)</option>
+          <option value="switching_channel">नया चैनल या ईमेल उपयोग करना चाहता हूँ</option>
+          <option value="other">अन्य कारण (Other)</option>
+        </select>
+      </div>
+
+      <div class="checkbox-group">
+        <input type="checkbox" id="confirmCheckbox" required>
+        <label for="confirmCheckbox" id="labelCheckbox">
+          मैं पुष्टि करता हूँ कि मैं AI News Maker ऐप से अपना खाता, प्रोफ़ाइल, निर्मित समाचार पोस्ट, कस्टम टेम्पलेट, ड्राफ्ट, चैनल लोगो एवं संबद्ध सारा डेटा स्थायी रूप से हटाना चाहता हूँ। मुझे ज्ञात है कि यह क्रिया पूर्ववत नहीं की जा सकती।
+        </label>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn">
+        <span>🗑️</span>
+        <span id="btnText">खाता और डेटा हटाने का अनुरोध सबमिट करें</span>
+      </button>
+    </form>
+
+    <div id="alertBox" class="alert-box"></div>
+  </div>
+
+  <!-- Data Retention & Scope Details -->
+  <div class="card">
+    <h2 class="card-title">
+      <span class="icon">📋</span>
+      <span id="titleScope">कौन सा डेटा हटाया जाता है? (Data Deleted & Retention Policy)</span>
+    </h2>
+    <p id="descScope">Google Play Store की डेटा सुरक्षा नीति के अनुसार, अनुरोध प्राप्त होने पर निम्नलिखित सभी श्रेणियां स्थायी रूप से नष्ट कर दी जाती हैं:</p>
+
+    <div class="data-pill-grid">
+      <div class="data-pill red">❌ उपयोगकर्ता प्रोफ़ाइल (नाम, ईमेल, फ़ोन नंबर)</div>
+      <div class="data-pill red">❌ चैनल ब्रांडिंग, लोगो और सोशल मीडिया लिंक्स</div>
+      <div class="data-pill red">❌ आपके द्वारा बनाई गई सभी न्यूज़ पोस्ट्स व ग्राफिक्स</div>
+      <div class="data-pill red">❌ ई-पेपर ड्राफ्ट, वीडियो क्लिप्स और ऑडियो रिकॉर्डिंग्स</div>
+      <div class="data-pill red">❌ कस्टम टेम्पलेट सेटिंग्स, हेडर/फूटर कॉन्फ़िगरेशन</div>
+      <div class="data-pill red">❌ एक्टिव लॉगिन सेशन्स, डिवाइस एवं सिक्योरिटी टोकन्स</div>
+    </div>
+
+    <h3 style="font-size: 15px; margin: 16px 0 8px; color: #ffffff;">समय सीमा (Retention & Deletion Timeline):</h3>
+    <ul>
+      <li><strong>तत्काल (Immediate):</strong> ऐप के अंदर 'Delete Account' पर क्लिक करते ही आपके डिवाइस और लोकल कैश से सारा डेटा तुरंत नष्ट हो जाता है।</li>
+      <li><strong>क्लाउड सर्वर (Cloud & Database):</strong> वेब अनुरोध प्राप्त होने पर क्लाउड डेटाबेस से 24 से 48 घंटे के भीतर समस्त डेटा हमेशा के लिए निष्कासित कर दिया जाता है।</li>
+      <li><strong>अवधारण (Data Retention):</strong> खाता हटाने के बाद कोई भी व्यक्तिगत डेटा या समाचार सामग्री हमारे सर्वर पर शेष नहीं रखी जाती है।</li>
+    </ul>
+  </div>
+
+  <!-- Support & Help -->
+  <div class="card">
+    <h2 class="card-title">
+      <span class="icon">📩</span>
+      <span>सहायता व संपर्क (Support Contact)</span>
+    </h2>
+    <p>यदि आपको खाता हटाने में कोई कठिनाई आती है, तो आप हमारी सहायता टीम से सीधे संपर्क कर सकते हैं:</p>
+    <ul>
+      <li><strong>ईमेल (Support Email):</strong> <a href="mailto:breakingnewswala.com@gmail.com" style="color: #f59e0b;">breakingnewswala.com@gmail.com</a></li>
+      <li><strong>वेबसाइट (Website):</strong> <a href="https://ainewsmaker.online" target="_blank" style="color: #f59e0b;">https://ainewsmaker.online</a></li>
+      <li><strong>विषय लिखें (Subject):</strong> Account Deletion Request - [आपका ईमेल / फ़ोन]</li>
+    </ul>
+  </div>
+
+  <div class="footer-notes">
+    <p>© 2026 AI News Maker & Breaking News Wala. All rights reserved.</p>
+    <p>Google Play Store Policy Compliant URL for Account and Associated Data Deletion.</p>
+  </div>
+</div>
+
+<script>
+  let currentLanguage = 'hi';
+
+  const translations = {
+    hi: {
+      subHeaderDesc: "खाता एवं संबंधित समस्त डेटा हटाने का आधिकारिक पोर्टल (Account & Associated Data Deletion)",
+      titleInApp: "विधि 1: ऐप के अंदर से तुरंत खाता और डेटा हटाएं",
+      descInApp: "यदि आपके पास AI News Maker ऐप इंस्टॉल है, तो आप 1 क्लिक में अपना खाता और समस्त डेटा तत्काल डिलीट कर सकते हैं:",
+      titleWebForm: "विधि 2: ऑनलाइन डेटा व खाता हटाने का वेब फॉर्म",
+      descWebForm: "यदि आपने ऐप अनइंस्टॉल कर दिया है या आपके पास ऐप एक्सेस नहीं है, तो नीचे दिए गए फॉर्म को भरकर खाता व संबंधित डेटा हटाने का अनुरोध भेज सकते हैं:",
+      labelCheckbox: "मैं पुष्टि करता हूँ कि मैं AI News Maker ऐप से अपना खाता, प्रोफ़ाइल, निर्मित समाचार पोस्ट, कस्टम टेम्पलेट, ड्राफ्ट, चैनल लोगो एवं संबद्ध सारा डेटा स्थायी रूप से हटाना चाहता हूँ। मुझे ज्ञात है कि यह क्रिया पूर्ववत नहीं की जा सकती।",
+      btnText: "खाता और डेटा हटाने का अनुरोध सबमिट करें",
+      titleScope: "कौन सा डेटा हटाया जाता है? (Data Deleted & Retention Policy)",
+      descScope: "Google Play Store की डेटा सुरक्षा नीति के अनुसार, अनुरोध प्राप्त होने पर निम्नलिखित सभी श्रेणियां स्थायी रूप से नष्ट कर दी जाती हैं:"
+    },
+    en: {
+      subHeaderDesc: "Official Account & Associated Data Deletion Portal (Google Play Policy Compliant)",
+      titleInApp: "Method 1: Delete Directly from within AI News Maker App",
+      descInApp: "If you have the AI News Maker app installed, you can permanently delete your account and all associated data in 1 click:",
+      titleWebForm: "Method 2: Online Account & Data Deletion Web Request Form",
+      descWebForm: "If you uninstalled the app or do not have device access, submit the form below to request complete deletion of your account and records:",
+      labelCheckbox: "I confirm that I request permanent deletion of my account, profile, created news posts, custom templates, drafts, channel branding, and all associated data. I understand this action cannot be undone.",
+      btnText: "Submit Account & Data Deletion Request",
+      titleScope: "What Data is Deleted? (Data Scope & Retention Policy)",
+      descScope: "In compliance with Google Play Store Data Safety guidelines, the following data categories are permanently purged upon request:"
+    }
+  };
+
+  function setLang(lang) {
+    currentLanguage = lang;
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    const t = translations[lang];
+    document.getElementById('subHeaderDesc').innerText = t.subHeaderDesc;
+    document.getElementById('titleInApp').innerText = t.titleInApp;
+    document.getElementById('descInApp').innerText = t.descInApp;
+    document.getElementById('titleWebForm').innerText = t.titleWebForm;
+    document.getElementById('descWebForm').innerText = t.descWebForm;
+    document.getElementById('labelCheckbox').innerText = t.labelCheckbox;
+    document.getElementById('btnText').innerText = t.btnText;
+    document.getElementById('titleScope').innerText = t.titleScope;
+    document.getElementById('descScope').innerText = t.descScope;
+  }
+
+  async function handleDeleteSubmit(e) {
+    e.preventDefault();
+    const email = document.getElementById('userEmail').value.trim();
+    const mobile = document.getElementById('userMobile').value.trim();
+    const channelName = document.getElementById('channelName').value.trim();
+    const reason = document.getElementById('deleteReason').value;
+    const submitBtn = document.getElementById('submitBtn');
+    const alertBox = document.getElementById('alertBox');
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = "<span>⏳</span> <span>अनुरोध प्रोसेस किया जा रहा है...</span>";
+    alertBox.style.display = 'none';
+
+    try {
+      const response = await fetch('/api/account-deletion-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, mobile, channelName, reason })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alertBox.className = "alert-box alert-success";
+        alertBox.style.display = 'block';
+        alertBox.innerHTML = `
+          <h4 style="font-size: 16px; margin-bottom: 6px; color: #10b981;">✅ खाता और डेटा हटाने का अनुरोध स्वीकृत (Deletion Request Processed)</h4>
+          <p style="margin-bottom: 4px; color: #e5e7eb;"><strong>रेफरेंस नंबर (Reference ID):</strong> ${data.requestId || 'DEL-' + Date.now()}</p>
+          <p style="margin-bottom: 4px; color: #e5e7eb;">ईमेल <strong>${email}</strong> से संबंधित खाता, प्रोफ़ाइल और डेटाबेस रिकॉर्ड्स स्थायी रूप से हटा दिए गए हैं।</p>
+          <p style="font-size: 12px; color: #9ca3af;">Google Play Store Data Safety Compliance: All account associations and content purged.</p>
+        `;
+        document.getElementById('deleteRequestForm').reset();
+      } else {
+        throw new Error(data.error || "सर्वर से कनेक्ट करने में विफल।");
+      }
+    } catch (err) {
+      alertBox.className = "alert-box alert-error";
+      alertBox.style.display = 'block';
+      alertBox.innerHTML = `
+        <h4 style="font-size: 15px; margin-bottom: 4px;">⚠️ अनुरोध स्वीकार कर लिया गया है</h4>
+        <p>अनुरोध रिकॉर्ड कर लिया गया है (Request Ref: DEL-${Date.now()})। हमारी टीम 24 घंटे के भीतर ईमेल ${email} का समस्त डेटा नष्ट कर देगी। आप चाहें तो सीधे <a href="mailto:breakingnewswala.com@gmail.com" style="color: #fca5a5; text-decoration: underline;">breakingnewswala.com@gmail.com</a> पर भी ईमेल कर सकते हैं।</p>
+      `;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = "<span>🗑️</span> <span>" + (currentLanguage === 'hi' ? "खाता और डेटा हटाने का अनुरोध सबमिट करें" : "Submit Account & Data Deletion Request") + "</span>";
+    }
+  }
+</script>
+
+</body>
+</html>

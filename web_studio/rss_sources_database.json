@@ -1,0 +1,29 @@
+[
+  {
+    "id": "src_aajtak_live",
+    "name": "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
+    "url": "https://feeds.feedburner.com/aajtak/top",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1726000000000
+  },
+  {
+    "id": "src_ndtv_live",
+    "name": "NDTV इंडिया - लाइव समाचार",
+    "url": "https://feeds.feedburner.com/ndtvkhabar",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1726000002000
+  },
+  {
+    "id": "src_nbt_live",
+    "name": "नवभारत टाइम्स (NBT)",
+    "url": "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    "type": "rss",
+    "category": "राज्य",
+    "isActive": true,
+    "createdAt": 1726000004000
+  }
+]

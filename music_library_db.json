@@ -1,0 +1,53 @@
+[
+  {
+    "id": "track_breaking_pulse",
+    "name": "🔴 सुपर ब्रेकिंग बीट (Urgent Beat)",
+    "category": "Breaking",
+    "url": "https://assets.mixkit.co/music/preview/mixkit-urgent-news-broadcast-693.mp3",
+    "duration": 30,
+    "uploadedAt": 1740000000000,
+    "uploadedBy": "admin.ainewsmaker@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
+  },
+  {
+    "id": "track_news_headlines",
+    "name": "📰 न्यूज़रूम हेडलाइंस (News Pulse)",
+    "category": "Headlines",
+    "url": "https://assets.mixkit.co/music/preview/mixkit-news-bulletin-966.mp3",
+    "duration": 45,
+    "uploadedAt": 1740000000000,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
+  },
+  {
+    "id": "track_ambient_editorial",
+    "name": "📻 शांत संपादकीय (Ambient Broadcast)",
+    "category": "Ambient",
+    "url": "https://assets.mixkit.co/music/preview/mixkit-investigation-suspense-691.mp3",
+    "duration": 60,
+    "uploadedAt": 1740000000000,
+    "uploadedBy": "admin.ainewsmaker@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
+  }
+]
