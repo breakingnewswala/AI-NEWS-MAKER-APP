@@ -94,7 +94,7 @@ export function processNewsLocally(
   if (!extractedTitle && targetUrl) {
     const slugWords = extractSlugKeywords(targetUrl);
     if (slugWords.length > 0) {
-      extractedTitle = 'ताज़ा समाचार: घटनाक्रम को लेकर महत्वपूर्ण अपडेट';
+      extractedTitle = `ताज़ा समाचार: ${slugWords.slice(0, 6).join(' ')}`;
     }
   }
 

@@ -85,6 +85,7 @@ import {
   fetchLogoChangeRequests,
   approveLogoChangeRequest,
   rejectLogoChangeRequest,
+  registerOrUpdateUser,
 } from '../lib/userPlanManager';
 import {
   AdminRssSource,
@@ -433,6 +434,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [rssMsg, setRssMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSyncingRss, setIsSyncingRss] = useState<boolean>(false);
 
+  // RSS Two Sections State: 'dashboard' | 'converter'
+  const [rssActiveSection, setRssActiveSection] = useState<'dashboard' | 'converter'>('dashboard');
+  const [converterUrl, setConverterUrl] = useState<string>('');
+  const [converterChannel, setConverterChannel] = useState<string>('');
+  const [converterCategory, setConverterCategory] = useState<string>('देश');
+  const [isConverting, setIsConverting] = useState<boolean>(false);
+  const [converterResult, setConverterResult] = useState<{
+    feedUrl: string;
+    totalArticles: number;
+    feedTitle?: string;
+    sampleArticles?: { title: string; link: string }[];
+  } | null>(null);
+  const [converterError, setConverterError] = useState<string | null>(null);
+  const [converterCopied, setConverterCopied] = useState<boolean>(false);
+
   // Plans Catalog State
   const [plans, setPlans] = useState<PlanFeatureDetail[]>(() => getPlansCatalog());
   const [editingPlanId, setEditingPlanId] = useState<UserPlanTier | null>(null);
@@ -552,7 +568,38 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       };
       localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAcc));
 
-      // 3. Refresh user list
+      // 3. Register in User Plan Manager with full profile
+      registerOrUpdateUser({
+        name,
+        fullName: name,
+        email,
+        role: newUserRole,
+        mobile: newUserMobile.trim(),
+        channelName: newUserChannel.trim(),
+        tier: newUserPlan,
+      });
+
+      // 4. Authoritative backend sync with credentials
+      fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          name,
+          fullName: name,
+          role: newUserRole,
+          mobile: newUserMobile.trim(),
+          channelName: newUserChannel.trim(),
+          tier: newUserPlan,
+        }),
+      }).then(() => {
+        syncCloudUsers().then((synced) => {
+          if (Array.isArray(synced)) setPlanUsers(synced);
+        }).catch(() => {});
+      }).catch(() => {});
+
+      // 5. Refresh user list
       setPlanUsers(getPlanUsers());
       setAddUserSuccessMsg(`उपयोगकर्ता '${name}' (${email}) सफलतापूर्वक बनाया गया!`);
       setNewUserName('');
@@ -2353,8 +2400,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 फिलहाल कोई यूज़र रिकॉर्ड नहीं है। नए यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
               </div>
             ) : (
-              <div className="w-full">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-full overflow-x-auto touch-pan-x scrollbar-thin pb-2">
+                <table className="w-full min-w-[720px] text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/60">
                       <th className="p-3 w-[36%]">यूज़र व अकाउंट विवरण (User & Role)</th>
@@ -3441,22 +3488,52 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           {subTab === 'rss' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
         <div className="space-y-6">
-          {/* Header Info Banner */}
-          <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-red-500/30 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30">
-                  <Rss className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-white tracking-wide">
-                    7. RSS लिंक्स डैशबोर्ड
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।
-                  </p>
-                </div>
-              </div>
+          {/* Within RSS Links Area: 2 Clearly Named Sections */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+            <button
+              type="button"
+              onClick={() => setRssActiveSection('dashboard')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                rssActiveSection === 'dashboard'
+                  ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Rss className="w-4 h-4" />
+              <span>1. RSS Links Dashboard</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRssActiveSection('converter')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                rssActiveSection === 'converter'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <span>2. Web to RSS Link Converter</span>
+            </button>
+          </div>
+
+          {rssActiveSection === 'dashboard' && (
+            <div className="space-y-6">
+              {/* Header Info Banner */}
+              <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-red-500/30 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30">
+                      <Rss className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-white tracking-wide">
+                        RSS Links Dashboard
+                      </h3>
+                      <p className="text-xs text-slate-300">
+                        विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।
+                      </p>
+                    </div>
+                  </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
@@ -3784,8 +3861,248 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
+
+      {/* SECTION 2: Web to RSS Link Converter */}
+      {rssActiveSection === 'converter' && (
+        <div className="space-y-6">
+          {/* Web to RSS Converter Header */}
+          <div className="bg-gradient-to-r from-cyan-950/40 via-slate-900 to-blue-950/40 border-2 border-cyan-500/50 rounded-2xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 border-b border-cyan-500/30 pb-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white tracking-wide">
+                  Web to RSS Link Converter
+                </h3>
+                <p className="text-xs text-slate-300">
+                  वेबसाइट होमपेज, श्रेणी या लिस्टिंग URL को सर्वर-साइड RSS 2.0 XML फ़ीड में बदलें।
+                </p>
+              </div>
+            </div>
+
+            {/* Info / Restriction Warning */}
+            <div className="p-3 bg-slate-950/80 border border-cyan-500/30 rounded-xl text-xs space-y-1.5 text-slate-300">
+              <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>महत्वपूर्ण इनपुट नियम (Input Rules):</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                ✅ <strong>स्वीकृत इनपुट्स:</strong> न्यूज़ चैनल का होमपेज (उदा. <code className="text-cyan-300">https://ndtv.in</code>), केटेगरी पेज (उदा. <code className="text-cyan-300">https://aajtak.in/national</code>), या आर्काइव/लिस्टिंग पेज।
+              </p>
+              <p className="text-[11px] text-rose-400">
+                ❌ <strong>अस्वीकृत इनपुट्स:</strong> किसी व्यक्तिगत एकल आर्टिकल या स्टोरी का सीधा लिंक मान्य नहीं है और अस्वीकार कर दिया जाएगा।
+              </p>
+            </div>
+
+            {/* Error Banner */}
+            {converterError && (
+              <div className="p-3 bg-rose-950/80 border border-rose-500 rounded-xl text-xs font-bold text-rose-300 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{converterError}</span>
+                </div>
+                <button type="button" onClick={() => setConverterError(null)} className="text-rose-400 hover:text-white cursor-pointer">✕</button>
+              </div>
+            )}
+
+            {/* Conversion Form */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setConverterError(null);
+                setConverterResult(null);
+                setConverterCopied(false);
+                const rawUrl = converterUrl.trim();
+                if (!rawUrl) {
+                  setConverterError('कृपया वैध वेबसाइट URL दर्ज करें।');
+                  return;
+                }
+                setIsConverting(true);
+                try {
+                  const res = await fetch('/api/convert-web-to-rss', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      url: rawUrl,
+                      channelName: converterChannel.trim() || (savedChannels[0] || 'Web Feed'),
+                      category: converterCategory || 'देश',
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok || !data.success) {
+                    setConverterError(data.error || 'वेबसाइट को RSS में बदलने में त्रुटि हुई।');
+                  } else {
+                    setConverterResult(data);
+                  }
+                } catch (err: any) {
+                  setConverterError(err.message || 'नेटवर्क त्रुटि हुई।');
+                } finally {
+                  setIsConverting(false);
+                }
+              }}
+              className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 space-y-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">चैनल / स्रोत नाम *</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={converterChannel}
+                      onChange={(e) => setConverterChannel(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="">-- पंजीकृत चैनल चुनें --</option>
+                      {savedChannels.map((ch, idx) => (
+                        <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={converterChannel}
+                      onChange={(e) => setConverterChannel(e.target.value)}
+                      placeholder="या नया चैनल नाम लिखें (उदा. NDTV India)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-cyan-400 focus:outline-hidden placeholder-slate-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">होमपेज / केटेगरी URL *</label>
+                  <input
+                    type="url"
+                    required
+                    value={converterUrl}
+                    onChange={(e) => setConverterUrl(e.target.value)}
+                    placeholder="https://ndtv.in या https://aajtak.in/national"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-cyan-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी (Category)</label>
+                  <select
+                    value={converterCategory}
+                    onChange={(e) => setConverterCategory(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
+                  >
+                    {feedCategories.filter((c) => c.isActive).map((c, idx) => (
+                      <option key={`conv-${c.id}-${idx}`} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isConverting}
+                className="py-2.5 px-5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50"
+              >
+                {isConverting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>वेबसाइट पार्स व RSS 2.0 जनरेट हो रहा है...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    <span>RSS 2.0 Feed में कन्वर्ट करें</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Generated Feed Result Card */}
+            {converterResult && (
+              <div className="bg-emerald-950/40 border-2 border-emerald-500/60 rounded-xl p-4 space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-emerald-400 font-black text-xs">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>🎉 वैध RSS 2.0 XML फ़ीड सफलतापूर्वक तैयार! ({converterResult.totalArticles} लेख प्राप्त)</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/40 font-mono">
+                    RSS 2.0 XML
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-slate-300 font-bold block">
+                    जनरेटेड RSS XML फ़ीड URL:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={converterResult.feedUrl}
+                      className="flex-1 bg-slate-900 border border-emerald-500/50 rounded-xl px-3 py-2 text-xs text-emerald-300 font-mono select-all focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(converterResult.feedUrl);
+                        setConverterCopied(true);
+                        setTimeout(() => setConverterCopied(false), 2500);
+                      }}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow transition"
+                    >
+                      {converterCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{converterCopied ? 'कॉपी हुआ!' : 'URL कॉपी करें'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Add to RSS Links Dashboard */}
+                <div className="pt-2 border-t border-emerald-500/30 flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-[11px] text-slate-300">
+                    इस फ़ीड को तुरंत अपने RSS Links Dashboard में पंजीकृत करें:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = converterChannel.trim() || (savedChannels[0] || 'Web Feed');
+                      setNewSourceName(name);
+                      setNewSourceUrl(converterResult.feedUrl);
+                      setNewSourceCategory(converterCategory);
+                      setRssActiveSection('dashboard');
+                      setRssMsg({
+                        type: 'success',
+                        text: `फ़ीड लोड हो गई है! नीचे "RSS स्रोत जोड़ें" बटन दबाकर इसे तुरंत सक्रिय करें।`,
+                      });
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>RSS Links Dashboard में जोड़ें</span>
+                  </button>
+                </div>
+
+                {/* Sample Articles Preview */}
+                {converterResult.sampleArticles && converterResult.sampleArticles.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-emerald-500/20">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                      फ़ीड में खोजे गए नमूना समाचार (Sample Headlines):
+                    </span>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {converterResult.sampleArticles.map((art, idx) => (
+                        <div key={idx} className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg text-xs flex items-center justify-between gap-2">
+                          <span className="truncate text-slate-200">{art.title}</span>
+                          <a href={art.link} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline shrink-0 text-[10px] flex items-center gap-1">
+                            <span>स्रोत</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
   </div>
 
 
@@ -3830,7 +4147,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide">
-                    8. वेब लिंक्स डैशबोर्ड (Live Web Scraping Sources)
+                    Web Links Dashboard
                   </h3>
                   <p className="text-xs text-slate-300">
                     वेबसाइट एवं आर्टिकल वेब लिंक्स जोड़ें। बैकएंड प्रोडक्शन स्क्रैपर लाइव आर्टिकल टेक्स्ट व फोटो एक्सट्रैक्ट करके डेटाबेस में सुरक्षित करता है।

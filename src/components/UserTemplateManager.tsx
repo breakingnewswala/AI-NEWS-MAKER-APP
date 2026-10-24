@@ -19,6 +19,9 @@ import {
   X,
   Power,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  Film,
 } from 'lucide-react';
 import {
   getCustomFrames,
@@ -35,6 +38,7 @@ import {
   UserCustomTemplate,
 } from '../lib/userTemplatesManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
+import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
 import {
   getUserSubscription,
   isUserAdmin,
@@ -80,6 +84,11 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     footerUrl: string;
     active: boolean;
   } | null>(null);
+
+  // Admin Section Accordion States (Part 15) - Collapsed by default
+  const [isGraphicsExpanded, setIsGraphicsExpanded] = useState(false);
+  const [isVideoExpanded, setIsVideoExpanded] = useState(false);
+  const [isApprovalExpanded, setIsApprovalExpanded] = useState(false);
 
   // New Frame Creation State
   const [isAddingFrame, setIsAddingFrame] = useState(false);
@@ -293,38 +302,40 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
   const isVipOrPro = isAdmin || sub.tier === 'professional' || sub.tier === 'ultra';
 
   return (
-    <div className="w-full bg-[#0a0f1d] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100">
-      {/* Header */}
-      <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border-b border-purple-500/20 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-md">
-            <Palette className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-base sm:text-lg font-black text-white">
-                टेम्प्लेट व कस्टम फ्रेम्स मैनेजर
-              </h3>
-              <span className="px-2 py-0.5 text-[10px] bg-gradient-to-r from-amber-500 to-yellow-500 text-neutral-950 rounded-full font-black flex items-center gap-1 shadow-sm">
-                <Crown className="w-3 h-3 fill-current" />
-                {isAdmin ? 'ADMIN' : sub.planName || 'PRO / VIP'}
-              </span>
+    <div className={`w-full ${isAdmin ? 'space-y-6 text-slate-100' : 'bg-[#0a0f1d] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100'}`}>
+      {/* Header - Only shown for non-admin custom template manager */}
+      {!isAdmin && (
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border-b border-purple-500/20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-md">
+              <Palette className="w-5 h-5 text-purple-400" />
             </div>
-            <p className="text-xs text-slate-400">
-              अपनी बनाई हुई कस्टम फ्रेम्स व टेम्पलेट्स प्रबंधित करें, नए बनाएं या डिलीट करें
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  टेम्प्लेट व कस्टम फ्रेम्स मैनेजर
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] bg-gradient-to-r from-amber-500 to-yellow-500 text-neutral-950 rounded-full font-black flex items-center gap-1 shadow-sm">
+                  <Crown className="w-3 h-3 fill-current" />
+                  {sub.planName || 'PRO / VIP'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                अपनी बनाई हुई कस्टम फ्रेम्स व टेम्पलेट्स प्रबंधित करें, नए बनाएं या लागू करें
+              </p>
+            </div>
           </div>
-        </div>
 
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            ✕
-          </button>
-        )}
-      </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Toast Alert */}
       {toastMessage && (
@@ -334,74 +345,55 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-800 bg-slate-900/60 px-4 pt-2 gap-2 text-xs font-bold">
-        <button
-          type="button"
-          onClick={() => setActiveTab('frames')}
-          className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'frames'
-              ? 'border-purple-400 text-purple-300 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <ImageIcon className="w-3.5 h-3.5" />
-          मेरे कस्टम 4:5 फ्रेम्स ({frames.length})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('templates')}
-          className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'templates'
-              ? 'border-purple-400 text-purple-300 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <Layout className="w-3.5 h-3.5" />
-          मेरे टेम्प्लेट्स ({userTemplates.length})
-        </button>
-
-        {isAdmin && (
+      {/* User Tabs (non-admin only) */}
+      {!isAdmin && (
+        <div className="flex border-b border-slate-800 bg-slate-900/60 px-4 pt-2 gap-2 text-xs font-bold">
           <button
             type="button"
-            onClick={() => setActiveTab('admin')}
+            onClick={() => setActiveTab('frames')}
             className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'admin'
-                ? 'border-red-400 text-red-300 font-black'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Crown className="w-3.5 h-3.5" />
-            एडमिन टियर एक्सेस कंट्रोल
-          </button>
-        )}
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('custom_hf')}
-            className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'custom_hf'
+              activeTab === 'frames'
                 ? 'border-purple-400 text-purple-300 font-black'
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            कस्टम हेडर व फुटर अप्रूवल ({planUsers.filter(u => {
-              const hf = getAssignedCustomHeaderFooter(u.email);
-              return !!(hf?.headerUrl || hf?.footerUrl);
-            }).length})
+            <ImageIcon className="w-3.5 h-3.5" />
+            मेरे कस्टम्स ({frames.length})
           </button>
-        )}
-      </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('templates')}
+            className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'templates'
+                ? 'border-purple-400 text-purple-300 font-black'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            <Layout className="w-3.5 h-3.5" />
+            मेरे टेम्पलेट्स ({userTemplates.length})
+          </button>
+        </div>
+      )}
 
       {/* Content */}
-      <div className="p-4 sm:p-6 space-y-6 flex-1">
-        {/* ========================================================================= */}
-        {/* TAB 1: CUSTOM 4:5 FRAMES                                                 */}
-        {/* ========================================================================= */}
-        {activeTab === 'frames' && (
+      <div className={isAdmin ? 'space-y-6 w-full' : 'p-4 sm:p-6 space-y-6 flex-1'}>
+        {/* USER TEMPLATES & FRAMES (Part 16: non-admins only) */}
+        {!isAdmin && (
+          <>
+            {!isVipOrPro && (
+              <div className="p-4 bg-amber-950/40 border border-amber-500/40 rounded-xl flex items-center justify-between gap-3 text-amber-200 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <Crown className="w-5 h-5 text-amber-400 shrink-0" />
+                  <span>
+                    कस्टम 4:5 फ्रेम्स व टेम्पलेट्स बनाने की सुविधा केवल <strong>PRO</strong> व <strong>VIP DESK</strong> यूज़र्स के लिए उपलब्ध है। (वर्तमान प्लान: {sub.planName || 'BASIC'})
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 1: CUSTOM 4:5 FRAMES */}
+            {activeTab === 'frames' && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-purple-950/20 p-3.5 rounded-xl border border-purple-500/20">
               <div>
@@ -732,16 +724,111 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             </div>
           </div>
         )}
+        </>
+      )}
 
-        {/* ========================================================================= */}
-        {/* TAB 3: ADMIN TIER ACCESS CONTROL & CUSTOM HF APPROVAL (PART 4 & PART 6)    */}
-        {/* ========================================================================= */}
-        {(activeTab === 'admin' || activeTab === 'custom_hf') && isAdmin && (
-          <div className="space-y-8">
-            <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
+      {/* ========================================================================= */}
+      {/* ADMIN TEMPLATE MANAGER: 3 EXPAND/COLLAPSE SECTIONS (PART 15)              */}
+      {/* ========================================================================= */}
+      {isAdmin && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* 15.1 SECTION 1: Graphics Template Control */}
+          <div id="admin-graphics-section" className="border border-purple-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
+            <button
+              type="button"
+              onClick={() => setIsGraphicsExpanded(!isGraphicsExpanded)}
+              className="w-full p-4 bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-600/30 border border-purple-500/50 text-purple-300">
+                  <Layout className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-black text-white">A. Graphic Template Control</h4>
+                    <span className="px-2 py-0.5 text-[10px] bg-purple-500/20 text-purple-300 font-bold rounded-full border border-purple-500/40">
+                      8 श्रेणियाँ • टियर एक्सेस
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Regular, Package, Super Breaking, Text Breaking, बयानबाज़ी, Special, Bonus, Custom फ्रेम्स व प्लान एक्सेस
+                  </p>
+                </div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                {isGraphicsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </button>
+            {isGraphicsExpanded && (
+              <div className="p-4 sm:p-6 border-t border-purple-500/20 bg-slate-950/40 animate-in fade-in">
+                <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
+              </div>
+            )}
+          </div>
 
-            {/* Custom Header & Footer Approval placed at the very bottom of Template Manager */}
-            <div id="custom-hf-approval-section" className="pt-6 border-t-2 border-slate-800 space-y-6 animate-in fade-in duration-200">
+          {/* 15.2 SECTION B: Video Template Control */}
+          <div id="admin-video-section" className="border border-amber-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
+            <button
+              type="button"
+              onClick={() => setIsVideoExpanded(!isVideoExpanded)}
+              className="w-full p-4 bg-gradient-to-r from-amber-950/80 via-slate-900 to-yellow-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-600/30 border border-amber-500/50 text-amber-300">
+                  <Film className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-black text-white">B. Video Template Control</h4>
+                    <span className="px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 font-bold rounded-full border border-amber-500/40">
+                      9:16, 1:1, 4:3, 4:5 • कॉइन व टियर
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    वीडियो फ्रेम अनुपात, हेडलाइन लाइन्स (2/3), Full/Core विज़िबिलिटी व टियर पात्रता कॉन्फ़िगर करें
+                  </p>
+                </div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                {isVideoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </button>
+            {isVideoExpanded && (
+              <div className="p-4 sm:p-6 border-t border-amber-500/20 bg-slate-950/40 animate-in fade-in">
+                <AdminVideoTemplateControl />
+              </div>
+            )}
+          </div>
+
+          {/* 15.3 SECTION C: Custom Ad Reporter Approval */}
+          <div id="custom-hf-approval-section" className="border border-indigo-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
+            <button
+              type="button"
+              onClick={() => setIsApprovalExpanded(!isApprovalExpanded)}
+              className="w-full p-4 bg-gradient-to-r from-indigo-950/80 via-slate-900 to-purple-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-600/30 border border-indigo-500/50 text-indigo-300">
+                  <Layers className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-black text-white">C. Custom Ad Reporter Approval</h4>
+                    <span className="px-2 py-0.5 text-[10px] bg-indigo-500/20 text-indigo-300 font-bold rounded-full border border-indigo-500/40">
+                      PRO & VIP DESK अप्रूवल
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    यूज़र्स द्वारा सबमिट किए गए ग्राफिक्स व वीडियो कस्टम हेडर/फुटर की समीक्षा व अप्रूवल
+                  </p>
+                </div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                {isApprovalExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </button>
+            {isApprovalExpanded && (
+              <div className="p-4 sm:p-6 border-t border-indigo-500/20 bg-slate-950/40 animate-in fade-in space-y-6">
             {/* Header info card */}
             <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/40 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1223,6 +1310,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 </div>
               </div>
             )}
+                </div>
+              )}
             </div>
           </div>
         )}

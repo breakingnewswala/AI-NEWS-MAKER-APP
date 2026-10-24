@@ -8481,6 +8481,83 @@ export function extractFactsFromUrlString(rawUrl: string): {
   }
 }
 
+// Edge reader proxy helper to bypass Cloudflare, WAF, bot blocks, and paywalls
+async function fetchViaReaderProxy(targetUrl: string): Promise<ExtractedArticleResult | null> {
+  try {
+    const readerUrl = `https://r.jina.ai/${targetUrl}`;
+    const res = await fetch(readerUrl, {
+      headers: {
+        "Accept": "text/plain, text/markdown, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text || text.trim().length < 50) return null;
+
+    let title = "";
+    const titleMatch = text.match(/^Title:\s*(.+)$/m);
+    if (titleMatch) {
+      title = cleanArticleTitle(titleMatch[1].trim());
+    }
+
+    let urlSource = targetUrl;
+    const urlMatch = text.match(/^URL Source:\s*(.+)$/m);
+    if (urlMatch) {
+      urlSource = urlMatch[1].trim();
+    }
+
+    let rawContent = "";
+    const contentMatch = text.match(/Markdown Content:\s*([\s\S]+)$/i);
+    if (contentMatch) {
+      rawContent = contentMatch[1].trim();
+    } else {
+      rawContent = text.replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").trim();
+    }
+
+    const images: string[] = [];
+    const imgRegex = /!\[.*?\]\((https?:\/\/[^\s\)]+)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = imgRegex.exec(rawContent)) !== null) {
+      const imgUrl = match[1];
+      if (
+        imgUrl &&
+        !images.includes(imgUrl) &&
+        !imgUrl.includes('.svg') &&
+        !imgUrl.includes('logo') &&
+        !imgUrl.includes('icon') &&
+        !imgUrl.includes('avatar') &&
+        !imgUrl.includes('badge')
+      ) {
+        images.push(imgUrl);
+      }
+    }
+
+    const cleanedContent = rawContent
+      .replace(/!\[.*?\]\(.*?\)/g, " ")
+      .replace(/\[([^\]]+)\]\(.*?\)/g, "$1")
+      .replace(/[*#_`>~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const desc = cleanedContent.slice(0, 320);
+
+    return {
+      title: title || "ताज़ा समाचार अपडेट",
+      description: desc,
+      content: cleanedContent.slice(0, 3500),
+      images: images.slice(0, 6),
+      sourceUrl: urlSource || targetUrl,
+      isRss: false,
+      extractionStatus: (title || cleanedContent.length > 50) ? "success" : "failed",
+    };
+  } catch (err: any) {
+    console.warn("[Reader Proxy] Fallback error for URL:", targetUrl, err?.message || err);
+    return null;
+  }
+}
+
 // Fetch URL handling both RSS/XML Feeds and Standard Web Articles with anti-bot resilience
 async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleResult | null> {
   const normalizedRawUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
@@ -8553,6 +8630,12 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
   }
 
   if (!rawBody || rawBody.length < 50 || !response || !response.ok) {
+    console.log(`[URL Scraper] Direct fetch failed for ${normalizedRawUrl}. Attempting reader proxy fallback...`);
+    const readerFallback = await fetchViaReaderProxy(normalizedRawUrl);
+    if (readerFallback && (readerFallback.content || readerFallback.title)) {
+      return readerFallback;
+    }
+
     return {
       title: "",
       description: "",
@@ -8666,6 +8749,15 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
 
   // Standard HTML Article extraction
   const article = parseArticleHtml(rawBody, finalRedirectedUrl);
+
+  // If standard HTML parsing yielded no content (e.g. JavaScript-rendered SPA or anti-bot payload), attempt reader proxy
+  if (article.extractionStatus === "failed" || (!article.content && !article.description && (!article.title || article.title.length < 10))) {
+    console.log(`[URL Scraper] HTML parsing yielded no real content for ${finalRedirectedUrl}. Attempting reader proxy fallback...`);
+    const readerFallback = await fetchViaReaderProxy(finalRedirectedUrl);
+    if (readerFallback && (readerFallback.content || readerFallback.title)) {
+      return readerFallback;
+    }
+  }
 
   return {
     title: article.title,
@@ -10757,10 +10849,10 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     }
 
     const isInternalPlatformUrl =
-      rawLink.includes("ainewsmaker.online") ||
-      rawLink.includes("breakingnewswala.com") ||
       rawLink.includes("localhost") ||
-      rawLink.includes("127.0.0.1");
+      rawLink.includes("127.0.0.1") ||
+      ((rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com")) &&
+        (rawLink.includes("/#/") || rawLink.includes("/login") || rawLink.includes("/profile") || rawLink.includes("/account-deletion") || rawLink.includes("/api/")));
 
     if (rawLink && isInternalPlatformUrl && !effectiveInput) {
       return res.status(400).json({

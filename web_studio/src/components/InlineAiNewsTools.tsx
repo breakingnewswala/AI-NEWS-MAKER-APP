@@ -25,6 +25,7 @@ import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
 import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
+import { scrapeNewsUrlClient } from '../lib/clientScraper';
 
 export interface AutoFillNewsData {
   newsId?: string;
@@ -462,7 +463,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           input: effectiveText || extraData?.title || undefined,
           linkUrl: effectiveLink || undefined,
@@ -643,9 +644,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         return;
       }
       console.warn('API error, executing client AI fallback:', err);
+      let fallbackText = effectiveText || extraData?.title || '';
+      let fallbackImages: string[] = extraData?.additionalPhotos || (extraData?.imageUrl ? [extraData.imageUrl] : []);
+
+      // If URL was provided, attempt client-side edge scraping so real news facts and photos are used
+      if (effectiveLink && (!fallbackText || fallbackText.length < 25)) {
+        try {
+          const scraped = await scrapeNewsUrlClient(effectiveLink, 8000);
+          if (scraped) {
+            fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
+            if (scraped.images && scraped.images.length > 0) {
+              fallbackImages = scraped.images;
+            }
+          }
+        } catch (scrapeErr) {
+          console.warn('Client scrape fallback error in triggerProcessDirectly:', scrapeErr);
+        }
+      }
+
       const fallbackResult = processNewsLocally(
-        effectiveText || extraData?.title || effectiveLink,
-        effectiveLink || undefined
+        fallbackText || effectiveLink,
+        effectiveLink || undefined,
+        tplConfig,
+        getActiveCaptionUsername(card, currentUser)
       );
 
       const opts: string[] = [];
@@ -681,12 +702,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       setHeadlineOptions(finalOpts.slice(0, 5));
       setSelectedHeadlineIndex(0);
-      setUseWebsitePhoto(!!extraData?.imageUrl);
+      setUseWebsitePhoto(!!fallbackImages[0] || !!extraData?.imageUrl);
 
       const finalHeadline = cleanHeadlineText(finalOpts[0] || fallbackResult.headline || '');
       const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || '');
-      const finalImage = (extraData?.imageUrl && !extraData.imageUrl.includes('placeholder'))
-        ? extraData.imageUrl
+      const finalImage = (fallbackImages[0] && !fallbackImages[0].includes('placeholder'))
+        ? fallbackImages[0]
         : (card.images.main || extraData?.imageUrl || '');
 
       const effectiveCaption = formatCaptionByStyle(
@@ -698,10 +719,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         effectiveLink || url
       );
 
-      const extraPhotos = extraData?.additionalPhotos || [];
-      const finalSecond = extraPhotos[1] || extraPhotos[0] || card.images.second || finalImage;
-      const finalThird = extraPhotos[2] || extraPhotos[0] || card.images.third || finalImage;
-      const finalFourth = extraPhotos[3] || extraPhotos[1] || extraPhotos[0] || card.images.fourth || finalImage;
+      const finalSecond = fallbackImages[1] || extraData?.additionalPhotos?.[1] || card.images.second || finalImage;
+      const finalThird = fallbackImages[2] || extraData?.additionalPhotos?.[2] || card.images.third || finalImage;
+      const finalFourth = fallbackImages[3] || extraData?.additionalPhotos?.[3] || card.images.fourth || finalImage;
 
       onChange({
         headline: finalHeadline,
@@ -783,7 +803,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const timeoutId = setTimeout(() => controller.abort(), 30000);
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           input: effectiveText || undefined,
           linkUrl: effectiveLink || undefined,
@@ -881,10 +901,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       console.warn('API error, executing client AI fallback:', err);
       try {
+        let fallbackText = effectiveText;
+        let scrapedPhotos: string[] = [];
+
+        // If URL was provided, attempt client-side edge scraping so real news facts and photos are used
+        if (effectiveLink && (!fallbackText || fallbackText.length < 25)) {
+          try {
+            const scraped = await scrapeNewsUrlClient(effectiveLink, 8000);
+            if (scraped) {
+              fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
+              if (scraped.images && scraped.images.length > 0) {
+                scrapedPhotos = scraped.images;
+              }
+            }
+          } catch (scrapeErr) {
+            console.warn('Client scrape fallback error in handleProcess:', scrapeErr);
+          }
+        }
+
         const fallbackResult = processNewsLocally(
-          effectiveText || effectiveLink,
+          fallbackText || effectiveLink,
           effectiveLink || undefined,
-          tplConfig
+          tplConfig,
+          card.socialHandle || currentUser?.username
         );
 
         const rawOpts: string[] = [];
@@ -912,10 +951,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
         setHeadlineOptions(finalOpts.slice(0, 5));
         setSelectedHeadlineIndex(0);
-        setUseWebsitePhoto(false);
+        setUseWebsitePhoto(scrapedPhotos.length > 0);
 
         const finalHeadline = cleanHeadlineText(finalOpts[0] || fallbackResult.headline || '');
         const finalLoc = cleanLocationField(fallbackResult.location || '');
+        const finalImage = scrapedPhotos[0] || card.images.main;
+        const finalSecond = scrapedPhotos[1] || card.images.second || finalImage;
+        const finalThird = scrapedPhotos[2] || card.images.third || finalImage;
+        const finalFourth = scrapedPhotos[3] || card.images.fourth || finalImage;
 
         const effectiveCaption = formatCaptionByStyle(
           captionStyle,
@@ -932,6 +975,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           highlightWords: fallbackResult.highlightWords || [],
           location: finalLoc,
           summary: effectiveCaption,
+          images: {
+            ...card.images,
+            main: finalImage,
+            second: finalSecond,
+            third: finalThird,
+            fourth: finalFourth,
+          },
+          extractedArticlePhotos: scrapedPhotos.length > 0 ? scrapedPhotos : card.extractedArticlePhotos,
         });
 
         if (navigator.clipboard && navigator.clipboard.writeText) {

@@ -51,6 +51,7 @@ export interface UserSubscriptionInfo {
   hoursRemaining?: number;
   minutesRemaining?: number;
   hasActivePaidPlan?: boolean;
+  isPlanExpired?: boolean;
   isTrialExpired?: boolean;
   isBlocked?: boolean;
   blockedAt?: number | null;
@@ -951,10 +952,11 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     trialEndsAt: expiresAt,
     isTrialActive,
     isTrialExpired: isExpired && storedTier === 'basic',
+    isPlanExpired: isExpired,
     daysRemaining,
     hoursRemaining,
     minutesRemaining,
-    hasActivePaidPlan: hasPaidPlan,
+    hasActivePaidPlan: hasPaidPlan && !isExpired,
     isBlocked,
     blockedAt: matchedUser?.blockedAt,
     blockedBy: matchedUser?.blockedBy,
@@ -1350,18 +1352,18 @@ export function registerOrUpdateUser(userData: {
     }).then(async (res) => {
       if (res.ok) {
         const json = await res.json();
-        if (Array.isArray(json.users)) {
-          const currentUsers = getPlanUsers();
-          const userMap = new Map<string, PlanUserRecord>();
-          currentUsers.forEach((u) => userMap.set(u.email.toLowerCase().trim(), u));
+        if (Array.isArray(json.users) && json.users.length > 0) {
+          const current = getPlanUsers();
+          const map = new Map<string, PlanUserRecord>();
+          DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => map.set(u.email.toLowerCase().trim(), u));
+          current.forEach((u) => map.set(u.email.toLowerCase().trim(), u));
           json.users.forEach((u: PlanUserRecord) => {
             if (u && u.email) {
-              const k = u.email.toLowerCase().trim();
-              const existing = userMap.get(k);
-              userMap.set(k, { ...existing, ...u });
+              const key = u.email.toLowerCase().trim();
+              map.set(key, { ...map.get(key), ...u });
             }
           });
-          const merged = Array.from(userMap.values()).sort((a, b) => {
+          const merged = Array.from(map.values()).sort((a, b) => {
             const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
             const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
             return timeB - timeA;
@@ -1628,6 +1630,11 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
           const parsed = JSON.parse(stored);
           if (parsed?.email) headers['x-user-email'] = parsed.email;
           if (parsed?.role) headers['x-user-role'] = parsed.role;
+          if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+        }
+        const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
+        if (directToken && !headers['authorization']) {
+          headers['authorization'] = `Bearer ${directToken}`;
         }
       } catch {}
 

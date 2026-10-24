@@ -217,3 +217,9 @@ export function getDraftById(id: string): NewsDraft | undefined {
   const drafts = getSavedDrafts();
   return drafts.find((d) => d.id === id);
 }
+
+export function getLatestVideoDraft(): any | null {
+  const drafts = getSavedDrafts();
+  const videoDraft = drafts.find((d) => d.draftType === 'video' && d.videoData);
+  return videoDraft ? videoDraft.videoData : null;
+}

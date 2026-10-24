@@ -1,6 +1,6 @@
 // Helper to resolve API URLs correctly whether running on Web (HTTP/HTTPS) or inside Android WebView (file://)
 
-export const DEFAULT_CLOUD_BASE_URL = 'https://ais-dev-wwdd4qbnuyj4jnu72seq6i-496088405107.asia-southeast1.run.app';
+export const DEFAULT_CLOUD_BASE_URL = 'https://ais-dev-vhpz665wuo3aifiyjrbnrh-101130074623.asia-southeast1.run.app';
 export const GOOGLE_OAUTH_CLIENT_ID = '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com';
 
 export function getCustomCloudUrl(): string {
@@ -39,6 +39,16 @@ export function isAndroidWebView(): boolean {
   );
 }
 
+export function isStaticDeploymentHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = (window.location.hostname || '').toLowerCase();
+  return (
+    host.endsWith('github.io') ||
+    host.endsWith('.surge.sh') ||
+    host.endsWith('.gitlab.io')
+  );
+}
+
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     // 1. If user configured a custom cloud domain / URL:
@@ -47,12 +57,17 @@ export function getApiBaseUrl(): string {
       return custom;
     }
 
-    // 2. If running via HTTP or HTTPS (web browser or WebView navigating web URL), use current origin
+    // 2. If running on known pure static host without backend
+    if (isStaticDeploymentHost()) {
+      return DEFAULT_CLOUD_BASE_URL;
+    }
+
+    // 3. If running via HTTP or HTTPS (web browser or WebView navigating web URL), use current origin
     if (window.location.protocol.startsWith('http') && window.location.hostname !== 'appassets.androidplatform.net') {
       return window.location.origin;
     }
 
-    // 3. Inside Android local asset WebView (file:// or appassets.androidplatform.net)
+    // 4. Inside Android local asset WebView (file:// or appassets.androidplatform.net)
     if (isAndroidWebView()) {
       return DEFAULT_CLOUD_BASE_URL;
     }

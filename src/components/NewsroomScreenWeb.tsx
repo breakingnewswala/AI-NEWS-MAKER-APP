@@ -490,7 +490,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                     {draft.cardData?.customScript && (
                       <button
                         type="button"
-                        onClick={(e) => handleCopyScript(draft.cardData.customScript!, draft.id, e)}
+                        onClick={(e) => handleCopyScript(draft.cardData?.customScript || '', draft.id, e)}
                         className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
                         title="स्क्रिप्ट कॉपी करें"
                       >
