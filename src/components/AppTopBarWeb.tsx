@@ -200,32 +200,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
   return (
     <>
-      {/* Admin Test as User Global Top Switcher Banner */}
-      {isAdminUser && adminSystemMode === 'test' && (
-        <div className="bg-gradient-to-r from-purple-800 via-indigo-900 to-purple-950 text-white text-xs px-3 py-1.5 shadow-lg border-b border-purple-500/50 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="px-2 py-0.5 bg-purple-500/30 rounded-md text-[10px] font-black uppercase tracking-wider text-purple-200 border border-purple-400/60 shrink-0">
-                🧪 Test Mode
-              </span>
-              <span className="font-medium text-[11px] sm:text-xs text-purple-100 truncate">
-                वर्तमान में आप <strong>Test as User</strong> मोड में सामान्य यूज़र अनुभव टेस्ट कर रहे हैं।
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setAdminSystemMode('admin');
-                setAdminSystemModeState('admin');
-              }}
-              className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-[11px] transition shadow-md cursor-pointer shrink-0 flex items-center gap-1 active:scale-95"
-            >
-              <span>वापस Continue as Admin</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-      )}
 
       <header className={`bg-slate-950/95 backdrop-blur-md border-b border-slate-800 text-white ${isAdminUser && adminSystemMode === 'test' ? 'relative' : 'sticky top-0'} z-40 shadow-md ${isStudio ? 'hidden md:block' : ''}`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -355,8 +329,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </button>
             )}
 
-            {/* Admin Mode / Test Mode Mobile & Top Bar Quick Switcher (Voice Directive 2) */}
-            {isAdminUser && (
+            {/* Admin Mode / Test Mode Switcher: EXCLUSIVELY in Admin Control Panel header beside notifications */}
+            {isAdminUser && isControlPanel && (
               <button
                 type="button"
                 onClick={() => {

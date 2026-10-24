@@ -1,5 +1,21 @@
 [
   {
+    "id": "audit_1792860101182_bj82",
+    "timestamp": 1792860101182,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792860101159",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792860101174_ziur",
+    "timestamp": 1792860101174,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792860101159",
+    "ip": "internal"
+  },
+  {
     "id": "audit_1792849982675_z4k0",
     "timestamp": 1792849982675,
     "adminEmail": "admin",

@@ -149,7 +149,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      name: currentUser?.name || 'यूज़र', email: currentUser?.email || '', role: 'user',
+      name: 'यूज़र', email: '', role: 'user',
       district: 'डिजिटल डेस्क'
     };
   })();
@@ -2526,13 +2526,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         disabled={isMandatory}
                         onClick={() => {
                           if (isMandatory) return;
-                          setChannelProfile((p) => ({
-                            ...p,
-                            socialIcons: {
-                              ...(p.socialIcons || DEFAULT_SOCIAL_ICONS),
-                              [soc.id]: !isChecked,
-                            },
-                          }));
+                          setChannelProfile((p) => {
+                            const base = p || DEFAULT_PROFILE;
+                            return {
+                              ...base,
+                              socialIcons: {
+                                ...(base?.socialIcons || DEFAULT_SOCIAL_ICONS),
+                                [soc.id]: !isChecked,
+                              },
+                            };
+                          });
                         }}
                         className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition ${
                           isMandatory
@@ -2816,31 +2819,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Mode Toggle Switch: Admin Mode | Test Mode */}
-              <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-purple-500/50 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleSwitchAdminMode('admin')}
-                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                    adminSystemMode === 'admin'
-                      ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  ⚡ एडमिन मोड
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchAdminMode('test')}
-                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                    adminSystemMode === 'test'
-                      ? 'bg-purple-500 text-slate-950 shadow-md ring-2 ring-purple-300'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${adminSystemMode === 'test' ? 'bg-slate-950 animate-ping' : 'bg-slate-500'}`} />
-                  <span>🧪 टेस्ट मोड</span>
-                </button>
+              {/* Status Badge - Single authoritative switcher is in the Control Panel Header beside notifications */}
+              <div className="flex items-center gap-2 bg-slate-950/80 px-3 py-2 rounded-xl border border-purple-500/50 shrink-0">
+                <span className="text-xs font-bold text-slate-300">सक्रिय मोड:</span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1.5 ${
+                  adminSystemMode === 'test'
+                    ? 'bg-purple-600 text-white border border-purple-400'
+                    : 'bg-red-600 text-white border border-red-500'
+                }`}>
+                  {adminSystemMode === 'test' ? '🧪 टेस्ट मोड सक्रिय' : '⚡ एडमिन मोड सक्रिय'}
+                </span>
               </div>
             </div>
 

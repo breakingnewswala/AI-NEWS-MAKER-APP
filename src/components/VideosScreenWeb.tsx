@@ -32,6 +32,7 @@ import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
+import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -40,6 +41,7 @@ interface VideosScreenWebProps {
   onAdminAddVideo?: (video: VideoFeedItem) => void;
   onAdminUpdateVideo?: (video: VideoFeedItem) => void;
   onAdminDeleteVideo?: (videoId: string) => void;
+  onNavigateToTab?: (tab: any, meta?: any) => void;
 }
 
 export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
@@ -49,6 +51,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   onAdminAddVideo,
   onAdminUpdateVideo,
   onAdminDeleteVideo,
+  onNavigateToTab,
 }) => {
   // State for Editing Video Dialog
   const [editingVideo, setEditingVideo] = useState<VideoFeedItem | null>(null);
@@ -80,7 +83,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     if (!currentUser?.email) return;
     const fetchUnlocked = async () => {
       try {
-        const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email)}`));
+        const uRes = await fetch(getApiUrl(`/api/wallet/unlocked-items?email=${encodeURIComponent(currentUser.email || '')}`));
           const uData = await uRes.json();
           const rawItems = uData.unlockedItems || uData.unlockedList || (Array.isArray(uData.items) ? uData.items.map((it: any) => typeof it === 'string' ? it : it.itemId) : []);
           if (Array.isArray(rawItems) && rawItems.length > 0) {
@@ -1825,7 +1828,41 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
-            {filteredVideos.map((vid) => renderVideoCard(vid, false))}
+            {filteredVideos.map((vid, vidIndex) => {
+              const promoConfig = (() => {
+                if (vidIndex === 5) return { layoutRatio: '16:9' as PromoLayoutRatio, startFeatureIndex: 0 };
+                if (vidIndex === 12) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 5 };
+                if (vidIndex === 19) return { layoutRatio: '4:5' as PromoLayoutRatio, startFeatureIndex: 4 };
+                if (vidIndex === 26) return { layoutRatio: '1:1' as PromoLayoutRatio, startFeatureIndex: 8 };
+                if (vidIndex === 33) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 11 };
+                if ((vidIndex + 1) % 7 === 0 && vidIndex > 33) {
+                  const ratios: PromoLayoutRatio[] = ['16:9', 'carousel', '4:5', '1:1'];
+                  const slot = Math.floor(vidIndex / 7);
+                  return {
+                    layoutRatio: ratios[slot % ratios.length],
+                    startFeatureIndex: (slot * 3) % 12,
+                  };
+                }
+                return null;
+              })();
+
+              return (
+                <React.Fragment key={vid.id}>
+                  {renderVideoCard(vid, false)}
+                  {promoConfig && (
+                    <div className="break-inside-avoid mb-6">
+                      <FeaturePromotionCard
+                        layoutRatio={promoConfig.layoutRatio}
+                        startFeatureIndex={promoConfig.startFeatureIndex}
+                        onNavigateToTab={(tab, meta) => {
+                          if (onNavigateToTab) onNavigateToTab(tab, meta);
+                        }}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         )}
       </div>

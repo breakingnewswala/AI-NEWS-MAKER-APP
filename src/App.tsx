@@ -865,7 +865,7 @@ export default function App() {
 
     if (savedProfile) {
       const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
-      const activeSocialKeys = Object.entries(savedProfile.socialIcons || {})
+      const activeSocialKeys = Object.entries(savedProfile?.socialIcons || {})
         .filter(([key, active]) => active && ALLOWED_FOOTER_SOCIALS.includes(key))
         .map(([key]) => key);
 
@@ -904,30 +904,31 @@ export default function App() {
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
+        const detail = e?.detail || getSavedChannelProfile() || {};
         const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
-        const activeSocialKeys = e.detail.socialIcons
-          ? Object.entries(e.detail.socialIcons)
+        const activeSocialKeys = detail?.socialIcons
+          ? Object.entries(detail.socialIcons)
               .filter(([key, active]) => active && ALLOWED_FOOTER_SOCIALS.includes(key))
               .map(([key]) => key)
           : undefined;
 
-        const primaryPngLogo = e.detail.channelLogoPngUrl || (e.detail.channelLogoUrl?.endsWith('.gif') ? '' : e.detail.channelLogoUrl);
+        const primaryPngLogo = detail?.channelLogoPngUrl || (detail?.channelLogoUrl?.endsWith?.('.gif') ? '' : detail?.channelLogoUrl);
 
         setCard((prev) => ({
           ...prev,
-          brandName: e.detail.channelNameHi || prev.brandName,
-          brandTagline: e.detail.channelNameEn || prev.brandTagline,
-          channelNameHi: e.detail.channelNameHi || prev.channelNameHi,
-          channelNameEn: e.detail.channelNameEn || prev.channelNameEn,
+          brandName: detail?.channelNameHi || prev.brandName,
+          brandTagline: detail?.channelNameEn || prev.brandTagline,
+          channelNameHi: detail?.channelNameHi || prev.channelNameHi,
+          channelNameEn: detail?.channelNameEn || prev.channelNameEn,
           customLogoUrl: primaryPngLogo || prev.customLogoUrl,
-          customHeaderPng: e.detail.customHeaderPng !== undefined ? e.detail.customHeaderPng : prev.customHeaderPng,
-          customFooterPng: e.detail.customFooterPng !== undefined ? e.detail.customFooterPng : prev.customFooterPng,
+          customHeaderPng: detail?.customHeaderPng !== undefined ? detail.customHeaderPng : prev.customHeaderPng,
+          customFooterPng: detail?.customFooterPng !== undefined ? detail.customFooterPng : prev.customFooterPng,
           channelLogoType: 'png',
-          socialHandle: e.detail.username ? (e.detail.username.startsWith('@') ? e.detail.username : `@${e.detail.username}`) : prev.socialHandle,
-          websiteUrl: e.detail.websiteUrl !== undefined ? (e.detail.websiteUrl || '').trim() : (prev.websiteUrl || '').trim(),
-          showWebsite: e.detail.showWebsite !== undefined ? e.detail.showWebsite : prev.showWebsite,
-          whatsappNumber: e.detail.whatsappNumber !== undefined ? (e.detail.whatsappNumber || e.detail.mobileNumber || '').trim() : (prev.whatsappNumber || '').trim(),
-          showMobileNumber: e.detail.showMobileNumber !== undefined ? e.detail.showMobileNumber : prev.showMobileNumber,
+          socialHandle: detail?.username ? (detail.username.startsWith('@') ? detail.username : `@${detail.username}`) : prev.socialHandle,
+          websiteUrl: detail?.websiteUrl !== undefined ? (detail.websiteUrl || '').trim() : (prev.websiteUrl || '').trim(),
+          showWebsite: detail?.showWebsite !== undefined ? detail.showWebsite : prev.showWebsite,
+          whatsappNumber: detail?.whatsappNumber !== undefined ? (detail.whatsappNumber || detail.mobileNumber || '').trim() : (prev.whatsappNumber || '').trim(),
+          showMobileNumber: detail?.showMobileNumber !== undefined ? detail.showMobileNumber : prev.showMobileNumber,
           activeSocialIcons: activeSocialKeys !== undefined ? activeSocialKeys : prev.activeSocialIcons,
         }));
     };
@@ -937,9 +938,10 @@ export default function App() {
 
   // Handle saving channel profile
   const handleSaveProfile = (profile: ChannelProfile, redirectAfterSave: boolean = false) => {
+    if (!profile) return;
     localStorage.setItem('user_channel_profile', JSON.stringify(profile));
-    localStorage.setItem('app_channel_name', profile.channelNameHi);
-    localStorage.setItem('app_channel_name_en', profile.channelNameEn);
+    localStorage.setItem('app_channel_name', profile.channelNameHi || '');
+    localStorage.setItem('app_channel_name_en', profile.channelNameEn || '');
     localStorage.setItem('is_onboarding_completed', 'true');
     setIsOnboardingCompleted(true);
 
@@ -965,7 +967,7 @@ export default function App() {
     } catch {}
 
     const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
-    const activeSocialKeys = Object.entries(profile.socialIcons || {})
+    const activeSocialKeys = Object.entries(profile?.socialIcons || {})
       .filter(([key, active]) => active && ALLOWED_FOOTER_SOCIALS.includes(key))
       .map(([key]) => key);
 
@@ -1042,7 +1044,7 @@ export default function App() {
     if (currentTab === 'studio' || currentTab === 'generator') {
       const savedProfile = getSavedChannelProfile();
       if (savedProfile) {
-        const activeSocialKeys = Object.entries(savedProfile.socialIcons || {})
+        const activeSocialKeys = Object.entries(savedProfile?.socialIcons || {})
           .filter(([_, active]) => active)
           .map(([key]) => key);
         setCard((prev) => ({
@@ -2353,6 +2355,7 @@ export default function App() {
             setLoginModalMode('admin');
             setIsLoginModalOpen(true);
           }}
+          onNavigateToTab={navigateToTab}
         />
       )}
 
@@ -2833,6 +2836,7 @@ export default function App() {
               }).catch(() => {});
             } catch {}
           }}
+          onNavigateToTab={navigateToTab}
         />
       )}
 
@@ -2907,8 +2911,8 @@ export default function App() {
         />
       )}
 
-      {/* Website Footer on content and informational pages */}
-      {currentTab !== 'studio' && currentTab !== 'generator' && (
+      {/* Website Footer — Home Feed Only per user request */}
+      {currentTab === 'home' && (
         <AppFooterWeb
           onNavigateToTab={navigateToTab}
           onOpenPlans={() => navigateToTab('profile')}

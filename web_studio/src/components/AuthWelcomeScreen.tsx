@@ -290,7 +290,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
   // Step 2: Channel & Reporter Details States
   const savedProfileStr = typeof window !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
-  const initialProfile: Partial<ChannelProfile> = savedProfileStr ? JSON.parse(savedProfileStr) : {};
+  const initialProfile: Partial<ChannelProfile> = (savedProfileStr && savedProfileStr !== 'null') ? (JSON.parse(savedProfileStr) || {}) : {};
   const subscription = getUserSubscription();
 
   const [detailFullName, setDetailFullName] = useState<string>(
@@ -332,11 +332,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const [socialIcons, setSocialIcons] = useState({
-    youtube: initialProfile.socialIcons?.youtube ?? true,
-    facebook: initialProfile.socialIcons?.facebook ?? true,
-    instagram: initialProfile.socialIcons?.instagram ?? true,
-    twitter: initialProfile.socialIcons?.twitter ?? false,
-    linkedin: initialProfile.socialIcons?.linkedin ?? false,
+    youtube: initialProfile?.socialIcons?.youtube ?? true,
+    facebook: initialProfile?.socialIcons?.facebook ?? true,
+    instagram: initialProfile?.socialIcons?.instagram ?? true,
+    twitter: initialProfile?.socialIcons?.twitter ?? false,
+    linkedin: initialProfile?.socialIcons?.linkedin ?? false,
   });
 
   const [username, setUsername] = useState<string>(initialProfile.username || '');

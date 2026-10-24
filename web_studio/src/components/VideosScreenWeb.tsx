@@ -27,16 +27,12 @@ import {
   Coins,
   Download,
   Lock,
-  Music,
-  Volume2,
-  VolumeX,
-  Pause,
-  MapPin,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
+import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -45,6 +41,7 @@ interface VideosScreenWebProps {
   onAdminAddVideo?: (video: VideoFeedItem) => void;
   onAdminUpdateVideo?: (video: VideoFeedItem) => void;
   onAdminDeleteVideo?: (videoId: string) => void;
+  onNavigateToTab?: (tab: any, meta?: any) => void;
 }
 
 export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
@@ -54,6 +51,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   onAdminAddVideo,
   onAdminUpdateVideo,
   onAdminDeleteVideo,
+  onNavigateToTab,
 }) => {
   // State for Editing Video Dialog
   const [editingVideo, setEditingVideo] = useState<VideoFeedItem | null>(null);
@@ -377,64 +375,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [adminCategory] = useState('breaking');
   const [adminIsBonus, setAdminIsBonus] = useState(false);
   const [adminRewardCoins, setAdminRewardCoins] = useState(50);
-  const [adminLocation, setAdminLocation] = useState('');
-
-  // Audio Mixing & Admin Music Library state (Section 16 Master Prompt)
-  const [musicTracks, setMusicTracks] = useState<any[]>([]);
-  const [selectedMusicTrackId, setSelectedMusicTrackId] = useState<string>('none');
-  const [originalAudioVol, setOriginalAudioVol] = useState<number>(100);
-  const [bgmVol, setBgmVol] = useState<number>(30);
-  const [isPreviewingAudioMix, setIsPreviewingAudioMix] = useState<boolean>(false);
-  const audioMixPlayerRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    fetch(getApiUrl('/api/music-library'))
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && Array.isArray(data.tracks)) {
-          setMusicTracks(data.tracks);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleToggleAudioMixPreview = () => {
-    if (isPreviewingAudioMix) {
-      if (audioMixPlayerRef.current) {
-        audioMixPlayerRef.current.pause();
-        audioMixPlayerRef.current = null;
-      }
-      setIsPreviewingAudioMix(false);
-      return;
-    }
-
-    if (selectedMusicTrackId === 'none') {
-      alert('कृपया पहले म्यूज़िक लाइब्रेरी से एक ट्रैक चुनें या मूल आवाज़ ही उपयोग करें।');
-      return;
-    }
-
-    const track = musicTracks.find((t) => t.id === selectedMusicTrackId);
-    if (!track || !track.url) return;
-
-    try {
-      const audio = new Audio(track.url);
-      audio.volume = bgmVol / 100;
-      audio.loop = true;
-      audio.onended = () => setIsPreviewingAudioMix(false);
-      audio.onerror = () => {
-        setIsPreviewingAudioMix(false);
-        alert('ऑडियो प्रीव्यू चलाने में समस्या आई');
-      };
-      audio.play().then(() => {
-        audioMixPlayerRef.current = audio;
-        setIsPreviewingAudioMix(true);
-      }).catch(() => {
-        setIsPreviewingAudioMix(false);
-      });
-    } catch {
-      setIsPreviewingAudioMix(false);
-    }
-  };
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
@@ -702,17 +642,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       isFullVisibilityAvailable: !adminIsOnly4_5,
       compatibleFrameIds: compatibleFrameIds,
       sourceDimensions: adminSourceDimensions,
-      location: adminLocation.trim() || undefined,
-      audioMix: selectedMusicTrackId !== 'none' && musicTracks.find((t) => t.id === selectedMusicTrackId)
-        ? {
-            hasCustomAudio: true,
-            musicTrackId: selectedMusicTrackId,
-            musicTrackName: musicTracks.find((t) => t.id === selectedMusicTrackId)?.name || '',
-            musicTrackUrl: musicTracks.find((t) => t.id === selectedMusicTrackId)?.url || '',
-            originalAudioVolume: originalAudioVol / 100,
-            bgmVolume: bgmVol / 100,
-          }
-        : undefined,
     };
 
     if (onAdminAddVideo) {
@@ -758,13 +687,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
   const ratioOptions = [
     { id: 'all', label: 'सभी अनुपात' },
-    { id: '9:16', label: '9:16 — रील्स / शॉर्ट्स' },
+    { id: '9:16', label: '9:16 — वर्टिकल' },
+    { id: '16:9', label: '16:9 — लैंडस्केप' },
     { id: '1:1', label: '1:1 — वर्गाकार' },
-    { id: '4:3', label: '4:3 — क्लासिक टीवी' },
     { id: '4:5', label: '4:5 — पोर्ट्रेट' },
   ];
 
-  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '4:3' | '1:1' | '4:5'>('all');
+  const [selectedRatioFilter, setSelectedRatioFilter] = useState<'all' | '9:16' | '16:9' | '4:3' | '1:1' | '4:5'>('all');
   const [isBonusOnlyFilter, setIsBonusOnlyFilter] = useState<boolean>(false);
   const [isRatioDropdownOpen, setIsRatioDropdownOpen] = useState<boolean>(false);
   const [inlinePlayingId, setInlinePlayingId] = useState<string | null>(null);
@@ -1485,40 +1414,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Step 6: Video Location (Section 4 Step 6 Master Prompt) */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <label className="text-xs font-black text-amber-400 flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
-                      6
-                    </span>
-                    <span>वीडियो लोकेशन (News Location):</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">
-                    Ready-to-Use Studio में सीधे दिखेगी
-                  </span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="p-2.5 bg-slate-900 border border-slate-700 rounded-lg text-amber-400 shrink-0">
-                    <MapPin className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    value={adminLocation}
-                    onChange={(e) => setAdminLocation(e.target.value)}
-                    placeholder="उदा. नई दिल्ली / लखनऊ / भोपाल / मुंबई"
-                    className="flex-1 p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              {/* Step 7 (NEW): 4:5 Core Safe Region Selection for 9:16 Video */}
+              {/* Step 6 (NEW): 4:5 Core Safe Region Selection for 9:16 Video */}
               {adminRatio === '9:16' && (
                 <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-850 pb-2">
                     <label className="text-xs font-black text-amber-400 flex items-center gap-2">
                       <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
-                        7
+                        6
                       </span>
                       <span>वीडियो विजिबिलिटी क्षेत्र चुनें (4:5 Core Region Selection):</span>
                     </label>
@@ -1624,12 +1526,12 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               )}
 
-              {/* Step 8: Thumbnail Selection */}
+              {/* Step 7: Thumbnail Selection */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-amber-400 flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
-                      8
+                      7
                     </span>
                     <span>थंबनेल चयन (वैकल्पिक / स्वतः कैप्चर):</span>
                   </label>
@@ -1671,85 +1573,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Step 9: Admin Music Library & Audio Mixing (Section 4 & 16 Master Prompt) */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                  <label className="text-xs font-black text-amber-400 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
-                      9
-                    </span>
-                    <span>ऑडियो मिक्सिंग व बैकग्राउंड म्यूज़िक (Audio Mixing & Music Library):</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleToggleAudioMixPreview}
-                    disabled={selectedMusicTrackId === 'none'}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition ${
-                      selectedMusicTrackId === 'none'
-                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
-                        : isPreviewingAudioMix
-                        ? 'bg-amber-400 text-slate-950 font-black shadow-md'
-                        : 'bg-slate-800 hover:bg-slate-750 text-amber-300 border border-slate-700'
-                    }`}
-                  >
-                    {isPreviewingAudioMix ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                    <span>{isPreviewingAudioMix ? 'मिक्स बंद करें' : 'ऑडियो मिक्स सुनें'}</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-300 block">
-                      म्यूज़िक लाइब्रेरी से ट्रैक चुनें:
-                    </label>
-                    <select
-                      value={selectedMusicTrackId}
-                      onChange={(e) => setSelectedMusicTrackId(e.target.value)}
-                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                    >
-                      <option value="none">🔇 कोई अतिरिक्त म्यूज़िक नहीं (केवल मूल आवाज़)</option>
-                      {musicTracks.map((tr) => (
-                        <option key={tr.id} value={tr.id}>
-                          {tr.name} ({tr.category})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] text-slate-300">
-                      <span>मूल वीडियो वॉल्यूम:</span>
-                      <span className="font-mono text-amber-400 font-bold">{originalAudioVol}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={originalAudioVol}
-                      onChange={(e) => setOriginalAudioVol(Number(e.target.value))}
-                      className="w-full accent-amber-400 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] text-slate-300">
-                      <span>BGM म्यूज़िक वॉल्यूम:</span>
-                      <span className="font-mono text-amber-400 font-bold">{bgmVol}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      disabled={selectedMusicTrackId === 'none'}
-                      value={bgmVol}
-                      onChange={(e) => setBgmVol(Number(e.target.value))}
-                      className="w-full accent-amber-400 cursor-pointer disabled:opacity-30"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 10: Bonus Video Toggle */}
+              {/* Step 8: Bonus Video Toggle */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <label htmlFor="admin-is-bonus" className="text-xs font-black text-amber-400 flex items-center gap-2 cursor-pointer">
@@ -1769,11 +1593,11 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Step 11: Active Publish Button & Live Validation Checklist */}
+              {/* Step 9: Active Publish Button & Live Validation Checklist */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
                 <div className="text-xs font-black text-amber-400 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
-                    11
+                    9
                   </span>
                   <span>सत्यापन चेकलिस्ट (Live Validation):</span>
                 </div>
@@ -2004,7 +1828,41 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
-            {filteredVideos.map((vid) => renderVideoCard(vid, false))}
+            {filteredVideos.map((vid, vidIndex) => {
+              const promoConfig = (() => {
+                if (vidIndex === 5) return { layoutRatio: '16:9' as PromoLayoutRatio, startFeatureIndex: 0 };
+                if (vidIndex === 12) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 5 };
+                if (vidIndex === 19) return { layoutRatio: '4:5' as PromoLayoutRatio, startFeatureIndex: 4 };
+                if (vidIndex === 26) return { layoutRatio: '1:1' as PromoLayoutRatio, startFeatureIndex: 8 };
+                if (vidIndex === 33) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 11 };
+                if ((vidIndex + 1) % 7 === 0 && vidIndex > 33) {
+                  const ratios: PromoLayoutRatio[] = ['16:9', 'carousel', '4:5', '1:1'];
+                  const slot = Math.floor(vidIndex / 7);
+                  return {
+                    layoutRatio: ratios[slot % ratios.length],
+                    startFeatureIndex: (slot * 3) % 12,
+                  };
+                }
+                return null;
+              })();
+
+              return (
+                <React.Fragment key={vid.id}>
+                  {renderVideoCard(vid, false)}
+                  {promoConfig && (
+                    <div className="break-inside-avoid mb-6">
+                      <FeaturePromotionCard
+                        layoutRatio={promoConfig.layoutRatio}
+                        startFeatureIndex={promoConfig.startFeatureIndex}
+                        onNavigateToTab={(tab, meta) => {
+                          if (onNavigateToTab) onNavigateToTab(tab, meta);
+                        }}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         )}
       </div>

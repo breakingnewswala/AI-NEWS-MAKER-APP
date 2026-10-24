@@ -1536,6 +1536,7 @@ export function approveLogoChangeRequest(requestId: string): void {
   if (req) {
     req.status = 'approved';
     if (typeof window !== 'undefined') {
+      let updatedSessionProfile: any = undefined;
       localStorage.setItem('logo_change_requests', JSON.stringify(reqs));
 
       const cleanEmail = req.userEmail.toLowerCase().trim();
@@ -1583,6 +1584,7 @@ export function approveLogoChangeRequest(requestId: string): void {
               activeProf.channelLogoType = 'png';
             }
             localStorage.setItem('user_channel_profile', JSON.stringify(activeProf));
+            updatedSessionProfile = activeProf;
           }
         } catch (e) {
           console.warn('Error applying approved logo/gif:', e);
@@ -1605,7 +1607,7 @@ export function approveLogoChangeRequest(requestId: string): void {
         }).catch((err) => console.warn('Backend approveLogoChangeRequest notice:', err));
       } catch {}
 
-      window.dispatchEvent(new Event('channel_profile_updated'));
+      window.dispatchEvent(new CustomEvent('channel_profile_updated', { detail: updatedSessionProfile }));
       window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
       window.dispatchEvent(new Event('ai_news_channel_profile_unlocked'));
       window.dispatchEvent(new Event('ai_news_plan_users_changed'));

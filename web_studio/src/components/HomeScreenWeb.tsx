@@ -47,6 +47,7 @@ import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
+import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 
 // Social Media Brand Icons for Story Feature (Part H)
 export const FacebookIcon = () => (
@@ -189,6 +190,7 @@ interface HomeScreenWebProps {
   onRefreshLiveNews?: () => void;
   isSyncingNews?: boolean;
   onOpenAdminLogin?: () => void;
+  onNavigateToTab?: (tab: any, meta?: any) => void;
 }
 
 export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
@@ -202,6 +204,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   onRefreshLiveNews,
   isSyncingNews = false,
   onOpenAdminLogin,
+  onNavigateToTab,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -1779,7 +1782,24 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredPosts.map((post) => {
+            {filteredPosts.map((post, postIndex) => {
+              const promoConfig = (() => {
+                if (postIndex === 5) return { layoutRatio: '16:9' as PromoLayoutRatio, startFeatureIndex: 0 };
+                if (postIndex === 12) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 5 };
+                if (postIndex === 19) return { layoutRatio: '4:5' as PromoLayoutRatio, startFeatureIndex: 4 };
+                if (postIndex === 26) return { layoutRatio: '1:1' as PromoLayoutRatio, startFeatureIndex: 8 };
+                if (postIndex === 33) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 11 };
+                if ((postIndex + 1) % 7 === 0 && postIndex > 33) {
+                  const ratios: PromoLayoutRatio[] = ['16:9', 'carousel', '4:5', '1:1'];
+                  const slot = Math.floor(postIndex / 7);
+                  return {
+                    layoutRatio: ratios[slot % ratios.length],
+                    startFeatureIndex: (slot * 3) % 12,
+                  };
+                }
+                return null;
+              })();
+
               const isSelected = selectedNewsIds.includes(post.id);
               const isHighlighted = post.isExclusive;
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
@@ -1804,12 +1824,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const isCardExhausted = Boolean(downloadStatus?.isExhausted && !isBonus && !canModerate);
 
               return (
-                <div
-                  key={post.id}
-                  className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass} ${
-                    isCardExhausted ? 'opacity-40 hover:opacity-70' : ''
-                  }`}
-                >
+                <React.Fragment key={post.id}>
+                  <div
+                    className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass} ${
+                      isCardExhausted ? 'opacity-40 hover:opacity-70' : ''
+                    }`}
+                  >
                   {isCardExhausted && (
                     <div
                       onClick={() => setShowLimitExhaustedModal(true)}
@@ -2264,8 +2284,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
                   </div>
                 </div>
-              );
-            })}
+
+                {promoConfig && (
+                  <FeaturePromotionCard
+                    layoutRatio={promoConfig.layoutRatio}
+                    startFeatureIndex={promoConfig.startFeatureIndex}
+                    onNavigateToTab={(tab, meta) => {
+                      if (onNavigateToTab) onNavigateToTab(tab, meta);
+                    }}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
           </div>
         </div>
 

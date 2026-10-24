@@ -1,16 +1,5 @@
 [
   {
-    "id": "rss-src_aajtak_live-1792849982640",
-    "title": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
-    "summary": "मध्य प्रदेश में नई सौर ऊर्जा नीति के तहत किसानों को 90 प्रतिशत सब्सिडी देने का बड़ा फैसला लिया गया है।",
-    "sourceChannel": "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
-    "sourceUrl": "https://feeds.feedburner.com/aajtak/top",
-    "category": "breaking",
-    "categoryName": "मुख्य समाचार",
-    "status": "REJECTED",
-    "timestamp": 1792849982652
-  },
-  {
     "id": "rss-src_aajtak_rss-JiMwMzk74KSP4K",
     "title": "&#039;एक शक से सब बर्बाद&#039;, शादी के 10 महीने बाद महिला ने दी जान, सुसाइड नोट में लिखी पूरी कहानी",
     "summary": "भरतपुर में शादी के महज 10 महीने बाद एक विवाहिता की मौत हो गई. पिता ने ससुराल वालों पर दहेज में स्कॉर्पियो और पैसों की मांग को लेकर प्रताड़ित करने का आरोप लगाया है. वहीं, पुलिस को मिले दो पेज के सुसाइड नोट में विवाहिता ने रिश्ते में एक शक को सब कुछ बर्बाद करने की बात लिखी है.",
@@ -38,7 +27,7 @@
     "categoryName": "देश",
     "publishedTime": "54 मिनट पहले",
     "imageUrl": "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
-    "breaking": false,
+    "breaking": true,
     "isExclusive": false,
     "timestamp": 1792140743149,
     "fullContent": "8वां वेतन आयोग लागू होने में हुई देरी तो आपको 3 लाख का नुकसान! समझें पूरा हिसाब\n\n8वां वेतन आयोग की टीम फाइनल रिपोर्ट तैयार करने के लिए अलग-अलग शहरों में कर्मचारियों से मुलाकात कर रही है और उनकी मांगे पूछ रही है और जल्‍द रिपोर्ट पेश करने का प्रयास कर रही है. लेकिन अगर इसमें देरी होती है, तो कर्मचारियों को भारी नुकसान हो सकता है. आइए जानते हैं कैसे...\n\nस्रोतः आज तक (Aaj Tak Hindi News) (https://www.aajtak.in/business/news/story/delay-in-8th-pay-commission-employees-gets-big-loss-in-hra-calculation-tutd-dskc-2660300-2026-10-03?utm_source=rssfeed)",
@@ -56,7 +45,7 @@
     "categoryName": "देश",
     "publishedTime": "1 घंटे पहले",
     "imageUrl": "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
-    "breaking": false,
+    "breaking": true,
     "isExclusive": false,
     "timestamp": 1792139738498,
     "fullContent": "अमृतसर में सोशल मीडिया इन्फ्लुएंसर की गोली मारकर हत्या\n\nअमृतसर में मेकअप आर्टिस्ट और इन्फ्लुएंसर मैड संधू को गोली मार दी गई. गोली लगने के बाद सड़क पर गिरे मैडी संधू की वीडियो वायरल हो रही है. खून से लथपथ हालत में सड़क पर मिले मैड संधू ने अस्पताल ले जाते समय दम तोड़ दिया.\n\nस्रोतः आज तक (Aaj Tak Hindi News) (https://www.aajtak.in/india/punjab/story/amritsar-makeup-artist-influencer-mad-sandhu-shot-dead-murder-ntc-apdy-rptc-2660290-2026-10-03?utm_source=rssfeed)",
