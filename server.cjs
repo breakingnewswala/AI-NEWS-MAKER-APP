@@ -7573,61 +7573,6 @@ function extractFactsFromUrlString(rawUrl) {
     };
   }
 }
-async function fetchViaReaderProxy(targetUrl) {
-  try {
-    const readerUrl = `https://r.jina.ai/${targetUrl}`;
-    const res = await fetch(readerUrl, {
-      headers: {
-        "Accept": "text/plain, text/markdown, */*",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      },
-      signal: AbortSignal.timeout(12e3)
-    });
-    if (!res.ok) return null;
-    const text = await res.text();
-    if (!text || text.trim().length < 50) return null;
-    let title = "";
-    const titleMatch = text.match(/^Title:\s*(.+)$/m);
-    if (titleMatch) {
-      title = cleanArticleTitle(titleMatch[1].trim());
-    }
-    let urlSource = targetUrl;
-    const urlMatch = text.match(/^URL Source:\s*(.+)$/m);
-    if (urlMatch) {
-      urlSource = urlMatch[1].trim();
-    }
-    let rawContent = "";
-    const contentMatch = text.match(/Markdown Content:\s*([\s\S]+)$/i);
-    if (contentMatch) {
-      rawContent = contentMatch[1].trim();
-    } else {
-      rawContent = text.replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").trim();
-    }
-    const images = [];
-    const imgRegex = /!\[.*?\]\((https?:\/\/[^\s\)]+)\)/g;
-    let match;
-    while ((match = imgRegex.exec(rawContent)) !== null) {
-      const imgUrl = match[1];
-      if (imgUrl && !images.includes(imgUrl) && !imgUrl.includes(".svg") && !imgUrl.includes("logo") && !imgUrl.includes("icon") && !imgUrl.includes("avatar") && !imgUrl.includes("badge")) {
-        images.push(imgUrl);
-      }
-    }
-    const cleanedContent = rawContent.replace(/!\[.*?\]\(.*?\)/g, " ").replace(/\[([^\]]+)\]\(.*?\)/g, "$1").replace(/[*#_`>~]/g, "").replace(/\s+/g, " ").trim();
-    const desc = cleanedContent.slice(0, 320);
-    return {
-      title: title || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F",
-      description: desc,
-      content: cleanedContent.slice(0, 3500),
-      images: images.slice(0, 6),
-      sourceUrl: urlSource || targetUrl,
-      isRss: false,
-      extractionStatus: title || cleanedContent.length > 50 ? "success" : "failed"
-    };
-  } catch (err) {
-    console.warn("[Reader Proxy] Fallback error for URL:", targetUrl, err?.message || err);
-    return null;
-  }
-}
 async function fetchAndProcessNewsUrl(rawUrl) {
   const normalizedRawUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
   const safety = isSafePublicUrl(normalizedRawUrl);
@@ -7692,11 +7637,6 @@ async function fetchAndProcessNewsUrl(rawUrl) {
     console.warn(`[URL Scraper] Network fetch failed for ${normalizedRawUrl}:`, fetchErr?.message || fetchErr);
   }
   if (!rawBody || rawBody.length < 50 || !response || !response.ok) {
-    console.log(`[URL Scraper] Direct fetch failed for ${normalizedRawUrl}. Attempting reader proxy fallback...`);
-    const readerFallback = await fetchViaReaderProxy(normalizedRawUrl);
-    if (readerFallback && (readerFallback.content || readerFallback.title)) {
-      return readerFallback;
-    }
     return {
       title: "",
       description: "",
@@ -7782,13 +7722,6 @@ async function fetchAndProcessNewsUrl(rawUrl) {
     }
   }
   const article = parseArticleHtml(rawBody, finalRedirectedUrl);
-  if (article.extractionStatus === "failed" || !article.content && !article.description && (!article.title || article.title.length < 10)) {
-    console.log(`[URL Scraper] HTML parsing yielded no real content for ${finalRedirectedUrl}. Attempting reader proxy fallback...`);
-    const readerFallback = await fetchViaReaderProxy(finalRedirectedUrl);
-    if (readerFallback && (readerFallback.content || readerFallback.title)) {
-      return readerFallback;
-    }
-  }
   return {
     title: article.title,
     description: article.description,
@@ -9258,7 +9191,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       rawLink = effectiveInput;
       effectiveInput = "";
     }
-    const isInternalPlatformUrl = rawLink.includes("localhost") || rawLink.includes("127.0.0.1") || (rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com")) && (rawLink.includes("/#/") || rawLink.includes("/login") || rawLink.includes("/profile") || rawLink.includes("/account-deletion") || rawLink.includes("/api/"));
+    const isInternalPlatformUrl = rawLink.includes("ainewsmaker.online") || rawLink.includes("breakingnewswala.com") || rawLink.includes("localhost") || rawLink.includes("127.0.0.1");
     if (rawLink && isInternalPlatformUrl && !effectiveInput) {
       return res.status(400).json({
         error: "\u0906\u0902\u0924\u0930\u093F\u0915 \u090F\u092A\u094D\u0932\u093F\u0915\u0947\u0936\u0928 URL \u0915\u094B \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u094D\u0930\u094B\u0924 \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0938\u094D\u0915\u094D\u0930\u0948\u092A \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u093F\u0938\u0940 \u092C\u093E\u0939\u0930\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0915\u093E \u0932\u093F\u0902\u0915 \u092F\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0916\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964"
