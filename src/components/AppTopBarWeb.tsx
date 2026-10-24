@@ -329,7 +329,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 onClick={() => {
                   onNavigateToTab('profile');
                   if (typeof window !== 'undefined') {
-                    window.location.hash = 'profile';
                     window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
                   }
                 }}

@@ -40,18 +40,15 @@ import {
   Mic,
   Trash2,
   Plus,
-  Shield,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
 import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
-import { newsAudio } from '../lib/newsAudioEngine';
+import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
 import { generateVideoDownloadFileName } from '../lib/dateUtils';
-import { saveVideoDraft, getLatestVideoDraft } from '../lib/draftsManager';
+import { saveVideoDraft } from '../lib/draftsManager';
 import { getSocialIconSrc } from '../lib/socialIconsData';
 import {
   VIDEO_FRAME_DEFINITIONS,
@@ -119,8 +116,6 @@ interface DrawCompositionOptions {
   watermarkOpacity?: number;
   watermarkText?: string;
   watermarkOffsetY?: number;
-  watermarkType?: 'text' | 'image';
-  watermarkImage?: HTMLImageElement | null;
   socialPosition?: 'footer' | 'header';
   showLocation?: boolean;
   showTicker?: boolean;
@@ -797,34 +792,20 @@ function drawVideoCompositionToCanvas(
     }
   }
 
-  // Watermark (Text or Image with Opacity and Vertical offset)
-  if (opts.showWatermark) {
-    if (opts.watermarkType === 'image' && opts.watermarkImage) {
-      ctx.save();
-      ctx.globalAlpha = Math.max(0.08, Math.min(0.95, opts.watermarkOpacity || 0.35));
-      const wmImg = opts.watermarkImage;
-      const wmScale = width / 720;
-      const targetW = Math.round(180 * wmScale);
-      const aspect = (wmImg.naturalWidth && wmImg.naturalHeight) ? (wmImg.naturalHeight / wmImg.naturalWidth) : 0.5;
-      const targetH = Math.round(targetW * aspect);
-      const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)) - (targetH / 2));
-      const wmX = Math.round((width - targetW) / 2);
-      ctx.drawImage(wmImg, wmX, wmY, targetW, targetH);
-      ctx.restore();
-    } else if (opts.watermarkText) {
-      ctx.save();
-      ctx.globalAlpha = Math.max(0.08, Math.min(0.9, opts.watermarkOpacity || 0.25));
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = 'rgba(0,0,0,0.9)';
-      ctx.shadowBlur = 8;
-      const wmScale = width / 720;
-      ctx.font = `900 ${Math.round(24 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
-      ctx.fillText(opts.watermarkText, width / 2, wmY);
-      ctx.restore();
-    }
+  // Central Text Watermark (Part 11 & Vertical offset)
+  if (opts.showWatermark && opts.watermarkText) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.08, Math.min(0.9, opts.watermarkOpacity || 0.25));
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 8;
+    const wmScale = width / 720;
+    ctx.font = `900 ${Math.round(24 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
+    ctx.fillText(opts.watermarkText, width / 2, wmY);
+    ctx.restore();
   }
 }
 
@@ -844,8 +825,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [profile] = useState<ChannelProfile | null>(() => getSavedProfile());
 
   // Mode 1 (Ready-to-Use / Quick Video) vs Mode 2 (Full Video Studio)
-  // Default to Quick Video Mode for both Web/Desktop and Mobile per Section 9
-  const [isReadyToUseMode, setIsReadyToUseMode] = useState<boolean>(() => true);
+  // On mobile or when opened from Video & Reels, Quick Video workflow is MANDATORY (Part 2 & Part 3)
+  const [isReadyToUseMode, setIsReadyToUseMode] = useState<boolean>(() => Boolean(initialVideo) || (typeof window !== 'undefined' ? window.innerWidth < 1024 : false));
 
   // Video Source & Playback State - clean default (no hardcoded mov_bbb fallback per Part C.5 & F.13)
   const [videoUrl, setVideoUrl] = useState<string>(
@@ -966,7 +947,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   });
   const [subHeadline, setSubHeadline] = useState<string>('');
   const [location, setLocation] = useState<string>(
-    initialVideo?.location || ''
+    initialVideo?.location || (profile as any)?.district || (profile as any)?.city || ''
   );
   const [channelTag, setChannelTag] = useState<string>(
     profile?.channelNameHi || currentUser?.channelName || ''
@@ -990,7 +971,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       return;
     }
     if (typeof window !== 'undefined') {
-      window.location.hash = 'home';
+      if (window.history && window.history.pushState) {
+        window.history.pushState({ tab: 'home' }, '', '/');
+      }
     }
   };
 
@@ -1006,56 +989,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [logoScale, setLogoScale] = useState<number>(100);
   const isGifActive = Boolean(activeLogoUrl && (activeLogoUrl.toLowerCase().includes('.gif') || activeLogoUrl.startsWith('data:image/gif')));
 
-  // Watermark State (Text & Image Watermark with Opacity & Vertical Offset per Section 3 & 4)
+  // Text Watermark (Section 13: Watermark Positioning with vertical offset)
   const [showWatermark, setShowWatermark] = useState<boolean>(false);
-  const [watermarkType, setWatermarkType] = useState<'text' | 'image'>('text');
   const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.25);
   const [watermarkOffsetY, setWatermarkOffsetY] = useState<number>(0);
   const watermarkText = useMemo(() => {
     return (profile?.channelNameHi || currentUser?.channelName || '').toUpperCase();
   }, [profile?.channelNameHi, currentUser?.channelName]);
-
-  // Plan & Tier Entitlement for Pro/VIP features (Section 5)
-  const userSub = useMemo(() => {
-    return getUserSubscription(currentUser?.email || profile?.email || '');
-  }, [currentUser?.email, profile?.email]);
-
-  const isProOrVipUser = useMemo(() => {
-    if (isEffectiveSuperAdmin(currentUser) || isEffectiveSuperAdmin(profile)) return true;
-    if (userSub.isTrialExpired || userSub.isPlanExpired) return false;
-    return userSub.tier === 'professional' || userSub.tier === 'ultra';
-  }, [currentUser, profile, userSub]);
-
-  // Admin Music Library State (Section 6: Centralized Admin Music Library)
-  const [adminMusicTracks, setAdminMusicTracks] = useState<any[]>([]);
-  const [isLoadingMusic, setIsLoadingMusic] = useState<boolean>(false);
-
-  useEffect(() => {
-    const fetchMusic = async () => {
-      setIsLoadingMusic(true);
-      try {
-        const mode = isReadyToUseMode ? 'quick' : 'studio';
-        const userEmail = currentUser?.email || profile?.email || '';
-        const userTier = userSub?.tier || 'basic';
-        const res = await fetch(getApiUrl(`/api/music-library?mode=${mode}&tier=${userTier}`), {
-          headers: {
-            'x-user-email': userEmail,
-          },
-        });
-        const data = await res.json();
-        if (res.ok && data.success && Array.isArray(data.tracks)) {
-          setAdminMusicTracks(data.tracks);
-        } else {
-          setAdminMusicTracks([]);
-        }
-      } catch {
-        setAdminMusicTracks([]);
-      } finally {
-        setIsLoadingMusic(false);
-      }
-    };
-    fetchMusic();
-  }, [isReadyToUseMode, currentUser?.email, profile?.email, userSub?.tier]);
 
   // Audio Selection (Section 6 Step 2: 1. Original Audio, 2. Background Music, 3. No Music)
   const [audioOption, setAudioOption] = useState<'original' | 'bgm' | 'none'>('original');
@@ -1132,176 +1072,63 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [videoExportError, setVideoExportError] = useState<string | null>(null);
   const [copiedCaption, setCopiedCaption] = useState<boolean>(false);
 
-  // Background Music State: default to original sound only ('none'), unless audioMix is configured
-  const [bgmTrack, setBgmTrack] = useState<string>(() => initialVideo?.audioMix?.bgmTrack || 'none');
-  const [bgmVolume, setBgmVolume] = useState<number>(() => initialVideo?.audioMix?.bgmVolume ?? 0);
-  const [videoVolume, setVideoVolume] = useState<number>(() => initialVideo?.audioMix?.originalVolume ?? 100);
-  const [customAudioUrl, setCustomAudioUrl] = useState<string>('');
-  const [customAudioTitle, setCustomAudioTitle] = useState<string>('');
-  const audioFileInputRef = useRef<HTMLInputElement>(null);
-
-  // Video Transitions State
-  const [transitionType, setTransitionType] = useState<VideoTransitionType>('flash');
-  const [transitionDuration, setTransitionDuration] = useState<number>(0.5);
-  const [isTransitionActive, setIsTransitionActive] = useState<boolean>(false);
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const additionalClipInputRef = useRef<HTMLInputElement>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const isExportingRef = useRef<boolean>(false);
-
   // Export Cancellation and Task Tracking Refs (Section 10)
   const cancelExportRef = useRef<boolean>(false);
   const activeExportIdRef = useRef<string | null>(null);
 
-  // Real-Time Draft System State (Part 1.4)
-  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-
-  // Auto-restore saved draft on mount if not opened via a specific incoming video
-  useEffect(() => {
-    if (initialVideo) return;
-    try {
-      const draft = getLatestVideoDraft();
-      if (draft) {
-        if (draft.headline1) setHeadline(draft.headline1);
-        if (draft.location) setLocation(draft.location);
-        if (draft.channelName) setChannelTag(draft.channelName);
-        if (draft.aspect) setAspect(draft.aspect);
-        if (draft.selectedFrameId) setSelectedFrameId(draft.selectedFrameId);
-        if (typeof draft.zoomScale === 'number') setZoomScale(draft.zoomScale);
-        if (typeof draft.offsetY === 'number') setOffsetY(draft.offsetY);
-        if (typeof draft.trimStart === 'number') setTrimStart(draft.trimStart);
-        if (typeof draft.trimEnd === 'number') setTrimEnd(draft.trimEnd);
-        if (draft.audioOption) setAudioOption(draft.audioOption);
-        if (draft.bgmTrack) setBgmTrack(draft.bgmTrack);
-        if (typeof draft.bgmVolume === 'number') setBgmVolume(draft.bgmVolume);
-        if (typeof draft.videoVolume === 'number') setVideoVolume(draft.videoVolume);
-        if (draft.videoUrl && !draft.videoUrl.startsWith('blob:')) {
-          setVideoUrl(draft.videoUrl);
-        }
-      }
-    } catch (e) {
-      console.warn('Draft auto-restore notice:', e);
-    }
-  }, [initialVideo]);
-
-  // Debounced auto-save draft (1.5s debounce per Part 1.4)
-  useEffect(() => {
-    if (!headline.trim() && !videoUrl && !location.trim() && clips.length === 0) return;
-    setDraftStatus('saving');
-    const timer = setTimeout(() => {
-      try {
-        const saved = saveVideoDraft({
-          videoUrl: videoUrl && !videoUrl.startsWith('blob:') ? videoUrl : '',
-          headline1: headline,
-          location,
-          channelName: channelTag,
-          channelLogoUrl: activeLogoUrl,
-          aspect,
-          zoomScale,
-          offsetY,
-          trimStart,
-          trimEnd,
-          selectedFrameId,
-          websiteUrl,
-          socialHandle,
-          mobileNumber,
-          watermarkOffsetY,
-          audioOption,
-          bgmTrack,
-          bgmVolume,
-          videoVolume,
-        });
-        if (saved) {
-          setDraftStatus('saved');
-        } else {
-          setDraftStatus('error');
-        }
-      } catch {
-        setDraftStatus('error');
-      }
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [
-    headline,
-    videoUrl,
-    location,
-    channelTag,
-    activeLogoUrl,
-    aspect,
-    zoomScale,
-    offsetY,
-    trimStart,
-    trimEnd,
-    selectedFrameId,
-    websiteUrl,
-    socialHandle,
-    mobileNumber,
-    watermarkOffsetY,
-    audioOption,
-    bgmTrack,
-    bgmVolume,
-    videoVolume,
-    clips.length,
-  ]);
-
-  // Central Validation Mechanism (Strict 7-Step Completion Validation)
+  // Central Validation Mechanism (Section 7: Strict Completion Validation)
   const quickVideoValidation = useMemo(() => {
     const missing: { key: string; label: string; step: number }[] = [];
 
-    // Step 1: Valid video, aspect ratio & compatible frame
+    // 1. Valid video
     const hasVideo = Boolean((videoUrl && videoUrl.trim()) || (clips.length > 0 && clips.some((c) => c.url && c.url.trim())));
     if (!hasVideo) {
       missing.push({ key: 'video', label: 'वीडियो जोड़ें (Add Video)', step: 1 });
     }
 
+    // 2. Aspect ratio
     const hasAspect = Boolean(aspect);
     if (!hasAspect) {
       missing.push({ key: 'aspect', label: 'आस्पेक्ट रेशियो चुनें', step: 1 });
     }
 
+    // 3. Compatible frame
     const hasFrame = Boolean(selectedFrameId && compatibleFrames.some((f) => f.id === selectedFrameId));
     if (!hasFrame) {
       missing.push({ key: 'frame', label: 'कंपैटिबल फ़्रेम चुनें', step: 1 });
     }
 
-    // Step 2: Audio selection resolved
+    // 4. Audio selection resolved
     const hasAudio = Boolean(audioOption === 'original' || audioOption === 'bgm' || audioOption === 'none');
     if (!hasAudio) {
       missing.push({ key: 'audio', label: 'ऑडियो या संगीत विकल्प तय करें', step: 2 });
     }
 
-    // Step 3: Headline entered (trimmed non-empty)
+    // 5. Headline entered (trimmed non-empty)
     const hasHeadline = Boolean(headline && headline.trim().length > 0);
     if (!hasHeadline) {
-      missing.push({ key: 'headline', label: 'मुख्य हेडलाइन दर्ज करें', step: 3 });
+      missing.push({ key: 'headline', label: 'मुख्य हेडलाइन दर्ज करें (Headline Required)', step: 3 });
     }
 
-    // Step 4: Location entered (only required if location box is enabled)
-    const hasLocation = !showLocation || Boolean(location && location.trim().length > 0);
-    if (showLocation && !hasLocation) {
-      missing.push({ key: 'location', label: 'खबर की लोकेशन दर्ज करें (या लोकेशन बॉक्स बंद करें)', step: 4 });
+    // 6. Location entered (trimmed non-empty)
+    const hasLocation = Boolean(location && location.trim().length > 0);
+    if (!hasLocation) {
+      missing.push({ key: 'location', label: 'खबर की लोकेशन दर्ज करें (Location Required)', step: 4 });
     }
 
-    // Step 5: Footer branding info present
+    // 7. Footer/Social info present
     const hasFooter = Boolean(
       (socialHandle && socialHandle.trim().length > 0) ||
       (channelTag && channelTag.trim().length > 0) ||
-      (mobileNumber && mobileNumber.trim().length > 0) ||
-      (websiteUrl && websiteUrl.trim().length > 0)
+      (mobileNumber && mobileNumber.trim().length > 0)
     );
     if (!hasFooter) {
-      missing.push({ key: 'footer', label: 'फ़ुटर या सोशल मीडिया जानकारी दर्ज करें', step: 5 });
+      missing.push({ key: 'footer', label: 'फ़ूटर या सोशल मीडिया जानकारी दर्ज करें', step: 5 });
     }
 
-    // Step 6: Logo and Watermark
-    const hasLogo = Boolean(activeLogoUrl || channelLogoUrl);
-
-    const totalRequirements = 5 + (showLocation ? 1 : 0);
+    const totalRequirements = 7;
     const completedRequirements = totalRequirements - missing.length;
-    const completionPercentage = Math.max(0, Math.min(100, Math.round((completedRequirements / totalRequirements) * 100)));
+    const completionPercentage = Math.round((completedRequirements / totalRequirements) * 100);
     const isValid = missing.length === 0;
 
     return {
@@ -1314,49 +1141,41 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         3: hasHeadline,
         4: hasLocation,
         5: hasFooter,
-        6: true,
-        7: isValid,
       } as Record<number, boolean>,
     };
-  }, [videoUrl, clips, aspect, selectedFrameId, compatibleFrames, audioOption, headline, showLocation, location, socialHandle, channelTag, mobileNumber, websiteUrl, activeLogoUrl, channelLogoUrl]);
+  }, [videoUrl, clips, aspect, selectedFrameId, compatibleFrames, audioOption, headline, location, socialHandle, channelTag, mobileNumber]);
 
-  // Reset Task Handler (Section 5 & Part 1.3: Clears video clips, headlines, audio, trim, zoom)
+  // Reset Task Handler (Section 5)
   const handleResetTask = () => {
-    if (headline.trim() || videoUrl || location.trim() || clips.length > 0) {
+    if (headline.trim() || videoUrl || location.trim()) {
       if (!window.confirm('क्या आप वर्तमान संपादन को रीसेट करना चाहते हैं? इससे सभी अनसेव्ड बदलाव हट जाएंगे।')) {
         return;
       }
     }
-    setVideoUrl('');
-    setClips([]);
     setHeadline('');
     setSubHeadline('');
-    setScheduledHeadlines(['', '', '', '']);
     setLocation('');
     setTickerText('');
     setZoomScale(1.0);
     setOffsetY(0);
     setTrimStart(0);
-    setTrimEnd(60);
+    setTrimEnd(Math.floor(duration) || 60);
     setAudioOption('original');
     setBgmTrack('none');
     setBgmVolume(0);
     setVideoVolume(100);
-    setCustomAudioUrl('');
-    setVoiceoverUrl('');
     setShowWatermark(false);
     setWatermarkOffsetY(0);
     setTaskGifLogo('');
     setQuickStep(1);
-    setDraftStatus('idle');
     showToast('🔄 वर्तमान वीडियो प्रोजेक्ट रीसेट हो गया');
   };
 
-  // Draft Save Handler (Section 5 & Part 1.4)
+  // Draft Save Handler (Section 5)
   const handleSaveDraft = () => {
     try {
       const saved = saveVideoDraft({
-        videoUrl: videoUrl && !videoUrl.startsWith('blob:') ? videoUrl : '',
+        videoUrl,
         headline1: headline,
         location,
         channelName: channelTag,
@@ -1377,14 +1196,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         videoVolume,
       });
       if (saved) {
-        setDraftStatus('saved');
         showToast('💾 ड्राफ्ट सफलतापूर्वक सेव हुआ!');
       } else {
-        setDraftStatus('error');
         showToast('❌ ड्राफ्ट सेव करने में समस्या आई');
       }
     } catch {
-      setDraftStatus('error');
       showToast('❌ ड्राफ्ट सेव करने में समस्या आई');
     }
   };
@@ -1454,6 +1270,25 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setIsGeneratingRawHeadlines(false);
     }
   };
+
+  // Background Music State: default to original sound only ('none'), unless audioMix is configured
+  const [bgmTrack, setBgmTrack] = useState<string>(() => initialVideo?.audioMix?.bgmTrack || 'none');
+  const [bgmVolume, setBgmVolume] = useState<number>(() => initialVideo?.audioMix?.bgmVolume ?? 0);
+  const [videoVolume, setVideoVolume] = useState<number>(() => initialVideo?.audioMix?.originalVolume ?? 100);
+  const [customAudioUrl, setCustomAudioUrl] = useState<string>('');
+  const [customAudioTitle, setCustomAudioTitle] = useState<string>('');
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Video Transitions State
+  const [transitionType, setTransitionType] = useState<VideoTransitionType>('flash');
+  const [transitionDuration, setTransitionDuration] = useState<number>(0.5);
+  const [isTransitionActive, setIsTransitionActive] = useState<boolean>(false);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const additionalClipInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const isExportingRef = useRef<boolean>(false);
 
   // Stop audio on unmount
   useEffect(() => {
@@ -1711,12 +1546,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       if (bgmTrack === 'custom' && customAudioUrl) {
         newsAudio.playCustomAudio(customAudioUrl);
       } else {
-        const found = adminMusicTracks.find((t) => t.id === bgmTrack);
-        if (found?.url) {
-          newsAudio.playCustomAudio(found.url);
-        } else {
-          newsAudio.playTrack(bgmTrack);
-        }
+        newsAudio.playTrack(bgmTrack);
       }
       setIsStandaloneBgmPlaying(true);
       showToast('🎵 बैकग्राउंड म्यूज़िक चल रहा है');
@@ -1883,9 +1713,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         logoScale,
         showWatermark,
         watermarkOpacity,
-        watermarkOffsetY,
-        watermarkType,
-        watermarkImage: (watermarkType === 'image' && logoImg) ? logoImg : null,
         watermarkText: watermarkText || profile?.channelNameHi || 'AI NEWS MAKER',
         socialPosition,
       });
@@ -1942,28 +1769,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const firstMissing = quickVideoValidation.missingItems[0]?.label || 'अधूरे फील्ड भरें';
       showToast(`❌ वीडियो डाउनलोड के लिए सभी आवश्यक चरण पूरे होना अनिवार्य है: ${firstMissing}`);
       return;
-    }
-
-    // Verify Plan & Entitlement (Part 5 & 8)
-    try {
-      const email = (currentUser?.email || profile?.email || '').toLowerCase().trim();
-      const verifyRes = await fetch(getApiUrl('/api/verify-download-entitlement'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          isBonus: Boolean(initialVideo?.isBonus),
-          headlineScheduleMode,
-          hasScheduledHeadlines: headlineScheduleMode === 'scheduled' && scheduledHeadlines.filter((h) => h.trim().length > 0).length > 1,
-        }),
-      });
-      const verifyData = await verifyRes.json();
-      if (!verifyRes.ok || !verifyData.allowed) {
-        showToast(`❌ ${verifyData.error || 'डाउनलोड की अनुमति नहीं है'}`);
-        return;
-      }
-    } catch (e) {
-      console.warn('Entitlement check notice:', e);
     }
 
     const currentExportId = `export_${Date.now()}`;
@@ -2090,9 +1895,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           // 2. Background music source (if active)
           if (customAudioUrl || bgmTrack !== 'none') {
             try {
-              const trackUrl = customAudioUrl || adminMusicTracks.find((t) => t.id === bgmTrack)?.url;
-              if (trackUrl) {
-                const bgmAudio = new Audio(trackUrl);
+              if (customAudioUrl) {
+                const bgmAudio = new Audio(customAudioUrl);
                 bgmAudio.crossOrigin = 'anonymous';
                 const bgmSource = audioCtx.createMediaElementSource(bgmAudio);
                 const bgmGain = audioCtx.createGain();
@@ -2163,25 +1967,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const endTime = Math.max(startTime + 0.5, rawEnd);
       const totalDuration = Math.max(0.5, endTime - startTime);
 
-      // Seek to start position and wait for seeked event (Part 2)
+      // Seek to start position and wait for seeked event
       video.pause();
       await new Promise<void>((resolve) => {
-        let settled = false;
         const onSeek = () => {
-          if (settled) return;
-          settled = true;
           video.removeEventListener('seeked', onSeek);
           resolve();
         };
         video.addEventListener('seeked', onSeek);
         video.currentTime = startTime;
-        setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            video.removeEventListener('seeked', onSeek);
-            resolve();
-          }
-        }, 600);
+        setTimeout(resolve, 500); // 500ms safety timeout
       });
 
       const initialExpHeadline = (headlineScheduleMode === 'scheduled' && scheduledHeadlines.filter((h) => h.trim().length > 0).length > 1)
@@ -2211,13 +2006,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         showWatermark,
         watermarkOpacity,
         watermarkOffsetY,
-        watermarkType,
-        watermarkImage: (watermarkType === 'image' && logoImg) ? logoImg : null,
         watermarkText: watermarkText || profile?.channelNameHi || '',
         socialPosition,
         showLocation,
         showTicker,
       });
+
+      recorder.start(100);
+      setVideoExportProgress(20);
+      setVideoExportStatus('वीडियो फ्रेम व जैकेट रेंडर हो रहे हैं...');
 
       // Attempt to play with audio; fallback to muted if browser autoplay blocks
       video.muted = false;
@@ -2227,11 +2024,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         video.muted = true;
         try { await video.play(); } catch {}
       }
-
-      // Start recorder ONLY after playback has successfully initiated
-      recorder.start(100);
-      setVideoExportProgress(20);
-      setVideoExportStatus('वीडियो फ्रेम व जैकेट रेंडर हो रहे हैं...');
 
       const exportStartWallTime = Date.now();
       let lastVideoCurrentTime = video.currentTime;
@@ -2294,8 +2086,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             showWatermark,
             watermarkOpacity,
             watermarkOffsetY,
-            watermarkType,
-            watermarkImage: (watermarkType === 'image' && logoImg) ? logoImg : null,
             watermarkText: watermarkText || profile?.channelNameHi || '',
             socialPosition,
             showLocation,
@@ -2324,11 +2114,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           maxReportedPct = Math.max(maxReportedPct, Math.max(timePct, wallPct));
           setVideoExportProgress(maxReportedPct);
 
-          // Fix premature 1-second termination: Ensure totalDuration has meaningfully elapsed
-          const isTimeComplete =
-            (elapsed >= totalDuration - 0.35 || wallElapsed >= totalDuration - 0.35) &&
-            (video.currentTime >= (endTime - 0.1) || video.ended);
-          const isHardTimeout = (now - exportStartWallTime) >= ((totalDuration + 2.0) * 1000);
+          const isTimeComplete = video.currentTime >= (endTime - 0.08) || video.ended;
+          const isHardTimeout = (now - exportStartWallTime) >= ((totalDuration + 1.2) * 1000);
 
           if (isTimeComplete || isHardTimeout) {
             stopAndFinish();
@@ -2449,84 +2236,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6">
         {/* LEFT COLUMN (42%): Live Video Canvas with Sticky Jacket Overlay */}
-        <aside className="w-full lg:w-[42%] lg:sticky lg:top-20 z-20 flex flex-col gap-3 self-start max-h-[calc(100vh-5.5rem)] overflow-y-auto scrollbar-thin">
+        <aside className="w-full lg:w-[42%] lg:sticky lg:top-4 z-20 flex flex-col gap-3 self-start">
           <div className="w-full bg-black p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col items-center">
-            {/* 1. Mobile Ratio Selector (Part 1.1: compact row at top on mobile) */}
-            <div className="w-full mb-2.5 lg:hidden">
-              {isRatioLocked ? (
-                <div className="p-2 bg-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between text-xs">
-                  <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                    <span>🔒 9:16 रील्स रेशियो लॉक</span>
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-black">9:16</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-4 gap-1.5 w-full">
-                  {[
-                    { id: '9:16', label: '9:16', desc: 'रील्स' },
-                    { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
-                    { id: '4:5', label: '4:5', desc: 'फ़ीड' },
-                    { id: '4:3', label: '4:3', desc: 'टीवी' },
-                  ].map((r) => {
-                    const isSel = aspect === r.id;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => {
-                          const newAspect = r.id as VideoAspect;
-                          setAspect(newAspect);
-                          const newCompatible = getCompatibleFrames({
-                            aspectRatio: newAspect,
-                            isOnly4_5,
-                            hasCoreCrop: Boolean(cropRegion),
-                          });
-                          if (newCompatible.length > 0 && !newCompatible.some((f) => f.id === selectedFrameId)) {
-                            setSelectedFrameId(newCompatible[0].id);
-                          }
-                          showToast(`रेशियो ${r.label} चुना गया`);
-                        }}
-                        className={`py-1.5 px-1 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center ${
-                          isSel
-                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
-                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <span className="text-xs font-black">{r.label}</span>
-                        <span className="text-[9px] opacity-80 truncate">{r.desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* 2. Top Status: Live Canvas, stable indicator (no ping), adjacent Reset & Draft buttons, Status pill */}
-            <div className="w-full flex items-center justify-between mb-2 px-1 gap-1 flex-wrap">
+            {/* Top Status: Live Canvas, stable indicator (no ping), adjacent Reset & Draft buttons */}
+            <div className="w-full flex items-center justify-between mb-2 px-1 gap-1">
               <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-bold shrink-0">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-600 shadow-sm" />
                 <span className="text-red-400 font-black">लाइव कैनवास</span>
-
-                {/* Real-Time Draft Status Pill (Part 1.4) */}
-                {draftStatus === 'saving' && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                    सहेज रहा है...
-                  </span>
-                )}
-                {draftStatus === 'saved' && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                    ✓ सहेजा गया
-                  </span>
-                )}
-                {draftStatus === 'error' && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/40 flex items-center gap-1">
-                    ⚠️ त्रुटि
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-1.5">
-                {/* Adjacent Reset Button (Section 5 & Part 1.3) */}
+                {/* Adjacent Reset Button (Section 5) */}
                 <button
                   type="button"
                   onClick={handleResetTask}
@@ -2537,7 +2256,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <span className="hidden sm:inline">रीसेट</span>
                 </button>
 
-                {/* Adjacent Draft Button (Section 5 & Part 1.4) */}
+                {/* Adjacent Draft Button (Section 5) */}
                 <button
                   type="button"
                   onClick={handleSaveDraft}
@@ -2949,27 +2668,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 </>
               )}
 
-              {/* Live Watermark Overlay (Section 3 & 4) */}
+              {/* Live Watermark Overlay (Part 11) */}
               {showWatermark && (
                 <div
                   className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center select-none"
-                  style={{
-                    opacity: watermarkOpacity,
-                    transform: `translateY(${watermarkOffsetY}px)`,
-                    transition: 'transform 0.05s ease-out, opacity 0.05s ease-out',
-                  }}
+                  style={{ opacity: watermarkOpacity }}
                 >
-                  {watermarkType === 'image' && activeLogoUrl ? (
-                    <img
-                      src={activeLogoUrl}
-                      alt="Watermark"
-                      className="max-w-[40%] max-h-[22%] object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] pointer-events-none"
-                    />
-                  ) : (
-                    <span className="text-white text-sm sm:text-lg font-black uppercase tracking-widest drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] text-center px-4">
-                      {watermarkText || profile?.channelNameHi || 'AI NEWS MAKER'}
-                    </span>
-                  )}
+                  <span className="text-white text-sm sm:text-lg font-black uppercase tracking-widest border border-white/30 px-3 py-1 rounded bg-black/20 backdrop-blur-2xs drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                    {watermarkText || profile?.channelNameHi || 'AI NEWS MAKER'}
+                  </span>
                 </div>
               )}
             </div>
@@ -2999,52 +2706,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               >
                 {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
               </button>
-            </div>
-
-            {/* Frame Selector (Section 3: Horizontally scrolling left-to-right immediately below Live Canvas on mobile) */}
-            <div className="w-full mt-2.5 p-2 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-1.5 lg:hidden">
-              <div className="flex items-center justify-between text-xs px-0.5">
-                <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                  <Tv className="w-3.5 h-3.5 text-amber-400" />
-                  <span>फ़्रेम डिज़ाइन ({compatibleFrames.length}):</span>
-                </span>
-                <span className="text-[10px] text-amber-400 font-mono">
-                  {aspect} कम्पैटिबल
-                </span>
-              </div>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin touch-pan-x w-full">
-                {compatibleFrames.map((f) => {
-                  const isSel = selectedFrameId === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFrameId(f.id);
-                        showToast(`✅ ${f.nameHi} चुना गया`);
-                      }}
-                      className={`flex-shrink-0 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2 ${
-                        isSel
-                          ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="text-base p-1 bg-slate-950 rounded-lg shrink-0">
-                        {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
-                      </div>
-                      <div className="min-w-0 max-w-[130px]">
-                        <div className="text-xs font-black text-amber-300 flex items-center gap-1">
-                          <span className="truncate">{f.nameHi}</span>
-                          {isSel && <Check className="w-3 h-3 text-amber-400 shrink-0" />}
-                        </div>
-                        <div className="text-[9px] text-slate-400 truncate">
-                          {f.description}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
             {/* Progress / Status / Error Indicator with Visible Cancel Control (Section 10) */}
@@ -3261,143 +2922,161 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           />
 
           {/* ============================================================ */}
-          {/* TOP BAR: MODE SWITCHER & STUDIO RATIO SELECTOR              */}
+          {/* TOP BAR: MODE SWITCHER & PRIMARY RATIO SELECTOR             */}
+          {/* Available on both Mobile & Desktop (Part D.6, E.7, F.13)     */}
           {/* ============================================================ */}
-          {(!isMobile || !isReadyToUseMode) && (
-            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-neutral-900 border-2 border-amber-500/60 rounded-2xl p-3 sm:p-5 space-y-3.5 shadow-xl mb-4">
-              {/* Row 1: Mode Switcher (Web only, hidden on Mobile per Section 1) */}
-              {!isMobile && (
-                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${!isReadyToUseMode ? 'pb-2.5 border-b border-slate-800' : ''}`}>
+          <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-neutral-900 border-2 border-amber-500/60 rounded-2xl p-3 sm:p-5 space-y-3.5 shadow-xl mb-4">
+            {/* Row 1: Mode Switcher (Web only, hidden on Mobile per Section 1) */}
+            {!isMobile && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                    वीडियो मोड (Editing Mode):
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReadyToUseMode(true);
+                      showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) सक्रिय');
+                    }}
+                    className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      isReadyToUseMode
+                        ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md ring-2 ring-amber-300'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>⚡ Quick Video Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReadyToUseMode(false);
+                      showToast('🎬 स्टूडियो मोड (Studio Mode) सक्रिय');
+                    }}
+                    className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      !isReadyToUseMode
+                        ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>🎬 Studio Mode</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Row 2: Aspect Ratio Selector (Section 3: Single horizontal row: 9:16, 1:1, 4:5, 4:3) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                  <Film className="w-3.5 h-3.5 text-amber-400" />
+                  <span>आस्पेक्ट रेशियो (Aspect Ratio):</span>
+                </span>
+                {isRatioLocked && (
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
+                    🔒 9:16 रील्स रेशियो लॉक
+                  </span>
+                )}
+              </div>
+
+              {isRatioLocked ? (
+                <div className="p-2.5 bg-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-300">
-                      वीडियो मोड (Editing Mode):
-                    </span>
+                    <span className="text-amber-400 font-black text-xs">🔒 9:16 रील्स / शॉर्ट्स (लॉक)</span>
+                    <span className="text-[10px] text-slate-400 hidden sm:inline">(रील्स वीडियो का रेशियो 9:16 पर सुरक्षित है)</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-black">
+                    9:16
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                  {[
+                    { id: '9:16', label: '9:16', desc: 'रील्स / शॉर्ट्स' },
+                    { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
+                    { id: '4:5', label: '4:5', desc: 'फ़ीड / पोस्ट' },
+                    { id: '4:3', label: '4:3', desc: 'क्लासिक टीवी' },
+                  ].map((r) => (
                     <button
+                      key={r.id}
                       type="button"
                       onClick={() => {
-                        setIsReadyToUseMode(true);
-                        showToast('⚡ त्वरित वीडियो मोड (Quick Video Mode) सक्रिय');
+                        const newAspect = r.id as VideoAspect;
+                        setAspect(newAspect);
+                        const newCompatible = getCompatibleFrames({
+                          aspectRatio: newAspect,
+                          isOnly4_5,
+                          hasCoreCrop: Boolean(cropRegion),
+                        });
+                        if (newCompatible.length > 0 && !newCompatible.some((f) => f.id === selectedFrameId)) {
+                          setSelectedFrameId(newCompatible[0].id);
+                        }
+                        showToast(`रेशियो ${r.label} चुना गया`);
                       }}
-                      className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        isReadyToUseMode
-                          ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md ring-2 ring-amber-300'
-                          : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                      className={`p-2 rounded-xl border text-center transition cursor-pointer ${
+                        aspect === r.id
+                          ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
+                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <span>⚡ Quick Video Mode</span>
+                      <div className="text-xs font-black">{r.label}</div>
+                      <div className="text-[9px] opacity-80 truncate">{r.desc}</div>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsReadyToUseMode(false);
-                        showToast('🎬 स्टूडियो मोड (Studio Mode) सक्रिय');
-                      }}
-                      className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        !isReadyToUseMode
-                          ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
-                          : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      <span>🎬 Studio Mode</span>
-                    </button>
-                  </div>
+                  ))}
                 </div>
               )}
-
-              {/* Studio Mode Ratio and Frame Selectors (only rendered in Studio Mode) */}
-              {!isReadyToUseMode && (
-                <>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                        <Film className="w-3.5 h-3.5 text-amber-400" />
-                        <span>आस्पेक्ट रेशियो (Aspect Ratio):</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
-                      {[
-                        { id: '9:16', label: '9:16', desc: 'रील्स / शॉर्ट्स' },
-                        { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
-                        { id: '4:5', label: '4:5', desc: 'फ़ीड / पोस्ट' },
-                        { id: '4:3', label: '4:3', desc: 'क्लासिक टीवी' },
-                      ].map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => {
-                            const newAspect = r.id as VideoAspect;
-                            setAspect(newAspect);
-                            const newCompatible = getCompatibleFrames({
-                              aspectRatio: newAspect,
-                              isOnly4_5,
-                              hasCoreCrop: Boolean(cropRegion),
-                            });
-                            if (newCompatible.length > 0 && !newCompatible.some((f) => f.id === selectedFrameId)) {
-                              setSelectedFrameId(newCompatible[0].id);
-                            }
-                            showToast(`रेशियो ${r.label} चुना गया`);
-                          }}
-                          className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                            aspect === r.id
-                              ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
-                              : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="text-xs font-black">{r.label}</div>
-                          <div className="text-[9px] opacity-80 truncate">{r.desc}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 pt-2.5 border-t border-slate-800">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                        <Tv className="w-3.5 h-3.5 text-amber-400" />
-                        <span>फ़्रेम डिज़ाइन ({compatibleFrames.length} कंपैटिबल फ़्रेम):</span>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {compatibleFrames.map((f) => {
-                        const isSel = selectedFrameId === f.id;
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedFrameId(f.id);
-                              showToast(`✅ ${f.nameHi} चुना गया`);
-                            }}
-                            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
-                              isSel
-                                ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
-                                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                            }`}
-                          >
-                            <div className="text-lg p-1 bg-slate-900 rounded-lg shrink-0">
-                              {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-black text-amber-300 flex items-center justify-between">
-                                <span className="truncate">{f.nameHi}</span>
-                                {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                              </div>
-                              <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                                {f.description}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
-          )}
+
+            {/* Row 3: Frame Selection (Section 4: Placed immediately after Aspect Ratio selector) */}
+            <div className="space-y-2 pt-2.5 border-t border-slate-800">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                  <Tv className="w-3.5 h-3.5 text-amber-400" />
+                  <span>फ़्रेम डिज़ाइन ({compatibleFrames.length} कंपैटिबल फ़्रेम):</span>
+                </span>
+                <span className="text-[10px] text-amber-400 font-mono">
+                  {aspect} के अनुकूल
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {compatibleFrames.map((f) => {
+                  const isSel = selectedFrameId === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedFrameId(f.id);
+                        showToast(`✅ ${f.nameHi} चुना गया`);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                        isSel
+                          ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-lg p-1 bg-slate-900 rounded-lg shrink-0">
+                        {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-black text-amber-300 flex items-center justify-between">
+                          <span className="truncate">{f.nameHi}</span>
+                          {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                          {f.description}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           {/* ============================================================ */}
           {/* WORKFLOW DISPATCH: Quick Video Mode vs Studio Mode           */}
@@ -3412,7 +3091,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 px-1">
                   <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>त्वरित वीडियो निर्माण (चरण {quickStep}/7)</span>
+                    <span>त्वरित वीडियो निर्माण (चरण {quickStep}/6)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <span
@@ -3427,16 +3106,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 </div>
 
-                {/* Horizontal Step Navigation Pills (Exact 7 Steps in Hindi) */}
+                {/* Horizontal Step Navigation Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
                   {[
-                    { step: 1, label: '1. वीडियो जोड़ें', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
-                    { step: 2, label: '2. संगीत और ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
-                    { step: 3, label: '3. मुख्य हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
-                    { step: 4, label: '4. स्थान', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
-                    { step: 5, label: '5. फ़ुटर ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[5] },
-                    { step: 6, label: '6. लोगो और वॉटरमार्क', icon: Shield, ok: quickVideoValidation.stepsStatus[6] },
-                    { step: 7, label: '7. वीडियो डाउनलोड और कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 1, label: '1. वीडियो', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
+                    { step: 2, label: '2. ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
+                    { step: 3, label: '3. हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
+                    { step: 4, label: '4. लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
+                    { step: 5, label: '5. फ़ूटर व ब्रांड', icon: Tag, ok: quickVideoValidation.stepsStatus[5] },
+                    { step: 6, label: '6. डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const Icon = s.icon;
@@ -3463,125 +3141,18 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </div>
 
               {/* ============================================================ */}
-              {/* STEP 1: वीडियो जोड़ें                                          */}
+              {/* STEP 1: ADD VIDEO (Max 3 clips, trim, zoom, vertical offset) */}
               {/* ============================================================ */}
               {quickStep === 1 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Film className="w-4 h-4 text-amber-400" />
-                      1. वीडियो जोड़ें
+                      1. वीडियो जोड़ें व ट्रिम (Add Video & Clips)
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-300">
                       क्लिप्स: {clips.length}/3
                     </span>
-                  </div>
-
-                  {/* Desktop-Only Aspect Ratio & Frame Design Selector (Part 1.1) */}
-                  <div className="hidden lg:block space-y-3 pb-3 border-b border-slate-800">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                          <Tv className="w-3.5 h-3.5 text-amber-400" />
-                          <span>आस्पेक्ट रेशियो (Aspect Ratio):</span>
-                        </span>
-                        <span className="text-[11px] text-amber-400 font-bold">
-                          {aspect}
-                        </span>
-                      </div>
-                      {isRatioLocked ? (
-                        <div className="p-2 bg-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between text-xs">
-                          <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                            <span>🔒 9:16 रील्स रेशियो लॉक</span>
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-black">9:16</span>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-4 gap-2 w-full">
-                          {[
-                            { id: '9:16', label: '9:16', desc: 'रील्स' },
-                            { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
-                            { id: '4:5', label: '4:5', desc: 'फ़ीड' },
-                            { id: '4:3', label: '4:3', desc: 'टीवी' },
-                          ].map((r) => {
-                            const isSel = aspect === r.id;
-                            return (
-                              <button
-                                key={r.id}
-                                type="button"
-                                onClick={() => {
-                                  const newAspect = r.id as VideoAspect;
-                                  setAspect(newAspect);
-                                  const newCompatible = getCompatibleFrames({
-                                    aspectRatio: newAspect,
-                                    isOnly4_5,
-                                    hasCoreCrop: Boolean(cropRegion),
-                                  });
-                                  if (newCompatible.length > 0 && !newCompatible.some((f) => f.id === selectedFrameId)) {
-                                    setSelectedFrameId(newCompatible[0].id);
-                                  }
-                                  showToast(`रेशियो ${r.label} चुना गया`);
-                                }}
-                                className={`py-2 px-1 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center ${
-                                  isSel
-                                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
-                                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                                }`}
-                              >
-                                <span className="text-xs font-black">{r.label}</span>
-                                <span className="text-[10px] opacity-80 truncate">{r.desc}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Desktop Frame Selector */}
-                    <div className="space-y-1.5 pt-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                          <Tv className="w-3.5 h-3.5 text-amber-400" />
-                          <span>फ़्रेम डिज़ाइन ({compatibleFrames.length}):</span>
-                        </span>
-                        <span className="text-[10px] text-amber-400 font-mono">
-                          {aspect} कम्पैटिबल
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
-                        {compatibleFrames.map((f) => {
-                          const isSel = selectedFrameId === f.id;
-                          return (
-                            <button
-                              key={f.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedFrameId(f.id);
-                                showToast(`✅ ${f.nameHi} चुना गया`);
-                              }}
-                              className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2 ${
-                                isSel
-                                  ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
-                                  : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                              }`}
-                            >
-                              <div className="text-base p-1 bg-slate-900 rounded-lg shrink-0">
-                                {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="text-xs font-black text-amber-300 flex items-center gap-1">
-                                  <span className="truncate">{f.nameHi}</span>
-                                  {isSel && <Check className="w-3 h-3 text-amber-400 shrink-0" />}
-                                </div>
-                                <div className="text-[9px] text-slate-400 truncate">
-                                  {f.description}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
                   </div>
 
                   {/* Upload Main Video / Add Clips Buttons */}
@@ -3816,14 +3387,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 2: संगीत और ऑडियो                                        */}
+              {/* STEP 2: MUSIC AND AUDIO (Original, Background, No Music)      */}
               {/* ============================================================ */}
               {quickStep === 2 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Music className="w-4 h-4 text-amber-400" />
-                      2. संगीत और ऑडियो
+                      2. संगीत व ऑडियो (Music & Audio)
                     </span>
                     <button
                       type="button"
@@ -3835,25 +3406,25 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </button>
                   </div>
 
-                  {/* 3 Clear Options: मूल ऑडियो, पृष्ठभूमि संगीत, बिना संगीत */}
+                  {/* 3 Clear Options: Original Audio, Background Music, No Music */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {[
                       {
                         id: 'original',
-                        title: 'मूल ऑडियो',
+                        title: '1. मूल वीडियो ऑडियो',
                         sub: 'केवल वीडियो की अपनी आवाज़',
                         icon: Volume2,
                       },
                       {
                         id: 'bgm',
-                        title: 'पृष्ठभूमि संगीत',
+                        title: '2. बैकग्राउंड संगीत',
                         sub: 'BGM + मूल आवाज़ मिक्स',
                         icon: Music,
                       },
                       {
                         id: 'none',
-                        title: 'बिना संगीत',
-                        sub: 'म्यूट (सभी ऑडियो बंद)',
+                        title: '3. कोई म्यूज़िक नहीं',
+                        sub: 'म्यूट (No Music)',
                         icon: VolumeX,
                       },
                     ].map((opt) => {
@@ -3873,7 +3444,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                               setIsStandaloneBgmPlaying(false);
                             } else if (opt.id === 'bgm') {
                               if (bgmTrack === 'none') {
-                                setBgmTrack(adminMusicTracks[0]?.id || 'none');
+                                setBgmTrack(BUILTIN_NEWS_TRACKS[0]?.id || 'breaking-1');
                               }
                               setBgmVolume(35); // 35-50% relative to original audio per Section 6
                               setVideoVolume(100);
@@ -3954,37 +3525,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                         {/* Track List */}
                         <div className="space-y-1.5">
-                          <span className="text-[11px] font-bold text-slate-400">एडमिन म्यूज़िक लाइब्रेरी ट्रैक्स:</span>
-                          {isLoadingMusic ? (
-                            <div className="p-3 text-center text-xs text-slate-400 bg-slate-900/60 rounded-lg border border-slate-800">
-                              म्यूज़िक लाइब्रेरी लोड हो रही है...
-                            </div>
-                          ) : adminMusicTracks.length === 0 ? (
-                            <div className="p-3 text-center text-xs text-slate-400 bg-slate-900/60 rounded-lg border border-slate-800">
-                              एडमिन म्यूज़िक लाइब्रेरी में इस मोड या प्लान के लिए कोई संगीत उपलब्ध नहीं है।
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              {adminMusicTracks.map((track) => (
-                                <button
-                                  key={track.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setBgmTrack(track.id);
-                                    newsAudio.playCustomAudio(track.url);
-                                  }}
-                                  className={`p-2 rounded-lg text-xs font-bold text-left border transition truncate cursor-pointer ${
-                                    bgmTrack === track.id
-                                      ? 'bg-amber-400 text-slate-950 border-amber-400 font-black'
-                                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-                                  }`}
-                                  title={track.name}
-                                >
-                                  {track.name}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          <span className="text-[11px] font-bold text-slate-400">सत्यापित रॉयल्टी-फ्री ट्रैक्स:</span>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {BUILTIN_NEWS_TRACKS.map((track) => (
+                              <button
+                                key={track.id}
+                                type="button"
+                                onClick={() => {
+                                  setBgmTrack(track.id);
+                                  newsAudio.playTrack(track.id);
+                                }}
+                                className={`p-2 rounded-lg text-xs font-bold text-left border transition truncate ${
+                                  bgmTrack === track.id
+                                    ? 'bg-amber-400 text-slate-950 border-amber-400 font-black'
+                                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                                }`}
+                              >
+                                {track.name}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Custom MP3 Upload */}
@@ -4015,68 +3575,24 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 3: HEADLINE (Raw script first, AI generator, editable) */}
+              {/* STEP 3: HEADLINE (Strictly blank initial state, AI tools)    */}
               {/* ============================================================ */}
               {quickStep === 3 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Type className="w-4 h-4 text-amber-400" />
-                      3. मुख्य हेडलाइन
+                      3. मुख्य हेडलाइन (Main News Headline)
                     </span>
                     <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
                       आवश्यक (Required)
                     </span>
                   </div>
 
-                  {/* 1. Raw Script / Context Textarea FIRST */}
-                  <div className="space-y-2 p-3 bg-slate-950/70 border border-slate-800 rounded-xl">
-                    <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-amber-400" />
-                      <span>रॉ स्क्रिप्ट या वीडियो से संबंधित जानकारी यहाँ लिखें। इसके आधार पर मुख्य हेडलाइन तैयार करें:</span>
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={rawScriptText}
-                      onChange={(e) => setRawScriptText(e.target.value)}
-                      placeholder="घटना के मुख्य बिंदु, प्रेस नोट, या वीडियो का विवरण यहाँ पेस्ट करें..."
-                      className="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none transition resize-none leading-relaxed"
-                    />
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        disabled={isGeneratingRawHeadlines || !rawScriptText.trim()}
-                        onClick={handleGenerateFromRawScript}
-                        className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl disabled:opacity-40 flex items-center gap-1.5 cursor-pointer shadow transition active:scale-95"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{isGeneratingRawHeadlines ? 'AI हेडलाइन बना रहा है...' : '⚡ AI से हेडलाइन तैयार करें'}</span>
-                      </button>
-                    </div>
-
-                    {rawScriptSuggestions.length > 0 && (
-                      <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                        <span className="text-[10px] text-amber-300 font-bold">सुझाव (क्लिक करके चुनें):</span>
-                        <div className="flex flex-col gap-1.5">
-                          {rawScriptSuggestions.map((sug, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => setHeadline(sug)}
-                              className="text-left text-xs p-2 bg-slate-900 rounded-lg border border-slate-700 text-slate-200 hover:border-amber-400 hover:text-white transition"
-                            >
-                              💡 {sug}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. Main Headline Input (Editable, Genuinely blank by default) */}
+                  {/* Headline Input (Genuinely blank by default) */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                      <span>मुख्य हेडलाइन (Headline) दर्ज या संपादित करें:</span>
+                      <span>मुख्य हेडलाइन लिखें:</span>
                       <span className="text-slate-500 font-mono text-[10px]">
                         {headline.length} वर्ण
                       </span>
@@ -4090,7 +3606,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     />
                   </div>
 
-                  {/* 3. Sub-Headline Input */}
+                  {/* Sub-Headline Input */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-300">
                       उप-शीर्षक / टैगलाइन (वैकल्पिक):
@@ -4099,14 +3615,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       type="text"
                       value={subHeadline}
                       onChange={(e) => setSubHeadline(e.target.value)}
-                      placeholder="जैसे: देखें विशेष ग्राउंड रिपोर्ट..."
+                      placeholder="जैसे: देखें विशेष रिपोर्ट..."
                       className="w-full p-2.5 bg-slate-950/80 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-none transition"
                     />
                   </div>
 
-                  {/* 4. AI Rewrite Buttons */}
+                  {/* AI Rewrite Buttons */}
                   <div className="flex items-center gap-2 flex-wrap pt-1">
-                    <span className="text-[11px] font-bold text-slate-400">AI रीराइट:</span>
+                    <span className="text-[11px] font-bold text-slate-400">AI सहायता:</span>
                     <button
                       type="button"
                       disabled={isAiGenerating || !headline.trim()}
@@ -4118,7 +3634,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           setIsAiGenerating(false);
                         }
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 disabled:opacity-40 transition cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 disabled:opacity-40 transition"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                       <span>{isAiGenerating ? 'AI लिख रहा है...' : '⚡ 2-लाइन AI रीराइट'}</span>
@@ -4134,149 +3650,52 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           setIsAiGenerating(false);
                         }
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 disabled:opacity-40 transition cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 disabled:opacity-40 transition"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                       <span>⚡ 3-लाइन AI रीराइट</span>
                     </button>
                   </div>
 
-                  {/* 5. Pro & VIP Headline Scheduling Section (Part 5) */}
-                  <div className="pt-3 border-t border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-300">हेडलाइन प्रदर्शन मोड:</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 uppercase tracking-wider">
-                          PRO / VIP
-                        </span>
-                      </div>
-                      {isProOrVipUser ? (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHeadlineScheduleMode('single');
-                              showToast('सिंगल हेडलाइन मोड सेट');
-                            }}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                              headlineScheduleMode === 'single'
-                                ? 'bg-amber-400 text-slate-950 font-black shadow'
-                                : 'bg-slate-950 text-slate-400 border border-slate-800'
-                            }`}
-                          >
-                            🔵 सिंगल हेडलाइन
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHeadlineScheduleMode('scheduled');
-                              showToast('⏱️ समय अनुसार शेड्यूलिंग मोड सेट');
-                            }}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                              headlineScheduleMode === 'scheduled'
-                                ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white font-black shadow'
-                                : 'bg-slate-950 text-slate-400 border border-slate-800'
-                            }`}
-                          >
-                            ⏱️ समय अनुसार शेड्यूलिंग
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-amber-400/80 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
-                          शेड्यूलिंग केवल Pro व VIP-Dash के लिए उपलब्ध
-                        </span>
-                      )}
+                  {/* Raw Script / Facts Helper Box */}
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-amber-400" />
+                      <span>रॉ स्क्रिप्ट या घटना के तथ्यों से हेडलाइन बनाएँ:</span>
+                    </span>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={rawScriptText}
+                        onChange={(e) => setRawScriptText(e.target.value)}
+                        placeholder="घटना के मुख्य बिंदु यहाँ पेस्ट करें..."
+                        className="flex-1 p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:border-amber-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={isGeneratingRawHeadlines || !rawScriptText.trim()}
+                        onClick={handleGenerateFromRawScript}
+                        className="px-3 py-2 bg-amber-400 text-slate-950 font-black text-xs rounded-xl disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>हेडलाइन बनाएँ</span>
+                      </button>
                     </div>
 
-                    {isProOrVipUser && headlineScheduleMode === 'scheduled' && (
-                      <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-amber-300">बदलने का अंतराल (Interval):</span>
-                          <div className="flex items-center gap-2">
+                    {rawScriptSuggestions.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] text-amber-300 font-bold">सुझाव (क्लिक करके चुनें):</span>
+                        <div className="flex flex-col gap-1.5">
+                          {rawScriptSuggestions.map((sug, i) => (
                             <button
+                              key={i}
                               type="button"
-                              onClick={() => {
-                                setHeadlineInterval(10);
-                                showToast('10 सेकंड अंतराल सेट');
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition ${
-                                headlineInterval === 10
-                                  ? 'bg-amber-400 text-slate-950 font-black'
-                                  : 'bg-slate-900 text-slate-400 border border-slate-800'
-                              }`}
+                              onClick={() => setHeadline(sug)}
+                              className="text-left text-xs p-2 bg-slate-950 rounded-lg border border-slate-800 text-slate-200 hover:border-amber-400 hover:text-white transition"
                             >
-                              10 सेकंड
+                              💡 {sug}
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setHeadlineInterval(15);
-                                showToast('15 सेकंड अंतराल सेट');
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition ${
-                                headlineInterval === 15
-                                  ? 'bg-amber-400 text-slate-950 font-black'
-                                  : 'bg-slate-900 text-slate-400 border border-slate-800'
-                              }`}
-                            >
-                              15 सेकंड
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="p-2 bg-slate-900/80 rounded-lg text-[11px] text-amber-300 font-bold border border-amber-500/30">
-                          🔴 वर्तमान समय ({formatTime(currentTime)}) पर सक्रिय हेडलाइन: "{activeHeadline}"
-                        </div>
-
-                        {/* Dynamic Headline Slots List */}
-                        <div className="space-y-2">
-                          {scheduledHeadlines.map((hText, sIdx) => {
-                            const startSec = sIdx * headlineInterval;
-                            const endSec = (sIdx + 1) * headlineInterval;
-                            return (
-                              <div key={sIdx} className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-mono font-bold text-amber-400">
-                                    स्लॉट #{sIdx + 1} ({formatTime(startSec)} - {formatTime(endSec)}):
-                                  </span>
-                                  {scheduledHeadlines.length > 1 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const updated = scheduledHeadlines.filter((_, i) => i !== sIdx);
-                                        setScheduledHeadlines(updated);
-                                      }}
-                                      className="text-red-400 hover:text-red-300 text-[10px] font-bold cursor-pointer"
-                                    >
-                                      हटाएं
-                                    </button>
-                                  )}
-                                </div>
-                                <input
-                                  type="text"
-                                  value={hText}
-                                  onChange={(e) => {
-                                    const updated = [...scheduledHeadlines];
-                                    updated[sIdx] = e.target.value;
-                                    setScheduledHeadlines(updated);
-                                  }}
-                                  className="w-full p-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-medium text-xs focus:border-amber-400 focus:outline-none"
-                                />
-                              </div>
-                            );
-                          })}
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setScheduledHeadlines([...scheduledHeadlines, '']);
-                              showToast('➕ नया हेडलाइन स्लॉट जोड़ा गया');
-                            }}
-                            className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-dashed border-slate-600 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-amber-400" />
-                            <span>अगला हेडलाइन स्लॉट जोड़ें (+{headlineInterval}s)</span>
-                          </button>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -4285,83 +3704,61 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 4: LOCATION (Toggleable, Blank default, Clean hiding)  */}
+              {/* STEP 4: LOCATION (Strictly blank initial state, no dummy text)*/}
               {/* ============================================================ */}
               {quickStep === 4 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-amber-400" />
-                      4. स्थान
+                      4. खबर की लोकेशन (News Location)
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowLocation(!showLocation)}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-bold border cursor-pointer transition ${
-                        showLocation
-                          ? 'bg-amber-400 text-slate-950 border-amber-300'
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
-                      }`}
-                    >
-                      {showLocation ? 'लोकेशन बॉक्स: चालू ✓' : 'लोकेशन बॉक्स: बंद ✕'}
-                    </button>
+                    <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
+                      आवश्यक (Required)
+                    </span>
                   </div>
 
-                  {showLocation ? (
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                          <span>स्थान / शहर / ज़िला दर्ज करें:</span>
-                          <span className="text-[10px] text-slate-400">यह स्क्रीन पर लोकेशन बैज में दिखेगा</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={location}
-                          onChange={(e) => setLocation(e.target.value)}
-                          placeholder="जैसे: नई दिल्ली, लखनऊ, भोपाल, पटना, मुंबई..."
-                          className="w-full p-3 bg-slate-950/80 border border-slate-700 rounded-xl text-white font-extrabold text-sm focus:border-amber-400 focus:outline-none transition"
-                        />
-                      </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                      <span>स्थान / शहर / ज़िला दर्ज करें:</span>
+                      <span className="text-[10px] text-slate-400">यह स्क्रीन पर लोकेशन बैज में दिखेगा</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="जैसे: नई दिल्ली, लखनऊ, भोपाल, पटना, मुंबई..."
+                      className="w-full p-3 bg-slate-950/80 border border-slate-700 rounded-xl text-white font-extrabold text-sm focus:border-amber-400 focus:outline-none transition"
+                    />
+                  </div>
 
-                      <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl space-y-1.5">
-                        <span className="text-[10px] font-bold text-slate-400">त्वरित लोकेशन सुझाव (क्लिक करें):</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {['नई दिल्ली', 'लखनऊ', 'भोपाल', 'पटना', 'जयपुर', 'मुंबई', 'चंडीगढ़', 'रायपुर'].map((city) => (
-                            <button
-                              key={city}
-                              type="button"
-                              onClick={() => setLocation(city)}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition cursor-pointer"
-                            >
-                              {city}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                  <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400">त्वरित लोकेशन सुझाव (वैकल्पिक):</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['नई दिल्ली', 'लखनऊ', 'भोपाल', 'पटना', 'जयपुर', 'मुंबई', 'चंडीगढ़', 'रायपुर'].map((city) => (
+                        <button
+                          key={city}
+                          type="button"
+                          onClick={() => setLocation(city)}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition"
+                        >
+                          {city}
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1">
-                      <p className="text-xs text-amber-300 font-bold">लोकेशन बॉक्स बंद है</p>
-                      <p className="text-[11px] text-slate-400">
-                        वीडियो स्क्रीन पर कोई खाली लोकेशन बॉक्स या प्लेसहोल्डर नहीं दिखेगा।
-                      </p>
-                    </div>
-                  )}
+                  </div>
                 </div>
               )}
 
               {/* ============================================================ */}
-              {/* STEP 5: FOOTER BRANDING (Handles, Phone, Website, Tag)       */}
+              {/* STEP 5: FOOTER & BRANDING (Socials, Logo, Watermark vertical) */}
               {/* ============================================================ */}
               {quickStep === 5 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Tag className="w-4 h-4 text-amber-400" />
-                      5. फ़ुटर ब्रांडिंग
-                    </span>
-                    <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
-                      आवश्यक (Required)
+                      5. फ़ूटर, लोगो व वॉटरमार्क (Footer & Branding)
                     </span>
                   </div>
 
@@ -4435,23 +3832,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* ============================================================ */}
-              {/* STEP 6: LOGO & WATERMARK (Profile logo, GIF upload, offset)  */}
-              {/* ============================================================ */}
-              {quickStep === 6 && (
-                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-amber-400" />
-                      6. लोगो और वॉटरमार्क
-                    </span>
-                  </div>
-
-                  {/* Logo Controls */}
-                  <div className="space-y-3">
+                  {/* Logo Controls (Section 12: Uses profile logo, scale, task GIF fallback) */}
+                  <div className="space-y-3 pt-3 border-t border-slate-800">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-300">चैनल लोगो (Profile Logo):</span>
                       {hasBothLogos && (
@@ -4459,14 +3842,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           <button
                             type="button"
                             onClick={() => setLogoFormatPreference('gif')}
-                            className={`px-2 py-0.5 rounded font-bold cursor-pointer transition ${logoFormatPreference === 'gif' ? 'bg-amber-400 text-slate-950' : 'text-slate-400'}`}
+                            className={`px-2 py-0.5 rounded font-bold ${logoFormatPreference === 'gif' ? 'bg-amber-400 text-slate-950' : 'text-slate-400'}`}
                           >
                             GIF एनिमेटेड
                           </button>
                           <button
                             type="button"
                             onClick={() => setLogoFormatPreference('png')}
-                            className={`px-2 py-0.5 rounded font-bold cursor-pointer transition ${logoFormatPreference === 'png' ? 'bg-amber-400 text-slate-950' : 'text-slate-400'}`}
+                            className={`px-2 py-0.5 rounded font-bold ${logoFormatPreference === 'png' ? 'bg-amber-400 text-slate-950' : 'text-slate-400'}`}
                           >
                             PNG स्थिर
                           </button>
@@ -4474,7 +3857,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
                       {activeLogoUrl ? (
                         <div className="flex items-center gap-2">
                           <img
@@ -4492,8 +3875,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         <span className="text-xs text-slate-400 italic">कोई प्रोफ़ाइल लोगो सेट नहीं है</span>
                       )}
 
-                      {/* GIF Fallback Upload for this task only */}
-                      <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5 transition">
+                      {/* GIF Fallback Upload for this task only (Section 12) */}
+                      <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5">
                         <Upload className="w-3.5 h-3.5 text-amber-400" />
                         <span>GIF लोगो चुनें (केवल इस वीडियो के लिए)</span>
                         <input
@@ -4531,7 +3914,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Watermark Controls with Vertical Offset Control */}
+                  {/* Watermark Controls with Vertical Offset Control (Section 13) */}
                   <div className="space-y-3 pt-3 border-t border-slate-800">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-300">वॉटरमार्क (Watermark):</span>
@@ -4568,7 +3951,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             />
                           </div>
 
-                          {/* Vertical Movement Slider */}
+                          {/* Vertical Movement Slider (Section 13) */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs font-bold text-slate-300">
                               <span>ऊर्ध्वाधर स्थिति (Vertical Position):</span>
@@ -4596,14 +3979,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 7: DOWNLOAD VIDEO & CAPTION (Strict 100% Validated)      */}
+              {/* STEP 6 / FINAL STEP: DOWNLOAD VIDEO & CAPTION (100% Validated)*/}
               {/* ============================================================ */}
-              {quickStep === 7 && (
+              {quickStep === 6 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-400" />
-                      7. वीडियो डाउनलोड और कैप्शन
+                      6. वीडियो डाउनलोड व कैप्शन (Download & Caption)
                     </span>
                     <span
                       className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
@@ -4625,11 +4008,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <div className="space-y-1.5 text-xs">
                       {[
                         { key: 'video', label: '1. वीडियो क्लिप जोड़ी गई', ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0), step: 1 },
-                        { key: 'audio', label: '2. ऑडियो / म्यूज़िक विकल्प तय', ok: Boolean(audioOption), step: 2 },
-                        { key: 'headline', label: '3. मुख्य हेडलाइन दर्ज', ok: Boolean(headline && headline.trim()), step: 3 },
-                        { key: 'location', label: showLocation ? '4. खबर की लोकेशन दर्ज' : '4. लोकेशन बॉक्स बंद (वैकल्पिक)', ok: !showLocation || Boolean(location && location.trim()), step: 4 },
-                        { key: 'footer', label: '5. सोशल व फ़ुटर ब्रांडिंग उपलब्ध', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim()) || (websiteUrl && websiteUrl.trim())), step: 5 },
-                        { key: 'logo', label: '6. चैनल लोगो व वॉटरमार्क सेट', ok: Boolean(activeLogoUrl || channelLogoUrl), step: 6 },
+                        { key: 'aspect', label: '2. आस्पेक्ट रेशियो चयनित', ok: Boolean(aspect), step: 1 },
+                        { key: 'frame', label: '3. कंपैटिबल फ़्रेम चयनित', ok: Boolean(selectedFrameId), step: 1 },
+                        { key: 'audio', label: '4. ऑडियो / म्यूज़िक विकल्प तय', ok: Boolean(audioOption), step: 2 },
+                        { key: 'headline', label: '5. मुख्य हेडलाइन दर्ज (Headline)', ok: Boolean(headline && headline.trim()), step: 3 },
+                        { key: 'location', label: '6. खबर की लोकेशन दर्ज (Location)', ok: Boolean(location && location.trim()), step: 4 },
+                        { key: 'footer', label: '7. सोशल/फ़ूटर जानकारी उपलब्ध', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim())), step: 5 },
                       ].map((item) => (
                         <div key={item.key} className="flex items-center justify-between py-1 border-b border-slate-800/60 last:border-0">
                           <span className="flex items-center gap-2">
@@ -4647,7 +4031,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             <button
                               type="button"
                               onClick={() => setQuickStep(item.step)}
-                              className="text-[10px] bg-red-950 text-red-300 hover:text-white px-2 py-0.5 rounded border border-red-800 font-bold cursor-pointer transition"
+                              className="text-[10px] bg-red-950 text-red-300 hover:text-white px-2 py-0.5 rounded border border-red-800 font-bold cursor-pointer"
                             >
                               चरण {item.step} पर जाएँ →
                             </button>
@@ -4662,7 +4046,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsCaptionModalOpen(true)}
-                      disabled={!headline.trim()}
+                      disabled={!headline.trim() || !location.trim()}
                       className="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer shadow transition"
                     >
                       <Share2 className="w-3.5 h-3.5 text-amber-400" />
@@ -4691,7 +4075,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </span>
                   </button>
 
-                  {/* Export Progress Interface with Visible X / Cancel Button */}
+                  {/* Export Progress Interface with Visible X / Cancel Button (Section 10) */}
                   {isExporting && (
                     <div className="p-3.5 bg-slate-950 border border-amber-500/40 rounded-xl space-y-2 shadow-2xl">
                       <div className="flex items-center justify-between text-xs font-bold text-amber-300">
@@ -4759,8 +4143,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setQuickStep((s) => Math.min(7, s + 1))}
-                  disabled={quickStep === 7}
+                  onClick={() => setQuickStep((s) => Math.min(6, s + 1))}
+                  disabled={quickStep === 6}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white disabled:opacity-30 cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition"
                 >
                   अगला चरण ▶
@@ -4776,7 +4160,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Film className="w-4 h-4 text-amber-400" />
-                        1. वीडियो टाइमलाइन और क्लिप्स
+                        1. वीडियो टाइमलाइन व क्लिप्स (Multi-Clip Timeline)
                       </span>
                       <button
                         type="button"
@@ -4925,12 +4309,59 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 2: Headlines & Timeline Scheduling (Single vs 10s/15s Interval) */}
+                  {/* Card 2: Select Jacket / Frame */}
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                        <Film className="w-4 h-4 text-amber-400" />
+                        2. वीडियो फ्रेम / जैकेट चुनें
+                      </span>
+                      <span className="text-[10px] text-amber-400 font-mono">
+                        {compatibleFrames.length} कंपैटिबल फ्रेम उपलब्ध
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {compatibleFrames.map((f) => {
+                        const isSel = selectedFrameId === f.id;
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedFrameId(f.id);
+                              showToast(`✅ ${f.nameHi} चुना गया`);
+                            }}
+                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                              isSel
+                                ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
+                                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="text-xl p-1.5 bg-slate-900 rounded-lg shrink-0">
+                              {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-black text-amber-300 flex items-center justify-between">
+                                <span className="truncate">{f.nameHi}</span>
+                                {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                              </div>
+                              <div className="text-[10px] text-slate-400 line-clamp-2 mt-0.5 leading-snug">
+                                {f.description}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Card 3: Headlines & Timeline Scheduling (Single vs 10s/15s Interval) */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-amber-400" />
-                        2. मुख्य हेडलाइन व टाइमलाइन शेड्यूलिंग
+                        3. हेडलाइन्स व टाइमलाइन शेड्यूलिंग (Headlines & Scheduling)
                       </span>
                     </div>
 
@@ -5102,12 +4533,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 3: Multi-Track Audio Mixing Studio (BGM + Voiceover + Video) */}
+                  {/* Card 4: Multi-Track Audio Mixing Studio (BGM + Voiceover + Video) */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Music className="w-4 h-4 text-amber-400" />
-                        3. ऑडियो और बैकग्राउंड म्यूज़िक
+                        4. मल्टी-ट्रैक ऑडियो मिक्सर (BGM + Voiceover + Video)
                       </span>
                       <button
                         type="button"
@@ -5127,49 +4558,37 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     {/* Track 1: Background Music Selection */}
                     <div className="space-y-2">
                       <label className="block text-xs font-bold text-slate-300">
-                        ट्रैक 1: बैकग्राउंड म्यूज़िक (Admin Music Library):
+                        ट्रैक 1: बैकग्राउंड म्यूज़िक (Royalty-Free BGM):
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {isLoadingMusic ? (
-                          <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800 text-center col-span-1 sm:col-span-2 text-xs text-amber-400 animate-pulse">
-                            🎵 एडमिन म्यूज़िक लाइब्रेरी लोड हो रही है...
-                          </div>
-                        ) : adminMusicTracks.length === 0 ? (
-                          <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800 text-center space-y-1 col-span-1 sm:col-span-2">
-                            <span className="text-xl">🎵</span>
-                            <div className="text-xs font-bold text-slate-300">एडमिन द्वारा कोई म्यूज़िक ट्रैक नहीं जोड़ा गया है।</div>
-                            <div className="text-[10px] text-slate-500">आप नीचे अपनी कस्टम MP3 फ़ाइल अपलोड कर सकते हैं।</div>
-                          </div>
-                        ) : (
-                          adminMusicTracks.map((t) => {
-                            const isSel = bgmTrack === t.id;
-                            return (
-                              <button
-                                key={t.id}
-                                type="button"
-                                onClick={() => {
-                                  setBgmTrack(t.id);
-                                  if (isPlaying || isStandaloneBgmPlaying) {
-                                    newsAudio.playCustomAudio(t.url);
-                                  }
-                                  showToast(`🎵 ${t.title || t.name} चुना गया`);
-                                }}
-                                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                                  isSel
-                                    ? 'bg-amber-400/20 border-amber-400 text-white ring-1 ring-amber-400/50 shadow-md'
-                                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                                }`}
-                              >
-                                <span className="text-xl shrink-0 p-1 bg-slate-900 rounded-lg">{t.icon || '🎵'}</span>
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-xs font-black text-amber-300 truncate">{t.title || t.name}</div>
-                                  <div className="text-[10px] text-slate-400 leading-tight mt-0.5">{t.category || t.description || 'Admin Music'}</div>
-                                </div>
-                                {isSel && <Check className="w-4 h-4 text-amber-400 shrink-0 self-center" />}
-                              </button>
-                            );
-                          })
-                        )}
+                        {BUILTIN_NEWS_TRACKS.map((t) => {
+                          const isSel = bgmTrack === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                setBgmTrack(t.id);
+                                if (isPlaying || isStandaloneBgmPlaying) {
+                                  newsAudio.playTrack(t.id);
+                                }
+                                showToast(`🎵 ${t.name} चुना गया`);
+                              }}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                                isSel
+                                  ? 'bg-amber-400/20 border-amber-400 text-white ring-1 ring-amber-400/50 shadow-md'
+                                  : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                              }`}
+                            >
+                              <span className="text-xl shrink-0 p-1 bg-slate-900 rounded-lg">{t.icon}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-black text-amber-300 truncate">{t.name}</div>
+                                <div className="text-[10px] text-slate-400 leading-tight mt-0.5">{t.description}</div>
+                              </div>
+                              {isSel && <Check className="w-4 h-4 text-amber-400 shrink-0 self-center" />}
+                            </button>
+                          );
+                        })}
 
                         {/* Custom MP3 Upload */}
                         <div
@@ -5360,12 +4779,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 4: Video Transitions & Motion FX */}
+                  {/* Card 5: Video Transitions & Motion FX */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Layers className="w-4 h-4 text-amber-400" />
-                        4. वीडियो ट्रांज़िशन इफ़ेक्ट्स
+                        5. वीडियो ट्रांज़िशन इफ़ेक्ट्स (Transitions & Motion FX)
                       </span>
                       <button
                         type="button"
@@ -5416,12 +4835,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 5: Location - Dedicated Independent Box */}
+                  {/* Card 6: Location - Dedicated Independent Box */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-blue-400" />
-                        5. खबर की लोकेशन
+                        6. खबर की लोकेशन (Location Badge)
                       </span>
                       <label className="flex items-center gap-2 cursor-pointer bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
                         <input
@@ -5448,12 +4867,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </p>
                   </div>
 
-                  {/* Card 6: Social Media & Scrolling Ticker */}
+                  {/* Card 7: Social Media & Scrolling Ticker */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Globe className="w-4 h-4 text-amber-400" />
-                        6. सोशल फ़ूटर व टिकर
+                        7. सोशल फ़ूटर व टिकर (Social & Ticker)
                       </span>
                     </div>
 
@@ -5573,46 +4992,32 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Card 7: Channel Logo & Watermark */}
+                  {/* Card 8: Channel Logo & Watermark */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Tag className="w-4 h-4 text-amber-400" />
-                        7. चैनल लोगो और वॉटरमार्क
+                        8. चैनल लोगो व वॉटरमार्क (Logo & Watermark)
                       </span>
                     </div>
 
-                    {/* Channel Logo Management */}
-                    <div className="space-y-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300">प्राइमरी चैनल लोगो:</span>
-                        {hasBothLogos && (
-                          <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[10px]">
-                            <button
-                              type="button"
-                              onClick={() => setLogoFormatPreference('gif')}
-                              className={`px-2 py-0.5 rounded font-bold cursor-pointer transition ${logoFormatPreference === 'gif' ? 'bg-amber-400 text-slate-950' : 'text-slate-400'}`}
-                            >
-                              GIF
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setLogoFormatPreference('png')}
-                              className={`px-2 py-0.5 rounded font-bold cursor-pointer transition ${logoFormatPreference === 'png' ? 'bg-amber-400 text-slate-950' : 'text-slate-400'}`}
-                            >
-                              PNG
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3 flex-wrap">
+                    {/* Logo */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => logoInputRef.current?.click()}
+                          className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-amber-400" />
+                          <span>लोगो बदलें</span>
+                        </button>
                         {activeLogoUrl ? (
                           <div className="flex items-center gap-2">
                             <img
                               src={activeLogoUrl}
                               alt="Logo preview"
-                              className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
+                              className="h-9 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
                             />
                             {isGifActive && (
                               <span className="px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-[10px] font-black rounded shrink-0">
@@ -5622,45 +5027,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           </div>
                         ) : (
                           <span className="text-xs text-slate-400 italic">
-                            (प्रोफ़ाइल में कोई लोगो सेट नहीं है)
+                            (डिफ़ॉल्ट लोगो सक्रिय)
                           </span>
-                        )}
-
-                        {/* Optional Project GIF Upload without altering permanent profile */}
-                        <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5 transition">
-                          <Upload className="w-3.5 h-3.5 text-amber-400" />
-                          <span>{taskGifLogo ? 'GIF बदलें' : 'प्रोजेक्ट के लिए GIF जोड़ें (वैकल्पिक)'}</span>
-                          <input
-                            type="file"
-                            accept="image/gif"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const localUrl = URL.createObjectURL(file);
-                                setTaskGifLogo(localUrl);
-                                setLogoFormatPreference('gif');
-                                showToast('🎬 एनिमेटेड GIF लोगो इस प्रोजेक्ट के लिए सेट हो गया!');
-                              }
-                            }}
-                          />
-                        </label>
-                        {taskGifLogo && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTaskGifLogo('');
-                              showToast('प्रोजेक्ट GIF हटाया गया, प्राइमरी PNG लोगो सक्रिय');
-                            }}
-                            className="text-[11px] text-red-400 hover:underline cursor-pointer"
-                          >
-                            GIF हटाएं
-                          </button>
                         )}
                       </div>
 
-                      {/* Logo Scale Slider */}
-                      <div className="space-y-1 pt-2 border-t border-slate-800/80">
+                      <div className="space-y-1">
                         <div className="flex justify-between text-xs font-bold text-slate-300">
                           <span>लोगो का आकार:</span>
                           <span className="text-amber-400 font-mono">{logoScale}%</span>
@@ -5677,11 +5049,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
                     </div>
 
-                    {/* Watermark Section */}
-                    <div className="pt-3 border-t border-slate-800 space-y-3">
+                    {/* Watermark */}
+                    <div className="pt-3 border-t border-slate-800 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300">वॉटरमार्क (Watermark):</span>
-                        <label className="flex items-center gap-2 cursor-pointer bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                        <span className="text-xs font-bold text-slate-300">टेक्स्ट वॉटरमार्क:</span>
+                        <label className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={showWatermark}
@@ -5695,82 +5067,27 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
 
                       {showWatermark && (
-                        <div className="space-y-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                          {/* Watermark Type Selector: Text vs Image */}
-                          <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setWatermarkType('text');
-                                showToast('टेक्स्ट वॉटरमार्क सक्रिय');
-                              }}
-                              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
-                                watermarkType === 'text'
-                                  ? 'bg-amber-400 text-slate-950 font-black shadow'
-                                  : 'text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              ✍️ टेक्स्ट वॉटरमार्क
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setWatermarkType('image');
-                                showToast('लोगो वॉटरमार्क (Image) सक्रिय');
-                              }}
-                              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
-                                watermarkType === 'image'
-                                  ? 'bg-amber-400 text-slate-950 font-black shadow'
-                                  : 'text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              🖼️ लोगो वॉटरमार्क (Image)
-                            </button>
-                          </div>
-
-                          {watermarkType === 'text' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <input
+                            type="text"
+                            value={watermarkText}
+                            readOnly
+                            className="p-2 bg-slate-950/70 border border-slate-700 rounded-xl text-amber-300 font-black text-xs cursor-not-allowed"
+                          />
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs font-bold text-slate-300">
+                              <span>पारदर्शिता:</span>
+                              <span className="text-amber-400 font-mono">{Math.round(watermarkOpacity * 100)}%</span>
+                            </div>
                             <input
-                              type="text"
-                              value={watermarkText || profile?.channelNameHi || 'AI NEWS MAKER'}
-                              readOnly
-                              className="w-full p-2 bg-slate-950/70 border border-slate-700 rounded-xl text-amber-300 font-black text-xs cursor-not-allowed"
+                              type="range"
+                              min="0.1"
+                              max="0.8"
+                              step="0.05"
+                              value={watermarkOpacity}
+                              onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                              className="w-full accent-amber-400 cursor-pointer"
                             />
-                          )}
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                            {/* Opacity Slider */}
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-xs font-bold text-slate-300">
-                                <span>पारदर्शिता (Opacity):</span>
-                                <span className="text-amber-400 font-mono">{Math.round(watermarkOpacity * 100)}%</span>
-                              </div>
-                              <input
-                                type="range"
-                                min="0.05"
-                                max="0.9"
-                                step="0.05"
-                                value={watermarkOpacity}
-                                onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
-                                className="w-full accent-amber-400 cursor-pointer"
-                              />
-                            </div>
-
-                            {/* Vertical Offset Slider */}
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-xs font-bold text-slate-300">
-                                <span>ऊर्ध्वाधर स्थिति (Vertical Offset):</span>
-                                <span className="text-amber-400 font-mono">{watermarkOffsetY}px</span>
-                              </div>
-                              <input
-                                type="range"
-                                min="-200"
-                                max="200"
-                                step="5"
-                                value={watermarkOffsetY}
-                                onChange={(e) => setWatermarkOffsetY(parseInt(e.target.value, 10))}
-                                className="w-full accent-amber-400 cursor-pointer"
-                              />
-                            </div>
                           </div>
                         </div>
                       )}
@@ -5779,49 +5096,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 </div>
               )}
         </section>
-      </div>
-
-      {/* Mobile Sticky Footer Strip (Part 1.2) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-3 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setQuickStep((s) => Math.max(1, s - 1))}
-          disabled={quickStep === 1}
-          className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-200 disabled:opacity-30 font-bold text-xs flex items-center gap-1 cursor-pointer transition active:scale-95"
-        >
-          <span>◀</span>
-          <span>पिछला</span>
-        </button>
-
-        <div className="flex flex-col items-center">
-          <span className="text-[11px] font-mono font-bold text-amber-400">
-            चरण {quickStep}/7
-          </span>
-          <span className="text-[9px] text-slate-400 truncate max-w-[120px]">
-            {quickStep === 1 ? 'वीडियो' : quickStep === 2 ? 'ऑडियो' : quickStep === 3 ? 'हेडलाइन' : quickStep === 4 ? 'लोकेशन' : quickStep === 5 ? 'लोगो' : quickStep === 6 ? 'सोशल' : 'एक्सपोर्ट'}
-          </span>
-        </div>
-
-        {quickStep < 7 ? (
-          <button
-            type="button"
-            onClick={() => setQuickStep((s) => Math.min(7, s + 1))}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white font-bold text-xs flex items-center gap-1 cursor-pointer shadow transition active:scale-95"
-          >
-            <span>अगला</span>
-            <span>▶</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleDownloadVideo}
-            disabled={isExporting}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 via-amber-500 to-emerald-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-lg animate-pulse"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>एक्सपोर्ट</span>
-          </button>
-        )}
       </div>
 
       {/* Caption Modal Dialog */}

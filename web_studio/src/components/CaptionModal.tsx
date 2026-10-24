@@ -143,16 +143,16 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
         rawSummary = rawSummary.substring(0, tagMatch.index).trim();
       }
 
-      newsStory = rawSummary ? `${cleanHeadline ? `${cleanHeadline}।\n\n` : ''}${rawSummary}` : cleanHeadline;
+      newsStory = rawSummary || cleanHeadline || 'मुख्य समाचार';
       const tagsToUse = buildHashtags(card.location, existingTags, card);
       const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
-      const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location);
+      const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
       setCaptionText(cleaned);
     } else {
       newsStory = cleanHeadline || 'मुख्य समाचार';
       const tagsToUse = buildHashtags(card.location, undefined, card);
       const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
-      const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location);
+      const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
       setCaptionText(cleaned);
     }
   }, [isOpen, card]);
@@ -187,12 +187,12 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
       if (response.ok) {
         const data = await response.json();
         if (data.caption) {
-          const finalCaption = cleanCaptionParagraphs(data.caption, mode, firstUserTag.replace(/^#/, ''), card.location);
+          const finalCaption = cleanCaptionParagraphs(data.caption, mode, firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
           setCaptionText(finalCaption);
         }
       } else {
-        const fallbackStory = cleanSummary ? `${cleanHeadline ? `${cleanHeadline}। ` : ''}${cleanSummary}` : cleanHeadline;
-        const finalCaption = cleanCaptionParagraphs(fallbackStory, mode, firstUserTag.replace(/^#/, ''), card.location);
+        const fallbackStory = cleanSummary || cleanHeadline;
+        const finalCaption = cleanCaptionParagraphs(fallbackStory, mode, firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
         setCaptionText(finalCaption);
       }
     } catch (e) {

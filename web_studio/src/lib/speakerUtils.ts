@@ -1125,7 +1125,8 @@ export function ensureHashtagHierarchy(
   summaryText: string,
   location: string = '',
   username: string = '',
-  mode: 'detailed' | 'short' | 'bullet' = 'detailed'
+  mode: 'detailed' | 'short' | 'bullet' = 'detailed',
+  headlineToStrip: string = ''
 ): string {
   if (!summaryText || typeof summaryText !== 'string') return summaryText || '';
 
@@ -1140,12 +1141,28 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/(?:\+?91[\-\s]?)?[6-9]\d{9}\b/g, '');
   rawBody = rawBody.replace(/\b\d{3,5}[-\s]\d{6,8}\b/g, '');
 
-  // Strip section headers/labels
+  // Strip English and Hindi field labels/headings (Title, Headline, Description, Content, etc.)
+  rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|शीर्षक|हेडलाइन|विवरण|सामग्री|कैप्शन|खबर|विस्तृत\s*कैप्शन|संक्षिप्त\s*कैप्शन|बुलेट\s*पॉइंट्स?)\s*[:\-–—.]*/gim, '');
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, '');
-  rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट)[\s:\-–—.]*/gim, '');
+  rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, '');
 
   // Strip press note flattery
   rawBody = sanitizePressNoteFlattery(rawBody, false);
+
+  // Strip leading headline duplicate if caption accidentally starts with the headline
+  if (headlineToStrip && headlineToStrip.trim()) {
+    const cleanH = cleanHeadlineText(headlineToStrip).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+    if (cleanH.length >= 10) {
+      const firstLineMatch = rawBody.match(/^([^\n।]+)[।\n]?/u);
+      if (firstLineMatch) {
+        const firstLine = cleanHeadlineText(firstLineMatch[1]).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+        if (firstLine === cleanH || calculateHeadlineSimilarity(firstLine, cleanH) >= 0.75) {
+          rawBody = rawBody.slice(firstLineMatch[0].length).trim();
+          rawBody = rawBody.replace(/^[:\-–—.]+\s*/u, '').trim();
+        }
+      }
+    }
+  }
 
   let finalBodyText = '';
 
@@ -1168,6 +1185,7 @@ export function ensureHashtagHierarchy(
     }
     finalBodyText = bulletLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
   } else if (mode === 'short') {
+    // Concise Caption: ~2 concise sentences (approx 1-2 short paragraphs)
     const rawParagraphs = rawBody
       .split(/\n{2,}|\n(?=[^\s•])/g)
       .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
@@ -1271,6 +1289,7 @@ export function ensureHashtagHierarchy(
   if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
     filteredMiddleTags.unshift(locTag);
   }
+
   const defaultSeeds = ['#BreakingNews', '#HindiNews', '#LatestUpdate', '#NewsUpdate'];
   for (const seed of defaultSeeds) {
     if (filteredMiddleTags.length >= 5) break;
@@ -1280,7 +1299,6 @@ export function ensureHashtagHierarchy(
   }
 
   const middleSlice = filteredMiddleTags.slice(0, 6);
-
   const finalTags: string[] = [];
   if (userTag) {
     finalTags.push(userTag);
@@ -1302,16 +1320,17 @@ export function ensureHashtagHierarchy(
 }
 
 /**
- * Ensures clean caption paragraphs with strict hashtag sequence
+ * Ensures clean caption paragraphs with strict hashtag sequence and no leading headline
  */
 export function cleanCaptionParagraphs(
   caption: string,
   mode: 'detailed' | 'short' | 'bullet' = 'detailed',
   username: string = '',
-  location: string = ''
+  location: string = '',
+  headlineToStrip: string = ''
 ): string {
   if (!caption) return '';
-  return ensureHashtagHierarchy(caption.trim(), location, username, mode);
+  return ensureHashtagHierarchy(caption.trim(), location, username, mode, headlineToStrip);
 }
 
 /**

@@ -971,7 +971,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       return;
     }
     if (typeof window !== 'undefined') {
-      window.location.hash = 'home';
+      if (window.history && window.history.pushState) {
+        window.history.pushState({ tab: 'home' }, '', '/');
+      }
     }
   };
 

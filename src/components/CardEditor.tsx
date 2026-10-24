@@ -3922,7 +3922,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      window.location.hash = 'profile';
+                      if (typeof (window as any).setAppTab === 'function') {
+                        (window as any).setAppTab('profile');
+                      }
                       window.dispatchEvent(new CustomEvent('ai_news_open_template_manager'));
                     }}
                     className="w-full mt-2 py-1.5 px-3 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-300 hover:text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"

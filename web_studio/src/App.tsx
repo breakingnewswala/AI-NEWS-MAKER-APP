@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { NewsCardData, AIAnalysisResult, ChannelProfile, FrameDesign } from './types';
 import { INITIAL_PRESETS, PLACEHOLDER_NEWS_IMG } from './data/presets';
 import { CardPreview } from './components/CardPreview';
@@ -79,6 +79,11 @@ import { NewsroomScreenWeb } from './components/NewsroomScreenWeb';
 import { DraftsScreenWeb } from './components/DraftsScreenWeb';
 import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
 import { ExportScreenWeb } from './components/ExportScreenWeb';
+import { TermsPage } from './components/TermsPage';
+import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
+import { AccountDeletionPage } from './components/AccountDeletionPage';
+import { SupportContactPage } from './components/SupportContactPage';
+import { AppFooterWeb } from './components/AppFooterWeb';
 import {
   isUserAdmin,
   setAdminSystemMode,
@@ -95,8 +100,20 @@ import {
   INITIAL_CATEGORIES,
 } from './data/newsFeedData';
 
-type AppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'epaper' | 'profile' | 'generator' | 'drafts' | 'export';
-
+type AppTab =
+  | 'home'
+  | 'videos'
+  | 'studio'
+  | 'newsroom'
+  | 'epaper'
+  | 'profile'
+  | 'generator'
+  | 'drafts'
+  | 'export'
+  | 'terms'
+  | 'privacy'
+  | 'delete-account'
+  | 'support';
 
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
@@ -278,71 +295,144 @@ export default function App() {
     window.location.hostname === 'appassets.androidplatform.net'
   );
 
-  // Active App Tab: Fully responsive across Web and Android APK
-  const isStudio = (['studio', 'generator'].includes(window?.location?.hash?.replace(/^#\/?/, '') || '')) || false;
+  // Active App Tab: Clean URL routing without hashtags across Web and Android APK
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     if (typeof window !== 'undefined') {
       const fullUrl = (window.location.href || '').toLowerCase();
-      if (fullUrl.includes('#profile') || fullUrl.includes('tab=profile') || fullUrl.includes('/profile')) {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
+
+      // 1. Legal, compliance & support pages
+      if (path.includes('terms') || hash.includes('terms') || fullUrl.includes('tab=terms')) return 'terms';
+      if (path.includes('privacy') || hash.includes('privacy') || fullUrl.includes('tab=privacy')) return 'privacy';
+      if (
+        path.includes('delete-account') ||
+        path.includes('account-deletion') ||
+        hash.includes('delete-account') ||
+        hash.includes('account-deletion') ||
+        fullUrl.includes('tab=delete-account')
+      ) {
+        return 'delete-account';
+      }
+      if (path.includes('support') || path.includes('contact') || hash.includes('support') || hash.includes('contact') || fullUrl.includes('tab=support')) {
+        return 'support';
+      }
+
+      // 2. Standard application tabs
+      if (path.includes('profile') || path.includes('admin') || path.includes('control') || path.includes('plans') || hash === 'profile' || fullUrl.includes('tab=profile')) {
         return 'profile';
       }
-      if (fullUrl.includes('#home') || fullUrl.includes('tab=home') || fullUrl.includes('/home')) {
-        return 'home';
-      }
-      if (fullUrl.includes('#videos') || fullUrl.includes('tab=videos') || fullUrl.includes('/videos')) {
+      if (path.includes('video') || hash === 'videos' || fullUrl.includes('tab=videos')) {
         return 'videos';
       }
-      if (fullUrl.includes('#newsroom') || fullUrl.includes('tab=newsroom') || fullUrl.includes('/newsroom') || fullUrl.includes('#epaper') || fullUrl.includes('/epaper')) {
-        return 'newsroom';
-      }
-      if (fullUrl.includes('#studio') || fullUrl.includes('tab=studio') || fullUrl.includes('/studio')) {
+      if (path.includes('studio') || path.includes('generator') || hash === 'studio' || hash === 'generator' || fullUrl.includes('tab=studio')) {
         return 'studio';
       }
-
-      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
-      if (['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(hash)) {
-        return (hash === 'epaper' ? 'newsroom' : hash) as AppTab;
+      if (path.includes('newsroom') || path.includes('epaper') || path.includes('drafts') || hash === 'newsroom' || hash === 'epaper' || fullUrl.includes('tab=newsroom')) {
+        return 'newsroom';
       }
-      // Check query params (e.g. ?tab=profile)
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const tabParam = urlParams.get('tab')?.toLowerCase();
-        if (tabParam && ['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(tabParam)) {
-          return (tabParam === 'epaper' ? 'newsroom' : tabParam) as AppTab;
-        }
-      } catch {}
-      // Check path
-      const path = window.location.pathname.toLowerCase();
-      if (path.includes('profile') || path.includes('admin') || path.includes('control')) return 'profile';
-      if (path.includes('home')) return 'home';
-      if (path.includes('video')) return 'videos';
-      if (path.includes('newsroom') || path.includes('epaper')) return 'newsroom';
 
+      // 3. Primary domain directly lands on Home without any hashtag or fragment
       return 'home';
     }
     return 'home';
   });
 
-  // Listen to browser hash changes & expose setAppTab for Native Android Bridge
+  const isStudio = currentTab === 'studio' || currentTab === 'generator';
+
+  // Navigate to tab cleanly using HTML5 history without visible hashtags
+  const navigateToTab = useCallback((tab: AppTab) => {
+    const target = tab === ('epaper' as any) ? 'newsroom' : tab;
+    setCurrentTab(target);
+    if (typeof window !== 'undefined') {
+      const cleanPath = target === 'home' ? '/' : `/${target}`;
+      if (window.history && window.history.pushState) {
+        if (window.location.pathname !== cleanPath) {
+          window.history.pushState({ tab: target }, '', cleanPath);
+        }
+      }
+      // Strip any lingering hashtag from the browser address bar
+      if (window.location.hash) {
+        window.history.replaceState({ tab: target }, '', cleanPath);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  // Listen to popstate (browser back/forward) & clean initial URL
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
-      if (['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(hash)) {
-        setCurrentTab((hash === 'epaper' ? 'newsroom' : hash) as AppTab);
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    (window as any).setAppTab = (tab: AppTab) => {
-      const target = tab === ('epaper' as any) ? 'newsroom' : tab;
-      if (['home', 'videos', 'studio', 'newsroom', 'epaper', 'profile'].includes(target)) {
-        setCurrentTab(target);
-        window.location.hash = target;
 
+    // Sanitize any legacy #home or # on initial visit so primary domain stays completely clean
+    if (window.location.hash === '#home' || window.location.hash === '#' || window.location.hash === '#/') {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname || '/');
       }
+    }
+
+    const handlePopState = () => {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
+      if (path.includes('terms') || hash.includes('terms')) { setCurrentTab('terms'); return; }
+      if (path.includes('privacy') || hash.includes('privacy')) { setCurrentTab('privacy'); return; }
+      if (path.includes('delete-account') || path.includes('account-deletion') || hash.includes('delete-account')) { setCurrentTab('delete-account'); return; }
+      if (path.includes('support') || path.includes('contact') || hash.includes('support')) { setCurrentTab('support'); return; }
+      if (path.includes('profile') || hash === 'profile' || path.includes('plans')) { setCurrentTab('profile'); return; }
+      if (path.includes('video') || hash === 'videos') { setCurrentTab('videos'); return; }
+      if (path.includes('studio') || hash === 'studio') { setCurrentTab('studio'); return; }
+      if (path.includes('newsroom') || hash === 'newsroom') { setCurrentTab('newsroom'); return; }
+      setCurrentTab('home');
     };
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+
+    window.addEventListener('popstate', handlePopState);
+    (window as any).setAppTab = (tab: AppTab) => {
+      navigateToTab(tab);
+    };
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigateToTab]);
+
+  // Synchronize clean browser page title without hashtags
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    switch (currentTab) {
+      case 'home':
+        document.title = 'Home - AI News Maker';
+        break;
+      case 'videos':
+        document.title = 'Videos & Reels - AI News Maker';
+        break;
+      case 'studio':
+      case 'generator':
+        document.title = 'Graphic Studio - AI News Maker';
+        break;
+      case 'newsroom':
+      case 'drafts':
+      case 'epaper':
+        document.title = 'Newsroom - AI News Maker';
+        break;
+      case 'profile':
+      case 'export':
+        document.title = 'Control Room - AI News Maker';
+        break;
+      case 'terms':
+        document.title = 'Terms & Conditions - AI News Maker';
+        break;
+      case 'privacy':
+        document.title = 'Privacy Policy - AI News Maker';
+        break;
+      case 'delete-account':
+        document.title = 'Account Deletion - AI News Maker';
+        break;
+      case 'support':
+        document.title = 'Support & Contact - AI News Maker';
+        break;
+      default:
+        document.title = 'AI News Maker';
+    }
+  }, [currentTab]);
 
   // News feed posts state - auto-migrates from v1 and validates live format (no dummy seeds)
   // Part N: Filter deleted items on initial mount to prevent deleted news from flashing after refresh
@@ -919,9 +1009,7 @@ export default function App() {
 
     if (redirectAfterSave) {
       setIsOnboardingOpen(false);
-      setCurrentTab('studio');
-      window.location.hash = 'studio';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      navigateToTab('studio');
       showToast('✅ चैनल प्रोफ़ाइल सुरक्षित! ग्राफिक स्टूडियो में स्वागत है');
     }
   };
@@ -936,8 +1024,7 @@ export default function App() {
     setCurrentUser(DEFAULT_REPORTER_USER);
     setIsOnboardingCompleted(true);
     setIsUserMenuOpen(false);
-    setCurrentTab('home');
-    window.location.hash = 'home';
+    navigateToTab('home');
     showToast('लॉगआउट सफल! आप होम स्क्रीन पर हैं।');
   };
 
@@ -1572,9 +1659,7 @@ export default function App() {
       };
       setStudioInitialItem(draftVideoItem);
       updateStudioMode('video');
-      setCurrentTab('studio');
-      window.location.hash = 'studio';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      navigateToTab('studio');
       return;
     }
     if (draft.card) {
@@ -1584,9 +1669,7 @@ export default function App() {
     }
     setActiveDraftId(draft.id);
     updateStudioMode('graphic');
-    setCurrentTab('studio');
-    window.location.hash = 'studio';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateToTab('studio');
   };
 
   const handleDownload = async (formatOverride?: 'png' | 'jpeg') => {
@@ -1876,11 +1959,9 @@ export default function App() {
       additionalPhotos: articlePhotos,
     });
 
-    setCurrentTab('studio');
+    navigateToTab('studio');
     setActiveStep(2); // Redirect straight to Step 2 (Step 2A AI Link tool)
     setToastMessage(effectiveLink ? '✅ खबर का लिंक बॉक्स 1 में लोड हुआ और AI हेडलाइन तैयार!' : 'खबर स्टूडियो में लोड हुई। आप सीधे लिंक दर्ज कर सकते हैं।');
-    window.location.hash = 'studio';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
       scrollToStepById('step-ai');
     }, 150);
@@ -1912,11 +1993,9 @@ export default function App() {
         main: vid.thumbnailUrl || prev.images.main,
       },
     }));
-    setCurrentTab('studio');
+    navigateToTab('studio');
     setActiveStep(1);
     setToastMessage('वीडियो न्यूज़ स्टूडियो में लोड हो गया है!');
-    window.location.hash = 'studio';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenStudioWithEPaper = (edition?: any) => {
@@ -1924,11 +2003,9 @@ export default function App() {
       ...prev,
       frameDesign: 'jacket-epaper',
     }));
-    setCurrentTab('studio');
+    navigateToTab('studio');
     setActiveStep(1);
     setToastMessage('ई-पेपर 2-कॉलम जैकेट एक्टिवेटेड!');
-    window.location.hash = 'studio';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAddNewPost = (newPostData: Omit<NewsFeedPost, 'id' | 'timestamp'>) => {
@@ -2029,8 +2106,7 @@ export default function App() {
             type="button"
             onClick={() => {
               setShowAuthWelcomeScreen(false);
-              setCurrentTab('home');
-              window.location.hash = 'home';
+              navigateToTab('home');
             }}
             className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer shadow-md transition"
           >
@@ -2042,8 +2118,7 @@ export default function App() {
           currentUser={currentUser}
           onSkipToHome={() => {
             setShowAuthWelcomeScreen(false);
-            setCurrentTab('home');
-            window.location.hash = 'home';
+            navigateToTab('home');
           }}
           onLoginSuccess={(user) => {
             const isAdmin = isUserAdmin(user);
@@ -2051,8 +2126,7 @@ export default function App() {
             setShowAuthWelcomeScreen(false);
             if (isAdmin) {
               setAdminSystemMode('admin');
-              setCurrentTab('profile');
-              window.location.hash = 'profile';
+              navigateToTab('profile');
               setIsOnboardingCompleted(true);
               localStorage.setItem('is_onboarding_completed', 'true');
               showToast('👑 एडमिन कंट्रोल पैनल में आपका स्वागत है!');
@@ -2074,8 +2148,7 @@ export default function App() {
             // Ensure onboarding is marked completed so the user enters the homepage immediately
             setIsOnboardingCompleted(true);
             localStorage.setItem('is_onboarding_completed', 'true');
-            setCurrentTab('home');
-            window.location.hash = 'home';
+            navigateToTab('home');
             showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
           }}
           onCompleteDetails={(profile, updatedUser) => {
@@ -2088,16 +2161,14 @@ export default function App() {
             const isAdmin = isUserAdmin(userToSet);
             if (isAdmin) {
               setAdminSystemMode('admin');
-              setCurrentTab('profile');
-              window.location.hash = 'profile';
+              navigateToTab('profile');
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
               showToast('👑 मुख्य एडमिन कंट्रोल पैनल में आपका स्वागत है!');
             } else {
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
-              setCurrentTab('home');
-              window.location.hash = 'home';
+              navigateToTab('home');
               showToast('✅ लॉगिन व चैनल सेटअप सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
             }
           }}
@@ -2129,11 +2200,7 @@ export default function App() {
             window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
             setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
           }}
-          onNavigateToTab={(tab) => {
-            setCurrentTab(tab);
-            window.location.hash = tab;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
+          onNavigateToTab={navigateToTab}
         />
       </div>
 
@@ -2150,8 +2217,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
-              setCurrentTab('profile');
-              window.location.hash = 'profile';
+              navigateToTab('support');
             }}
             className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
           >
@@ -2178,8 +2244,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                setCurrentTab('profile');
-                window.location.hash = 'profile';
+                navigateToTab('profile');
               }}
               className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition animate-pulse flex items-center gap-1"
             >
@@ -2228,8 +2293,7 @@ export default function App() {
                 onClick={() => {
                   setIsExpiredModalDismissed(true);
                   try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
-                  setCurrentTab('profile');
-                  window.location.hash = 'profile';
+                  navigateToTab('profile');
                 }}
                 className="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
               >
@@ -2241,8 +2305,7 @@ export default function App() {
                 onClick={() => {
                   setIsExpiredModalDismissed(true);
                   try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
-                  setCurrentTab('home');
-                  window.location.hash = 'home';
+                  navigateToTab('home');
                   showToast('🎁 बोनस खबरें सूची से बनाएं');
                 }}
                 className="flex-1 py-2.5 px-4 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 font-black rounded-xl text-xs flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
@@ -2728,9 +2791,7 @@ export default function App() {
           currentUser={currentUser}
           onOpenStudioWithVideo={(video) => {
             handleOpenStudioWithVideo(video);
-            setCurrentTab('studio');
-            window.location.hash = 'studio';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            navigateToTab('studio');
           }}
           onAdminAddVideo={(newVid) => {
             setVideos((prev) => [newVid, ...prev]);
@@ -2781,19 +2842,13 @@ export default function App() {
           currentUser={currentUser}
           onOpenStudioWithDraft={handleOpenDraftInStudio}
           onNavigateToStudio={() => {
-            setCurrentTab('studio');
-            window.location.hash = 'studio';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            navigateToTab('studio');
           }}
           onNavigateToVideos={() => {
-            setCurrentTab('videos');
-            window.location.hash = 'videos';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            navigateToTab('videos');
           }}
           onNavigateToControlPanel={() => {
-            setCurrentTab('profile');
-            window.location.hash = 'profile';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            navigateToTab('profile');
           }}
         />
       )}
@@ -2806,14 +2861,10 @@ export default function App() {
             onLogout={handleLogout}
             onAddNewPost={handleAddNewPost}
             onOpenStudio={() => {
-              setCurrentTab('studio');
-              window.location.hash = 'studio';
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              navigateToTab('studio');
             }}
             onNavigateToGenerator={() => {
-              setCurrentTab('studio');
-              window.location.hash = 'studio';
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              navigateToTab('studio');
             }}
             categories={categories}
             onAddCategory={handleAddCategory}
@@ -2822,14 +2873,54 @@ export default function App() {
         </ErrorBoundary>
       )}
 
+      {/* 6. Terms & Conditions */}
+      {currentTab === 'terms' && (
+        <TermsPage
+          onBack={() => navigateToTab('home')}
+          onNavigateToSupport={() => navigateToTab('support')}
+        />
+      )}
+
+      {/* 7. Privacy Policy */}
+      {currentTab === 'privacy' && (
+        <PrivacyPolicyPage
+          onBack={() => navigateToTab('home')}
+          onNavigateToDeleteAccount={() => navigateToTab('delete-account')}
+          onNavigateToSupport={() => navigateToTab('support')}
+        />
+      )}
+
+      {/* 8. Account Deletion */}
+      {currentTab === 'delete-account' && (
+        <AccountDeletionPage
+          onBack={() => navigateToTab('home')}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {/* 9. Support & Contact Us */}
+      {currentTab === 'support' && (
+        <SupportContactPage
+          onBack={() => navigateToTab('home')}
+          currentUser={currentUser}
+        />
+      )}
+
+      {/* Website Footer on content and informational pages */}
+      {currentTab !== 'studio' && currentTab !== 'generator' && (
+        <AppFooterWeb
+          onNavigateToTab={navigateToTab}
+          onOpenPlans={() => navigateToTab('profile')}
+        />
+      )}
+
       {/* Persistent Bottom Bar - 1:1 identical across web browser and Android APK */}
       <AppBottomBarWeb
         currentTab={currentTab}
         currentUser={currentUser}
         onSelectTab={(tab) => {
-          setCurrentTab(tab);
-          window.location.hash = tab;
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          navigateToTab(tab);
         }}
       />
 

@@ -496,9 +496,9 @@ let dynamicOpenAiKey: string = (process.env.OPENAI_API_KEY && process.env.OPENAI
   : "";
 let dynamicCustomDomain: string = "";
 let quotaExceededInfo = {
-  isExceeded: true,
+  isExceeded: false,
   lastChecked: new Date().toISOString(),
-  message: "दैनिक फ्री कोटा (20 अनुरोध/दिन) सीमा सक्रिय है। स्मार्ट संपादकीय इंजन द्वारा समाचार ड्राफ्टिंग निरंतर चालू है।",
+  message: "Google Gemini AI मॉडल सेवा सक्रिय और तैयार है।",
 };
 
 
@@ -5439,7 +5439,47 @@ app.post("/api/account-deletion-requests", (req, res) => {
     const cleanMobile = (mobile || "").toString().trim();
     const cleanChannel = (channelName || "").toString().trim().toLowerCase();
 
-    // Remove matching posts from news_database.json if channelName or sourceChannel matches
+    // 1. Purge user from master users database
+    if (cleanEmail || cleanMobile) {
+      let masterUsers = loadUsersMasterDatabase();
+      const origUserCount = masterUsers.length;
+      masterUsers = masterUsers.filter((u) => {
+        const uEmail = (u.email || "").toLowerCase().trim();
+        const uMobile = (u.mobile || "").trim();
+        if (cleanEmail && uEmail === cleanEmail) return false;
+        if (cleanMobile && uMobile === cleanMobile) return false;
+        return true;
+      });
+      if (masterUsers.length !== origUserCount) {
+        saveUsersMasterDatabase(masterUsers);
+      }
+    }
+
+    // 2. Purge user profile from profiles database
+    if (cleanEmail || cleanMobile || cleanChannel) {
+      const allProfiles = loadProfilesDatabase();
+      let profileModified = false;
+      for (const [key, prof] of Object.entries(allProfiles)) {
+        const pEmail = ((prof as any)?.email || key).toLowerCase().trim();
+        const pMobile = ((prof as any)?.mobile || "").trim();
+        const pChannel = ((prof as any)?.channelName || (prof as any)?.username || "").toLowerCase().trim();
+        if (cleanEmail && pEmail === cleanEmail) {
+          delete allProfiles[key];
+          profileModified = true;
+        } else if (cleanMobile && pMobile === cleanMobile) {
+          delete allProfiles[key];
+          profileModified = true;
+        } else if (cleanChannel && pChannel === cleanChannel) {
+          delete allProfiles[key];
+          profileModified = true;
+        }
+      }
+      if (profileModified) {
+        saveProfilesDatabase(allProfiles);
+      }
+    }
+
+    // 3. Remove matching posts from news_database.json if channelName or sourceChannel matches
     let existingPosts = loadNewsDatabase();
     const initialCount = existingPosts.length;
     if (cleanChannel.length > 2 || cleanEmail.length > 4) {
@@ -5491,7 +5531,48 @@ app.all("/api/user-data/delete-account", (req, res) => {
   try {
     const { email, mobile, channelName } = req.body || {};
     const cleanEmail = (email || "").toString().trim().toLowerCase();
+    const cleanMobile = (mobile || "").toString().trim();
     const cleanChannel = (channelName || "").toString().trim().toLowerCase();
+
+    // 1. Purge user from master users database
+    if (cleanEmail || cleanMobile) {
+      let masterUsers = loadUsersMasterDatabase();
+      const origUserCount = masterUsers.length;
+      masterUsers = masterUsers.filter((u) => {
+        const uEmail = (u.email || "").toLowerCase().trim();
+        const uMobile = (u.mobile || "").trim();
+        if (cleanEmail && uEmail === cleanEmail) return false;
+        if (cleanMobile && uMobile === cleanMobile) return false;
+        return true;
+      });
+      if (masterUsers.length !== origUserCount) {
+        saveUsersMasterDatabase(masterUsers);
+      }
+    }
+
+    // 2. Purge user profile from profiles database
+    if (cleanEmail || cleanMobile || cleanChannel) {
+      const allProfiles = loadProfilesDatabase();
+      let profileModified = false;
+      for (const [key, prof] of Object.entries(allProfiles)) {
+        const pEmail = ((prof as any)?.email || key).toLowerCase().trim();
+        const pMobile = ((prof as any)?.mobile || "").trim();
+        const pChannel = ((prof as any)?.channelName || (prof as any)?.username || "").toLowerCase().trim();
+        if (cleanEmail && pEmail === cleanEmail) {
+          delete allProfiles[key];
+          profileModified = true;
+        } else if (cleanMobile && pMobile === cleanMobile) {
+          delete allProfiles[key];
+          profileModified = true;
+        } else if (cleanChannel && pChannel === cleanChannel) {
+          delete allProfiles[key];
+          profileModified = true;
+        }
+      }
+      if (profileModified) {
+        saveProfilesDatabase(allProfiles);
+      }
+    }
 
     let existingPosts = loadNewsDatabase();
     const initialCount = existingPosts.length;
@@ -5509,7 +5590,7 @@ app.all("/api/user-data/delete-account", (req, res) => {
     const record: AccountDeletionRecord = {
       id: requestId,
       email: cleanEmail || "in-app-user",
-      mobile: (mobile || "").toString().trim(),
+      mobile: cleanMobile,
       channelName: cleanChannel,
       reason: "In-App one-click account & all data deletion",
       requestedAt: Date.now(),
@@ -7833,9 +7914,10 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
+  "gemini-flash-lite-latest",
+  "gemini-3-flash-preview",
+  "gemini-3.8-flash",
+  "gemini-flash-latest",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -7957,6 +8039,8 @@ interface ArticleExtractedMetadata {
   canonicalUrl?: string;
   publishedDate?: string;
   images?: string[];
+  extractionStatus?: "success" | "failed";
+  inaccessibleReason?: string;
 }
 
 interface ExtractedArticleResult {
@@ -7968,6 +8052,8 @@ interface ExtractedArticleResult {
   canonicalUrl?: string;
   publishedDate?: string;
   isRss?: boolean;
+  extractionStatus?: "success" | "failed";
+  inaccessibleReason?: string;
 }
 
 function cleanHtmlEntities(str: string): string {
@@ -7979,7 +8065,17 @@ function cleanHtmlEntities(str: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&nbsp;/g, " ")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_m, dec) => String.fromCharCode(parseInt(dec, 10)))
     .replace(/[^\S\r\n]+/g, " ")
+    .trim();
+}
+
+function stripNewsSiteBranding(title: string): string {
+  if (!title) return "";
+  return title
+    .replace(/\s*[-–—|]\s*(?:Dainik\s*Bhaskar|दैनिक\s*भास्कर|Amar\s*Ujala|अमर\s*उजाला|NDTV\s*Khabar|NDTV\s*India|NDTV|Aaj\s*Tak|आज\s*तक|News18|Patrika|पत्रिका|Navbharat\s*Times|नवभारत\s*टाइम्स|Hindustan|Live\s*Hindustan|BBC\s*News\s*हिंदी|BBC|ABP\s*News|Zee\s*News|Republic\s*Bharat|Oneindia|Jagran|दैनिक\s*जागरण|विकिपीडिया|Wikipedia)[^|–—\-]*$/iu, "")
+    .replace(/\s*[-–—|]\s*(?:Latest\s*News|Breaking\s*News|Hindi\s*News|ताज़ा\s*खबर).*$/iu, "")
     .trim();
 }
 
@@ -8003,7 +8099,23 @@ function parseArticleHtml(html: string, pageUrl: string): {
   images: string[];
   canonicalUrl?: string;
   publishedDate?: string;
+  extractionStatus: "success" | "failed";
+  inaccessibleReason?: string;
 } {
+  const lowerHtml = (html || "").toLowerCase();
+
+  // Detect paywalls, Cloudflare challenges, CAPTCHAs, bot blocks, or login walls
+  const isBlockedOrPaywalled =
+    (lowerHtml.includes("cf-browser-verification") ||
+     lowerHtml.includes("cf-challenge-running") ||
+     (lowerHtml.includes("cloudflare") && lowerHtml.includes("ray id") && lowerHtml.includes("security")) ||
+     lowerHtml.includes("access denied") ||
+     lowerHtml.includes("403 forbidden") ||
+     lowerHtml.includes("verify you are human") ||
+     lowerHtml.includes("turn on javascript and cookies") ||
+     lowerHtml.includes("just a moment...") ||
+     (lowerHtml.includes("login") && lowerHtml.includes("password") && lowerHtml.length < 3000));
+
   // 1. Titles: og:title, <title>, twitter:title, <h1>
   const ogTitleMatch =
     html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
@@ -8022,7 +8134,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
     "";
 
   if (rawTitle) {
-    rawTitle = cleanHeadlineText(cleanHtmlEntities(rawTitle));
+    rawTitle = stripNewsSiteBranding(cleanHeadlineText(cleanHtmlEntities(rawTitle)));
   }
 
   // 2. Descriptions: og:description, meta[name=description], twitter:description
@@ -8054,7 +8166,54 @@ function parseArticleHtml(html: string, pageUrl: string): {
       .trim();
   }
 
-  // 3. Body text: clean scripts, styles, nav, headers, footers, forms, aside, ads, related news
+  // 3. JSON-LD schema check first (NewsArticle / Article articleBody is often purest full text)
+  let jsonLdContent = "";
+  const foundImages: string[] = [];
+  try {
+    const jsonLdMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    for (const jm of jsonLdMatches) {
+      try {
+        const jdata = JSON.parse(jm[1].trim());
+        const jitems = Array.isArray(jdata) ? jdata : jdata?.["@graph"] ? jdata["@graph"] : [jdata];
+        for (const item of jitems) {
+          if (item && (item["@type"] === "NewsArticle" || item["@type"] === "Article" || item["@type"] === "ReportageNewsArticle" || item.headline || item.articleBody)) {
+            if (!rawTitle && item.headline) {
+              rawTitle = stripNewsSiteBranding(cleanHeadlineText(cleanHtmlEntities(String(item.headline))));
+            }
+            if (!rawDesc && item.description) {
+              rawDesc = cleanHtmlEntities(String(item.description))
+                .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
+                .replace(
+                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                  " "
+                )
+                .replace(/\s+/g, " ")
+                .trim();
+            }
+            if (item.articleBody) {
+              const bodyStr = cleanHtmlEntities(String(item.articleBody))
+                .replace(
+                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                  " "
+                )
+                .replace(/\s+/g, " ")
+                .trim();
+              if (bodyStr.length > jsonLdContent.length) {
+                jsonLdContent = bodyStr.slice(0, 4000);
+              }
+            }
+            const img = item.image?.url || (typeof item.image === "string" ? item.image : (Array.isArray(item.image) ? item.image[0] : null));
+            if (img) {
+              const resolvedImg = resolveUrl(typeof img === "object" ? img.url : img, pageUrl);
+              if (resolvedImg && !foundImages.includes(resolvedImg)) foundImages.unshift(resolvedImg);
+            }
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+
+  // 4. Body text from HTML: clean scripts, styles, nav, headers, footers, forms, aside, ads
   const cleanBody = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
@@ -8064,13 +8223,15 @@ function parseArticleHtml(html: string, pageUrl: string): {
     .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, " ")
     .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, " ")
     .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ")
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, " ")
     .replace(/<div\b[^>]*class=["'][^"']*(?:related|trending|popular|sidebar|advert|banner|share|social|cookie|comment|menu|nav|breadcrumb)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, " ")
     .replace(/<ul\b[^>]*class=["'][^"']*(?:related|trending|share|social)[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, " ");
 
   const articleContainerMatch =
     cleanBody.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i) ||
     cleanBody.match(/<div[^>]+itemprop=["']articleBody["'][^>]*>([\s\S]*?)<\/div>/i) ||
-    cleanBody.match(/<div[^>]+class=["'][^"']*(?:story-element|article-body|story-content|news-content|story-body|article__body)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) ||
+    cleanBody.match(/<div[^>]+class=["'][^"']*(?:story-details|story-body|article-body|story-content|news-content|art-text|article__body|story_wrapper|ArticleBody|content-area|article-content|main-content)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) ||
     cleanBody.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
 
   const textSource = articleContainerMatch ? articleContainerMatch[1] : cleanBody;
@@ -8091,7 +8252,8 @@ function parseArticleHtml(html: string, pageUrl: string): {
       )
       .replace(/\s+/g, " ")
       .trim();
-    if (pClean.length > 20 && !extractedParagraphs.includes(pClean)) {
+
+    if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
       if (
         !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|\bIST\b|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+/i.test(pClean)
       ) {
@@ -8101,21 +8263,13 @@ function parseArticleHtml(html: string, pageUrl: string): {
     }
   }
 
-  let bodyContent = extractedParagraphs.join("\n\n");
-  bodyContent = bodyContent
-    .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
-    .replace(/(?:loading[\s\.]*)+/gi, "")
-    .replace(/(?:please wait[\s\.]*)+/gi, "")
-    .replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
+  let htmlBodyContent = extractedParagraphs.join("\n\n").trim();
+  // Choose the richer content between HTML paragraphs and JSON-LD articleBody
+  let bodyContent = (jsonLdContent && jsonLdContent.length > htmlBodyContent.length + 50)
+    ? jsonLdContent
+    : (htmlBodyContent || jsonLdContent || "");
 
-  // 4. Images: og:image, twitter:image, JSON-LD, body <img>
-  const foundImages: string[] = [];
-
+  // 5. Images: og:image, twitter:image, JSON-LD, body <img>
   const ogImageMatch =
     html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
     html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
@@ -8131,47 +8285,6 @@ function parseArticleHtml(html: string, pageUrl: string): {
     const resolved = resolveUrl(twitterImageMatch[1].trim(), pageUrl);
     if (resolved && !foundImages.includes(resolved)) foundImages.push(resolved);
   }
-
-  // JSON-LD schema check
-  try {
-    const jsonLdMatches = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-    for (const jm of jsonLdMatches) {
-      try {
-        const jdata = JSON.parse(jm[1].trim());
-        const jitems = Array.isArray(jdata) ? jdata : jdata?.["@graph"] ? jdata["@graph"] : [jdata];
-        for (const item of jitems) {
-          if (item && (item["@type"] === "NewsArticle" || item["@type"] === "Article" || item["@type"] === "ReportageNewsArticle" || item.headline)) {
-            if (!rawTitle && item.headline) rawTitle = cleanHeadlineText(cleanHtmlEntities(String(item.headline)));
-            if (!rawDesc && item.description) {
-              rawDesc = cleanHtmlEntities(String(item.description))
-                .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
-                .replace(
-                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-                  " "
-                )
-                .replace(/\s+/g, " ")
-                .trim();
-            }
-            if (!bodyContent && item.articleBody) {
-              bodyContent = cleanHtmlEntities(String(item.articleBody))
-                .replace(
-                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-                  " "
-                )
-                .replace(/\s+/g, " ")
-                .trim()
-                .slice(0, 2500);
-            }
-            const img = item.image?.url || (typeof item.image === "string" ? item.image : (Array.isArray(item.image) ? item.image[0] : null));
-            if (img) {
-              const resolvedImg = resolveUrl(typeof img === "object" ? img.url : img, pageUrl);
-              if (resolvedImg && !foundImages.includes(resolvedImg)) foundImages.unshift(resolvedImg);
-            }
-          }
-        }
-      } catch {}
-    }
-  } catch {}
 
   // Body <img>
   const imgMatches = html.matchAll(/<img[^>]+src=["']([^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi);
@@ -8200,7 +8313,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
     }
   }
 
-  // 5. Canonical URL & Publication Date metadata
+  // 6. Canonical URL & Publication Date metadata
   const canonicalMatch =
     html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i) ||
     html.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']canonical["']/i);
@@ -8212,6 +8325,12 @@ function parseArticleHtml(html: string, pageUrl: string): {
     html.match(/<time[^>]*datetime=["']([^"']+)["']/i);
   const publishedDate = pubDateMatch && pubDateMatch[1] ? pubDateMatch[1].trim() : undefined;
 
+  const hasGenuineArticleText = (bodyContent && bodyContent.length >= 60) || (rawDesc && rawDesc.length >= 50 && rawTitle && rawTitle.length >= 15);
+  const extractionStatus: "success" | "failed" = (!isBlockedOrPaywalled && hasGenuineArticleText) ? "success" : "failed";
+  const inaccessibleReason = isBlockedOrPaywalled
+    ? "Page is protected by anti-bot, CAPTCHA, or paywall"
+    : (!hasGenuineArticleText ? "Article body could not be extracted from webpage" : undefined);
+
   return {
     title: rawTitle,
     description: rawDesc,
@@ -8219,6 +8338,8 @@ function parseArticleHtml(html: string, pageUrl: string): {
     images: foundImages,
     canonicalUrl,
     publishedDate,
+    extractionStatus,
+    inaccessibleReason,
   };
 }
 
@@ -8365,14 +8486,15 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
   const normalizedRawUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
   const safety = isSafePublicUrl(normalizedRawUrl);
   if (!safety.safe) {
-    const fallbackFacts = extractFactsFromUrlString(normalizedRawUrl);
     return {
-      title: fallbackFacts.titleHint,
-      description: fallbackFacts.titleHint ? `${fallbackFacts.titleHint}। इस मामले में पुलिस व प्रशासन स्तर पर आवश्यक जांच और कार्रवाई जारी है।` : "",
-      content: fallbackFacts.titleHint ? `${fallbackFacts.titleHint}। पूरे मामले पर अधिकारियों द्वारा नजर रखी जा रही है।` : "",
+      title: "",
+      description: "",
+      content: "",
       images: [],
       sourceUrl: normalizedRawUrl,
       isRss: false,
+      extractionStatus: "failed",
+      inaccessibleReason: "Invalid or restricted URL",
     };
   }
 
@@ -8430,15 +8552,16 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
     console.warn(`[URL Scraper] Network fetch failed for ${normalizedRawUrl}:`, fetchErr?.message || fetchErr);
   }
 
-  if (!rawBody || rawBody.length < 50) {
-    const fallbackFacts = extractFactsFromUrlString(normalizedRawUrl);
+  if (!rawBody || rawBody.length < 50 || !response || !response.ok) {
     return {
-      title: fallbackFacts.titleHint,
-      description: fallbackFacts.titleHint ? `${fallbackFacts.titleHint}। इस मामले में पुलिस व प्रशासन स्तर पर आवश्यक जांच और कार्रवाई जारी है।` : "",
-      content: fallbackFacts.titleHint ? `${fallbackFacts.titleHint}। पूरे मामले पर अधिकारियों द्वारा नजर रखी जा रही है।` : "",
+      title: "",
+      description: "",
+      content: "",
       images: [],
       sourceUrl: normalizedRawUrl,
       isRss: false,
+      extractionStatus: "failed",
+      inaccessibleReason: response ? `HTTP ${response.status}` : "Network fetch failed",
     };
   }
 
@@ -8507,23 +8630,27 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
             if (artRes.ok) {
               const artHtml = await artRes.text();
               const deepArticle = parseArticleHtml(artHtml, itemLink);
-              return {
-                title: deepArticle.title || itemTitle,
-                description: deepArticle.description || itemDesc,
-                content: deepArticle.content || itemContent || itemDesc,
-                images: deepArticle.images.length > 0 ? deepArticle.images : rssImages,
-                sourceUrl: itemLink,
-                canonicalUrl: deepArticle.canonicalUrl,
-                publishedDate: deepArticle.publishedDate,
-                isRss: true,
-              };
+              if (deepArticle.extractionStatus === "success" && (deepArticle.content || deepArticle.description)) {
+                return {
+                  title: deepArticle.title || itemTitle,
+                  description: deepArticle.description || itemDesc,
+                  content: deepArticle.content || itemContent || itemDesc,
+                  images: deepArticle.images.length > 0 ? deepArticle.images : rssImages,
+                  sourceUrl: itemLink,
+                  canonicalUrl: deepArticle.canonicalUrl,
+                  publishedDate: deepArticle.publishedDate,
+                  isRss: true,
+                  extractionStatus: "success",
+                };
+              }
             }
           }
         } catch (deepErr) {
-          console.warn("Deep article fetch from RSS link failed, using RSS item facts:", deepErr);
+          console.warn("Deep article fetch from RSS link failed, checking RSS item facts:", deepErr);
         }
       }
 
+      const hasRssFacts = (itemContent && itemContent.length >= 60) || (itemDesc && itemDesc.length >= 40 && itemTitle && itemTitle.length >= 10);
       return {
         title: itemTitle,
         description: itemDesc,
@@ -8531,17 +8658,14 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
         images: rssImages,
         sourceUrl: itemLink || finalRedirectedUrl,
         isRss: true,
+        extractionStatus: hasRssFacts ? "success" : "failed",
+        inaccessibleReason: hasRssFacts ? undefined : "RSS story content lacks sufficient details",
       };
     }
   }
 
   // Standard HTML Article extraction
   const article = parseArticleHtml(rawBody, finalRedirectedUrl);
-
-  if (!article.title || article.title.length < 5) {
-    const slugFacts = extractFactsFromUrlString(finalRedirectedUrl);
-    article.title = slugFacts.titleHint || article.title;
-  }
 
   return {
     title: article.title,
@@ -8552,6 +8676,8 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
     canonicalUrl: article.canonicalUrl,
     publishedDate: article.publishedDate,
     isRss: false,
+    extractionStatus: article.extractionStatus,
+    inaccessibleReason: article.inaccessibleReason,
   };
 }
 
@@ -9276,7 +9402,8 @@ export function ensureHashtagHierarchy(
   summaryText: string,
   location: string = "",
   username: string = "",
-  mode: "detailed" | "short" | "bullet" = "detailed"
+  mode: "detailed" | "short" | "bullet" = "detailed",
+  headlineToStrip: string = ""
 ): string {
   if (!summaryText || typeof summaryText !== "string") return summaryText || "";
 
@@ -9291,13 +9418,29 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/(?:\+?91[\-\s]?)?[6-9]\d{9}\b/g, "");
   rawBody = rawBody.replace(/\b\d{3,5}[-\s]\d{6,8}\b/g, "");
 
-  // Strip section headers/labels
+  // Strip English and Hindi field labels/headings (Title, Headline, Description, Content, etc.)
+  rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|शीर्षक|हेडलाइन|विवरण|सामग्री|कैप्शन|खबर|विस्तृत\s*कैप्शन|संक्षिप्त\s*कैप्शन|बुलेट\s*पॉइंट्स?)\s*[:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
-  rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट)[\s:\-–—.]*/gim, "");
+  rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
 
   // Strip press note flattery using Attachment 5
   rawBody = sanitizePressNoteFlattery(rawBody, false);
   rawBody = sanitizeFlattery(rawBody);
+
+  // Strip leading headline duplicate if caption accidentally starts with the headline
+  if (headlineToStrip && headlineToStrip.trim()) {
+    const cleanH = cleanHeadlineText(headlineToStrip).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+    if (cleanH.length >= 10) {
+      const firstLineMatch = rawBody.match(/^([^\n।]+)[।\n]?/u);
+      if (firstLineMatch) {
+        const firstLine = cleanHeadlineText(firstLineMatch[1]).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+        if (firstLine === cleanH || calculateHeadlineSimilarityInternal(firstLine, cleanH) >= 0.75) {
+          rawBody = rawBody.slice(firstLineMatch[0].length).trim();
+          rawBody = rawBody.replace(/^[:\-–—.]+\s*/u, "").trim();
+        }
+      }
+    }
+  }
 
   let finalBodyText = "";
 
@@ -9463,10 +9606,11 @@ export function cleanCaptionParagraphs(
   caption: string,
   mode: "detailed" | "short" | "bullet" = "detailed",
   username: string = "",
-  location: string = ""
+  location: string = "",
+  headlineToStrip: string = ""
 ): string {
   if (!caption) return "";
-  return ensureHashtagHierarchy(caption.trim(), location, username, mode);
+  return ensureHashtagHierarchy(caption.trim(), location, username, mode, headlineToStrip);
 }
 
 
@@ -10382,6 +10526,10 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     "formattedHeadline",
     "location",
     "summary",
+    "captionDetailed",
+    "captionBullets",
+    "captionShort",
+    "category",
   ],
 };
 
@@ -10429,7 +10577,7 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     ? `पहला हैशटैग: #${cleanUser}`
     : `(यदि यूज़रनेम न हो तो कोई यूज़रनेम हैशटैग न लगाएं)`;
 
-  const systemInstruction = `आप एक अग्रणी डिजिटल हिंदी न्यूज़ चैनल के वरिष्ठ मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का विश्लेषण करके सख्त संपादकीय नियमों का कड़ाई से पालन करते हुए निष्पक्ष, प्रामाणिक और प्रभावशाली हिंदी हेडलाइन, 5 संतुलित हेडलाइन विकल्प और सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
+  const systemInstruction = `आप एक अग्रणी डिजिटल हिंदी न्यूज़ चैनल के वरिष्ठ मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का गहन विश्लेषण करके सख्त संपादकीय नियमों का कड़ाई से पालन करते हुए निष्पक्ष, प्रामाणिक और प्रभावशाली हिंदी हेडलाइन, 5 स्वतंत्र एवं संतुलित हेडलाइन विकल्प और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
@@ -10444,30 +10592,37 @@ ${effectiveSourceTitle ? `शीर्षक संदर्भ: ${effectiveSour
 
 ${customPrompt ? `[यूज़र का अतिरिक्त निर्देश / प्रॉम्प्ट]:\n"""\n${customPrompt}\n"""\n` : ""}
 ★ अति-महत्वपूर्ण संपादकीय नियम (STRICT EDITORIAL RULES):
-1. आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन (MANDATORY):
+1. मूल हेडलाइन की अंधी नकल वर्जित (ORIGINAL REWRITING REQUIRED):
+   - स्रोत हेडलाइन (source headline) का उपयोग केवल विषय को समझने के लिए करें, उसे ज्यों-का-त्यों या केवल 1-2 शब्द बदलकर कभी प्रस्तुत न करें।
+   - सभी 5 हेडलाइन विकल्प समाचार के मुख्य पुष्ट तथ्यों (facts), घटनाक्रम और असर के आधार पर नए सिरे से स्वतंत्र रूप से (independently) लिखें।
+   - मेटा विवरण (meta description), RSS विवरण या शुरुआती वाक्यों की सीधी नकल करके कैप्शन न बनाएं।
+2. आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन (MANDATORY):
    - हेडलाइन, हेडलाइन विकल्पों और पूरी स्क्रिप्ट (summary व captions) में से 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी', 'परम पूज्य' जैसे सभी औपचारिक व सरकारी/पीआर शब्दों को पूरी तरह हटा दें। सीधे अधिकारी या नेता का पद और नाम लिखें।
-2. निष्पक्षता व खोजी पत्रकारिता:
+3. निष्पक्षता व खोजी पत्रकारिता:
    - यदि प्रेस नोट या कच्ची खबर में एकतरफा सरकारी दावा हो, तो उसे संतुलित और तथ्यपरक न्यूज़ में बदलें। "बड़ा खुलासा", "मचा हड़कंप", "इससे लोगों को मदद मिलेगी" जैसे गैर-ज़रूरी फिलर शब्दों को पूरी तरह हटाएं।
-3. भाषा व पंचुएशन:
+4. भाषा व पंचुएशन:
    - विशुद्ध, गंभीर, व्याकरणिक दृष्टि से सटीक हिंदी (देवनागरी लिपि)। किसी भी हेडलाइन के अंत में पूर्णविराम (. या ।) न लगाएं।
-4. ठीक 5 हेडलाइन विकल्प (Strict 5 Tiered Maximum Limits):
+5. ठीक 5 हेडलाइन विकल्प (Strict 5 Tiered Maximum Limits):
    - विकल्प 1 (ब्रेकिंग स्टाइल): अधिकतम 100 वर्ण (वर्ण सीमा, लक्ष्य नहीं)
    - विकल्प 2 (तथ्यात्मक स्टाइल): अधिकतम 120 वर्ण
    - विकल्प 3 (कार्रवाई/जांच स्टाइल): अधिकतम 135 वर्ण
    - विकल्प 4 (जनहित/विस्तृत स्टाइल): अधिकतम 145 वर्ण
    - विकल्प 5 (नीति/फॉलो-अप स्टाइल): अधिकतम 170 वर्ण
-5. स्थान (Location):
-   - केवल शुद्ध शहर, जिला या राज्य (जैसे "रीवा", "भोपाल, मध्य प्रदेश")। स्थान में कभी भी कोई URL, लिंक या वाक्य न डालें।
-6. सोशल मीडिया कैप्शन (शून्य URL नियम - ABSOLUTELY NO URLs):
+6. स्थान (Location):
+   - केवल शुद्ध शहर, जिला या राज्य (जैसे "रीवा", "भोपाल, मध्य प्रदेश")। स्थान को हेडलाइन बड़ा करने के लिए जबरन न जोड़ें। स्थान में कभी भी कोई URL, लिंक या वाक्य न डालें।
+7. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs):
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" न जोड़ें।
-   - summary / captionDetailed: ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में पूरी निष्पक्ष खबर।
-   - captionBullets: 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो।
-   - captionShort: ठीक 2 संक्षिप्त एवं सारगर्भित पैराग्राफ।
+   - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
+   - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं।
+   - कोई अंग्रेजी लेबल जैसे 'Title', 'Description', 'Content' कैप्शन में न डालें।
+   - summary / captionDetailed: ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में सीधे खबर के तथ्यों से शुरू करते हुए पूरी निष्पक्ष खबर।
+   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो और ठीक एक अलग तथ्य या आंकड़ा बताए। बुलेट के ऊपर कोई हेडलाइन न रखें।
+   - captionShort: ठीक 2 संक्षिप्त एवं सारगर्भित पैराग्राफ (लगभग 2 संक्षिप्त वाक्य), सीधे मुख्य घटनाक्रम से शुरू।
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
      * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
-7. suggestedImagePrompt:
+8. suggestedImagePrompt:
    - अंग्रेजी में रियलिस्टिक प्रेस फोटो प्रॉम्प्ट (35mm लेंस, प्राकृतिक प्रकाश, प्रामाणिक भारतीय प्रेस कवरेज, बिना किसी टेक्स्ट या वॉटरमार्क के)।
 
 Strictly return a valid JSON object matching these exact keys:
@@ -10477,10 +10632,10 @@ Strictly return a valid JSON object matching these exact keys:
   "highlightWords": ["मुख्य शब्द 1", "मुख्य शब्द 2"],
   "formattedHeadline": "हेडलाइन जिसमें मुख्य शब्द [yellow]शब्द[/yellow] से चिह्नित हों",
   "location": "शहर, राज्य",
-  "summary": "विस्तृत 3 पैराग्राफ खबर और अंत में हैशटैग (बिना URL)",
-  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन (बिना URL)",
-  "captionBullets": "बुलेट पॉइंट्स कैप्शन (बिना URL)",
-  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन (बिना URL)",
+  "summary": "विस्तृत 3 पैराग्राफ खबर और अंत में हैशटैग (बिना URL, बिना हेडलाइन शुरुआत)",
+  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन (बिना URL, बिना हेडलाइन शुरुआत)",
+  "captionBullets": "बुलेट पॉइंट्स कैप्शन सीधे • से शुरू (बिना URL, बिना हेडलाइन शुरुआत)",
+  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन (बिना URL, बिना हेडलाइन शुरुआत)",
   "category": "हादसा / प्रशासन / राजनीति / विकास / अपराध / जनआंदोलन",
   "suggestedImagePrompt": "English journalistic photography prompt",
   "isAiGeneratedPhoto": false,
@@ -10507,12 +10662,16 @@ export async function scrapeNewsFromUrl(rawUrl: string): Promise<{
   snippet: string;
   pickedImages: { main?: string; second?: string; third?: string; fourth?: string };
   extractedMeta?: ArticleExtractedMetadata;
+  extractionStatus?: "success" | "failed";
+  inaccessibleReason?: string;
 }> {
   const extracted = await fetchAndProcessNewsUrl(rawUrl);
   if (!extracted) {
     return {
       snippet: `URL to reference: ${rawUrl}`,
       pickedImages: {},
+      extractionStatus: "failed",
+      inaccessibleReason: "Unable to reach or parse URL",
     };
   }
   const snippet = `
@@ -10543,6 +10702,8 @@ Content: ${extracted.content ? extracted.content.slice(0, 2000) : ""}
       canonicalUrl: extracted.canonicalUrl,
       publishedDate: extracted.publishedDate,
     },
+    extractionStatus: extracted.extractionStatus,
+    inaccessibleReason: extracted.inaccessibleReason,
   };
 }
 
@@ -10610,8 +10771,12 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     if (rawLink && !isInternalPlatformUrl) {
       if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
+        let scrapedStatus: "success" | "failed" = "failed";
+        let scrapedReason = "";
         try {
           const scraped = await scrapeNewsFromUrl(normalizedUrl);
+          scrapedStatus = scraped.extractionStatus || "failed";
+          scrapedReason = scraped.inaccessibleReason || "";
           if (scraped.extractedMeta) {
             extractedArticleMeta = scraped.extractedMeta;
             effectiveArticleTitle = extractedArticleMeta.title || "";
@@ -10632,20 +10797,23 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         } catch (fetchErr: any) {
           console.warn("Could not fetch or parse URL directly:", fetchErr?.message || fetchErr);
           fetchedArticleSnippet = "";
+          scrapedStatus = "failed";
+          scrapedReason = fetchErr?.message || "Failed to fetch";
         }
 
         const hasRealFacts = Boolean(
-          (effectiveArticleTitle && effectiveArticleTitle.trim().length > 5) ||
-          (effectiveArticleDesc && effectiveArticleDesc.trim().length > 10) ||
-          (articleBodySnippets && articleBodySnippets.trim().length > 20) ||
-          (effectiveInput && effectiveInput.trim().length > 15)
+          (articleBodySnippets && articleBodySnippets.trim().length > 30) ||
+          (effectiveArticleDesc && effectiveArticleDesc.trim().length > 25 && effectiveArticleTitle && effectiveArticleTitle.trim().length > 10) ||
+          (effectiveInput && effectiveInput.trim().length > 25)
         );
 
-        if (!hasRealFacts && rawLink) {
-          const urlFacts = extractFactsFromUrlString(rawLink);
-          effectiveArticleDesc = urlFacts.titleHint || "";
-          articleBodySnippets = urlFacts.titleHint || "";
-          fetchedArticleSnippet = `URL: ${rawLink}\nDomain: ${urlFacts.domain}\nTitle: ${urlFacts.titleHint}\nKeywords: ${urlFacts.slugWords.join(" ")}`;
+        if ((scrapedStatus === "failed" || !hasRealFacts) && (!effectiveInput || effectiveInput.trim().length < 25)) {
+          return res.status(422).json({
+            error: "इस न्यूज़ लिंक से मुख्य खबर/आलेख पढ़ा नहीं जा सका (पेज सुरक्षित, पेवॉल, लॉगिन या अनुपलब्ध है)। कृपया खबर का वास्तविक टेक्स्ट कॉपी करके पेस्ट करें या दूसरा सुलभ लिंक प्रदान करें।",
+            extraction_status: "failed",
+            reason: scrapedReason || "Webpage content unavailable",
+            submitted_url: rawLink,
+          });
         }
 
         const hasAuthenticHindiInput = Boolean(
@@ -10914,11 +11082,29 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
 
       if (Array.isArray(parsedData.headlineOptions)) {
         for (const h of parsedData.headlineOptions) {
+          // Source headline must not be blindly copied
+          if (primarySourceHeadline && calculateHeadlineSimilarityInternal(primarySourceHeadline, h) >= 0.90) {
+            continue;
+          }
           addOptionIfValid(h);
         }
       }
       if (parsedData.headline && cleanOptions.length === 0) {
-        addOptionIfValid(parsedData.headline);
+        if (!primarySourceHeadline || calculateHeadlineSimilarityInternal(primarySourceHeadline, parsedData.headline) < 0.90) {
+          addOptionIfValid(parsedData.headline);
+        }
+      }
+
+      if (cleanOptions.length < 5) {
+        const supp = generate5BalancedHeadlineOptions(
+          primarySourceHeadline || "मुख्य समाचार",
+          factSentences,
+          parsedData.location
+        );
+        for (const opt of supp) {
+          if (cleanOptions.length >= 5) break;
+          addOptionIfValid(opt);
+        }
       }
 
       parsedData.headlineOptions = fitHeadlinesTo5TierRanges(
@@ -11005,7 +11191,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           parsedData.location,
           channelUsername
         );
-        parsedData.captionDetailed = cleanCaptionParagraphs(sanitized, 'detailed', channelUsername, parsedData.location);
+        parsedData.captionDetailed = cleanCaptionParagraphs(sanitized, 'detailed', channelUsername, parsedData.location, parsedData.headline);
       }
       if (parsedData.captionBullets) {
         const sanitized = sanitizeCaptionText(
@@ -11014,7 +11200,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           parsedData.location,
           channelUsername
         );
-        parsedData.captionBullets = cleanCaptionParagraphs(sanitized, 'bullet', channelUsername, parsedData.location);
+        parsedData.captionBullets = cleanCaptionParagraphs(sanitized, 'bullet', channelUsername, parsedData.location, parsedData.headline);
       }
       if (parsedData.captionShort) {
         const sanitized = sanitizeCaptionText(
@@ -11023,7 +11209,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           parsedData.location,
           channelUsername
         );
-        parsedData.captionShort = cleanCaptionParagraphs(sanitized, 'short', channelUsername, parsedData.location);
+        parsedData.captionShort = cleanCaptionParagraphs(sanitized, 'short', channelUsername, parsedData.location, parsedData.headline);
       }
 
       if (parsedData.summary) {
@@ -11033,7 +11219,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           parsedData.location,
           channelUsername
         );
-        parsedData.summary = cleanCaptionParagraphs(sanitized, 'detailed', channelUsername, parsedData.location);
+        parsedData.summary = cleanCaptionParagraphs(sanitized, 'detailed', channelUsername, parsedData.location, parsedData.headline);
       } else {
         parsedData.summary = parsedData.captionDetailed;
       }
@@ -12364,7 +12550,7 @@ ${modeGuidance}
       }
     }
 
-    const cleanResult = cleanCaptionParagraphs(caption, effectiveMode, effectiveUsername, effectiveLocation);
+    const cleanResult = cleanCaptionParagraphs(caption, effectiveMode, effectiveUsername, effectiveLocation, effectiveHeadline);
     return res.json({ success: true, caption: cleanResult });
   } catch (err: any) {
     console.error("Error in /api/generate-caption:", err);

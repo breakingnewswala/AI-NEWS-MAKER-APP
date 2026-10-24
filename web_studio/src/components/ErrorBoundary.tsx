@@ -61,7 +61,9 @@ export class ErrorBoundary extends Component<Props, State> {
               onClick={() => {
                 this.handleReset();
                 try {
-                  window.location.hash = 'studio';
+                  if (typeof (window as any).setAppTab === 'function') {
+                    (window as any).setAppTab('studio');
+                  }
                 } catch {}
               }}
               className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold rounded-xl cursor-pointer transition-all"

@@ -256,7 +256,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       rawSource = baseSummary || headline;
     }
 
-    return cleanCaptionParagraphs(rawSource, mode, cleanUser, loc);
+    return cleanCaptionParagraphs(rawSource, mode, cleanUser, loc, headline);
   };
 
   const handleSwitchCaptionStyle = (newStyle: 'detailed' | 'bullets' | 'short') => {
@@ -447,6 +447,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     setLoading(true);
     setError(null);
+    setResult(null);
+    setHeadlineOptions([]);
+    setSelectedHeadlineIndex(0);
     setGeneratedAiImageUrl(null);
 
     try {

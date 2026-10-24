@@ -99,6 +99,53 @@
   ],
   "transactions": [
     {
+      "id": "tx-frame-1792849945938-0yqc",
+      "transactionId": "tx-frame-1792849945938-0yqc",
+      "userId": "coin_test_1792849945909@example.com",
+      "userEmail": "coin_test_1792849945909@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792849945938,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792849945912-me73",
+      "transactionId": "tx-credit-1792849945912-me73",
+      "userId": "coin_test_1792849945909@example.com",
+      "userEmail": "coin_test_1792849945909@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792849945912,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-welcome-graphic-1792849306143-7hwg",
+      "transactionId": "tx-welcome-graphic-1792849306143-7hwg",
+      "userId": "admin.ainewsmaker@gmail.com",
+      "userEmail": "admin.ainewsmaker@gmail.com",
+      "description": "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 500,
+      "amount": 500,
+      "balanceAfter": 500,
+      "status": "completed",
+      "createdAt": 1792849306143,
+      "createdBy": "system"
+    },
+    {
       "id": "tx-frame-1792841385422-1z8v",
       "transactionId": "tx-frame-1792841385422-1z8v",
       "userId": "coin_test_1792841385391@example.com",
@@ -1367,9 +1414,23 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
+    },
+    "admin.ainewsmaker@gmail.com": {
+      "coinBalance": 500,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 500
+    },
+    "coin_test_1792849945909@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
     }
   },
-  "welcomeRewards": {},
+  "welcomeRewards": {
+    "admin.ainewsmaker@gmail.com": {
+      "graphicClaimed": true
+    }
+  },
   "unlockedItems": {},
   "frameUnlocks": {
     "coin_test_1792250751878@example.com": {
@@ -1592,6 +1653,13 @@
     "coin_test_1792841385391@example.com": {
       "graphic_002": {
         "unlockedAt": 1792841385422,
+        "expiresAt": 1792866599999,
+        "dateStr": "2026-10-24"
+      }
+    },
+    "coin_test_1792849945909@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792849945938,
         "expiresAt": 1792866599999,
         "dateStr": "2026-10-24"
       }

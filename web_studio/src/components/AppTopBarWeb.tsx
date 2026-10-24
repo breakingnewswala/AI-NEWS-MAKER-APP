@@ -247,7 +247,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </div>
 
               <div>
-                {/* Header line: AI News Maker + LIVE Badge + Compact Mobile Admin/Test Mode Toggle */}
+                {/* Header line: AI News Maker + LIVE Badge */}
                 <div className="flex items-center gap-2">
                   <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
                     AI News Maker
@@ -255,31 +255,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
                     LIVE
                   </span>
-
-                  {/* Compact Mobile Admin/Test Mode Toggle (Saffron for Admin, Purple for Test) - On non-Control-Panel mobile areas (Part 20) */}
-                  {isAdminUser && !isControlPanel && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextMode = adminSystemMode === 'admin' ? 'test' : 'admin';
-                        setAdminSystemMode(nextMode);
-                        setAdminSystemModeState(nextMode);
-                      }}
-                      className={`md:hidden relative inline-flex items-center h-5 w-10 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out border ${
-                        adminSystemMode === 'test'
-                          ? 'bg-purple-600 border-purple-400'
-                          : 'bg-[#ea580c] border-amber-400'
-                      }`}
-                      title={adminSystemMode === 'test' ? 'टेस्ट मोड सक्रिय (बैंगनी) - क्लिक करके एडमिन मोड में बदलें' : 'एडमिन मोड सक्रिय (सिंदूरी) - क्लिक करके टेस्ट मोड में बदलें'}
-                      aria-label="Toggle Admin/Test Mode"
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                          adminSystemMode === 'test' ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  )}
                 </div>
 
                 <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
@@ -354,7 +329,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 onClick={() => {
                   onNavigateToTab('profile');
                   if (typeof window !== 'undefined') {
-                    window.location.hash = 'profile';
                     window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
                   }
                 }}
@@ -381,6 +355,34 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </button>
             )}
 
+            {/* Admin Mode / Test Mode Mobile & Top Bar Quick Switcher (Voice Directive 2) */}
+            {isAdminUser && (
+              <button
+                type="button"
+                onClick={() => {
+                  const nextMode = adminSystemMode === 'admin' ? 'test' : 'admin';
+                  setAdminSystemMode(nextMode);
+                  setAdminSystemModeState(nextMode);
+                }}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border shadow-xs ${
+                  adminSystemMode === 'test'
+                    ? 'bg-purple-600/90 hover:bg-purple-500 text-white border-purple-400'
+                    : 'bg-slate-900 hover:bg-slate-850 text-amber-400 border-slate-700/80 hover:border-amber-400/50'
+                }`}
+                title={adminSystemMode === 'test' ? 'टेस्ट मोड सक्रिय - एडमिन मोड में बदलें' : 'एडमिन मोड - टेस्ट मोड में बदलें'}
+              >
+                {adminSystemMode === 'test' ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                    <span>🧪 टेस्ट</span>
+                  </>
+                ) : (
+                  <>
+                    <span>⚡ एडमिन</span>
+                  </>
+                )}
+              </button>
+            )}
 
             {/* Real-time Notifications */}
               <div className="relative">
