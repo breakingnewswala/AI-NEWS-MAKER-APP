@@ -35,8 +35,7 @@ export function isAndroidWebView(): boolean {
   if (typeof window === 'undefined') return false;
   return (
     window.location.hostname === 'appassets.androidplatform.net' ||
-    window.location.protocol === 'file:' ||
-    !!(window as any).AndroidBridge
+    window.location.protocol === 'file:'
   );
 }
 
@@ -48,17 +47,17 @@ export function getApiBaseUrl(): string {
       return custom;
     }
 
-    // Inside Android WebView, requests cannot go to appassets.androidplatform.net origin
+    // 2. If running via HTTP or HTTPS (web browser or WebView navigating web URL), use current origin
+    if (window.location.protocol.startsWith('http') && window.location.hostname !== 'appassets.androidplatform.net') {
+      return window.location.origin;
+    }
+
+    // 3. Inside Android local asset WebView (file:// or appassets.androidplatform.net)
     if (isAndroidWebView()) {
       return DEFAULT_CLOUD_BASE_URL;
     }
-
-    // 2. If running in standard browser via HTTP or HTTPS, use current origin
-    if (window.location.protocol.startsWith('http')) {
-      return window.location.origin;
-    }
   }
-  // 3. Android WebView running local assets from file:///android_asset/news_studio/
+  // Fallback
   return DEFAULT_CLOUD_BASE_URL;
 }
 

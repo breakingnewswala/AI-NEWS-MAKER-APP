@@ -700,7 +700,34 @@ export function calculateHeadlineSimilarity(h1: string, h2: string): number {
 }
 
 /**
- * Sanitizes flattering and honorific words from text (Part 3)
+ * Attachment 5 Canonical sanitizeFlattery implementation
+ */
+export function sanitizeFlattery(text: string): string {
+  if (!text || typeof text !== 'string') return text || '';
+  return text
+    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
+    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * Strips all URLs, web domains, and links (Zero URL policy)
+ */
+export function stripAllUrlsAndHyperlinks(text: string): string {
+  if (!text || typeof text !== 'string') return text || '';
+  return text
+    .replace(/https?:\/\/[^\s]+/gi, '')
+    .replace(/www\.[^\s]+/gi, '')
+    .replace(/\b[a-zA-Z0-9.\-]+\.(?:com|in|org|net|co|io|online|xyz|tv|site|app|live)\b[^\s]*/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Sanitizes flattering and honorific words from text (Part 3 & Attachment 5)
  * Completely eliminates PR flattery & honorifics (श्री, श्रीमती, सुश्री, माननीय, सम्माननीय, आदरणीय, महोदय, जी, पूज्य, परम पूज्य)
  * STRICT PROTECTION: Never damages genuine names or place words like श्रीवास्तव, श्रीनगर, श्रीराम, श्रीधर
  */
@@ -713,21 +740,11 @@ export function sanitizePressNoteFlattery(text: any, isHeadline: boolean = false
   // 1. Remove fluff prefixes
   cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, '');
 
-  // 2. Comprehensive Anti-Flattery filter: Strip formal honorifics ('माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'श्रीमान', 'श्रीमती', 'सुश्री', 'परम पूज्य', 'पूज्य')
-  cleaned = cleaned.replace(
-    /(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम\s*पूज्य|पूज्य)(?:\s*[\/\-]\s*(?:श्रीमान|श्रीमती|सुश्री|महोदय|महोदया))?\s+/gu,
-    ' '
-  );
+  // 2. Canonical Attachment 5 sanitizeFlattery implementation
+  cleaned = sanitizeFlattery(cleaned);
 
-  // 3. Strip standalone 'श्री' or 'श्री/श्रीमती' when followed by space and name, preserving proper nouns like श्रीवास्तव, श्रीनगर, श्रीराम, श्रीधर
-  cleaned = cleaned.replace(
-    /(?:^|[^\p{L}\p{M}])(?:श्री|श्रीमती)(?:\s*[\/\-]\s*(?:श्री|श्रीमती))?\s+(?=[\p{L}])/gu,
-    ' '
-  );
-
-  // 4. Strip formal suffixes ('महोदय', 'महोदया', 'जी')
-  cleaned = cleaned.replace(/(?:\s+महोदय|\s+महोदया)(?=[,\s.!?।\n]|$)/gu, '');
-  cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, '');
+  // 3. Remove unnecessary trailing explanatory filler sentences (e.g. "इससे लोगों को मदद मिलेगी")
+  cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, '');
 
   cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').trim();
   if (isHeadline) {
@@ -1093,10 +1110,22 @@ export function generate5JournalisticHeadlines(
  * - Middle: 4-6 relevant news/location tags
  * - Final tag: strictly #AINewsMaker
  */
+/**
+ * Ensures clean, factual Hindi caption according to selected mode with strict hashtag hierarchy:
+ * - Detailed: Exactly 3 rich paragraphs
+ * - Bullets: 3-5 lines starting with '• '
+ * - Short: Exactly 2 concise paragraphs
+ * - Zero URLs, hyperlinks, phone numbers, or flattery
+ * - Exactly ONE blank line before hashtags
+ * - 1st tag: #{username} (never guessed, omitted if absent)
+ * - Middle: 4-6 relevant news/location tags
+ * - Final tag: strictly #AINewsMaker
+ */
 export function ensureHashtagHierarchy(
   summaryText: string,
   location: string = '',
-  username: string = ''
+  username: string = '',
+  mode: 'detailed' | 'short' | 'bullet' = 'detailed'
 ): string {
   if (!summaryText || typeof summaryText !== 'string') return summaryText || '';
 
@@ -1104,10 +1133,8 @@ export function ensureHashtagHierarchy(
   const parts = summaryText.split(/\n\s*#/);
   let rawBody = parts[0].trim();
 
-  // Strip raw URLs, web domains, and links
-  rawBody = rawBody.replace(/https?:\/\/\S+/gi, '');
-  rawBody = rawBody.replace(/www\.\S+/gi, '');
-  rawBody = rawBody.replace(/\b[a-zA-Z0-9.\-]+\.(?:com|in|org|net|co|io)\b\S*/gi, '');
+  // Strip all URLs, web domains, and links (Zero URL policy)
+  rawBody = stripAllUrlsAndHyperlinks(rawBody);
 
   // Strip phone numbers
   rawBody = rawBody.replace(/(?:\+?91[\-\s]?)?[6-9]\d{9}\b/g, '');
@@ -1120,42 +1147,92 @@ export function ensureHashtagHierarchy(
   // Strip press note flattery
   rawBody = sanitizePressNoteFlattery(rawBody, false);
 
-  // 2. Format into 2-3 clean factual paragraphs
-  const rawParagraphs = rawBody
-    .split(/\n{2,}|\n(?=[^\s•])/g)
-    .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
-    .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
+  let finalBodyText = '';
 
-  let cleanParas: string[] = [];
-  if (rawParagraphs.length === 1 && rawParagraphs[0].length > 120) {
-    const sentences = rawParagraphs[0]
-      .split(/[।\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 5);
-    if (sentences.length >= 4) {
-      const p1 = sentences.slice(0, 2).join('। ') + '।';
-      const p2 = sentences.slice(2, 4).join('। ') + '।';
-      const p3 = sentences.slice(4).length > 0 ? sentences.slice(4).join('। ') + '।' : '';
-      cleanParas = [p1, p2, p3].filter(Boolean);
-    } else if (sentences.length >= 2) {
-      const p1 = sentences.slice(0, 1).join('। ') + '।';
-      const p2 = sentences.slice(1).join('। ') + '।';
-      cleanParas = [p1, p2];
-    } else {
-      cleanParas = rawParagraphs;
+  if (mode === 'bullet') {
+    const rawLines = rawBody
+      .split(/\n+/)
+      .map((l) => l.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
+      .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
+
+    let bulletLines = rawLines;
+    if (bulletLines.length < 3) {
+      const sents = rawBody
+        .split(/[।\n]+/)
+        .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+      bulletLines = sents.slice(0, 5);
     }
-  } else if (rawParagraphs.length > 3) {
-    const p1 = rawParagraphs[0];
-    const p2 = rawParagraphs[1];
-    const p3 = rawParagraphs.slice(2).join(' ');
-    cleanParas = [p1, p2, p3];
-  } else if (rawParagraphs.length >= 2) {
-    cleanParas = rawParagraphs.slice(0, 3);
-  } else {
-    cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
-  }
+    if (bulletLines.length === 0) {
+      bulletLines = [rawBody || 'ताज़ा घटनाक्रम की मुख्य जानकारी'];
+    }
+    finalBodyText = bulletLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
+  } else if (mode === 'short') {
+    const rawParagraphs = rawBody
+      .split(/\n{2,}|\n(?=[^\s•])/g)
+      .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
+      .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
 
-  const finalBodyText = cleanParas.join('\n\n').trim();
+    let cleanParas: string[] = [];
+    if (rawParagraphs.length >= 2) {
+      cleanParas = [rawParagraphs[0], rawParagraphs.slice(1).join(' ')];
+    } else {
+      const sentences = rawBody
+        .split(/[।\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5);
+      if (sentences.length >= 2) {
+        cleanParas = [
+          sentences.slice(0, Math.ceil(sentences.length / 2)).join('। ') + '।',
+          sentences.slice(Math.ceil(sentences.length / 2)).join('। ') + '।',
+        ];
+      } else {
+        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
+      }
+    }
+    finalBodyText = cleanParas.slice(0, 2).join('\n\n').trim();
+  } else {
+    // Mode 'detailed': Exactly 3 substantive paragraphs
+    const rawParagraphs = rawBody
+      .split(/\n{2,}|\n(?=[^\s•])/g)
+      .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
+      .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
+
+    let cleanParas: string[] = [];
+    if (rawParagraphs.length >= 3) {
+      cleanParas = [rawParagraphs[0], rawParagraphs[1], rawParagraphs.slice(2).join(' ')];
+    } else if (rawParagraphs.length === 2) {
+      const secondPartSentences = rawParagraphs[1]
+        .split(/[।\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5);
+      if (secondPartSentences.length >= 2) {
+        cleanParas = [
+          rawParagraphs[0],
+          secondPartSentences.slice(0, Math.ceil(secondPartSentences.length / 2)).join('। ') + '।',
+          secondPartSentences.slice(Math.ceil(secondPartSentences.length / 2)).join('। ') + '।',
+        ];
+      } else {
+        cleanParas = [rawParagraphs[0], rawParagraphs[1]];
+      }
+    } else {
+      const sentences = rawBody
+        .split(/[।\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5);
+      if (sentences.length >= 3) {
+        const p1 = sentences.slice(0, 1).join('। ') + '।';
+        const p2 = sentences.slice(1, 3).join('। ') + '।';
+        const p3 = sentences.slice(3).join('। ') + '।';
+        cleanParas = [p1, p2, p3];
+      } else if (sentences.length === 2) {
+        cleanParas = [sentences[0] + '।', sentences[1] + '।'];
+      } else {
+        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
+      }
+    }
+    finalBodyText = cleanParas.join('\n\n').trim();
+  }
 
   // 3. Extract and construct hashtags
   const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
@@ -1234,7 +1311,7 @@ export function cleanCaptionParagraphs(
   location: string = ''
 ): string {
   if (!caption) return '';
-  return ensureHashtagHierarchy(caption.trim(), location, username);
+  return ensureHashtagHierarchy(caption.trim(), location, username, mode);
 }
 
 /**
@@ -1245,9 +1322,15 @@ export function cleanCaptionParagraphs(
  */
 export function cleanLocationField(loc: string): string {
   if (!loc) return '';
-  let cleaned = loc
+  let cleaned = stripAllUrlsAndHyperlinks(String(loc))
     .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
     .trim();
+
+  // Strip URLs and fluff
+  cleaned = cleaned.replace(/https?:\/\/\S+|www\.\S+|[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\/\S*/gi, '').trim();
+  if (cleaned.length > 50) {
+    cleaned = cleaned.split(/[,।\n]/)[0].trim();
+  }
 
   // Split by slashes or hyphens and remove category names
   const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);

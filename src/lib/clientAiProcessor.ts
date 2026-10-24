@@ -1,5 +1,17 @@
 import { AIAnalysisResult } from '../types';
-import { cleanHeadlineText, cleanLocationField, detectDistrictAndState, formatDistrictWithState, formatAsJournalisticHeadline, generate5JournalisticHeadlines, generate4BalancedHeadlineOptions, cleanCaptionParagraphs } from './speakerUtils';
+import {
+  cleanHeadlineText,
+  cleanLocationField,
+  detectDistrictAndState,
+  formatDistrictWithState,
+  formatAsJournalisticHeadline,
+  generate5JournalisticHeadlines,
+  generate4BalancedHeadlineOptions,
+  cleanCaptionParagraphs,
+  fitHeadlinesTo5TierRanges,
+  sanitizeFlattery,
+  stripAllUrlsAndHyperlinks,
+} from './speakerUtils';
 import { TemplateConfig, getGraphicTemplateConfig } from './graphicTemplatesRegistry';
 
 export type HeadlineTemplateMeta = Partial<TemplateConfig> | {
@@ -216,14 +228,13 @@ export function processNewsLocally(
   const corpusToExtract = (extractedDesc || extractedContent) ? `${extractedDesc}\n\n${extractedContent}` : clean;
   const allSentences = extractSafeSentences(corpusToExtract);
 
-  // 5. Build EXACTLY 5 Distinct Journalistic Headlines (No Hardcoded Genre Templates)
+  // 5. Build EXACTLY 5 Distinct Journalistic Headlines (Strict 5 Tiered Maximum Limits)
   const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
   const rawBaseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' ').slice(0, 70)) : 'महत्वपूर्ण समाचार');
 
-  const headlineOptions = generate5JournalisticHeadlines(rawBaseTitle, allSentences, detectedLocation);
-
-
-  const headline = headlineOptions[0];
+  const rawOptions = generate5JournalisticHeadlines(rawBaseTitle, allSentences, detectedLocation);
+  const headlineOptions = fitHeadlinesTo5TierRanges(rawOptions, allSentences, rawBaseTitle, detectedLocation);
+  const headline = headlineOptions[0] || 'मुख्य समाचार';
 
   // Pick highlight words: numbers, quoted words or entities
   const words = headline.split(/\s+/).filter(Boolean);
@@ -278,20 +289,20 @@ export function processNewsLocally(
   const anchorScript = `${headline}। इस मामले पर विस्तृत रिपोर्ट।`;
 
   return {
-    headline: headlineOptions[0],
+    headline,
     headlineOptions,
     highlightWords,
     formattedHeadline,
     location: detectedLocation,
-    summary: cleanCaptionParagraphs(summary, 'detailed', cleanUsername),
-    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed', cleanUsername),
-    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet', cleanUsername),
-    captionShort: cleanCaptionParagraphs(captionShort, 'short', cleanUsername),
+    summary: cleanCaptionParagraphs(summary, 'detailed', cleanUsername, detectedLocation),
+    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed', cleanUsername, detectedLocation),
+    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet', cleanUsername, detectedLocation),
+    captionShort: cleanCaptionParagraphs(captionShort, 'short', cleanUsername, detectedLocation),
     anchorScript,
     categories,
     tags: tagsList,
     category,
-    suggestedImagePrompt: `Journalistic news press photo depicting ${headline}, realistic news photography, India`,
+    suggestedImagePrompt: `Journalistic news press photo depicting ${headline}, Journalistic documentary photography style, realistic Indian news press photography, natural ambient lighting, 35mm camera lens, authentic scene. No text, no words, no watermark, no logos, clean image.`,
     isAiGeneratedPhoto: false,
     speakerName: '',
     speakerTitle: '',

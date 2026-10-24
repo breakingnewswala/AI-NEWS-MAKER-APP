@@ -1,5 +1,69 @@
 [
   {
+    "id": "audit_1792841395388_lkdf",
+    "timestamp": 1792841395388,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792841395360",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792841395379_4u27",
+    "timestamp": 1792841395379,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792841395360",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792840803628_ms7o",
+    "timestamp": 1792840803628,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792840803587",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792840803602_hfbo",
+    "timestamp": 1792840803602,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792840803587",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792840164929_qccw",
+    "timestamp": 1792840164929,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792840164905",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792840164920_ehuf",
+    "timestamp": 1792840164920,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792840164905",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792839262750_l6ww",
+    "timestamp": 1792839262750,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792839262724",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792839262738_33t0",
+    "timestamp": 1792839262738,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792839262724",
+    "ip": "internal"
+  },
+  {
     "id": "audit_1792823572150_he6x",
     "timestamp": 1792823572150,
     "adminEmail": "admin",

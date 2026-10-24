@@ -4,6 +4,7 @@ import { NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl } from '../lib/apiConfig';
 import { isUserActionAllowed } from '../lib/userPlanManager';
+import { cleanCaptionParagraphs, stripAllUrlsAndHyperlinks } from '../lib/speakerUtils';
 
 interface CaptionModalProps {
   isOpen: boolean;
@@ -132,7 +133,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
     let newsStory = '';
 
     if (card.summary && card.summary.trim()) {
-      let rawSummary = card.summary.trim();
+      let rawSummary = stripAllUrlsAndHyperlinks(card.summary.trim());
 
       // If summary already ends with hashtags, extract them
       const tagMatch = rawSummary.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
@@ -144,11 +145,15 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
 
       newsStory = rawSummary ? `${cleanHeadline ? `${cleanHeadline}।\n\n` : ''}${rawSummary}` : cleanHeadline;
       const tagsToUse = buildHashtags(card.location, existingTags, card);
-      setCaptionText(tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory);
+      const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
+      const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location);
+      setCaptionText(cleaned);
     } else {
       newsStory = cleanHeadline || 'मुख्य समाचार';
       const tagsToUse = buildHashtags(card.location, undefined, card);
-      setCaptionText(tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory);
+      const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
+      const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location);
+      setCaptionText(cleaned);
     }
   }, [isOpen, card]);
 
@@ -156,35 +161,12 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
   const handleExpandWithAI = async (overrideStyle?: 'detailed_3_para' | 'bullet_points' | 'short') => {
     if (isActionLocked) return;
     const styleToUse = overrideStyle || selectedStyle;
+    const mode = styleToUse === 'short' ? 'short' : styleToUse === 'bullet_points' ? 'bullet' : 'detailed';
     setIsExpanding(true);
 
     try {
       const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
-      const cleanSummary = (card.summary || '').trim();
-
-      const prompt = `
-आप एक वरिष्ठ हिंदी समाचार संपादक (Social Media News Journalist) हैं।
-निम्नलिखित खबर के आधार पर इंस्टाग्राम और फेसबुक के लिए एक आकर्षक, प्रामाणिक और विस्तृत पोस्ट कैप्शन (Caption) तैयार करें।
-
-हेडलाइन: "${cleanHeadline}"
-मूल विवरण/सारांश: "${cleanSummary || 'विवरण उपलब्ध नहीं'}"
-स्थान: "${card.location || 'मध्य प्रदेश'}"
-
-शैली (Style): ${
-  styleToUse === 'detailed_3_para'
-    ? 'विस्तृत (Detailed News Story)'
-    : styleToUse === 'bullet_points'
-    ? 'मुख्य बिंदु (Bullet Points Format with Key Highlights)'
-    : 'संक्षिप्त (Short & Punchy)'
-}
-
-${customInstruction ? `अतिरिक्त निर्देश (User Instruction): "${customInstruction}"` : ''}
-
-नियम:
-1. भाषा शुद्ध, स्पष्ट और गंभीर हिंदी पत्रकारिता शैली की होनी चाहिए।
-2. कोई अनावश्यक काल्पनिक बातें न जोड़ें।
-3. पहला हैशटैग ${firstUserTag} रखें। किसी भी ब्रांड का अनचाहा हैशटैग न जोड़ें।
-`;
+      const cleanSummary = stripAllUrlsAndHyperlinks((card.summary || '').trim());
 
       const response = await fetch(getApiUrl('/api/generate-caption'), {
         method: 'POST',
@@ -195,6 +177,7 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
           category: card.category,
           existingSummary: captionText || cleanSummary,
           style: styleToUse,
+          captionLength: mode,
           customInstruction: customInstruction.trim() || undefined,
           aiProvider: aiProvider,
           username: firstUserTag.replace(/^#/, ''),
@@ -204,20 +187,13 @@ ${customInstruction ? `अतिरिक्त निर्देश (User Inst
       if (response.ok) {
         const data = await response.json();
         if (data.caption) {
-          let text = data.caption.trim();
-          const tagMatch = text.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
-          let extractedTags = '';
-          if (tagMatch) {
-            extractedTags = tagMatch[0].trim();
-            text = text.substring(0, tagMatch.index).trim();
-          }
-          const finalTags = buildHashtags(card.location, extractedTags, card);
-          setCaptionText(`${text}\n\n${finalTags}`);
+          const finalCaption = cleanCaptionParagraphs(data.caption, mode, firstUserTag.replace(/^#/, ''), card.location);
+          setCaptionText(finalCaption);
         }
       } else {
         const fallbackStory = cleanSummary ? `${cleanHeadline ? `${cleanHeadline}। ` : ''}${cleanSummary}` : cleanHeadline;
-        const tags = buildHashtags(card.location, undefined, card);
-        setCaptionText(`${fallbackStory}\n\n${tags}`);
+        const finalCaption = cleanCaptionParagraphs(fallbackStory, mode, firstUserTag.replace(/^#/, ''), card.location);
+        setCaptionText(finalCaption);
       }
     } catch (e) {
       console.warn('AI Caption expansion error:', e);

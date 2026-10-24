@@ -49,7 +49,7 @@ function request(method, path, body = null, headers = {}) {
 async function runTests() {
   console.log(`Starting background test server on port ${TEST_PORT}...`);
   const serverProcess = spawn('node', ['dev.cjs'], {
-    env: { ...process.env, PORT: String(TEST_PORT), NODE_ENV: 'production' },
+    env: { ...process.env, PORT: String(TEST_PORT), DEFAULT_APP_PORT: String(TEST_PORT), NODE_ENV: 'production' },
     stdio: 'pipe',
   });
 
@@ -57,7 +57,7 @@ async function runTests() {
     // console.log(`[SERVER]: ${data}`);
   });
   serverProcess.stderr.on('data', (data) => {
-    // console.error(`[SERVER ERR]: ${data}`);
+    console.error(`[SERVER ERR]: ${data}`);
   });
 
   // Wait for server to boot

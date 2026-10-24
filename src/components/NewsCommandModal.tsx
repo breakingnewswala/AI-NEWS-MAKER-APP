@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, X, Link as LinkIcon, Send, Sparkles, Check, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
 import { AIAnalysisResult } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
+import { cleanHeadlineText, cleanLocationField, generate5BalancedHeadlineOptions, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
 
 interface NewsCommandModalProps {
   isOpen: boolean;
@@ -204,20 +205,60 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     setIsRegeneratingHeadlines(true);
     setError(null);
     try {
-      const response = await fetch(getApiUrl('/api/regenerate-headlines'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceHeadline: result.headline,
-          summary: result.summary,
-          location: result.location,
-          customPrompt: customPrompt.trim() || undefined,
-          aiProvider: newsAiProvider,
-        }),
-      });
-      const data = await response.json();
-      if (data.success && data.options && data.options.length > 0) {
-        const newOpts = data.options;
+      let data: any = null;
+      try {
+        const response = await fetch(getApiUrl('/api/regenerate-headlines'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            canonicalContext: {
+              title: result.headline,
+              articleText: result.summary,
+              location: result.location,
+            },
+            sourceHeadline: result.headline,
+            summary: result.summary,
+            location: result.location,
+            previousHeadlines: headlineOptions,
+            customPrompt: customPrompt.trim() || undefined,
+            aiProvider: newsAiProvider,
+            userTier: 'pro',
+          }),
+        });
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          data = await response.json().catch(() => null);
+        } else {
+          const rawText = await response.text().catch(() => '');
+          try { data = JSON.parse(rawText); } catch { data = null; }
+        }
+      } catch (fetchErr) {
+        data = null;
+      }
+
+      let newOpts: string[] = [];
+      if (data && data.success && Array.isArray(data.headlineOptions) && data.headlineOptions.length > 0) {
+        newOpts = data.headlineOptions.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+      } else if (data && data.success && Array.isArray(data.options) && data.options.length > 0) {
+        newOpts = data.options.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+      } else if (data && data.success && Array.isArray(data.headlines) && data.headlines.length > 0) {
+        newOpts = data.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+      }
+
+      if (newOpts.length === 0) {
+        // Fallback to local headline generator
+        const srcTitle = cleanHeadlineText(result.headline);
+        const srcSummary = result.summary || '';
+        const srcLoc = cleanLocationField(result.location || '');
+        const sentences = (srcSummary || srcTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+        const balanced = generate5BalancedHeadlineOptions(srcTitle, sentences, srcLoc);
+        newOpts = fitHeadlinesTo5TierRanges(balanced, sentences, srcTitle, srcLoc);
+      }
+
+      if (newOpts.length > 0) {
         setHeadlineOptions(newOpts);
         setSelectedHeadlineIndex(0);
         setResult((prev) =>
@@ -230,35 +271,10 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
             : null
         );
       } else {
-        // Fallback to process-news-command
-        const fallbackRes = await fetch(getApiUrl('/api/process-news-command'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            input: result.headline + (result.summary ? ' - ' + result.summary : ''),
-            customPrompt: 'इस खबर के लिए 4 बिल्कुल नए, प्रभावशाली, संतुलित और अलग-अलग शैली के हिंदी हेडलाइन विकल्प तैयार करें।',
-            aiProvider: newsAiProvider,
-          }),
-        });
-        const fbData = await fallbackRes.json();
-        if (fbData.success && fbData.data) {
-          const newOpts = fbData.data.headlineOptions || [fbData.data.headline];
-          setHeadlineOptions(newOpts);
-          setSelectedHeadlineIndex(0);
-          setResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  headline: newOpts[0],
-                  formattedHeadline: fbData.data.formattedHeadline || newOpts[0],
-                  highlightWords: fbData.data.highlightWords || prev.highlightWords,
-                }
-              : null
-          );
-        }
+        setError('नए हेडलाइन विकल्प नहीं बन सके');
       }
     } catch (err: any) {
-      console.error('Headlines regeneration error:', err);
+      console.warn('Headlines regeneration fallback in modal:', err);
       setError('नए हेडलाइन विकल्प नहीं बन सके');
     } finally {
       setIsRegeneratingHeadlines(false);
@@ -532,7 +548,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{newsAiProvider === 'openai' ? 'ChatGPT' : 'Gemini'} 4 हेडलाइन विकल्प तैयार कर रहा है...</span>
+                  <span>{newsAiProvider === 'openai' ? 'ChatGPT' : 'Gemini'} 5 हेडलाइन विकल्प तैयार कर रहा है...</span>
                 </>
               ) : (
                 <>
@@ -593,7 +609,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                 </span>
               </div>
 
-              {/* 4 Balanced Headline Options Selector */}
+              {/* 5 Balanced Headline Options Selector */}
               {headlineOptions.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-[11px] text-neutral-400 font-semibold flex items-center justify-between">
@@ -603,7 +619,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       onClick={handleRegenerateHeadlines}
                       disabled={isRegeneratingHeadlines}
                       className="text-yellow-400 hover:text-yellow-300 text-[11px] font-bold flex items-center gap-1 bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/30 cursor-pointer disabled:opacity-50"
-                      title="पसंद न आने पर 4 बिल्कुल नए हेडलाइन विकल्प बनाएं"
+                      title="पसंद न आने पर 5 बिल्कुल नए हेडलाइन विकल्प बनाएं"
                     >
                       {isRegeneratingHeadlines ? (
                         <>
@@ -628,30 +644,28 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                         <div
                           key={idx}
                           onClick={() => handleSelectHeadline(opt, idx)}
-                          className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex items-start gap-2.5 ${
+                          className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1 ${
                             isSelected
                               ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                               : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
                           }`}
                         >
-                          <span
-                            className={`w-5 h-5 flex items-center justify-center rounded-full text-xs font-mono font-black shrink-0 mt-0.5 ${
-                              isSelected
-                                ? 'bg-yellow-400 text-neutral-950'
-                                : 'bg-neutral-800 text-neutral-300'
-                            }`}
-                          >
-                            {idx + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="leading-snug">{opt}</div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-black text-yellow-400 tracking-wide">
+                              विकल्प {idx + 1}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-neutral-400 font-mono font-bold">
+                                [{charLen} / {maxLimit}]
+                              </span>
+                              {isSelected && (
+                                <Check className="w-3.5 h-3.5 text-yellow-400" />
+                              )}
+                            </div>
                           </div>
-                          <span className="text-[10px] text-neutral-400 font-mono font-bold shrink-0 mt-0.5 whitespace-nowrap">
-                            [{charLen} / {maxLimit}]
-                          </span>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
-                          )}
+                          <div className="leading-snug text-neutral-200">
+                            {opt}
+                          </div>
                         </div>
                       );
                     })}

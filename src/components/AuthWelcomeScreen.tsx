@@ -64,6 +64,7 @@ export interface AuthWelcomeScreenProps {
   onLoginSuccess: (user: ReporterUser) => void;
   onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser) => void;
   onOpenGoogleApiGuide?: () => void;
+  onSkipToHome?: () => void;
 }
 
 export const KNOWN_REGISTERED_USERS: Record<
@@ -245,6 +246,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   currentUser = null,
   onLoginSuccess,
   onCompleteDetails,
+  onSkipToHome,
 }) => {
   // Step State: 1 = Login / Sign Up, 2 = Channel & Reporter Details Setup
   const [currentStep, setCurrentStep] = useState<1 | 2>(() => {
@@ -1102,6 +1104,19 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
       {/* Main Centered Container */}
       <main className="relative z-10 w-full max-w-2xl sm:max-w-3xl flex flex-col items-center text-center my-auto">
+        {/* Direct to Home Screen Action Bar */}
+        {onSkipToHome && (
+          <div className="w-full flex justify-end mb-3">
+            <button
+              type="button"
+              onClick={onSkipToHome}
+              className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-lg transition transform active:scale-95 cursor-pointer border border-amber-300"
+            >
+              <span>🏠</span>
+              <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन)</span>
+            </button>
+          </div>
+        )}
         {/* ============================================================== */}
         {/* STEP 1: MULTI-TIER LOGIN / SIGN UP SCREEN (Google, Admin, Reporter) */}
         {/* ============================================================== */}
@@ -1411,6 +1426,38 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       मैं किसी अन्य समाचार चैनल के नाम, लोगो या कॉपीराइट सामग्री का उपयोग नहीं करूँगा।
                     </p>
                   </div>
+                </div>
+
+                {/* Direct to Home Screen / Preview Bypass (बिना लॉगिन सीधे होम स्क्रीन) */}
+                <div className="w-full p-3 bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-400/50 rounded-xl text-center space-y-1.5 mb-2 shadow-inner">
+                  <div className="text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5">
+                    <span>⚡</span>
+                    <span>प्रीव्यू मोड: बिना Google लॉगिन सीधे ऐप में प्रवेश करें</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onSkipToHome) {
+                        onSkipToHome();
+                      } else {
+                        const devUser: ReporterUser = {
+                          id: 'preview-reporter-01',
+                          username: 'ainewsmaker',
+                          name: 'विशेष संवाददाता',
+                          email: 'reporter@ainewsmaker.online',
+                          role: 'reporter',
+                          token: 'preview_session_token_2026',
+                        };
+                        safeLocalStorageSet('reporter_auth_session', JSON.stringify(devUser));
+                        safeLocalStorageSet('is_onboarding_completed', 'true');
+                        onLoginSuccess(devUser);
+                      }
+                    }}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer border border-amber-300"
+                  >
+                    <span>🏠</span>
+                    <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन)</span>
+                  </button>
                 </div>
 
                 {/* Google / Gmail Sign In (Primary Login) */}

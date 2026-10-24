@@ -9223,27 +9223,69 @@ export function generate5JournalisticHeadlines(
 }
 
 /**
- * Ensures clean, factual Hindi caption in 2-3 paragraphs with strict hashtag hierarchy:
- * - Paragraph 1: Main event, place, date/time
- * - Paragraph 2: Verified background, context, statements/investigation
- * - Paragraph 3: Confirmed action, current status or next steps (if applicable)
+ * Attachment 5: Flattery and honorifics sanitizer function
+ * Strips formal and sycophantic titles ('माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'श्रीमान', 'श्रीमती', 'सुश्री', 'परम पूज्य', 'पूज्य', 'श्री', 'महोदय', 'जी')
+ */
+export function sanitizeFlattery(text: any): string {
+  if (!text) return "";
+  const s = typeof text === "string" ? text : String(text || "");
+  return s
+    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
+    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * Section 7: Strict URL and Hyperlink Stripper
+ * Removes all URLs, markdown links, HTML links, and website click artifacts
+ */
+export function stripAllUrlsAndHyperlinks(text: string): string {
+  if (!text) return "";
+  let s = String(text);
+  // Markdown links [text](url) -> text
+  s = s.replace(/\[([^\]]+)\]\((?:https?:\/\/[^\s)]+|www\.[^\s)]+|[^\s)]+)\)/gi, "$1");
+  // HTML links <a ...>text</a> -> text
+  s = s.replace(/<a\b[^>]*>(.*?)<\/a>/gi, "$1");
+  // Raw URLs
+  s = s.replace(/https?:\/\/[^\s\)\],;।]+/gi, "");
+  s = s.replace(/ftp:\/\/[^\s\)\],;।]+/gi, "");
+  s = s.replace(/www\.[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.\/]+[^\s\)\],;।]?/gi, "");
+  s = s.replace(/\b[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)*\.(?:com|in|org|net|co|io|gov|edu|ai|app|live|news|tv|online|info|me)\b(?:\/[^\s\)\],;।]*)?/gi, "");
+  // Web reading and click artifacts
+  s = s.replace(/(?:क्लिक\s*करें|वेबसाइट\s*पर\s*पढ़ें|लिंक\s*पर\s*जाएं|पूरी\s*खबर\s*पढ़ें|पूरी\s*खबर\s*देखें|स्रोत\s*लिंक|कॉपी\s*लिंक|शेयर\s*करें)[:\s\-–—]*/gi, "");
+  s = s.replace(/[ \t]{2,}/g, " ");
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
+
+/**
+ * Ensures clean, factual Hindi caption in 2-3 paragraphs or bullet points with strict hashtag hierarchy:
+ * - Detailed: Exactly 3 substantive paragraphs (incident -> context/eyewitness -> action/status)
+ * - Bullets: Distinct bullet points starting with • 
+ * - Short: Exactly 2 substantive paragraphs
  * - Zero raw URLs, phone numbers, or flattery
  * - Exactly ONE blank line before hashtags
  * - 1st tag: #{username} (never guessed, omitted if absent)
  * - Middle: 4-6 relevant news/location tags
  * - Final tag: strictly #AINewsMaker
  */
-export function ensureHashtagHierarchy(summaryText: string, location: string = "", username: string = ""): string {
+export function ensureHashtagHierarchy(
+  summaryText: string,
+  location: string = "",
+  username: string = "",
+  mode: "detailed" | "short" | "bullet" = "detailed"
+): string {
   if (!summaryText || typeof summaryText !== "string") return summaryText || "";
 
   // 1. Separate body text from any existing hashtag line
   const parts = summaryText.split(/\n\s*#/);
   let rawBody = parts[0].trim();
 
-  // Strip raw URLs, web domains, and links
-  rawBody = rawBody.replace(/https?:\/\/\S+/gi, "");
-  rawBody = rawBody.replace(/www\.\S+/gi, "");
-  rawBody = rawBody.replace(/\b[a-zA-Z0-9.\-]+\.(?:com|in|org|net|co|io)\b\S*/gi, "");
+  // Strip all URLs, links, and click artifacts (Section 7)
+  rawBody = stripAllUrlsAndHyperlinks(rawBody);
 
   // Strip phone numbers
   rawBody = rawBody.replace(/(?:\+?91[\-\s]?)?[6-9]\d{9}\b/g, "");
@@ -9253,47 +9295,103 @@ export function ensureHashtagHierarchy(summaryText: string, location: string = "
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट)[\s:\-–—.]*/gim, "");
 
-  // Strip press note flattery
+  // Strip press note flattery using Attachment 5
   rawBody = sanitizePressNoteFlattery(rawBody, false);
+  rawBody = sanitizeFlattery(rawBody);
 
-  // 2. Format into 2-3 clean factual paragraphs
-  const rawParagraphs = rawBody
-    .split(/\n{2,}|\n(?=[^\s•])/g)
-    .map((p) => p.replace(/[ \t]{2,}/g, " ").trim())
-    .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
+  let finalBodyText = "";
 
-  let cleanParas: string[] = [];
-  if (rawParagraphs.length === 1 && rawParagraphs[0].length > 120) {
-    const sentences = rawParagraphs[0]
-      .split(/[।\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 5);
-    if (sentences.length >= 4) {
-      const p1 = sentences.slice(0, 2).join("। ") + "।";
-      const p2 = sentences.slice(2, 4).join("। ") + "।";
-      const p3 = sentences.slice(4).length > 0 ? sentences.slice(4).join("। ") + "।" : "";
-      cleanParas = [p1, p2, p3].filter(Boolean);
-    } else if (sentences.length >= 2) {
-      const p1 = sentences.slice(0, 1).join("। ") + "।";
-      const p2 = sentences.slice(1).join("। ") + "।";
-      cleanParas = [p1, p2];
+  if (mode === "bullet") {
+    // Structured bullet-point news summary (Section 8B)
+    const bulletLines = rawBody
+      .split(/\n+/)
+      .map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim())
+      .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
+
+    if (bulletLines.length > 0) {
+      finalBodyText = bulletLines
+        .slice(0, 6)
+        .map((b) => `• ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}।`)
+        .join("\n");
     } else {
-      cleanParas = rawParagraphs;
+      const sentences = rawBody
+        .split(/[।\n]+|\.\s+/)
+        .map((s) => stripAllUrlsAndHyperlinks(s).trim())
+        .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+      finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["मुख्य घटनाक्रम का संक्षिप्त विवरण।"])
+        .map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`)
+        .join("\n");
     }
-  } else if (rawParagraphs.length > 3) {
-    const p1 = rawParagraphs[0];
-    const p2 = rawParagraphs[1];
-    const p3 = rawParagraphs.slice(2).join(" ");
-    cleanParas = [p1, p2, p3];
-  } else if (rawParagraphs.length >= 2) {
-    cleanParas = rawParagraphs.slice(0, 3);
+  } else if (mode === "short") {
+    // Exactly 2 substantive paragraphs (Section 8C)
+    const rawParagraphs = rawBody
+      .split(/\n{2,}/)
+      .map((p) => p.replace(/[ \t]{2,}/g, " ").trim())
+      .filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
+
+    if (rawParagraphs.length >= 2) {
+      finalBodyText = rawParagraphs.slice(0, 2).join("\n\n");
+    } else {
+      const sentences = rawBody
+        .split(/[।\n]+|\.\s+/)
+        .map((s) => stripAllUrlsAndHyperlinks(s).trim())
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+      if (sentences.length >= 2) {
+        const mid = Math.ceil(sentences.length / 2);
+        const p1 = sentences.slice(0, mid).join("। ") + "।";
+        const p2 = sentences.slice(mid).join("। ") + "।";
+        finalBodyText = `${p1}\n\n${p2}`;
+      } else {
+        finalBodyText = rawParagraphs[0] || rawBody;
+      }
+    }
   } else {
-    cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
+    // Mode 'detailed': Exactly 3 substantive paragraphs (Section 8A)
+    const rawParagraphs = rawBody
+      .split(/\n{2,}/)
+      .map((p) => p.replace(/[ \t]{2,}/g, " ").trim())
+      .filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
+
+    if (rawParagraphs.length === 3) {
+      finalBodyText = rawParagraphs.join("\n\n");
+    } else if (rawParagraphs.length > 3) {
+      const p1 = rawParagraphs[0];
+      const p2 = rawParagraphs[1];
+      const p3 = rawParagraphs.slice(2).join(" ");
+      finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
+    } else {
+      const sentences = rawBody
+        .split(/[।\n]+|\.\s+/)
+        .map((s) => stripAllUrlsAndHyperlinks(s).trim())
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+
+      if (sentences.length >= 6) {
+        const p1 = sentences.slice(0, 2).join("। ") + "।";
+        const p2 = sentences.slice(2, 4).join("। ") + "।";
+        const p3 = sentences.slice(4).join("। ") + "।";
+        finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
+      } else if (sentences.length >= 4) {
+        const p1 = sentences.slice(0, 2).join("। ") + "।";
+        const p2 = sentences.slice(2, 3).join("। ") + "।";
+        const p3 = sentences.slice(3).join("। ") + "।";
+        finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
+      } else if (sentences.length >= 3) {
+        const p1 = sentences[0] + "।";
+        const p2 = sentences[1] + "।";
+        const p3 = sentences.slice(2).join("। ") + "।";
+        finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
+      } else if (sentences.length === 2) {
+        finalBodyText = `${sentences[0]}।\n\n${sentences[1]}।`;
+      } else {
+        finalBodyText = rawParagraphs.length > 0 ? rawParagraphs.join("\n\n") : rawBody;
+      }
+    }
   }
 
-  const finalBodyText = cleanParas.join("\n\n").trim();
+  // Final cleanup of body text to guarantee zero URLs
+  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText);
 
-  // 3. Extract and construct hashtags
+  // 3. Extract and construct hashtags (Section 9)
   const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
@@ -9318,6 +9416,7 @@ export function ensureHashtagHierarchy(summaryText: string, location: string = "
       lower === "#ai_news_maker" ||
       lower === "#breakingnewswala" ||
       lower === "#bnwtv" ||
+      lower === "#ब्रेकिंगन्यूजवाला" ||
       lower.startsWith("#http") ||
       lower.startsWith("#www") ||
       lower.startsWith("#url")
@@ -9367,7 +9466,7 @@ export function cleanCaptionParagraphs(
   location: string = ""
 ): string {
   if (!caption) return "";
-  return ensureHashtagHierarchy(caption.trim(), location, username);
+  return ensureHashtagHierarchy(caption.trim(), location, username, mode);
 }
 
 
@@ -10328,46 +10427,62 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
   const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
   const userTagInstruction = cleanUser && !isGeneric
     ? `पहला हैशटैग: #${cleanUser}`
-    : `(कोई यूज़रनेम हैशटैग न लगाएं)`;
+    : `(यदि यूज़रनेम न हो तो कोई यूज़रनेम हैशटैग न लगाएं)`;
 
-  const systemInstruction = `आप एक पेशेवर हिंदी न्यूज़ एडिटर हैं। दी गई समाचार सामग्री का विश्लेषण करके सटीक, प्रामाणिक और प्रभावशाली हिंदी हेडलाइन, हेडलाइन विकल्प और सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
+  const systemInstruction = `आप एक अग्रणी डिजिटल हिंदी न्यूज़ चैनल के वरिष्ठ मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का विश्लेषण करके सख्त संपादकीय नियमों का कड़ाई से पालन करते हुए निष्पक्ष, प्रामाणिक और प्रभावशाली हिंदी हेडलाइन, 5 संतुलित हेडलाइन विकल्प और सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
 
-  const prompt = `विश्लेषण हेतु समाचार सामग्री:
-${effectiveSourceTitle ? `शीर्षक संदर्भ: ${effectiveSourceTitle}\n` : ""}
-लेख व वास्तविक तथ्य:
-${effectiveBody ? effectiveBody.slice(0, 4000) : effectiveInput}
+  const prompt = `आप एक अग्रणी डिजिटल हिंदी न्यूज़ चैनल के वरिष्ठ मुख्य संपादक (Chief Editor) हैं।
+यूज़र ने निम्नलिखित इनपुट (कच्ची स्क्रिप्ट / प्रेस नोट / समाचार विवरण या वेबसाइट डेटा) दिया है:
 
-${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
-तैयार करें:
-1. headline: मुख्य और सबसे सटीक हिंदी हेडलाइन।
-2. headlineOptions: 5 अलग-अलग सटीक और तथ्यपरक हेडलाइन विकल्प।
-3. highlightWords: हेडलाइन के 2-4 मुख्य शब्द।
-4. formattedHeadline: हेडलाइन जिसमें हाइलाइट होने वाले शब्द [highlight]शब्द[/highlight] के रूप में चिह्नित हों।
-5. location: वास्तविक जिला/शहर/राज्य।
-6. summary: सोशल मीडिया के लिए विस्तृत समाचार कैप्शन (अंतिम हैशटैग #AINewsMaker हो)।
-7. captionDetailed, captionBullets, captionShort: तीन अलग-अलग सोशल कैप्शन फॉर्मेट (अंतिम हैशटैग #AINewsMaker हो)।
-8. category: समाचार की सटीक श्रेणी।
-9. suggestedImagePrompt: इस खबर के लिए उपयुक्त प्रेस फोटो विवरण (अंग्रेजी में)।
-10. isAiGeneratedPhoto: false
-11. speakerName: यदि किसी का बयान है तो नाम, अन्यथा खाली स्ट्रिंग ("")।
-12. speakerTitle: पद या पदवी, अन्यथा खाली स्ट्रिंग ("")।
+[समाचार सामग्री]:
+"""
+${effectiveSourceTitle ? `शीर्षक संदर्भ: ${effectiveSourceTitle}\n` : ""}${effectiveBody ? effectiveBody.slice(0, 4000) : effectiveInput}
+"""
 
-JSON Output Schema:
+${customPrompt ? `[यूज़र का अतिरिक्त निर्देश / प्रॉम्प्ट]:\n"""\n${customPrompt}\n"""\n` : ""}
+★ अति-महत्वपूर्ण संपादकीय नियम (STRICT EDITORIAL RULES):
+1. आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन (MANDATORY):
+   - हेडलाइन, हेडलाइन विकल्पों और पूरी स्क्रिप्ट (summary व captions) में से 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी', 'परम पूज्य' जैसे सभी औपचारिक व सरकारी/पीआर शब्दों को पूरी तरह हटा दें। सीधे अधिकारी या नेता का पद और नाम लिखें।
+2. निष्पक्षता व खोजी पत्रकारिता:
+   - यदि प्रेस नोट या कच्ची खबर में एकतरफा सरकारी दावा हो, तो उसे संतुलित और तथ्यपरक न्यूज़ में बदलें। "बड़ा खुलासा", "मचा हड़कंप", "इससे लोगों को मदद मिलेगी" जैसे गैर-ज़रूरी फिलर शब्दों को पूरी तरह हटाएं।
+3. भाषा व पंचुएशन:
+   - विशुद्ध, गंभीर, व्याकरणिक दृष्टि से सटीक हिंदी (देवनागरी लिपि)। किसी भी हेडलाइन के अंत में पूर्णविराम (. या ।) न लगाएं।
+4. ठीक 5 हेडलाइन विकल्प (Strict 5 Tiered Maximum Limits):
+   - विकल्प 1 (ब्रेकिंग स्टाइल): अधिकतम 100 वर्ण (वर्ण सीमा, लक्ष्य नहीं)
+   - विकल्प 2 (तथ्यात्मक स्टाइल): अधिकतम 120 वर्ण
+   - विकल्प 3 (कार्रवाई/जांच स्टाइल): अधिकतम 135 वर्ण
+   - विकल्प 4 (जनहित/विस्तृत स्टाइल): अधिकतम 145 वर्ण
+   - विकल्प 5 (नीति/फॉलो-अप स्टाइल): अधिकतम 170 वर्ण
+5. स्थान (Location):
+   - केवल शुद्ध शहर, जिला या राज्य (जैसे "रीवा", "भोपाल, मध्य प्रदेश")। स्थान में कभी भी कोई URL, लिंक या वाक्य न डालें।
+6. सोशल मीडिया कैप्शन (शून्य URL नियम - ABSOLUTELY NO URLs):
+   - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" न जोड़ें।
+   - summary / captionDetailed: ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में पूरी निष्पक्ष खबर।
+   - captionBullets: 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो।
+   - captionShort: ठीक 2 संक्षिप्त एवं सारगर्भित पैराग्राफ।
+   - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
+     * सबसे पहला हैशटैग: ${userTagInstruction}
+     * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
+     * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
+7. suggestedImagePrompt:
+   - अंग्रेजी में रियलिस्टिक प्रेस फोटो प्रॉम्प्ट (35mm लेंस, प्राकृतिक प्रकाश, प्रामाणिक भारतीय प्रेस कवरेज, बिना किसी टेक्स्ट या वॉटरमार्क के)।
+
+Strictly return a valid JSON object matching these exact keys:
 {
-  "headline": "",
-  "headlineOptions": ["विकल्प 1", "विकल्प 2", "विकल्प 3", "विकल्प 4", "विकल्प 5"],
-  "highlightWords": [],
-  "formattedHeadline": "",
-  "location": "",
-  "summary": "",
-  "captionDetailed": "",
-  "captionBullets": "",
-  "captionShort": "",
-  "category": "",
-  "suggestedImagePrompt": "",
+  "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम)",
+  "headlineOptions": ["विकल्प 1 (<=100 वर्ण)", "विकल्प 2 (<=120 वर्ण)", "विकल्प 3 (<=135 वर्ण)", "विकल्प 4 (<=145 वर्ण)", "विकल्प 5 (<=170 वर्ण)"],
+  "highlightWords": ["मुख्य शब्द 1", "मुख्य शब्द 2"],
+  "formattedHeadline": "हेडलाइन जिसमें मुख्य शब्द [yellow]शब्द[/yellow] से चिह्नित हों",
+  "location": "शहर, राज्य",
+  "summary": "विस्तृत 3 पैराग्राफ खबर और अंत में हैशटैग (बिना URL)",
+  "captionDetailed": "विस्तृत 3 पैराग्राफ कैप्शन (बिना URL)",
+  "captionBullets": "बुलेट पॉइंट्स कैप्शन (बिना URL)",
+  "captionShort": "संक्षिप्त 2 पैराग्राफ कैप्शन (बिना URL)",
+  "category": "हादसा / प्रशासन / राजनीति / विकास / अपराध / जनआंदोलन",
+  "suggestedImagePrompt": "English journalistic photography prompt",
   "isAiGeneratedPhoto": false,
   "speakerName": "",
   "speakerTitle": ""
@@ -10548,8 +10663,8 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           if (!isMetaTitleHindi) {
             const firstHindiSent = effectiveInput
               .split(/[।\n]+|(?<=[^\d])\.\s+/)
-              .map((s) => cleanHeadlineText(s).trim())
-              .find((s) => s.length >= 15 && /[\u0900-\u097F]/.test(s));
+              .map((s: string) => cleanHeadlineText(s).trim())
+              .find((s: string) => s.length >= 15 && /[\u0900-\u097F]/.test(s));
             if (firstHindiSent) {
               effectiveArticleTitle = formatAsJournalisticHeadline(firstHindiSent);
               if (extractedArticleMeta) {
@@ -11052,6 +11167,11 @@ app.post("/api/admin/ai-features-config", (req, res) => {
   }
 });
 
+// GET /api/regenerate-headlines - Health / status check
+app.get("/api/regenerate-headlines", (_req, res) => {
+  res.json({ success: true, message: "Regenerate headlines API endpoint active" });
+});
+
 // POST /api/regenerate-headlines - Regenerate 5 brand new, distinct headline options from canonical context
 app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, res) => {
   try {
@@ -11111,8 +11231,8 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
     const excludeTitles = rawPrev.map((h: string) => cleanHeadlineText(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
 
-    const sourceTitle = canonicalContext.title || req.body.title || "";
-    const sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || "";
+    const sourceTitle = canonicalContext.title || req.body.title || req.body.sourceHeadline || "";
+    const sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
     const sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
 
     // Fact sentences from the news story
@@ -11270,6 +11390,7 @@ JSON Output Schema:
       actualProvider,
       headlines: finalOptions,
       headlineOptions: finalOptions,
+      options: finalOptions,
       headline: finalOptions[0] || "",
       canonicalContext: {
         ...canonicalContext,
@@ -11441,11 +11562,19 @@ export function cleanHeadlineText(text: string): string {
 
 function cleanLocationField(loc: string): string {
   if (!loc) return "";
-  let cleaned = loc
+  let cleaned = stripAllUrlsAndHyperlinks(String(loc))
     .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, "")
     .trim();
 
   if (cleaned === "विशेष कवरेज") return "";
+
+  // If a URL was passed into location, strip URL artifacts
+  cleaned = cleaned.replace(/https?:\/\/\S+|www\.\S+|[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\/\S*/gi, "").trim();
+
+  // Remove sentences/fluff
+  if (cleaned.length > 50) {
+    cleaned = cleaned.split(/[,।\n]/)[0].trim();
+  }
 
   const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
   const locationParts = parts.filter((p) => !CATEGORY_KEYWORDS_LIST.some((cat) => cat.toLowerCase() === p.toLowerCase()));
@@ -11486,7 +11615,8 @@ app.post("/api/format-static-caption", (req, res) => {
     const formattedSummary = ensureHashtagHierarchy(
       sanitizePressNoteFlattery(sourceText),
       cleanLoc,
-      channelUsername || username || ""
+      channelUsername || username || "",
+      'detailed'
     );
 
     const locLine = cleanLoc ? `\n\nस्थान: ${cleanLoc}` : "";
@@ -11509,32 +11639,19 @@ app.post("/api/format-static-caption", (req, res) => {
   }
 });
 
-
-
-// Helper: Clean flattering / formal prefixes from news text (Devanagari Unicode Safe)
+// Helper: Clean flattering / formal prefixes from news text (Devanagari Unicode Safe, Attachment 5)
 export function sanitizePressNoteFlattery(text: string, isHeadline: boolean = false): string {
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
   // 1. Remove fluff prefixes
   cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "");
 
-  // 2. Comprehensive Anti-Flattery filter: Strip formal honorifics ('माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'श्रीमान', 'श्रीमती', 'सुश्री', 'परम पूज्य', 'पूज्य')
-  cleaned = cleaned.replace(
-    /(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम\s*पूज्य|पूज्य)(?:\s*[\/\-]\s*(?:श्रीमान|श्रीमती|सुश्री|महोदय|महोदया))?\s+/gu,
-    " "
-  );
+  // 2. Canonical Attachment 5 sanitizeFlattery implementation
+  cleaned = sanitizeFlattery(cleaned);
 
-  // 3. Strip standalone 'श्री' or 'श्री/श्रीमती' when followed by space and name, preserving proper nouns like श्रीवास्तव, श्रीनगर, श्रीराम, श्रीधर
-  cleaned = cleaned.replace(
-    /(?:^|[^\p{L}\p{M}])(?:श्री|श्रीमती)(?:\s*[\/\-]\s*(?:श्री|श्रीमती))?\s+(?=[\p{L}])/gu,
-    " "
-  );
+  // 3. Remove unnecessary trailing explanatory filler sentences (e.g. "इससे लोगों को मदद मिलेगी")
+  cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
 
-  // 4. Strip formal suffixes ('महोदय', 'महोदया', 'जी')
-  cleaned = cleaned.replace(/(?:\s+महोदय|\s+महोदया)(?=[,\s.!?।\n]|$)/gu, "");
-  cleaned = cleaned.replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "");
-
-  cleaned = cleaned.replace(/[ \t]{2,}/g, " ").trim();
   if (isHeadline) {
     cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
   }
@@ -11967,12 +12084,14 @@ Return ONLY the English prompt string.`,
     let imageBase64 = "";
     let isAiGenerated = false;
 
+    const PRESS_PHOTO_STYLE_SUFFIX = ", Journalistic documentary photography style, realistic Indian news press photography, natural ambient lighting, 35mm camera lens, authentic scene. No text, no words, no watermark, no logos, clean image.";
+
     // Branch 1: OpenAI DALL-E 3
     if (aiProvider === "openai") {
       try {
         const openai = getOpenAIClient();
         const dalleSize = aspectRatio === "1:1" ? "1024x1024" : "1024x1792";
-        const dallePrompt = `${imagePrompt}. Journalistic documentary photography style, realistic Indian news press photography, natural ambient lighting, 35mm camera lens, authentic scene. No text, no words, no watermark, no logos, clean image.`;
+        const dallePrompt = `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`;
 
         console.log("Calling OpenAI DALL-E 3 with prompt:", dallePrompt);
         const dalleRes = await openai.images.generate({
@@ -12020,7 +12139,7 @@ Return ONLY the English prompt string.`,
             contents: {
               parts: [
                 {
-                  text: `${imagePrompt}. Journalistic press photo, award-winning news photography, authentic documentary realism, clear focus, high quality.`,
+                  text: `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`,
                 },
               ],
             },
@@ -12048,7 +12167,7 @@ Return ONLY the English prompt string.`,
               contents: {
                 parts: [
                   {
-                    text: `${imagePrompt}. Journalistic press photo, realistic documentary photo.`,
+                    text: `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`,
                   },
                 ],
               },
@@ -12146,25 +12265,46 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
       ? 'bullet'
       : 'detailed';
 
-    let styleDirective = `1. समाचार का विस्तृत विवरण तैयार करें।`;
+    const cleanUser = effectiveUsername.replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
+    const isGenericUser = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
+    const userTagDirective = cleanUser && !isGenericUser ? `\n   - सबसे पहला हैशटैग अनिवार्य रूप से: #${cleanUser}` : "";
 
+    let modeGuidance = "";
     if (effectiveMode === 'short') {
-      styleDirective = `1. समाचार का संक्षिप्त विवरण तैयार करें।`;
+      modeGuidance = `1. समाचार को ठीक 2 संक्षिप्त एवं सारगर्भित पैराग्राफ में लिखें (Full 2 Short Paragraphs):
+   - पहला पैराग्राफ: घटना का मुख्य विवरण, समय, स्थान व मुख्य घटनाक्रम।
+   - दूसरा पैराग्राफ: वर्तमान स्थिति, प्रशासन/पुलिस की कार्रवाई या निष्कर्ष।`;
     } else if (effectiveMode === 'bullet') {
-      styleDirective = `1. समाचार का विवरण मुख्य बिंदुओं में तैयार करें।`;
+      modeGuidance = `1. समाचार को मुख्य बिंदुओं (Bullet Points) में तैयार करें:
+   - प्रत्येक पंक्ति '• ' से शुरू हो और ठीक एक स्पष्ट तथ्य या घटनाक्रम प्रस्तुत करे।
+   - कम से कम 3 और अधिकतम 5 बुलेट पॉइंट्स दें।`;
+    } else {
+      modeGuidance = `1. समाचार को अनिवार्य रूप से ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में लिखें (Full 3 Detailed Paragraphs):
+   - पहला पैराग्राफ: घटना का मुख्य विवरण, समय, स्थान व मुख्य घटनाक्रम।
+   - दूसरा पैराग्राफ: पृष्ठभूमि, कारण, प्रत्यक्षदर्शियों का कहना व जांच की बातें।
+   - तीसरा पैराग्राफ: पुलिस/प्रशासन की कार्रवाई, वर्तमान स्थिति और आगे की प्रक्रिया।`;
     }
 
-    const prompt = `निम्नलिखित समाचार के लिए सोशल मीडिया पोस्ट का कैप्शन तैयार करें:
+    const systemInstruction = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ मुख्य संपादक हैं।`;
+    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ मुख्य संपादक हैं।
+निम्नलिखित समाचार के लिए इंस्टाग्राम और फेसबुक पोस्ट का विस्तृत, प्रामाणिक और प्रभावशाली कैप्शन तैयार करें:
 
 हेडलाइन: "${effectiveHeadline}"
 स्थान: "${effectiveLocation}"
 श्रेणी: "${effectiveCategory}"
-${effectiveSummary ? `संदर्भ / मौजूदा विवरण: ${effectiveSummary}` : ""}
-${customInstruction ? `यूज़र का विशेष निर्देश: ${customInstruction}` : ""}
+${effectiveSummary ? `मौजूदा संदर्भ/कच्चा विवरण: "${effectiveSummary}"` : ""}
+${customInstruction ? `यूज़र का विशेष निर्देश: "${customInstruction}"` : ""}
 
-निर्देश:
-${styleDirective}
-2. केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें।`;
+नियम (कड़ाई से पालन करें):
+${modeGuidance}
+2. पाठकों को यह स्पष्ट अहसास होना चाहिए कि "पूरी खबर विवरण में" उपलब्ध है।
+3. खबर में कोई फालतू हेडिंग, टाइटल, फोन नंबर, सोशल मीडिया लिंक्स, वेबसाइट URL या "पूरी खबर पढ़ें" जैसे गैर-ज़रूरी शब्द न जोड़ें। किसी भी प्रकार का URL या वेब लिंक बिल्कुल न लिखें।
+4. ठीक एक खाली लाइन छोड़कर अंत में 6 से 8 प्रासंगिक हैशटैग लगाएं।
+5. हैशटैग क्रम (MUST):${userTagDirective}
+   - बीच में घटना/स्थान से संबंधित प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #${effectiveLocation.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "") || "News"})
+   - सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
+
+केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।`;
 
     let caption = "";
 
@@ -12176,7 +12316,7 @@ ${styleDirective}
           messages: [
             {
               role: "system",
-              content: "आप एक सहायक हैं। केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें।",
+              content: systemInstruction,
             },
             {
               role: "user",
@@ -12197,6 +12337,9 @@ ${styleDirective}
           DEFAULT_FALLBACK_MODELS,
           {
             contents: prompt,
+            config: {
+              systemInstruction,
+            },
           }
         );
         caption = (response.text || "").trim();
@@ -12221,7 +12364,7 @@ ${styleDirective}
       }
     }
 
-    const cleanResult = cleanCaptionParagraphs(caption, effectiveMode, effectiveUsername);
+    const cleanResult = cleanCaptionParagraphs(caption, effectiveMode, effectiveUsername, effectiveLocation);
     return res.json({ success: true, caption: cleanResult });
   } catch (err: any) {
     console.error("Error in /api/generate-caption:", err);
@@ -13632,6 +13775,26 @@ app.post("/api/admin/update-version-info", (req, res) => {
   }
 });
 
+// Catch-all for undefined /api/* endpoints - ALWAYS return clean JSON, never HTML
+app.all("/api/*", (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `API route not found: ${req.method} ${req.path}`,
+  });
+});
+
+// Central error handler for /api/* requests so unhandled errors never return HTML
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req.path.startsWith("/api") || req.originalUrl.startsWith("/api")) {
+    console.error("Unhandled API error caught by middleware:", err);
+    return res.status(err.status || 500).json({
+      success: false,
+      error: cleanErrorMessage(err) || "Internal server error",
+    });
+  }
+  next(err);
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
@@ -13654,6 +13817,9 @@ async function startServer() {
     app.use(vite.middlewares);
     app.use("*", async (req, res, next) => {
       const url = req.originalUrl;
+      if (url.startsWith("/api/")) {
+        return res.status(404).json({ success: false, error: `API route not found: ${req.method} ${url}` });
+      }
       try {
         const indexPath = path.resolve(process.cwd(), "index.html");
         let template = fs.readFileSync(indexPath, "utf-8");
@@ -13688,7 +13854,10 @@ async function startServer() {
         },
       })
     );
-    app.get("*", (_req, res) => {
+    app.get("*", (req, res) => {
+      if (req.path.startsWith("/api/")) {
+        return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
+      }
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");

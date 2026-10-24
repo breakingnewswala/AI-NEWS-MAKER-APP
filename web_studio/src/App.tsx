@@ -110,11 +110,44 @@ export const STUDIO_STEPS = [
   { step: 7, id: 'step-download', label: '7. डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'स्टेप 7: डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
 ];
 
-const DEFAULT_REPORTER_USER: ReporterUser = {
-  username: 'admin',
+export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
+  fullName: 'मुख्य संपादक',
+  channelNameHi: 'AI News Maker',
+  channelNameEn: 'AI NEWS MAKER',
+  channelLogoUrl: '/assets/ai_news_maker_logo.png',
+  channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+  channelLogoType: 'png',
+  username: 'ainewsmaker',
+  mobileNumber: '9669802408',
+  whatsappNumber: '9669802408',
+  websiteUrl: 'ainewsmaker.online',
+  showMobileNumber: true,
+  showWebsite: true,
+  district: 'सेंट्रल डेस्क',
+  socialIcons: {
+    youtube: true,
+    facebook: true,
+    instagram: true,
+    twitter: false,
+    linkedin: false,
+  },
+};
+
+export const DEFAULT_REPORTER_USER: ReporterUser = {
+  userId: 'reporter-admin-01',
+  uid: 'reporter-admin-01',
+  id: 'reporter-admin-01',
+  username: 'ainewsmaker',
   name: 'मुख्य संपादक',
   role: 'admin',
   district: 'सेंट्रल डेस्क',
+  email: 'admin.ainewsmaker@gmail.com',
+  channelName: 'AI News Maker',
+  channelLogoUrl: '/assets/ai_news_maker_logo.png',
+  channelWebsite: 'ainewsmaker.online',
+  mobileNumber: '9669802408',
+  tier: 'pro',
+  planTier: 'pro',
 };
 
 function getSavedChannelProfile(): ChannelProfile | null {
@@ -230,9 +263,9 @@ function getSavedChannelProfile(): ChannelProfile | null {
         }
       }
     }
-    return null;
+    return DEFAULT_CHANNEL_PROFILE;
   } catch {
-    return null;
+    return DEFAULT_CHANNEL_PROFILE;
   }
 }
 
@@ -567,6 +600,7 @@ export default function App() {
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // Authentication session - loads from localStorage or Android native bridge
+  // Direct Preview Mode: Defaults to active reporter session so Home screen and all features work immediately without Google Login barrier
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
       const saved = localStorage.getItem('reporter_auth_session');
@@ -578,9 +612,8 @@ export default function App() {
     } catch {
       // ignore
     }
-    // Normal auth session resolution across Web & APK
-    // Web visitors MUST authenticate via Google / Admin Login first
-    return null;
+    // Direct preview access on Web & APK
+    return DEFAULT_REPORTER_USER;
   });
 
   useEffect(() => {
@@ -588,18 +621,14 @@ export default function App() {
   }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
-  // Web visitors strictly require an active session and completed onboarding flag
+  // Direct Preview Mode: Defaults to true so Home screen is immediately displayed
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      // Require authentic session
-      const savedSession = localStorage.getItem('reporter_auth_session');
       const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedSession && savedOnboarding === 'true') {
-        return true;
-      }
-      return false;
+      if (savedOnboarding === 'false') return false;
+      return true;
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -904,10 +933,12 @@ export default function App() {
     localStorage.removeItem('is_onboarding_completed');
     localStorage.removeItem('ai_news_user');
     localStorage.removeItem('user_profile_data');
-    setCurrentUser(null);
-    setIsOnboardingCompleted(false);
+    setCurrentUser(DEFAULT_REPORTER_USER);
+    setIsOnboardingCompleted(true);
     setIsUserMenuOpen(false);
-    showToast('लॉगआउट सफल! कृपया पुनः लॉगिन करें');
+    setCurrentTab('home');
+    window.location.hash = 'home';
+    showToast('लॉगआउट सफल! आप होम स्क्रीन पर हैं।');
   };
 
   // Save to localStorage whenever card changes
@@ -1977,8 +2008,10 @@ export default function App() {
     return <RemotionTestStudio />;
   }
 
-  // Step 1 (Login/Signup) & Step 2 (Channel Details Setup) Gate
-  if (!currentUser || !isOnboardingCompleted) {
+  // Direct Preview Mode: Home screen renders directly without login barrier
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(false);
+
+  if (showAuthWelcomeScreen) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
         {toastMessage && (
@@ -1987,12 +2020,35 @@ export default function App() {
             <span>{toastMessage}</span>
           </div>
         )}
+        <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+          <div className="text-xs text-amber-400 font-bold flex items-center gap-2">
+            <span>⚡</span>
+            <span>प्रीव्यू मोड सक्रिय</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowAuthWelcomeScreen(false);
+              setCurrentTab('home');
+              window.location.hash = 'home';
+            }}
+            className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer shadow-md transition"
+          >
+            🏠 सीधे होम स्क्रीन पर जाएं
+          </button>
+        </div>
         <AuthWelcomeScreen
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
+          onSkipToHome={() => {
+            setShowAuthWelcomeScreen(false);
+            setCurrentTab('home');
+            window.location.hash = 'home';
+          }}
           onLoginSuccess={(user) => {
             const isAdmin = isUserAdmin(user);
             setCurrentUser(user);
+            setShowAuthWelcomeScreen(false);
             if (isAdmin) {
               setAdminSystemMode('admin');
               setCurrentTab('profile');
@@ -2026,9 +2082,9 @@ export default function App() {
             handleSaveProfile(profile);
             const userToSet = updatedUser || currentUser;
             if (updatedUser) {
-              setCurrentUser(updatedUser);
+              setCurrentUser(userToSet);
             }
-
+            setShowAuthWelcomeScreen(false);
             const isAdmin = isUserAdmin(userToSet);
             if (isAdmin) {
               setAdminSystemMode('admin');

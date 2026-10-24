@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { AIAnalysisResult, NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
 import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
@@ -232,41 +232,31 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   };
 
 
-  // Structured caption formatter
+  // Structured caption formatter (Strictly zero URLs across all modes)
   const formatCaptionByStyle = (
     style: 'detailed' | 'bullets' | 'short',
     headline: string,
     location: string,
     baseSummary: string,
     currentRes?: AIAnalysisResult | null,
-    sourceUrl?: string
+    _sourceUrl?: string
   ): string => {
     const loc = location || 'मध्य प्रदेश';
     const cleanUser = getActiveCaptionUsername(card, currentUser);
     const mode = style === 'short' ? 'short' : style === 'bullets' ? 'bullet' : 'detailed';
 
+    let rawSource = '';
     if (currentRes) {
-      if (style === 'detailed' && currentRes.captionDetailed) return cleanCaptionParagraphs(currentRes.captionDetailed, mode, cleanUser);
-      if (style === 'bullets' && currentRes.captionBullets) return cleanCaptionParagraphs(currentRes.captionBullets, mode, cleanUser);
-      if (style === 'short' && currentRes.captionShort) return cleanCaptionParagraphs(currentRes.captionShort, mode, cleanUser);
+      if (style === 'detailed' && currentRes.captionDetailed) rawSource = currentRes.captionDetailed;
+      else if (style === 'bullets' && currentRes.captionBullets) rawSource = currentRes.captionBullets;
+      else if (style === 'short' && currentRes.captionShort) rawSource = currentRes.captionShort;
+      else if (currentRes.summary) rawSource = currentRes.summary;
+    }
+    if (!rawSource) {
+      rawSource = baseSummary || headline;
     }
 
-    const cleanBody = (baseSummary || '').trim();
-    const sentences = cleanBody
-      .split(/[।\.\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 5);
-
-    if (style === 'bullets') {
-      const bulletItems = (sentences.length > 0 ? sentences.slice(0, 4) : [headline]).map((b) => `• ${b}`);
-      return bulletItems.join('\n');
-    }
-
-    if (style === 'short') {
-      return sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : (sentences[0] ? `${sentences[0]}।` : headline);
-    }
-
-    return cleanBody || headline;
+    return cleanCaptionParagraphs(rawSource, mode, cleanUser, loc);
   };
 
   const handleSwitchCaptionStyle = (newStyle: 'detailed' | 'bullets' | 'short') => {
@@ -496,9 +486,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         return;
       }
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'सर्वर से विश्लेषण में त्रुटि');
+      let data: any = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json().catch(() => null);
+      } else {
+        const rawText = await response.text().catch(() => '');
+        try { data = JSON.parse(rawText); } catch { data = null; }
+      }
+      if (!response.ok || !data || !data.success) {
+        throw new Error(data?.error || 'सर्वर से विश्लेषण में त्रुटि');
       }
 
       const res: AIAnalysisResult = data.data;
@@ -806,9 +803,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         return;
       }
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'सर्वर से विश्लेषण में त्रुटि');
+      let data: any = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json().catch(() => null);
+      } else {
+        const rawText = await response.text().catch(() => '');
+        try { data = JSON.parse(rawText); } catch { data = null; }
+      }
+      if (!response.ok || !data || !data.success) {
+        throw new Error(data?.error || 'सर्वर से विश्लेषण में त्रुटि');
       }
 
       const res: AIAnalysisResult = data.data;
@@ -987,39 +991,86 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setError(null);
     setRegenSuccessMsg(null);
 
-    try {
-      const activeCtx = canonicalContext || result?.canonicalContext || {
-        sourceUrl: linkUrl || card.sourceUrl || '',
-        title: result?.headline || card.headline || '',
-        articleText: inputText || result?.summary || card.summary || '',
-        location: result?.location || card.location || '',
-        category: result?.category || card.category || '',
-      };
+    const activeCtx = canonicalContext || result?.canonicalContext || {
+      sourceUrl: linkUrl || card.sourceUrl || '',
+      title: result?.headline || card.headline || '',
+      articleText: inputText || result?.summary || card.summary || '',
+      location: result?.location || card.location || '',
+      category: result?.category || card.category || '',
+    };
 
+    try {
       const payload = {
         canonicalContext: activeCtx,
+        sourceHeadline: result?.headline || card.headline || '',
+        summary: inputText || result?.summary || card.summary || '',
+        location: result?.location || card.location || '',
         previousHeadlines: headlineOptions,
         template_id: card.templateId || 'graphic_001',
         channelUsername: card.socialHandle || currentUser?.username || '',
-        userTier: userPlan,
-        email: currentUser?.email,
-        userId: currentUser?.userId || currentUser?.uid,
+        userTier: userPlan || currentUser?.tier || 'pro',
+        email: currentUser?.email || 'admin.ainewsmaker@gmail.com',
+        userId: currentUser?.userId || currentUser?.uid || 'reporter-admin-01',
         aiProvider,
         customPrompt,
       };
 
-      const res = await fetch(getApiUrl('/api/regenerate-headlines'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let data: any = null;
+      try {
+        const res = await fetch(getApiUrl('/api/regenerate-headlines'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify(payload),
+        });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'हेडलाइन्स दोबारा बनाने में समस्या आई');
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          data = await res.json().catch(() => null);
+        } else {
+          const rawText = await res.text().catch(() => '');
+          try {
+            data = JSON.parse(rawText);
+          } catch {
+            data = null;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('Network or endpoint fetch error in regenerate-headlines:', fetchErr);
+        data = null;
       }
 
-      const newOptions: string[] = (data.headlineOptions || []).slice(0, 5);
+      let newOptions: string[] = [];
+      if (data && data.success && Array.isArray(data.headlineOptions) && data.headlineOptions.length > 0) {
+        newOptions = data.headlineOptions.map((h: string) => cleanHeadlineText(h)).filter(Boolean).slice(0, 5);
+      } else if (data && data.success && Array.isArray(data.headlines) && data.headlines.length > 0) {
+        newOptions = data.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean).slice(0, 5);
+      } else if (data && data.success && Array.isArray(data.options) && data.options.length > 0) {
+        newOptions = data.options.map((h: string) => cleanHeadlineText(h)).filter(Boolean).slice(0, 5);
+      }
+
+      // If backend was unreachable, returned HTML (404/502), or failed, execute resilient client-side 5-tier generator
+      if (newOptions.length === 0) {
+        const sourceTitle = cleanHeadlineText(activeCtx.title || result?.headline || card.headline || 'ताज़ा समाचार');
+        const sourceText = activeCtx.articleText || inputText || result?.summary || card.summary || '';
+        const sourceLoc = cleanLocationField(activeCtx.location || result?.location || card.location || '');
+        const articleSentences = (sourceText || sourceTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+        const generated = generate5BalancedHeadlineOptions(sourceTitle, articleSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc);
+        newOptions = fitted.filter((h) => !headlineOptions.includes(h)).slice(0, 5);
+        if (newOptions.length < 5) {
+          fitted.forEach((h) => {
+            if (newOptions.length < 5 && !newOptions.includes(h)) newOptions.push(h);
+          });
+        }
+        if (newOptions.length === 0) {
+          newOptions = generated.slice(0, 5);
+        }
+      }
+
       if (newOptions.length > 0) {
         setHeadlineOptions(newOptions);
         setSelectedHeadlineIndex(0);
@@ -1031,20 +1082,43 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 headline: topH,
                 formattedHeadline: topH,
                 headlineOptions: newOptions,
-                canonicalContext: data.canonicalContext || activeCtx,
+                canonicalContext: (data && data.canonicalContext) || activeCtx,
               }
             : null
         );
-        if (data.actualProvider) {
+        if (data && data.actualProvider) {
           setActiveGeneratedProvider(data.actualProvider);
         }
         onChange({ headline: topH, formattedHeadline: topH });
         setRegenSuccessMsg('5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक तैयार किए गए!');
         setTimeout(() => setRegenSuccessMsg(null), 3500);
+      } else {
+        setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया समाचार टेक्स्ट जांचें।');
       }
     } catch (err: any) {
-      console.error('Error regenerating headlines:', err);
-      setError(err?.message || 'हेडलाइन्स दोबारा बनाने में त्रुटि हुई');
+      console.warn('Fallback headline regeneration executed:', err);
+      try {
+        const sourceTitle = cleanHeadlineText(activeCtx.title || result?.headline || card.headline || 'ताज़ा समाचार');
+        const sourceText = activeCtx.articleText || inputText || result?.summary || card.summary || '';
+        const sourceLoc = cleanLocationField(activeCtx.location || result?.location || card.location || '');
+        const articleSentences = (sourceText || sourceTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+        const generated = generate5BalancedHeadlineOptions(sourceTitle, articleSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc);
+        if (fitted.length > 0) {
+          setHeadlineOptions(fitted.slice(0, 5));
+          setSelectedHeadlineIndex(0);
+          const topH = fitted[0];
+          setResult((prev) => (prev ? { ...prev, headline: topH, formattedHeadline: topH, headlineOptions: fitted } : null));
+          onChange({ headline: topH, formattedHeadline: topH });
+          setRegenSuccessMsg('5 नए संतुलित हेडलाइन विकल्प तैयार किए गए!');
+          setTimeout(() => setRegenSuccessMsg(null), 3500);
+          return;
+        }
+      } catch {}
+      setError('हेडलाइन्स दोबारा बनाने में समस्या आई। कृपया पुनः प्रयास करें।');
     } finally {
       setIsRegenerating(false);
     }
@@ -1057,7 +1131,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     try {
       const res = await fetch(getApiUrl('/api/generate-ai-image'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           headline: result.headline,
           customPrompt: aiPhotoPrompt.trim() || undefined,
@@ -1065,8 +1139,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           aiProvider,
         }),
       });
-      const data = await res.json();
-      if (data.success && data.imageUrl) {
+      let data: any = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await res.json().catch(() => null);
+      } else {
+        const rawText = await res.text().catch(() => '');
+        try { data = JSON.parse(rawText); } catch { data = null; }
+      }
+      if (data && data.success && data.imageUrl) {
         setGeneratedAiImageUrl(data.imageUrl);
       }
     } catch {
@@ -1536,6 +1617,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               </span>
               {headlineOptions.slice(0, 5).map((opt, idx) => {
                 const isSelected = selectedHeadlineIndex === idx;
+                const maxLimit = [100, 120, 135, 145, 170][idx] || 170;
                 const effectiveText = (isSelected && result?.headline ? result.headline : opt)
                   .replace(/\[\/?(?:yellow|highlight)\]/g, '')
                   .trim();
@@ -1544,28 +1626,26 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   <div
                     key={idx}
                     onClick={() => handleSelectHeadline(opt, idx)}
-                    className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex items-start gap-2.5 ${
+                    className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1 ${
                       isSelected
                         ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                         : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
                     }`}
                   >
-                    <span
-                      className={`w-5 h-5 flex items-center justify-center rounded-full text-xs font-mono font-black shrink-0 mt-0.5 ${
-                        isSelected
-                          ? 'bg-yellow-400 text-neutral-950'
-                          : 'bg-neutral-800 text-neutral-300'
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="leading-snug">{isSelected && result?.headline ? result.headline : opt}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-yellow-400 tracking-wide">
+                        विकल्प {idx + 1}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-neutral-400 font-mono font-bold">
+                          [{charLen} / {maxLimit}]
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-yellow-400" />}
+                      </div>
                     </div>
-                    <span className="text-[10px] text-neutral-400 font-mono font-bold shrink-0 mt-0.5 whitespace-nowrap">
-                      [{charLen} अक्षर]
-                    </span>
-                    {isSelected && <Check className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />}
+                    <div className="leading-snug text-neutral-200">
+                      {isSelected && result?.headline ? result.headline : opt}
+                    </div>
                   </div>
                 );
               })}
