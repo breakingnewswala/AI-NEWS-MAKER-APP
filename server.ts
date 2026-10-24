@@ -10330,42 +10330,7 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     ? `पहला हैशटैग: #${cleanUser}`
     : `(कोई यूज़रनेम हैशटैग न लगाएं)`;
 
-  const systemInstruction = `आप एक अग्रणी हिंदी डिजिटल न्यूज़ नेटवर्क के चीफ एडिटर हैं (BREAKING NEWS WALA Core Rules)।
-अनिवार्य संपादकीय नियम (CORE EDITORIAL RULES):
-
-1. आदरसूचक व चाटुकारिता शब्दों का पूर्ण निष्कासन (ANTI-FLATTERY MANDATE):
-   - 'श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी', 'परम पूज्य' आदि औपचारिक शब्द हेडलाइन, विकल्पों और पूरे कैप्शन से शत-प्रतिशत हटा दें। सीधा पद व नाम लिखें (उदा. "माननीय मुख्यमंत्री श्री..." -> "मुख्यमंत्री...").
-
-2. हेडलाइन नियम (HEADLINE GENERATION):
-   - मुख्य हेडलाइन: 12 से 22 शब्दों की, अत्यंत शक्तिशाली, देवनागरी लिपि में, बिना किसी औपचारिक शब्द के।
-   - ठीक 5 अलग-अलग संतुलित हेडलाइन विकल्प तैयार करें (ये अधिकतम सीमाएं हैं, कोई अंत में पूर्णविराम (। या .) न लगाएं, न ही 'इससे लोगों को मदद मिलेगी' जैसे अनावश्यक वाक्य जोड़ें):
-     * विकल्प 1 (ब्रेकिंग स्टाइल): मुख्य घटना, हाई-इम्पैक्ट - अधिकतम 100 वर्ण
-     * विकल्प 2 (तथ्यात्मक स्टाइल): घटना के मुख्य तथ्य व स्पष्ट जानकारी - अधिकतम 120 वर्ण
-     * विकल्प 3 (एक्शन/सवाल स्टाइल): प्रशासनिक कार्रवाई या सवाल खड़ा करती स्टाइल - अधिकतम 135 वर्ण
-     * विकल्प 4 (जनसरोकार स्टाइल): जनता व समाज पर घटना का सीधा प्रभाव - अधिकतम 145 वर्ण
-     * विकल्प 5 (विस्तृत संदर्भ स्टाइल): घटना की पूरी पृष्ठभूमि व फॉलो-अप संदर्भ - अधिकतम 170 वर्ण
-   - ये अधिकतम सीमाएं हैं (maximum limits, not minimum targets), कृत्रिम भराव शब्द न जोड़ें।
-
-3. हाइलाइट शब्द (MULTI-COLOR / KEYWORD HIGHLIGHT):
-   - हेडलाइन में से 2 से 4 मुख्य शब्द (Power Words) चुनें।
-   - "formattedHeadline" में इन शब्दों के चारों ओर [highlight]शब्द[/highlight] टैग लगाएं।
-
-4. स्थान कैप्चरिंग (LOCATION DETECTION):
-   - समाचार से संबंधित जिला, शहर या राज्य सटीक रूप से निकालें।
-
-5. 2-3 पैराग्राफ कैप्शन नियम (CAPTION RULES):
-   - इंस्टाग्राम व फेसबुक पोस्ट के लिए पूरी खबर को कम से कम 2 और विवरण अधिक होने पर ठीक 3 विस्तृत पैराग्राफ में लिखें:
-     * पैराग्राफ 1: मुख्य घटना, समय, स्थान व घटनाक्रम का विवरण।
-     * पैराग्राफ 2: पृष्ठभूमि, कारण, प्रत्यक्षदर्शियों या जांच की बातें।
-     * पैराग्राफ 3: पुलिस/प्रशासन की कार्रवाई, वर्तमान स्थिति और आगे का अपडेट।
-   - कोई फालतू हेडिंग, फोन नंबर, लिंक्स या रॉ URL न जोड़ें।
-   - ठीक एक खाली लाइन छोड़कर अंत में हैशटैग लगाएं:
-     पहला हैशटैग: ${userTagInstruction}, मध्य में 4-6 संबंधित हैशटैग, और अंतिम हैशटैग: अनिवार्य रूप से strictly #AINewsMaker
-
-6. प्रतीकात्मक फोटो पहचान (SYMBOLIC PHOTO DETECTION):
-   - यदि इनपुट में यह संकेत है कि फोटो AI जनरेटेड है या प्रतीकात्मक है, तो "isAiGeneratedPhoto" को true करें, अन्यथा false रखें।
-
-7. केवल वैध JSON लौटाएं (Return only valid JSON conforming to schema).`;
+  const systemInstruction = `आप एक पेशेवर हिंदी न्यूज़ एडिटर हैं। दी गई समाचार सामग्री का विश्लेषण करके सटीक, प्रामाणिक और प्रभावशाली हिंदी हेडलाइन, हेडलाइन विकल्प और सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
@@ -10377,15 +10342,15 @@ ${effectiveBody ? effectiveBody.slice(0, 4000) : effectiveInput}
 
 ${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
 तैयार करें:
-1. headline: सबसे सटीक व संतुलित मुख्य हेडलाइन (अधिकतम 100 वर्ण, बिना किसी पूर्णविराम के)।
-2. headlineOptions: ठीक 5 अलग-अलग संतुलित हेडलाइन विकल्प (विकल्प 1: <=100 वर्ण, विकल्प 2: <=120 वर्ण, विकल्प 3: <=135 वर्ण, विकल्प 4: <=145 वर्ण, विकल्प 5: <=170 वर्ण, बिना किसी पूर्णविराम के)।
+1. headline: मुख्य और सबसे सटीक हिंदी हेडलाइन।
+2. headlineOptions: 5 अलग-अलग सटीक और तथ्यपरक हेडलाइन विकल्प।
 3. highlightWords: हेडलाइन के 2-4 मुख्य शब्द।
 4. formattedHeadline: हेडलाइन जिसमें हाइलाइट होने वाले शब्द [highlight]शब्द[/highlight] के रूप में चिह्नित हों।
 5. location: वास्तविक जिला/शहर/राज्य।
-6. summary: 2-3 पैराग्राफ का विस्तृत सोशल मीडिया कैप्शन (अंतिम हैशटैग अनिवार्य रूप से #AINewsMaker हो)।
-7. captionDetailed, captionBullets, captionShort: तीन अलग-अलग सोशल कैप्शन फॉर्मेट (अंतिम हैशटैग अनिवार्य रूप से #AINewsMaker हो)।
-8. category: समाचार की सटीक श्रेणी (जैसे 'अपराध', 'राजनीति', 'हादसा', 'प्रशासन', 'कारोबार', 'राष्ट्रीय')।
-9. suggestedImagePrompt: इस खबर के लिए उपयुक्त यथार्थवादी प्रेस फोटो विवरण (अंग्रेजी में)।
+6. summary: सोशल मीडिया के लिए विस्तृत समाचार कैप्शन (अंतिम हैशटैग #AINewsMaker हो)।
+7. captionDetailed, captionBullets, captionShort: तीन अलग-अलग सोशल कैप्शन फॉर्मेट (अंतिम हैशटैग #AINewsMaker हो)।
+8. category: समाचार की सटीक श्रेणी।
+9. suggestedImagePrompt: इस खबर के लिए उपयुक्त प्रेस फोटो विवरण (अंग्रेजी में)।
 10. isAiGeneratedPhoto: false
 11. speakerName: यदि किसी का बयान है तो नाम, अन्यथा खाली स्ट्रिंग ("")।
 12. speakerTitle: पद या पदवी, अन्यथा खाली स्ट्रिंग ("")।
@@ -10393,7 +10358,7 @@ ${customPrompt ? `यूज़र का विशेष निर्देश: 
 JSON Output Schema:
 {
   "headline": "",
-  "headlineOptions": ["विकल्प 1 (<=100 वर्ण)", "विकल्प 2 (<=120 वर्ण)", "विकल्प 3 (<=135 वर्ण)", "विकल्प 4 (<=145 वर्ण)", "विकल्प 5 (<=170 वर्ण)"],
+  "headlineOptions": ["विकल्प 1", "विकल्प 2", "विकल्प 3", "विकल्प 4", "विकल्प 5"],
   "highlightWords": [],
   "formattedHeadline": "",
   "location": "",
@@ -10563,8 +10528,8 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
 
         if (!hasRealFacts && rawLink) {
           const urlFacts = extractFactsFromUrlString(rawLink);
-          effectiveArticleDesc = urlFacts.titleHint ? `${urlFacts.titleHint}। इस संबंध में आवश्यक जांच और प्रशासनिक कार्रवाई जारी है।` : "";
-          articleBodySnippets = urlFacts.titleHint ? `${urlFacts.titleHint}। पूरे मामले पर लगातार नजर रखी जा रही है।` : "";
+          effectiveArticleDesc = urlFacts.titleHint || "";
+          articleBodySnippets = urlFacts.titleHint || "";
           fetchedArticleSnippet = `URL: ${rawLink}\nDomain: ${urlFacts.domain}\nTitle: ${urlFacts.titleHint}\nKeywords: ${urlFacts.slugWords.join(" ")}`;
         }
 
@@ -10839,31 +10804,6 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       }
       if (parsedData.headline && cleanOptions.length === 0) {
         addOptionIfValid(parsedData.headline);
-      }
-
-      // If fewer than 5 options returned, derive remaining from available facts or primary headline
-      if (cleanOptions.length < 5) {
-        for (const sent of factSentences) {
-          if (cleanOptions.length >= 5) break;
-          addOptionIfValid(sent);
-        }
-      }
-
-      if (cleanOptions.length < 5) {
-        const balanced = generate5BalancedHeadlineOptions(
-          primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
-          factSentences,
-          parsedData.location
-        );
-        for (const b of balanced) {
-          if (cleanOptions.length >= 5) break;
-          addOptionIfValid(b);
-        }
-      }
-
-      while (cleanOptions.length < 5) {
-        const fallbackSeed = primarySourceHeadline || parsedData.headline || "महत्वपूर्ण समाचार मुख्य अपडेट";
-        cleanOptions.push(fallbackSeed);
       }
 
       parsedData.headlineOptions = fitHeadlinesTo5TierRanges(
