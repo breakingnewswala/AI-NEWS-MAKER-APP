@@ -684,8 +684,18 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                 <div className="flex items-center justify-between text-[11px] text-neutral-400 font-semibold">
                   <div className="flex items-center gap-1.5">
                     <span>चयनित हेडलाइन संपादित करें (Edit text):</span>
-                    <span className="text-[10px] text-yellow-400 font-mono">
-                      [{(result.headline || '').length} / {[100, 120, 135, 145, 170][selectedHeadlineIndex] || 170}]
+                    <span className="text-[10px] text-yellow-400 font-mono bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
+                      <span className="text-amber-300 font-bold">
+                        {(result.headline || '')
+                          .replace(/\[\/?(?:yellow|highlight)\]/g, '')
+                          .trim()
+                          .split(/\s+/)
+                          .filter(Boolean).length} शब्द
+                      </span>
+                      <span className="text-neutral-600">|</span>
+                      <span>
+                        {(result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').trim().length} / 150 अक्षर
+                      </span>
                     </span>
                   </div>
                   <VoiceInputButton

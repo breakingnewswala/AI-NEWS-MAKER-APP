@@ -1975,7 +1975,7 @@ export default function App() {
     const locLine = effectiveLoc ? `\n\n📍 स्थान: ${effectiveLoc}` : '';
     const cleanEffectiveLoc = effectiveLoc ? effectiveLoc.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
     const locTag = cleanEffectiveLoc ? `#${cleanEffectiveLoc}` : '';
-    const allTags = [userTag, locTag, '#BreakingNews', '#HindiNews'].filter(Boolean).join(' ');
+    const allTags = [userTag, locTag, '#BreakingNews', '#HindiNews', '#AINewsMaker'].filter(Boolean).join(' ');
     const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${allTags}`.trim();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});

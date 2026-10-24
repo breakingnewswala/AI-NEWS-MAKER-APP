@@ -908,13 +908,20 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 
-  // 150 is a ceiling, not a target: natural shorter headlines (65-120 chars) are preserved as is
-  if (cleaned.length <= maxLimit) {
+  // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
+  const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
+  if (visibleLength <= maxLimit) {
     return cleaned;
   }
 
+  // If text exceeds maxLimit, strip markup before truncating so tags are never broken mid-tag
+  const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
+  if (plainText.length <= maxLimit) {
+    return plainText;
+  }
+
   // Trim to maximum limit cleanly at whole word boundary without slicing mid-word or mid-quote
-  const sliced = cleaned.substring(0, maxLimit);
+  const sliced = plainText.substring(0, maxLimit);
   const lastDelim = Math.max(
     sliced.lastIndexOf(", "),
     sliced.lastIndexOf(" - "),
@@ -922,15 +929,14 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
     sliced.lastIndexOf("; ")
   );
   const lastSpace = sliced.lastIndexOf(" ");
+  let result = sliced;
   if (lastDelim > 40) {
-    cleaned = sliced.substring(0, lastDelim);
+    result = sliced.substring(0, lastDelim);
   } else if (lastSpace > 25) {
-    cleaned = sliced.substring(0, lastSpace);
-  } else {
-    cleaned = sliced;
+    result = sliced.substring(0, lastSpace);
   }
-  cleaned = cleaned.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
-  return cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
+  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 }
 
 /**
@@ -1010,15 +1016,16 @@ export function generate5BalancedHeadlineOptions(
 
   const uniqueOptions: string[] = [];
 
-  const addOptionIfClean = (cand: string) => {
+  const addOptionIfClean = (cand: string, skipSimilarityCheck: boolean = false) => {
     if (!cand) return;
     const formatted = fitSingleHeadlineToTier(cand, 150);
     if (!formatted || formatted.length < 15) return;
     if (uniqueOptions.includes(formatted)) return;
-    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.90);
-    if (!isTooSimilar) {
-      uniqueOptions.push(formatted);
+    if (!skipSimilarityCheck) {
+      const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.92);
+      if (isTooSimilar) return;
     }
+    uniqueOptions.push(formatted);
   };
 
   // Option 1: Direct core event headline
@@ -1044,8 +1051,8 @@ export function generate5BalancedHeadlineOptions(
     if (base.includes(d)) {
       const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
       if (parts.length >= 2) {
-        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`);
-        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`);
+        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
+        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
       }
     }
   }
@@ -1055,11 +1062,11 @@ export function generate5BalancedHeadlineOptions(
   if (questionMatch) {
     const actor = questionMatch[1].trim();
     const action = questionMatch[2].trim();
-    addOptionIfClean(`${actor}: ${action}`);
-    addOptionIfClean(`${action}: जानिए कौन हैं ${actor}`);
-    addOptionIfClean(`${actor} की चर्चा: ${action}`);
-    addOptionIfClean(`${action}, ${actor} की मुख्य भूमिका`);
-    addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`);
+    addOptionIfClean(`${actor}: ${action}`, true);
+    addOptionIfClean(`${action}: जानिए कौन हैं ${actor}`, true);
+    addOptionIfClean(`${actor} की चर्चा: ${action}`, true);
+    addOptionIfClean(`${action}, ${actor} की मुख्य भूमिका`, true);
+    addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`, true);
   }
 
   // Action / Announcement restructuring using words from base
@@ -1076,12 +1083,12 @@ export function generate5BalancedHeadlineOptions(
   if (connectorMatches) {
     const cause = connectorMatches[1].trim();
     const effect = connectorMatches[2].trim();
-    addOptionIfClean(`${effect}: ${cause} का मामला`);
-    addOptionIfClean(`${cause}: ${effect}`);
+    addOptionIfClean(`${effect}: ${cause} का मामला`, true);
+    addOptionIfClean(`${cause}: ${effect}`, true);
   }
 
-  // If still fewer than 5, guarantee exactly 5 unique options using clean editorial prefixes without administration words
-  const editorialPrefixes = ["बड़ी खबर: ", "ताज़ा अपडेट: ", "विशेष रिपोर्ट: ", "जानिए: ", "प्रमुख घटनाक्रम: "];
+  // If still fewer than 5, guarantee exactly 5 unique options using clean editorial angles without administration words
+  const editorialPrefixes = ["विशेष रिपोर्ट: ", "ग्राउंड रिपोर्ट: ", "प्रमुख घटनाक्रम: ", "नया अपडेट: ", "विस्तृत कवरेज: "];
   for (const p of editorialPrefixes) {
     if (uniqueOptions.length >= 5) break;
     if (!base.startsWith(p)) {
@@ -1090,6 +1097,15 @@ export function generate5BalancedHeadlineOptions(
         uniqueOptions.push(fitted);
       }
     }
+  }
+
+  let seedIdx = 1;
+  while (uniqueOptions.length < 5) {
+    const backupCandidate = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${base}`, 150);
+    if (!uniqueOptions.includes(backupCandidate)) {
+      uniqueOptions.push(backupCandidate);
+    }
+    seedIdx++;
   }
 
   return uniqueOptions.slice(0, 5);

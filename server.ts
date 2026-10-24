@@ -10141,10 +10141,10 @@ export function createLocalNewsFallback(
     highlightWords,
     formattedHeadline,
     location: detectedLocation,
-    summary: captionVariants.captionDetailed,
-    captionDetailed: captionVariants.captionDetailed,
-    captionBullets: captionVariants.captionBullets,
-    captionShort: captionVariants.captionShort,
+    summary: cleanCaptionParagraphs(captionVariants.captionDetailed, 'detailed', username, detectedLocation, headline),
+    captionDetailed: cleanCaptionParagraphs(captionVariants.captionDetailed, 'detailed', username, detectedLocation, headline),
+    captionBullets: cleanCaptionParagraphs(captionVariants.captionBullets, 'bullet', username, detectedLocation, headline),
+    captionShort: cleanCaptionParagraphs(captionVariants.captionShort, 'short', username, detectedLocation, headline),
     anchorScript,
     categories,
     category,
@@ -10525,15 +10525,16 @@ export function generate5BalancedHeadlineOptions(
 
   const uniqueOptions: string[] = [];
 
-  const addOptionIfClean = (cand: string) => {
+  const addOptionIfClean = (cand: string, skipSimilarityCheck: boolean = false) => {
     if (!cand) return;
     const formatted = fitSingleHeadlineToTier(cand, 150);
     if (!formatted || formatted.length < 15) return;
     if (uniqueOptions.includes(formatted)) return;
-    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.90);
-    if (!isTooSimilar) {
-      uniqueOptions.push(formatted);
+    if (!skipSimilarityCheck) {
+      const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.92);
+      if (isTooSimilar) return;
     }
+    uniqueOptions.push(formatted);
   };
 
   // Option 1: Direct core event headline
@@ -10559,8 +10560,8 @@ export function generate5BalancedHeadlineOptions(
     if (base.includes(d)) {
       const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
       if (parts.length >= 2) {
-        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`);
-        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`);
+        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
+        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
       }
     }
   }
@@ -10570,11 +10571,11 @@ export function generate5BalancedHeadlineOptions(
   if (questionMatch) {
     const actor = questionMatch[1].trim();
     const action = questionMatch[2].trim();
-    addOptionIfClean(`${actor}: ${action}`);
-    addOptionIfClean(`${action}: जानिए कौन हैं ${actor}`);
-    addOptionIfClean(`${actor} की चर्चा: ${action}`);
-    addOptionIfClean(`${action}, ${actor} की मुख्य भूमिका`);
-    addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`);
+    addOptionIfClean(`${actor}: ${action}`, true);
+    addOptionIfClean(`${action}: जानिए कौन हैं ${actor}`, true);
+    addOptionIfClean(`${actor} की चर्चा: ${action}`, true);
+    addOptionIfClean(`${action}, ${actor} की मुख्य भूमिका`, true);
+    addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`, true);
   }
 
   // Action / Announcement restructuring using words from base
@@ -10591,12 +10592,12 @@ export function generate5BalancedHeadlineOptions(
   if (connectorMatches) {
     const cause = connectorMatches[1].trim();
     const effect = connectorMatches[2].trim();
-    addOptionIfClean(`${effect}: ${cause} का मामला`);
-    addOptionIfClean(`${cause}: ${effect}`);
+    addOptionIfClean(`${effect}: ${cause} का मामला`, true);
+    addOptionIfClean(`${cause}: ${effect}`, true);
   }
 
-  // If still fewer than 5, guarantee exactly 5 unique options using clean editorial prefixes without administration words
-  const editorialPrefixes = ["बड़ी खबर: ", "ताज़ा अपडेट: ", "विशेष रिपोर्ट: ", "जानिए: ", "प्रमुख घटनाक्रम: "];
+  // If still fewer than 5, guarantee exactly 5 unique options using clean editorial angles without administration words
+  const editorialPrefixes = ["विशेष रिपोर्ट: ", "ग्राउंड रिपोर्ट: ", "प्रमुख घटनाक्रम: ", "नया अपडेट: ", "विस्तृत कवरेज: "];
   for (const p of editorialPrefixes) {
     if (uniqueOptions.length >= 5) break;
     if (!base.startsWith(p)) {
@@ -10605,6 +10606,15 @@ export function generate5BalancedHeadlineOptions(
         uniqueOptions.push(fitted);
       }
     }
+  }
+
+  let seedIdx = 1;
+  while (uniqueOptions.length < 5) {
+    const backupCandidate = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${base}`, 150);
+    if (!uniqueOptions.includes(backupCandidate)) {
+      uniqueOptions.push(backupCandidate);
+    }
+    seedIdx++;
   }
 
   return uniqueOptions.slice(0, 5);
@@ -10633,13 +10643,20 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 
-  // 150 is a ceiling, not a target: natural shorter headlines (65-120 chars) are preserved as is
-  if (cleaned.length <= maxLimit) {
+  // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
+  const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
+  if (visibleLength <= maxLimit) {
     return cleaned;
   }
 
+  // If text exceeds maxLimit, strip markup before truncating so tags are never broken mid-tag
+  const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
+  if (plainText.length <= maxLimit) {
+    return plainText;
+  }
+
   // Trim to maximum limit cleanly at whole word boundary without slicing mid-word or mid-quote
-  const sliced = cleaned.substring(0, maxLimit);
+  const sliced = plainText.substring(0, maxLimit);
   const lastDelim = Math.max(
     sliced.lastIndexOf(", "),
     sliced.lastIndexOf(" - "),
@@ -10647,15 +10664,14 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
     sliced.lastIndexOf("; ")
   );
   const lastSpace = sliced.lastIndexOf(" ");
+  let result = sliced;
   if (lastDelim > 40) {
-    cleaned = sliced.substring(0, lastDelim);
+    result = sliced.substring(0, lastDelim);
   } else if (lastSpace > 25) {
-    cleaned = sliced.substring(0, lastSpace);
-  } else {
-    cleaned = sliced;
+    result = sliced.substring(0, lastSpace);
   }
-  cleaned = cleaned.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
-  return cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
+  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 }
 
 /**
@@ -10711,7 +10727,7 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     headlineOptions: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Exactly 5 distinct, factual headline options for the SAME central news event (BREAKING NEWS WALA style, each up to 150 characters maximum, concise, active Devanagari Hindi without ending punctuation)",
+      description: "Exactly 5 distinct, factual headline options for the SAME central news event (BREAKING NEWS WALA style, each targeting 100-150 visible characters, absolute maximum 150 visible characters, concise, active Devanagari Hindi without ending punctuation)",
     },
     highlightWords: {
       type: Type.ARRAY,
@@ -10787,7 +10803,7 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     ? `पहला हैशटैग: #${cleanUser}`
     : `(यदि यूज़रनेम न हो तो कोई यूज़रनेम हैशटैग न लगाएं)`;
 
-  const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मुख्य पुष्ट घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी एक मुख्य घटना के 5 संतुलित हेडलाइन विकल्प (अधिकतम 150 वर्ण) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
+  const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मुख्य पुष्ट घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी एक मुख्य घटना के 5 संतुलित हेडलाइन विकल्प (लक्ष्य 100-150 वर्ण, अधिकतम 150 वर्ण) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
@@ -10813,10 +10829,14 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - विकल्प 3: कार्रवाई या परिणाम (Action/Consequence) — घटना से जुड़ी कार्रवाई, असर या विकास।
    - विकल्प 4: मुख्य बिंदु या दावा (Key Development/Quote) — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान।
    - विकल्प 5: सारगर्भित व प्रभावशाली (High-Impact Angle) — उसी मुख्य घटना का संतुलित, धारदार रूप।
-3. समृद्ध शब्द सीमा व अधिकतम 150 वर्ण (RICH HEADLINE WORD COUNT & 150 CHAR CEILING):
-   - हेडलाइन को बहुत छोटा या अधूरा (जैसे केवल 5-8 शब्द) न लिखें। हेडलाइन में पर्याप्त जानकारी, प्रमुख नाम और घटनाक्रम को शामिल करते हुए 14 से 26 शब्दों (लगभग 85 से 145 वर्ण, अधिकतम 150 वर्ण) की समृद्ध, संपूर्ण हेडलाइन बनाएं।
-   - प्रत्येक हेडलाइन विकल्प के लिए एकल अधिकतम सीमा 150 वर्ण है। 150 वर्ण एक सीमा है; हेडलाइन को कभी भी किसी नाम, पद, उद्धरण या वाक्य के बीच में अधूरा न काटें।
-   - हेडलाइन स्ट्रिंग में कभी भी '[58/100]' या '(विकल्प 1)' जैसे वर्ण-गणना या लेबल न जोड़ें।
+3. एकल हेडलाइन लंबाई नियम — 100 से 150 वर्ण (SINGLE HEADLINE LENGTH RULE — 100 TO 150 CHARACTERS):
+   - प्रत्येक हेडलाइन विकल्प के लिए लक्ष्य लंबाई: 100 से 150 दृश्यमान वर्ण (visible characters)।
+   - पूर्ण अधिकतम सीमा: 150 दृश्यमान वर्ण (Absolute Maximum: 150 visible characters)।
+   - सभी 5 विकल्पों पर समान नियम लागू होता है।
+   - जब उपलब्ध पुष्ट तथ्य समर्थन करते हों तो 100–150 वर्ण की संपूर्ण, स्वाभाविक हेडलाइन लिखें। बनावटी विस्तार, दोहराव या अवांछित प्रशासनिक जुमले न जोड़ें।
+   - यदि स्रोत छोटा हो और 100 वर्ण बिना दोहराव के संभव न हो, तो मनगढ़ंत बातें जोड़ने के बजाय तथ्यात्मक शुद्धता को प्राथमिकता दें।
+   - 150 वर्ण से अधिक कभी न हो। किसी व्यक्ति का नाम, स्थान, बयान या सार्थक वाक्यांश कभी बीच में अधूरा न काटें।
+   - हेडलाइन स्ट्रिंग में कभी भी '[58/100]', '[62/120]' या '(विकल्प 1)' जैसे वर्ण-गणना या लेबल न जोड़ें।
 4. पत्रकारिता की निष्पक्षता व चाटुकारिता का पूर्ण निष्कासन:
    - 'श्री', 'माननीय', 'सम्माननीय', 'आदरणीय', 'महोदय', 'जी' जैसे पीआर/सरकारी शब्द पूरी तरह हटा दें।
    - "बड़ा खुलासा", "मचा हड़कंप", "सन्न रह जाएंगे", "इससे लोगों को मदद मिलेगी" जैसे क्लिकबैट और फिलर शब्द कभी न लिखें।
@@ -10835,18 +10855,19 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
      * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
+     * नोट: #breakingnewswala या #BNWTV को अनिवार्य रूप से न जोड़ें।
 8. suggestedImagePrompt:
    - अंग्रेजी में रियलिस्टिक प्रेस फोटो प्रॉम्प्ट (35mm lens, natural lighting, Indian news photojournalism style, no text or watermark).
 
 Strictly return a valid JSON object matching these exact keys:
 {
-  "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम, <=150 वर्ण)",
+  "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम, लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
   "headlineOptions": [
-    "विकल्प 1: मुख्य घटनाक्रम (<=150 वर्ण)",
-    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (<=150 वर्ण)",
-    "विकल्प 3: कार्रवाई/परिणाम कोण (<=150 वर्ण)",
-    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (<=150 वर्ण)",
-    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (<=150 वर्ण)"
+    "विकल्प 1: मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
   ],
   "highlightWords": ["मुख्य शब्द 1", "मुख्य शब्द 2"],
   "formattedHeadline": "हेडलाइन जिसमें मुख्य शब्द [yellow]शब्द[/yellow] से चिह्नित हों",
@@ -11667,17 +11688,17 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
 Generate exactly 5 distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
 - All 5 options must be based strictly on the same central event (no secondary stories or unrelated paragraphs).
 - STRICT RULE: Do NOT append generic administrative or police filler words (such as 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story. For entertainment, sports, business, or lifestyle news, keep the phrasing strictly relevant to the subject.
-- Rich headline word count: Aim for rich, informative, contextual headlines of 14 to 26 words (up to 150 characters maximum) capturing full context, key names, and developments, rather than overly brief phrases.
+- Single headline length policy: Target 100 to 150 visible characters per headline, with an absolute maximum of 150 visible characters.
+- Aim for the 100-150 character range when supported by verified facts, with no artificial filler, padding, or fabricated administrative phrases.
 - Option 1: Core event (direct, hard news)
 - Option 2: Key person/actor angle
 - Option 3: Action/Development angle
 - Option 4: Crucial fact/Quote angle
 - Option 5: Crisp, punchy journalistic angle
-- Single maximum ceiling: up to 150 characters per headline.
 - No ending punctuation (. or ।). No tier labels or bracketed counts like '[58/100]'.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
-    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित हों, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
+    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित हों, लक्ष्य 100-150 वर्ण, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 2500)}
 ${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
@@ -11685,11 +11706,11 @@ ${excludeTitles.length > 0 ? `पिछले विकल्प जिन्ह
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1: मुख्य घटना (<=150 वर्ण)",
-    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (<=150 वर्ण)",
-    "विकल्प 3: कार्रवाई/परिणाम कोण (<=150 वर्ण)",
-    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (<=150 वर्ण)",
-    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (<=150 वर्ण)"
+    "विकल्प 1: मुख्य घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
   ]
 }`;
 

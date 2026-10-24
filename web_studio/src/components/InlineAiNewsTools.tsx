@@ -1754,7 +1754,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       .filter(Boolean).length} शब्द
                   </span>
                   <span className="text-neutral-600">|</span>
-                  <span>{(result.headline || '').length} अक्षर</span>
+                  <span>{(result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').trim().length} / 150 अक्षर</span>
                 </span>
               </div>
               <VoiceInputButton

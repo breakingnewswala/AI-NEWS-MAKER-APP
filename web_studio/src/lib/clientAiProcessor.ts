@@ -274,6 +274,7 @@ export function processNewsLocally(
     '#BreakingNews',
     '#HindiNews',
     ...(catTag && !locTag.includes(catTag) ? [`#${catTag}`] : []),
+    '#AINewsMaker',
   ].filter(Boolean);
   const tagsStr = tagsList.join(' ');
 
@@ -294,10 +295,10 @@ export function processNewsLocally(
     highlightWords,
     formattedHeadline,
     location: detectedLocation,
-    summary: cleanCaptionParagraphs(summary, 'detailed', cleanUsername, detectedLocation),
-    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed', cleanUsername, detectedLocation),
-    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet', cleanUsername, detectedLocation),
-    captionShort: cleanCaptionParagraphs(captionShort, 'short', cleanUsername, detectedLocation),
+    summary: cleanCaptionParagraphs(summary, 'detailed', cleanUsername, detectedLocation, headline),
+    captionDetailed: cleanCaptionParagraphs(captionDetailed, 'detailed', cleanUsername, detectedLocation, headline),
+    captionBullets: cleanCaptionParagraphs(captionBullets, 'bullet', cleanUsername, detectedLocation, headline),
+    captionShort: cleanCaptionParagraphs(captionShort, 'short', cleanUsername, detectedLocation, headline),
     anchorScript,
     categories,
     tags: tagsList,
