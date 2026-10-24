@@ -1229,12 +1229,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   // Formatted Social Caption Text
   const generatedCaptionText = useMemo(() => {
-    const rawUser = profile?.username ? profile.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
-    const userTag = rawUser && rawUser.toLowerCase() !== 'reporter' && rawUser.toLowerCase() !== 'ainewsmaker' ? `#${rawUser}` : '';
+    const userTag = profile?.username ? `#${profile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
     const locLine = (showLocation && location.trim()) ? `📍 लोकेशन: ${location.trim()}\n` : '';
-    const tagList = [userTag, '#BreakingNews', '#VideoReport', '#DigitalNews', '#LiveNews'].filter(Boolean);
-    tagList.push('#AINewsMaker');
-    return `🎬 【वीडियो बुलेटिन】\n\n🚨 ${activeHeadline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}${locLine}🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n${tagList.join(' ')}`;
+    return `🎬 【वीडियो बुलेटिन】\n\n🚨 ${activeHeadline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}${locLine}🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n${userTag} #BreakingNews #VideoReport #DigitalNews #LiveNews`;
   }, [activeHeadline, subHeadline, location, channelTag, websiteUrl, mobileNumber, profile?.username, showLocation]);
 
   // Raw Script to Headlines AI Generator (Part E.11)
@@ -1659,11 +1656,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   // Copy Social Media Caption
   const handleCopyCaption = () => {
-    const rawUser = profile?.username ? profile.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
-    const userTag = rawUser && rawUser.toLowerCase() !== 'reporter' && rawUser.toLowerCase() !== 'ainewsmaker' ? `#${rawUser}` : '';
-    const tagList = [userTag, '#BreakingNews', '#VideoReport', '#DigitalNews', '#LiveNews'].filter(Boolean);
-    tagList.push('#AINewsMaker');
-    const caption = `🎬 【वीडियो बुलेटिन】\n\n🚨 ${headline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}\n📍 लोकेशन: ${location}\n🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n${tagList.join(' ')}`;
+    const userTag = profile?.username ? `#${profile.username.replace(/[^a-zA-Z0-9_]/g, '')}` : '#reporter';
+    const caption = `🎬 【वीडियो बुलेटिन】\n\n🚨 ${headline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}\n📍 लोकेशन: ${location}\n🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n${userTag} #BreakingNews #VideoReport #DigitalNews #LiveNews`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(caption);
       setCopiedCaption(true);

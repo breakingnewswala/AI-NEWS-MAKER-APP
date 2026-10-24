@@ -10,13 +10,13 @@
     "district": "हेडक्वार्टर सेंट्रल डेस्क",
     "channelNameHi": "एआई न्यूज़ मेकर",
     "channelNameEn": "AI News Maker",
-    "channelLogoUrl": "/uploads/logos/logo-1792873722327-c7fa3650.png",
+    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
     "channelLogoPngUrl": "/assets/ai_news_maker_logo.png",
     "channelLogoGifUrl": "",
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1792874542000
+    "updatedAt": 1792860039972
   },
   "breakingnewswala.com@gmail.com": {
     "username": "breakingnewswala",
@@ -35,7 +35,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9669802408",
     "websiteUrl": "breakingnewswala.com",
-    "updatedAt": 1792874542000
+    "updatedAt": 1792860039971
   },
   "khabridasnews@gmail.com": {
     "username": "khabridasnews",
@@ -54,7 +54,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9876543210",
     "websiteUrl": "https://khabridasnews.com",
-    "updatedAt": 1792874541998
+    "updatedAt": 1792860039970
   },
   "riturajtomarorchha@gmail.com": {
     "username": "riturajtomarorchha",
@@ -73,7 +73,7 @@
     "channelLogoType": "png",
     "mobileNumber": "9876543211",
     "websiteUrl": "ainewsmaker.online",
-    "updatedAt": 1792874542000
+    "updatedAt": 1792860039971
   },
   "digital.anmolsandesh@gmail.com": {
     "username": "anmolsandesh",
@@ -92,6 +92,6 @@
     "channelLogoType": "png",
     "mobileNumber": "9425000998",
     "websiteUrl": "anmolsandesh.com",
-    "updatedAt": 1792874542000
+    "updatedAt": 1792860039971
   }
 }
