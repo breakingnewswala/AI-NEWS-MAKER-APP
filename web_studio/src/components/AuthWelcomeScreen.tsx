@@ -300,16 +300,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     currentUser?.district || initialProfile.district || ''
   );
 
-  // Permanent Primary Mobile Number & OTP Verification
+  // Permanent Primary Mobile Number
   const [primaryMobileNumber, setPrimaryMobileNumber] = useState<string>(
     subscription.primaryMobile || initialProfile.mobileNumber || ''
   );
-  const [otpSent, setOtpSent] = useState<boolean>(false);
-  const [otpInput, setOtpInput] = useState<string>('');
-  const [otpVerified, setOtpVerified] = useState<boolean>(() => subscription.isMobileLocked || false);
-  const [otpTimer, setOtpTimer] = useState<number>(0);
-  const [otpMessage, setOtpMessage] = useState<string>('');
-  const [otpError, setOtpError] = useState<string>('');
 
   const [detailChannelNameHi, setDetailChannelNameHi] = useState<string>(
     initialProfile.channelNameHi || ''
@@ -378,7 +372,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         channelLogoGifUrl: (detailChannelLogoGifUrl && detailChannelLogoGifUrl.startsWith('data:image/') && detailChannelLogoGifUrl.length > 50000) ? '' : detailChannelLogoGifUrl,
         channelLogoType: detailChannelLogoType,
         websiteUrl,
-        otpVerified,
         acceptedTerms,
       };
       try {
@@ -397,7 +390,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     detailChannelLogoGifUrl,
     detailChannelLogoType,
     websiteUrl,
-    otpVerified,
     acceptedTerms,
     currentStep,
     currentUser,
@@ -435,54 +427,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   };
 
-  // Countdown timer for OTP
-  useEffect(() => {
-    let timer: any;
-    if (otpTimer > 0) {
-      timer = setInterval(() => {
-        setOtpTimer((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [otpTimer]);
 
-  const handleSendOtp = () => {
-    setOtpError('');
-    const cleanNumber = primaryMobileNumber.trim().replace(/[^0-9]/g, '');
-    if (cleanNumber.length !== 10) {
-      setOtpError('कृपया वैध 10 अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)');
-      return;
-    }
-    setOtpSent(true);
-    setOtpTimer(45);
-    setOtpMessage('✅ 6-अंकों का OTP कोड आपके नंबर पर भेजा गया है (परीक्षण OTP: 123456)');
-  };
-
-  const handleVerifyOtp = () => {
-    setOtpError('');
-    const cleanOtp = otpInput.trim();
-    if (!cleanOtp || cleanOtp.length < 4) {
-      setOtpError('कृपया 6 अंकों का OTP दर्ज करें');
-      return;
-    }
-    if (cleanOtp === '123456' || cleanOtp.length === 6) {
-      setOtpVerified(true);
-      setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
-      savePrimaryMobileNumber(primaryMobileNumber.trim());
-    } else {
-      setOtpError('अमान्य OTP कोड! कृपया 123456 दर्ज करें या नीचे 1-क्लिक बटन दबाएं।');
-    }
-  };
-
-  const handleAutoVerifyOtp = () => {
-    setOtpError('');
-    setOtpInput('123456');
-    setOtpVerified(true);
-    setOtpMessage('✅ मोबाइल नंबर सफलतापूर्वक सत्यापित व सुरक्षित लॉक कर दिया गया!');
-    if (primaryMobileNumber.trim()) {
-      savePrimaryMobileNumber(primaryMobileNumber.trim());
-    }
-  };
 
   // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
   const handleGoogleUserSuccess = async (email: string, name?: string, picture?: string) => {
@@ -507,8 +452,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       const res = await fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`));
       if (res.ok) {
         const data = await res.json();
-        if (data && (data.channelNameHi || data.channelLogoUrl || data.district || data.fullName)) {
-          serverProfile = data;
+        const prof = (data?.profile || data);
+        if (prof && (prof.channelNameHi || prof.channelLogoUrl || prof.district || prof.fullName)) {
+          serverProfile = prof;
         }
       }
     } catch {}
@@ -745,7 +691,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     setDetailChannelLogoGifUrl(draftData?.channelLogoGifUrl || '');
     setDetailChannelLogoType(draftData?.channelLogoType || 'png');
     setWebsiteUrl(draftData?.websiteUrl || '');
-    setOtpVerified(Boolean(draftData?.otpVerified));
     setAcceptedTerms(Boolean(draftData?.acceptedTerms));
 
     setCurrentStep(2);
@@ -943,9 +888,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
-    // Verify OTP first if not already locked
-    if (!otpVerified && !subscription.isMobileLocked) {
-      setStep2ErrorMsg('कृपया आगे बढ़ने से पहले प्राइमरी मोबाइल नंबर का OTP सत्यापन पूरा करें।');
+    // Validate 10-digit mobile number
+    const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
+    if (!subscription.isMobileLocked && cleanDigits.length !== 10) {
+      setStep2ErrorMsg('कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का मोबाइल नंबर दर्ज करें।');
       return;
     }
 
@@ -1223,43 +1169,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             {/* Stepper Views: Steps 1, 2, 3 (Feature Cards) vs Step 4 (Notice & Login) */}
             {homeStep < 4 ? (
               <div className="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-4 shadow-xl text-left">
-                {/* Section Header with Step Title & View Mode Toggle */}
+                {/* Section Header with Step Title */}
                 <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="text-xs sm:text-sm font-black text-amber-300 uppercase tracking-wide">
-                      {viewAllFeaturesMode
-                        ? 'स्टूडियो की सभी 12 मुख्य सुविधाएं (संपूर्ण सूची)'
-                        : homeStep === 1
-                        ? 'स्टूडियो की मुख्य सुविधाएं — भाग 1 (ग्राफिक्स व फ्रेम टेम्पलेट्स)'
+                      {homeStep === 1
+                        ? '1: 50+ News Frames & Templates'
                         : homeStep === 2
-                        ? 'स्टूडियो की मुख्य सुविधाएं — भाग 2 (AI हेडलाइंस, वॉइसओवर व वीडियो एडिटिंग)'
-                        : 'स्टूडियो की मुख्य सुविधाएं — भाग 3 (स्मार्ट टूल्स, अलर्ट्स व न्यूज़रूम ड्राफ्ट्स)'}
+                        ? '2: AI Headlines & Voiceover'
+                        : '3: Video & Reels Studio'}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setViewAllFeaturesMode(!viewAllFeaturesMode)}
-                    className="text-[11px] font-bold text-amber-400/90 hover:text-amber-300 underline underline-offset-4 cursor-pointer transition-colors"
-                  >
-                    {viewAllFeaturesMode
-                      ? '← 4-4 कार्ड्स के चरणबद्ध दृश्य पर लौटें'
-                      : 'सभी 12 फीचर्स एक साथ देखें'}
-                  </button>
+                  <span className="text-[11px] font-bold text-slate-400">
+                    चरण {homeStep} / 3 • 4 मुख्य फीचर्स
+                  </span>
                 </div>
 
-                {/* Feature Cards Grid (4 per step or all 12 if toggled) */}
-                <div
-                  className={`grid gap-3 ${
-                    viewAllFeaturesMode
-                      ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                      : 'grid-cols-1 sm:grid-cols-2'
-                  }`}
-                >
-                  {(viewAllFeaturesMode
-                    ? HOME_FEATURE_CARDS
-                    : HOME_FEATURE_CARDS.filter((c) => c.step === homeStep)
-                  ).map((feat) => {
+                {/* Feature Cards Grid (4 per step) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {HOME_FEATURE_CARDS.filter((c) => c.step === homeStep).map((feat) => {
                     const IconC = feat.icon;
                     return (
                       <div
@@ -1311,7 +1240,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
                 {/* Bottom Navigation Row */}
                 <div className="flex items-center justify-between gap-3 mt-4 pt-3.5 border-t border-slate-800/80">
-                  {homeStep > 1 && !viewAllFeaturesMode ? (
+                  {homeStep > 1 ? (
                     <button
                       type="button"
                       onClick={() => setHomeStep((prev) => (prev - 1) as 1 | 2 | 3 | 4)}
@@ -1322,36 +1251,27 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     </button>
                   ) : (
                     <div className="text-[11px] text-slate-400 font-medium">
-                      {viewAllFeaturesMode ? 'कुल 12 फीचर्स' : `चरण ${homeStep} / 3 • 4 फीचर्स`}
+                      चरण {homeStep} / 3 • 4 फीचर्स
                     </div>
                   )}
 
                   <div className="hidden sm:block text-xs text-slate-400 font-medium">
-                    {!viewAllFeaturesMode && (
-                      <>
-                        {homeStep === 1 && 'फीचर्स 1 से 4 (कुल 12 फीचर्स)'}
-                        {homeStep === 2 && 'फीचर्स 5 से 8 (कुल 12 फीचर्स)'}
-                        {homeStep === 3 && 'फीचर्स 9 से 12 (कुल 12 फीचर्स)'}
-                      </>
-                    )}
+                    {homeStep === 1 && '1: 50+ News Frames & Templates'}
+                    {homeStep === 2 && '2: AI Headlines & Voiceover'}
+                    {homeStep === 3 && '3: Video & Reels Studio'}
                   </div>
 
                   <button
                     type="button"
                     onClick={() => {
-                      if (viewAllFeaturesMode) {
-                        setHomeStep(4);
-                        setMaxUnlockedHomeStep(4);
-                      } else {
-                        const nextStep = (homeStep + 1) as 1 | 2 | 3 | 4;
-                        setHomeStep(nextStep);
-                        setMaxUnlockedHomeStep((prev) => Math.max(prev, nextStep));
-                      }
+                      const nextStep = (homeStep + 1) as 1 | 2 | 3 | 4;
+                      setHomeStep(nextStep);
+                      setMaxUnlockedHomeStep((prev) => Math.max(prev, nextStep));
                     }}
                     className="px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer ml-auto"
                   >
                     <span>
-                      {viewAllFeaturesMode || homeStep === 3
+                      {homeStep === 3
                         ? 'आगे बढ़ें (नियम व लॉगिन)'
                         : 'अगले 4 फीचर्स देखें'}
                     </span>
@@ -1432,37 +1352,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Direct to Home Screen / Preview Bypass (बिना लॉगिन सीधे होम स्क्रीन) */}
-                <div className="w-full p-3 bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-400/50 rounded-xl text-center space-y-1.5 mb-2 shadow-inner">
-                  <div className="text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5">
-                    <span>⚡</span>
-                    <span>प्रीव्यू मोड: बिना Google लॉगिन सीधे ऐप में प्रवेश करें</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onSkipToHome) {
-                        onSkipToHome();
-                      } else {
-                        const devUser: ReporterUser = {
-                          id: 'preview-reporter-01',
-                          username: 'ainewsmaker',
-                          name: 'विशेष संवाददाता',
-                          email: 'reporter@ainewsmaker.online',
-                          role: 'reporter',
-                          token: 'preview_session_token_2026',
-                        };
-                        safeLocalStorageSet('reporter_auth_session', JSON.stringify(devUser));
-                        safeLocalStorageSet('is_onboarding_completed', 'true');
-                        onLoginSuccess(devUser);
-                      }
-                    }}
-                    className="w-full py-3 px-4 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer border border-amber-300"
-                  >
-                    <span>🏠</span>
-                    <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन)</span>
-                  </button>
-                </div>
 
                 {/* Google / Gmail Sign In (Primary Login) */}
                 <div className="space-y-2 pt-1">
@@ -1671,12 +1560,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         महत्वपूर्ण सूचना: यह Primary Number बाद में बदला नहीं जा सकेगा।
                       </p>
                       <p className="text-[11px] text-red-300/80 mt-0.5">
-                        खाता सुरक्षा व सत्यापन हेतु कृपया अपना सही 10-अंकों का मोबाइल नंबर दर्ज करें और OTP से सत्यापित करें।
+                        खाता सुरक्षा व सत्यापन हेतु कृपया अपना सही 10-अंकों का मोबाइल नंबर दर्ज करें।
                       </p>
                     </div>
                   </div>
 
-                  {subscription.isMobileLocked || otpVerified ? (
+                  {subscription.isMobileLocked ? (
                     <div className="p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-500/60 space-y-1">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
@@ -1701,97 +1590,36 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">
                             <Lock className="w-3.5 h-3.5 text-amber-400" />
-                            <span>3. प्राइमरी मोबाइल नंबर दर्ज करें *</span>
+                            <span>3. प्राइमरी मोबाइल नंबर (10 अंक) *</span>
                           </label>
                           <span className="text-[10px] text-amber-400 font-bold">
                             🔒 स्थायी लॉक होगा
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                            <input
-                              type="tel"
-                              maxLength={10}
-                              required
-                              value={primaryMobileNumber}
-                              disabled={otpSent && otpVerified}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, '');
-                                setPrimaryMobileNumber(val);
-                                if (!graphicContactNumber) {
-                                  setGraphicContactNumber(val);
-                                }
-                              }}
-                              placeholder="यहाँ अपना 10-अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)"
-                              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleSendOtp}
-                            disabled={otpTimer > 0}
-                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition cursor-pointer whitespace-nowrap disabled:opacity-50"
-                          >
-                            {otpTimer > 0 ? `${otpTimer}s प्रतीक्षा...` : otpSent ? 'पुनः OTP भेजें' : 'OTP प्राप्त करें'}
-                          </button>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            required
+                            readOnly={Boolean(subscription.isMobileLocked || channelProfile.mobileNumber || subscription.primaryMobile)}
+                            value={primaryMobileNumber}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                              setPrimaryMobileNumber(val);
+                              if (!graphicContactNumber) {
+                                setGraphicContactNumber(val);
+                              }
+                            }}
+                            placeholder="यहाँ अपना 10-अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)"
+                            className={`w-full pl-9 pr-3 py-2 border rounded-xl text-xs sm:text-sm font-mono placeholder:text-slate-500/80 placeholder:font-normal ${
+                              subscription.isMobileLocked || channelProfile.mobileNumber || subscription.primaryMobile
+                                ? 'bg-slate-900/60 border-slate-800 text-slate-300 cursor-not-allowed'
+                                : 'bg-slate-950 border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                            }`}
+                          />
                         </div>
                       </div>
-
-                      {/* OTP verification box if sent */}
-                      {otpSent && (
-                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/40 space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                              <Timer className="w-3.5 h-3.5" />
-                              <span>6-अंकों का OTP कोड दर्ज करें</span>
-                            </label>
-                            <span className="text-[10px] text-slate-400">
-                              (परीक्षण हेतु: 123456)
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              maxLength={6}
-                              value={otpInput}
-                              onChange={(e) => setOtpInput(e.target.value.replace(/[^0-9]/g, ''))}
-                              placeholder="123456"
-                              className="w-full px-3 py-2 bg-slate-900 border border-amber-400/60 rounded-xl text-white text-sm font-mono tracking-widest text-center focus:outline-hidden placeholder:text-slate-600"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleVerifyOtp}
-                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition cursor-pointer whitespace-nowrap"
-                            >
-                              सत्यापित करें
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleAutoVerifyOtp}
-                              className="px-3 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl transition cursor-pointer whitespace-nowrap shadow shrink-0"
-                              title="1 क्लिक में 123456 भरकर सत्यापित करें"
-                            >
-                              ⚡ 1-क्लिक OTP भरें
-                            </button>
-                          </div>
-
-                          {/* SMS Gateway Guidance Notice */}
-                          <div className="p-2.5 bg-blue-950/40 border border-blue-500/40 rounded-xl flex items-start gap-2 text-[11px] text-blue-200">
-                            <span className="shrink-0 text-sm">ℹ️</span>
-                            <p className="leading-relaxed">
-                              <strong>लाइव SMS गेटवे सूचना:</strong> मोबाइल पर डायरेक्ट SMS प्राप्त करने हेतु Fast2SMS / Twilio API व DLT अप्रूवल आवश्यक होता है। तुरंत सत्यापन हेतु परीक्षण OTP (123456) अथवा <strong>'⚡ 1-क्लिक OTP भरें'</strong> का उपयोग करें।
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {otpMessage && (
-                        <p className="text-xs text-emerald-400 font-bold">{otpMessage}</p>
-                      )}
-                      {otpError && (
-                        <p className="text-xs text-red-400 font-bold">{otpError}</p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -2109,13 +1937,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     <input
                       type="text"
                       required
+                      readOnly={Boolean(initialProfile?.username)}
                       value={username}
                       onChange={(e) => {
-                        setIsUsernameCustomized(true);
-                        setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+                        if (!initialProfile?.username) {
+                          setIsUsernameCustomized(true);
+                          setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+                        }
                       }}
                       placeholder="यहाँ अपना सोशल मीडिया यूज़रनेम दर्ज करें (उदा. yourchannel)"
-                      className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
+                      className={`w-full pl-8 pr-3 py-2 border rounded-xl text-xs sm:text-sm font-mono placeholder:text-slate-500/80 placeholder:font-normal ${
+                        initialProfile?.username
+                          ? 'bg-slate-900/60 border-slate-800 text-slate-300 cursor-not-allowed'
+                          : 'bg-slate-900 border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                      }`}
                     />
                   </div>
                 </div>

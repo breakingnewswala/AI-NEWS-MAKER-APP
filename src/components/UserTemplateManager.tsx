@@ -498,7 +498,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {frames.map((cf) => {
+                {frames.map((cf, index) => {
                   const isActive = activeFrameId === cf.id;
                   return (
                     <div
@@ -524,7 +524,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                         </div>
 
                         <div>
-                          <h5 className="text-xs font-bold text-white truncate">{cf.name}</h5>
+                          <h5 className="text-xs font-bold text-white truncate">फ्रेम #{index + 1}: {cf.name}</h5>
                           <span className="text-[10px] text-purple-300">रेशियो: 4:5 पोर्ट्रेट</span>
                         </div>
                       </div>
@@ -673,7 +673,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
             {/* List of User Templates */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {userTemplates.map((t) => (
+              {userTemplates.map((t, index) => (
                 <div
                   key={t.id}
                   className="p-3.5 bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-xl flex flex-col justify-between space-y-3"
@@ -689,7 +689,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                     </div>
 
                     <div>
-                      <h5 className="text-xs font-bold text-white">{t.name}</h5>
+                      <h5 className="text-xs font-bold text-white">फ्रेम #{index + 1}: {t.name}</h5>
                       <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">
                         {t.description || 'कस्टम न्यूज़ कार्ड टेम्पलेट'}
                       </p>

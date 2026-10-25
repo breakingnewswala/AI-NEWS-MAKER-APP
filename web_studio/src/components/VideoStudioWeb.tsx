@@ -1124,7 +1124,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       (mobileNumber && mobileNumber.trim().length > 0)
     );
     if (!hasFooter) {
-      missing.push({ key: 'footer', label: 'फ़ूटर या सोशल मीडिया जानकारी दर्ज करें', step: 5 });
+      missing.push({ key: 'footer', label: 'फ़ूटर या सोशल मीडिया जानकारी दर्ज करें', step: 6 });
     }
 
     const totalRequirements = 7;
@@ -1141,7 +1141,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         2: hasAudio,
         3: hasHeadline,
         4: hasLocation,
-        5: hasFooter,
+        5: true,
+        6: hasFooter,
+        7: isValid,
       } as Record<number, boolean>,
     };
   }, [videoUrl, clips, aspect, selectedFrameId, compatibleFrames, audioOption, headline, location, socialHandle, channelTag, mobileNumber]);
@@ -1771,14 +1773,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     try {
       const email = (currentUser?.email || profile?.email || '').toLowerCase().trim();
       if (!email) return;
-      fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+
+      // Call atomic first-time export reward endpoint
+      fetch(getApiUrl('/api/rewards/first-time-export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, rewardType: 'video' }),
+        body: JSON.stringify({ email, type: 'video' }),
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data && (data.awarded || (data.claimed && !data.alreadyClaimed))) {
+          if (data && data.awarded) {
             window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
             window.dispatchEvent(new CustomEvent('ai_news_wallet_updated'));
             setTimeout(() => {
@@ -1787,6 +1791,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           }
         })
         .catch(() => {});
+
+      // Also call legacy wallet endpoint
+      fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, rewardType: 'video' }),
+      }).catch(() => {});
     } catch {}
   };
 
@@ -2266,7 +2277,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6">
         {/* LEFT COLUMN (42%): Live Video Canvas with Sticky Jacket Overlay */}
-        <aside className="w-full lg:w-[42%] lg:sticky lg:top-4 z-20 flex flex-col gap-3 self-start">
+        <aside className="w-full lg:w-[42%] lg:sticky lg:top-[72px] self-start max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 overflow-y-auto">
           <div className="w-full bg-black p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col items-center">
             {/* Top Status: Live Canvas, stable indicator (no ping), adjacent Reset & Draft buttons */}
             <div className="w-full flex items-center justify-between mb-2 px-1 gap-1">
@@ -3121,7 +3132,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 px-1">
                   <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>त्वरित वीडियो निर्माण (चरण {quickStep}/6)</span>
+                    <span>त्वरित वीडियो निर्माण (चरण {quickStep}/7)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <span
@@ -3143,8 +3154,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     { step: 2, label: '2. ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
                     { step: 3, label: '3. हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
                     { step: 4, label: '4. लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
-                    { step: 5, label: '5. फ़ूटर व ब्रांड', icon: Tag, ok: quickVideoValidation.stepsStatus[5] },
-                    { step: 6, label: '6. डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 5, label: '5. लोगो व वॉटरमार्क', icon: Sparkles, ok: quickVideoValidation.stepsStatus[5] },
+                    { step: 6, label: '6. फ़ूटर व ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[6] },
+                    { step: 7, label: '7. डाउनलोड व कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const Icon = s.icon;
@@ -3781,90 +3793,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 5: FOOTER & BRANDING (Socials, Logo, Watermark vertical) */}
+              {/* STEP 5: LOGO & WATERMARK (Profile Logo, Scale, Watermark)     */}
               {/* ============================================================ */}
               {quickStep === 5 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-amber-400" />
-                      5. फ़ूटर, लोगो व वॉटरमार्क (Footer & Branding)
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      5. लोगो व वॉटरमार्क (Logo & Watermark)
                     </span>
-                  </div>
-
-                  {/* Frame Footer Awareness */}
-                  <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-300 flex items-center justify-between">
-                    <span className="text-slate-400">फ़्रेम फ़ूटर प्रकार:</span>
-                    <span className="font-bold text-amber-300">
-                      {selectedFrameId.includes('custom') ? 'मानक स्थिर फ़ूटर (Fixed Standard)' : 'एडजस्टेबल फ़ूटर'}
-                    </span>
-                  </div>
-
-                  {/* Social Handles with Graphic Photo Studio Icons */}
-                  <div className="space-y-3">
-                    <span className="text-xs font-bold text-slate-300">सोशल मीडिया व संपर्क जानकारी:</span>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                          <img src={getSocialIconSrc('youtube')} alt="YouTube" className="w-3.5 h-3.5 object-contain" />
-                          <span>यूट्यूब / सोशल हैंडल:</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={socialHandle}
-                          onChange={(e) => setSocialHandle(e.target.value)}
-                          placeholder="@apnachannel"
-                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>व्हाट्सएप / मोबाइल नंबर:</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={mobileNumber}
-                          onChange={(e) => setMobileNumber(e.target.value)}
-                          placeholder="+91 98765 43210"
-                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                          <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>वेबसाइट URL:</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={websiteUrl}
-                          onChange={(e) => setWebsiteUrl(e.target.value)}
-                          placeholder="www.apnanews.com"
-                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                          <Tag className="w-3.5 h-3.5 text-amber-400" />
-                          <span>चैनल टैग / नाम:</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={channelTag}
-                          onChange={(e) => setChannelTag(e.target.value)}
-                          placeholder="BREAKING NEWS WALA"
-                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
-                        />
-                      </div>
-                    </div>
                   </div>
 
                   {/* Logo Controls (Section 12: Uses profile logo, scale, task GIF fallback) */}
-                  <div className="space-y-3 pt-3 border-t border-slate-800">
+                  <div className="space-y-3 pt-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-300">चैनल लोगो (Profile Logo):</span>
                       {hasBothLogos && (
@@ -4009,14 +3950,99 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 6 / FINAL STEP: DOWNLOAD VIDEO & CAPTION (100% Validated)*/}
+              {/* STEP 6: FOOTER BRANDING (Socials, Mobile, Website, Tag)      */}
               {/* ============================================================ */}
               {quickStep === 6 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-amber-400" />
+                      6. फ़ूटर व ब्रांडिंग (Footer Branding)
+                    </span>
+                  </div>
+
+                  {/* Frame Footer Awareness */}
+                  <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-300 flex items-center justify-between">
+                    <span className="text-slate-400">फ़्रेम फ़ूटर प्रकार:</span>
+                    <span className="font-bold text-amber-300">
+                      {selectedFrameId.includes('custom') ? 'मानक स्थिर फ़ूटर (Fixed Standard)' : 'एडजस्टेबल फ़ूटर'}
+                    </span>
+                  </div>
+
+                  {/* Social Handles with Graphic Photo Studio Icons */}
+                  <div className="space-y-3">
+                    <span className="text-xs font-bold text-slate-300">सोशल मीडिया व संपर्क जानकारी:</span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                          <img src={getSocialIconSrc('youtube')} alt="YouTube" className="w-3.5 h-3.5 object-contain" />
+                          <span>यूट्यूब / सोशल हैंडल:</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={socialHandle}
+                          onChange={(e) => setSocialHandle(e.target.value)}
+                          placeholder="@apnachannel"
+                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>व्हाट्सएप / मोबाइल नंबर:</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={mobileNumber}
+                          onChange={(e) => setMobileNumber(e.target.value)}
+                          placeholder="+91 98765 43210"
+                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>वेबसाइट URL:</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={websiteUrl}
+                          onChange={(e) => setWebsiteUrl(e.target.value)}
+                          placeholder="www.apnanews.com"
+                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-amber-400" />
+                          <span>चैनल टैग / नाम:</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={channelTag}
+                          onChange={(e) => setChannelTag(e.target.value)}
+                          placeholder="BREAKING NEWS WALA"
+                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ============================================================ */}
+              {/* STEP 7 / FINAL STEP: DOWNLOAD VIDEO & CAPTION (100% Validated)*/}
+              {/* ============================================================ */}
+              {quickStep === 7 && (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-400" />
-                      6. वीडियो डाउनलोड व कैप्शन (Download & Caption)
+                      7. वीडियो डाउनलोड व कैप्शन (Download & Caption)
                     </span>
                     <span
                       className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
@@ -4043,7 +4069,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         { key: 'audio', label: '4. ऑडियो / म्यूज़िक विकल्प तय', ok: Boolean(audioOption), step: 2 },
                         { key: 'headline', label: '5. मुख्य हेडलाइन दर्ज (Headline)', ok: Boolean(headline && headline.trim()), step: 3 },
                         { key: 'location', label: '6. खबर की लोकेशन दर्ज (Location)', ok: Boolean(location && location.trim()), step: 4 },
-                        { key: 'footer', label: '7. सोशल/फ़ूटर जानकारी उपलब्ध', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim())), step: 5 },
+                        { key: 'footer', label: '7. सोशल/फ़ूटर जानकारी उपलब्ध', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim())), step: 6 },
                       ].map((item) => (
                         <div key={item.key} className="flex items-center justify-between py-1 border-b border-slate-800/60 last:border-0">
                           <span className="flex items-center gap-2">
@@ -4173,8 +4199,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setQuickStep((s) => Math.min(6, s + 1))}
-                  disabled={quickStep === 6}
+                  onClick={() => setQuickStep((s) => Math.min(7, s + 1))}
+                  disabled={quickStep === 7}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white disabled:opacity-30 cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition"
                 >
                   अगला चरण ▶

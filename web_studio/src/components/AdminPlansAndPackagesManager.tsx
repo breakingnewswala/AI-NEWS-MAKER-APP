@@ -260,6 +260,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Master Admin 4 Navigable Categories & Sub-Users Directory State (Section 11)
+  const [userTierCategory, setUserTierCategory] = useState<'ALL' | 'BASIC' | 'ADVANCED' | 'PRO' | 'VIP'>('ALL');
+  const [adminAllSubUsers, setAdminAllSubUsers] = useState<any[]>([]);
+
+  const fetchAdminAllSubUsers = () => {
+    fetch('/api/admin/sub-users')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.subUsers)) {
+          setAdminAllSubUsers(data.subUsers);
+        }
+      })
+      .catch(() => {});
+  };
+
   // Authoritative real-time user & logo requests sync on mount, subTab change, window focus & periodic interval
   useEffect(() => {
     let isMounted = true;
@@ -281,9 +296,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
     fetchUsers();
     fetchLogoReqs();
+    fetchAdminAllSubUsers();
     const interval = setInterval(() => {
       fetchUsers();
       fetchLogoReqs();
+      fetchAdminAllSubUsers();
     }, 4000);
     const handleLocalUsersSync = () => {
       if (isMounted) setPlanUsers(getPlanUsers());
@@ -2401,6 +2418,36 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
 
+            {/* SECTION 11: 4 Navigable Categories Bar */}
+            <div className="w-full flex items-center gap-2 overflow-x-auto pb-1">
+              {[
+                { id: 'ALL', label: 'सभी श्रेणियां (All Users)', count: planUsers.length, color: 'from-slate-700 to-slate-800' },
+                { id: 'BASIC', label: '1. Basic Users', count: planUsers.filter(u => (u.tier || 'basic').toLowerCase() === 'basic').length, color: 'from-amber-600 to-amber-700' },
+                { id: 'ADVANCED', label: '2. Advanced Users', count: planUsers.filter(u => (u.tier || '').toLowerCase() === 'advanced').length, color: 'from-blue-600 to-blue-700' },
+                { id: 'PRO', label: '3. Pro Users', count: planUsers.filter(u => ['pro', 'professional'].includes((u.tier || '').toLowerCase())).length, color: 'from-purple-600 to-purple-700' },
+                { id: 'VIP', label: '4. VIP Desk Users', count: planUsers.filter(u => ['vip', 'ultra'].includes((u.tier || '').toLowerCase())).length, color: 'from-emerald-600 to-emerald-700' },
+              ].map((cat) => {
+                const isActive = userTierCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setUserTierCategory(cat.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer border ${
+                      isActive
+                        ? `bg-gradient-to-r ${cat.color} text-white border-white/40 shadow-md ring-2 ring-amber-400/30`
+                        : 'bg-slate-900/80 hover:bg-slate-850 text-slate-300 border-slate-700/80'
+                    }`}
+                  >
+                    <span>{cat.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${isActive ? 'bg-black/40 text-amber-300' : 'bg-slate-950 text-slate-400'}`}>
+                      {cat.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
             {planUsers.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">
                 फिलहाल कोई यूज़र रिकॉर्ड नहीं है। नए यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
@@ -2418,6 +2465,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {planUsers
                       .filter((u) => {
+                        // Filter by 4 Navigable Categories (Section 11)
+                        if (userTierCategory !== 'ALL') {
+                          const normTier = (u.tier || 'basic').toLowerCase();
+                          if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
+                          if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
+                          if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
+                          if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
+                        }
+
                         // Filter by status
                         if (userStatusFilter === 'active' && u.isBlocked) return false;
                         if (userStatusFilter === 'blocked' && !u.isBlocked) return false;
@@ -2444,6 +2500,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         const isExpired = Boolean(u.isTrialExpired || (u.tier === 'basic' && u.daysRemaining !== undefined && u.daysRemaining <= 0));
                         const trialStart = u.trialStartedAt || u.createdAt || u.activatedAt;
                         const trialEnds = u.trialEndsAt || (trialStart ? trialStart + 7 * 24 * 3600 * 1000 : 0);
+                        const linkedSubs = adminAllSubUsers.filter((s) => s.primaryEmail?.toLowerCase().trim() === u.email?.toLowerCase().trim());
 
                         return (
                           <tr key={u.userId || u.email} className={`hover:bg-slate-800/40 transition-colors ${isBlocked ? 'bg-rose-950/15' : ''}`}>
@@ -2507,6 +2564,32 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                   पंजीकृत: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('hi-IN') : 'सक्रिय'}
                                 </span>
                               </div>
+
+                              {/* Linked Sub-Users Display (Section 11) */}
+                              {(['ultra', 'vip', 'professional', 'pro'].includes((u.tier || '').toLowerCase()) || isSuper || linkedSubs.length > 0) && (
+                                <div className="mt-2 p-2 rounded-xl bg-slate-950/90 border border-cyan-900/50 text-[10.5px]">
+                                  <div className="flex items-center justify-between font-bold text-cyan-300">
+                                    <span className="flex items-center gap-1">
+                                      <span>👥 सब-यूज़र:</span>
+                                      <span className="font-mono">{linkedSubs.length} / {['ultra', 'vip'].includes((u.tier || '').toLowerCase()) || isSuper ? 3 : 1}</span>
+                                    </span>
+                                    <span className="text-[9px] text-slate-400">
+                                      {linkedSubs.length === 0 ? 'कोई लिंक नहीं' : `${linkedSubs.length} सक्रिय`}
+                                    </span>
+                                  </div>
+                                  {linkedSubs.length > 0 && (
+                                    <div className="mt-1 space-y-0.5 max-h-16 overflow-y-auto">
+                                      {linkedSubs.map((sub, sIdx) => (
+                                        <div key={sub.id || sIdx} className="text-[9.5px] font-mono text-slate-300 truncate flex items-center gap-1">
+                                          <span className="text-cyan-400">•</span>
+                                          <span>{sub.subUserEmail}</span>
+                                          {sub.subUserName && <span className="text-slate-400">({sub.subUserName})</span>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </td>
 
                             {/* 2. Current Plan & Trial Status (Combined in Column 2) */}

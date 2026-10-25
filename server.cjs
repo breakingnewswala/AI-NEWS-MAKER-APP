@@ -1426,6 +1426,7 @@ var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json")
 var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
 var LOGO_REQUESTS_DB_FILE = import_path.default.join(process.cwd(), "logo_change_requests_db.json");
 var REWARDS_DB_FILE = import_path.default.join(process.cwd(), "rewards_database.json");
+var SUB_USERS_DB_FILE = import_path.default.join(process.cwd(), "sub_users_db.json");
 var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
 var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
 var UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "videos");
@@ -1475,6 +1476,27 @@ function saveRewardsDatabase(db) {
     return true;
   } catch (err) {
     console.error("Error saving rewards_database.json:", err.message);
+    return false;
+  }
+}
+function loadSubUsersDatabase() {
+  try {
+    if (import_fs.default.existsSync(SUB_USERS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(SUB_USERS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (err) {
+    console.error("Error reading sub_users_db.json:", err.message);
+  }
+  return [];
+}
+function saveSubUsersDatabase(data) {
+  try {
+    import_fs.default.writeFileSync(SUB_USERS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error saving sub_users_db.json:", err.message);
     return false;
   }
 }
@@ -2600,6 +2622,212 @@ app.post("/api/wallet/claim-welcome-reward", (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/rewards/first-time-export", (req, res) => {
+  try {
+    const { email, userId, type, rewardType } = req.body || {};
+    const effectiveRewardType = rewardType || type;
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    if (effectiveRewardType !== "graphic" && effectiveRewardType !== "video") {
+      return res.status(400).json({ error: "Invalid reward type. Must be 'graphic' or 'video'." });
+    }
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.welcomeRewards) {
+      rDb.welcomeRewards = {};
+    }
+    if (!rDb.welcomeRewards[walletKey]) {
+      rDb.welcomeRewards[walletKey] = {};
+    }
+    const userRewards = rDb.welcomeRewards[walletKey];
+    const isClaimed = effectiveRewardType === "graphic" ? Boolean(userRewards.graphicClaimed) : Boolean(userRewards.videoClaimed);
+    if (isClaimed) {
+      return res.json({
+        success: true,
+        alreadyClaimed: true,
+        rewardCoins: 0,
+        wallet: rDb.wallets[walletKey],
+        message: effectiveRewardType === "graphic" ? "\u092A\u094D\u0930\u0925\u092E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" : "\u092A\u094D\u0930\u0925\u092E \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u093E 500 \u0915\u0949\u0907\u0928 \u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u3002"
+      });
+    }
+    const rewardCoins = 500;
+    rDb.wallets[walletKey].coinBalance += rewardCoins;
+    rDb.wallets[walletKey].totalEarnedCoins += rewardCoins;
+    if (effectiveRewardType === "graphic") {
+      userRewards.graphicClaimed = true;
+    } else {
+      userRewards.videoClaimed = true;
+    }
+    const txId = `tx-welcome-${effectiveRewardType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: effectiveRewardType === "graphic" ? "\u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921: \u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 (500 \u0915\u0949\u0907\u0928)" : "\u0935\u0947\u0932\u0915\u092E \u0930\u093F\u0935\u0949\u0930\u094D\u0921: \u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 (500 \u0915\u0949\u0907\u0928)",
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: rewardCoins,
+      amount: rewardCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system"
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      claimed: true,
+      awarded: true,
+      rewardCoins,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `\u092C\u0927\u093E\u0908! \u092A\u094D\u0930\u0925\u092E ${effectiveRewardType === "graphic" ? "\u0917\u094D\u0930\u093E\u092B\u093F\u0915" : "\u0935\u0940\u0921\u093F\u092F\u094B"} \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u092A\u0930 500 \u0935\u0947\u0932\u0915\u092E \u0915\u0949\u0907\u0928\u094D\u0938 \u0906\u092A\u0915\u0947 \u0935\u0949\u0932\u0947\u091F \u092E\u0947\u0902 \u091C\u0941\u0921\u093C \u0917\u090F \u0939\u0948\u0902!`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user/sub-users", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || req.query.primaryEmail || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.status(400).json({ success: false, error: "Primary user email is required" });
+    }
+    const allProfiles = loadProfilesDatabase();
+    const prof = allProfiles[rawEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === rawEmail) || {};
+    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || rawEmail === "admin.ainewsmaker@gmail.com" || rawEmail === "breakingnewswala.com@gmail.com";
+    const tier = (prof.tier || "basic").toString().toLowerCase();
+    const planName = (prof.planName || "").toString().toUpperCase();
+    let allowedLimit = 0;
+    if (isAdmin) {
+      allowedLimit = 99;
+    } else if (tier === "ultra" || planName.includes("VIP")) {
+      allowedLimit = 3;
+    } else if (tier === "professional" || tier === "pro" || planName.includes("PRO")) {
+      allowedLimit = 1;
+    } else {
+      allowedLimit = 0;
+    }
+    const allSubs = loadSubUsersDatabase();
+    const userSubs = allSubs.filter((s) => s.primaryEmail.toLowerCase().trim() === rawEmail);
+    const parentLink = allSubs.find((s) => s.subUserEmail.toLowerCase().trim() === rawEmail);
+    return res.json({
+      success: true,
+      primaryEmail: rawEmail,
+      allowedLimit,
+      maxSubUsers: allowedLimit,
+      currentCount: userSubs.length,
+      subUsers: userSubs,
+      isSubUser: Boolean(parentLink),
+      parentPrimaryEmail: parentLink ? parentLink.primaryEmail : null
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/user/sub-users/invite", (req, res) => {
+  try {
+    const { primaryEmail, subUserEmail, subUserName } = req.body || {};
+    const cleanPrimary = (primaryEmail || "").toString().toLowerCase().trim();
+    const cleanSub = (subUserEmail || "").toString().toLowerCase().trim();
+    if (!cleanPrimary || !cleanSub) {
+      return res.status(400).json({ success: false, error: "Primary email and sub-user email are required" });
+    }
+    if (cleanPrimary === cleanSub) {
+      return res.status(400).json({ success: false, error: "\u0906\u092A \u0938\u094D\u0935\u092F\u0902 \u0915\u0947 \u0908\u092E\u0947\u0932 \u0915\u094B \u0938\u092C-\u092F\u0942\u095B\u0930 \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0928\u0939\u0940\u0902 \u091C\u094B\u0921\u093C \u0938\u0915\u0924\u0947\u0964" });
+    }
+    const allProfiles = loadProfilesDatabase();
+    const prof = allProfiles[cleanPrimary] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanPrimary) || {};
+    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || cleanPrimary === "admin.ainewsmaker@gmail.com" || cleanPrimary === "breakingnewswala.com@gmail.com";
+    const tier = (prof.tier || "basic").toString().toLowerCase();
+    const planName = (prof.planName || "").toString().toUpperCase();
+    let allowedLimit = 0;
+    if (isAdmin) {
+      allowedLimit = 99;
+    } else if (tier === "ultra" || planName.includes("VIP")) {
+      allowedLimit = 3;
+    } else if (tier === "professional" || tier === "pro" || planName.includes("PRO")) {
+      allowedLimit = 1;
+    } else {
+      allowedLimit = 0;
+    }
+    if (allowedLimit <= 0) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0906\u092A\u0915\u0947 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0938\u092C-\u092F\u0942\u095B\u0930 \u0915\u0940 \u0905\u0928\u0941\u092E\u0924\u093F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0938\u092C-\u092F\u0942\u095B\u0930 \u091C\u094B\u0921\u093C\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F Pro (1 \u0938\u092C-\u092F\u0942\u095B\u0930) \u092F\u093E VIP Desk (3 \u0938\u092C-\u092F\u0942\u095B\u0930) \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    const allSubs = loadSubUsersDatabase();
+    const userSubs = allSubs.filter((s) => s.primaryEmail.toLowerCase().trim() === cleanPrimary);
+    if (userSubs.length >= allowedLimit) {
+      return res.status(400).json({
+        success: false,
+        error: `\u0906\u092A\u0915\u0947 \u092A\u094D\u0932\u093E\u0928 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0905\u0927\u093F\u0915\u0924\u092E ${allowedLimit} \u0938\u092C-\u092F\u0942\u095B\u0930 \u0939\u0940 \u091C\u094B\u0921\u093C\u0947 \u091C\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964`
+      });
+    }
+    const existingMatch = userSubs.find((s) => s.subUserEmail.toLowerCase().trim() === cleanSub);
+    if (existingMatch) {
+      return res.status(400).json({
+        success: false,
+        error: "\u092F\u0939 \u0908\u092E\u0947\u0932 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0938\u092C-\u092F\u0942\u095B\u0930 \u0938\u0942\u091A\u0940 \u092E\u0947\u0902 \u091C\u0941\u0921\u093C\u093E \u0939\u0941\u0906 \u0939\u0948\u0964"
+      });
+    }
+    const newSub = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      primaryEmail: cleanPrimary,
+      subUserEmail: cleanSub,
+      subUserName: (subUserName || "").toString().trim(),
+      createdAt: Date.now(),
+      status: "active"
+    };
+    allSubs.push(newSub);
+    saveSubUsersDatabase(allSubs);
+    return res.json({
+      success: true,
+      subUser: newSub,
+      message: `\u0938\u092C-\u092F\u0942\u095B\u0930 (${cleanSub}) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u091C\u094B\u0921\u093C\u093E \u0917\u092F\u093E!`
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/user/sub-users/:id", (req, res) => {
+  try {
+    const subId = req.params.id;
+    let allSubs = loadSubUsersDatabase();
+    const idx = allSubs.findIndex((s) => s.id === subId);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: "\u0938\u092C-\u092F\u0942\u095B\u0930 \u0930\u093F\u0915\u0949\u0930\u094D\u0921 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    allSubs.splice(idx, 1);
+    saveSubUsersDatabase(allSubs);
+    return res.json({
+      success: true,
+      message: "\u0938\u092C-\u092F\u0942\u095B\u0930 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964"
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/sub-users", (_req, res) => {
+  try {
+    const allSubs = loadSubUsersDatabase();
+    return res.json({
+      success: true,
+      subUsers: allSubs
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 app.post("/api/wallet/unlock-item", (req, res) => {
@@ -5235,7 +5463,7 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
       const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
       const trulyNew = [];
       for (const p of fetchedPosts) {
-        p.status = p.status || "PENDING_APPROVAL";
+        p.status = p.status || "APPROVED";
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         if (!existingIds.has(p.id) && !existingTitles.has(titleKey)) {
           existingIds.add(p.id);
@@ -5244,7 +5472,7 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
         } else {
           const match = existingPosts.find((ep) => ep.id === p.id || ep.title.trim().toLowerCase().slice(0, 40) === titleKey);
           if (match && !match.status) {
-            match.status = "PENDING_APPROVAL";
+            match.status = "APPROVED";
           }
         }
       }
@@ -5537,6 +5765,40 @@ app.post("/api/user-profile", async (req, res) => {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
     const existing = allProfiles[cleanId] || {};
+    let finalUsername = profile.username !== void 0 ? profile.username : existing.username;
+    if (!isAdmin && existing.username && existing.username.trim()) {
+      finalUsername = existing.username;
+    }
+    let finalMobile = (profile.mobileNumber || profile.mobile) !== void 0 ? profile.mobileNumber || profile.mobile : existing.mobileNumber;
+    if (!isAdmin && existing.mobileNumber && existing.mobileNumber.trim()) {
+      finalMobile = existing.mobileNumber;
+    }
+    const normUsername = (finalUsername || "").toString().toLowerCase().trim().replace(/^@/, "");
+    if (normUsername) {
+      for (const [k, p] of Object.entries(allProfiles)) {
+        const otherEmail = (p.email || k).toLowerCase().trim();
+        const thisEmail = (profile.email || cleanId).toLowerCase().trim();
+        if (otherEmail !== thisEmail && k !== cleanId) {
+          const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, "");
+          if (otherUname && otherUname === normUsername) {
+            return res.status(409).json({ success: false, error: "\u092F\u0939 \u092F\u0942\u095B\u0930\u0928\u0947\u092E \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u092F\u0942\u095B\u0930 \u0926\u094D\u0935\u093E\u0930\u093E \u0909\u092A\u092F\u094B\u0917 \u092E\u0947\u0902 \u0939\u0948\u0964" });
+          }
+        }
+      }
+    }
+    const normMobile = (finalMobile || "").toString().replace(/\D/g, "").slice(-10);
+    if (normMobile.length === 10) {
+      for (const [k, p] of Object.entries(allProfiles)) {
+        const otherEmail = (p.email || k).toLowerCase().trim();
+        const thisEmail = (profile.email || cleanId).toLowerCase().trim();
+        if (otherEmail !== thisEmail && k !== cleanId) {
+          const otherMob = (p.mobileNumber || p.mobile || "").toString().replace(/\D/g, "").slice(-10);
+          if (otherMob.length === 10 && otherMob === normMobile) {
+            return res.status(409).json({ success: false, error: "\u092F\u0939 \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0939\u0948\u0964" });
+          }
+        }
+      }
+    }
     const safeRole = isAdmin ? profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter") : existing.role || (isMasterAdminEmail ? "admin" : "reporter");
     const safeTier = isAdmin ? profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic") : existing.tier || (isMasterAdminEmail ? "ultra" : "basic");
     const updated = {
@@ -5544,7 +5806,7 @@ app.post("/api/user-profile", async (req, res) => {
       ...profile,
       userId: profile.userId || profile.uid || existing.userId || cleanId,
       uid: profile.uid || profile.userId || existing.uid || cleanId,
-      username: profile.username || existing.username || "",
+      username: finalUsername || "",
       fullName: profile.fullName || profile.name || existing.fullName || "",
       role: safeRole,
       tier: safeTier,
@@ -5556,7 +5818,7 @@ app.post("/api/user-profile", async (req, res) => {
       channelLogoPngUrl: profile.channelLogoPngUrl || existing.channelLogoPngUrl,
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
-      mobileNumber: profile.mobileNumber || profile.mobile || existing.mobileNumber || "",
+      mobileNumber: finalMobile || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
@@ -11863,7 +12125,10 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         unlimited: true
       });
     }
-    if (cleanEmail && isProtectedAdminAccount(cleanEmail)) {
+    const allProfiles = loadProfilesDatabase();
+    const prof = allProfiles[cleanEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
+    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === "admin" || prof.role === "superadmin";
+    if (cleanEmail && isAdminAccount) {
       return res.json({
         allowed: true,
         plan: "ultra",

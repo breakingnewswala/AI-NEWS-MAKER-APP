@@ -23,7 +23,7 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({
   });
 
   useEffect(() => {
-    document.title = 'Privacy Policy - AI News Maker';
+    document.title = 'AI News Maker';
     window.scrollTo(0, 0);
   }, []);
 

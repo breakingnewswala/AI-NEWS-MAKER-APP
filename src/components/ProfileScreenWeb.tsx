@@ -554,8 +554,92 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     }
   };
 
-  // Tabs: 'profile', 'membership', 'rewards_wallet', 'templates_manager', 'policies' - initially closed per requirement
-  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'rewards_wallet' | 'templates_manager' | 'policies' | ''>('');
+  // Tabs: 'profile', 'membership', 'rewards_wallet', 'sub_users', 'templates_manager', 'policies' - initially closed per requirement
+  const [normalUserTab, setNormalUserTab] = useState<'profile' | 'membership' | 'rewards_wallet' | 'sub_users' | 'templates_manager' | 'policies' | ''>('');
+
+  // Sub-Users management state (Section 10)
+  const [subUsersList, setSubUsersList] = useState<any[]>([]);
+  const [subUsersMaxLimit, setSubUsersMaxLimit] = useState(0);
+  const [subUserParentEmail, setSubUserParentEmail] = useState<string | null>(null);
+  const [subUserEmailInput, setSubUserEmailInput] = useState('');
+  const [subUserNameInput, setSubUserNameInput] = useState('');
+  const [isInvitingSubUser, setIsInvitingSubUser] = useState(false);
+  const [subUserError, setSubUserError] = useState('');
+  const [subUserSuccess, setSubUserSuccess] = useState('');
+
+  const fetchSubUsers = () => {
+    const email = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+    if (!email) return;
+    fetch(getApiUrl(`/api/user/sub-users?email=${encodeURIComponent(email)}`))
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setSubUsersList(data.subUsers || []);
+          setSubUsersMaxLimit(data.allowedLimit ?? data.maxSubUsers ?? 0);
+          setSubUserParentEmail(data.parentPrimaryEmail || null);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchSubUsers();
+  }, [currentUser?.email]);
+
+  const handleInviteSubUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const primaryEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+    const subEmail = subUserEmailInput.trim().toLowerCase();
+    if (!subEmail || !subEmail.includes('@')) {
+      setSubUserError('कृपया एक मान्य ईमेल पता दर्ज करें।');
+      return;
+    }
+    setIsInvitingSubUser(true);
+    setSubUserError('');
+    setSubUserSuccess('');
+    try {
+      const res = await fetch(getApiUrl('/api/user/sub-users/invite'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primaryEmail,
+          subUserEmail: subEmail,
+          subUserName: subUserNameInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'सब-यूज़र जोड़ने में विफल');
+      }
+      setSubUserSuccess(data.message || 'सब-यूज़र सफलतापूर्वक जोड़ा गया!');
+      setSubUserEmailInput('');
+      setSubUserNameInput('');
+      fetchSubUsers();
+    } catch (err: any) {
+      setSubUserError(err.message || 'त्रुटि हुई');
+    } finally {
+      setIsInvitingSubUser(false);
+    }
+  };
+
+  const handleDeleteSubUser = async (subId: string) => {
+    if (!window.confirm('क्या आप वाकई इस सब-यूज़र को हटाना चाहते हैं?')) return;
+    try {
+      const res = await fetch(getApiUrl(`/api/user/sub-users/${encodeURIComponent(subId)}`), {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('सब-यूज़र हटा दिया गया');
+        fetchSubUsers();
+      } else {
+        alert(data.error || 'सब-यूज़र हटाने में विफल');
+      }
+    } catch (err: any) {
+      alert(err.message || 'हटाने में त्रुटि');
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'profile' | 'plans_packages' | 'templates' | 'dashboard'>(() => {
     if (isAdmin && typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
@@ -3197,6 +3281,215 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               )}
             </div>
             )}
+
+            {/* OPTION: सब-यूज़र प्रबंधन (Sub-Users Management - Section 10) */}
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'sub_users' ? 'border-cyan-400 bg-slate-900/95 ring-2 ring-cyan-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextTab = normalUserTab === 'sub_users' ? '' : 'sub_users';
+                  setNormalUserTab(nextTab);
+                  if (nextTab === 'sub_users') {
+                    fetchSubUsers();
+                  }
+                }}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'sub_users' ? 'bg-gradient-to-r from-cyan-950 via-slate-900 to-blue-950 border-b border-cyan-800/80' : 'hover:bg-slate-850'}`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                    <span>👥</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm sm:text-base font-black text-white block truncate">
+                        सब-यूज़र प्रबंधन (Sub-Users Management)
+                      </span>
+                      <span className="px-2 py-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                        PRO (1) & VIP DESK (3)
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      अपने न्यूज़ चैनल / डेस्क के लिए अधिकृत सब-रिपोर्टर ईमेल जोड़ें व प्रबंधित करें
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  {subUsersList.length > 0 && (
+                    <span className="px-2.5 py-1 bg-slate-950 text-cyan-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                      {subUsersList.length} सक्रिय
+                    </span>
+                  )}
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'sub_users' ? 'rotate-180 text-cyan-400' : ''}`} />
+                </div>
+              </button>
+              {normalUserTab === 'sub_users' && (
+                <div className="p-4 sm:p-6 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
+                  {/* Parent account notice if current user is a linked sub-user */}
+                  {subUserParentEmail && (
+                    <div className="p-3 bg-blue-950/60 border border-blue-800 rounded-xl text-xs text-blue-200 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span>आप <strong>{subUserParentEmail}</strong> के अधिकृत सब-यूज़र (Sub-User) के रूप में जुड़े हुए हैं।</span>
+                    </div>
+                  )}
+
+                  {/* Tier status bar */}
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">वर्तमान प्लान स्थिति</div>
+                      <div className="text-sm font-bold text-white flex items-center gap-2 mt-0.5">
+                        <span>{subscription?.planName || 'Basic Plan'}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
+                          अनुमति सीमा: {subUsersMaxLimit} सब-यूज़र
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      सक्रिय सब-यूज़र: <span className="font-mono font-bold text-cyan-400">{subUsersList.length}</span> / {subUsersMaxLimit}
+                    </div>
+                  </div>
+
+                  {subUsersMaxLimit <= 0 && !isAdmin ? (
+                    /* Basic / Advanced locked message */
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900 to-amber-950/20 border border-amber-600/40 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
+                        <div>
+                          <h4 className="text-sm font-black text-white">सब-यूज़र सुविधा आपके प्लान में सम्मिलित नहीं है</h4>
+                          <p className="text-xs text-slate-300 mt-0.5">
+                            Basic और Advanced प्लान्स में सब-यूज़र जोड़ने की अनुमति नहीं है।
+                          </p>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1.5">
+                        <div className="font-semibold text-amber-300">सब-यूज़र लाभ:</div>
+                        <ul className="list-disc pl-5 space-y-1 text-slate-400">
+                          <li><span className="text-white font-bold">Pro Plan:</span> 1 सब-यूज़र (1 अतिरिक्त रिपोर्टर लॉगिन)</li>
+                          <li><span className="text-white font-bold">VIP Desk:</span> 3 सब-यूज़र (3 अतिरिक्त रिपोर्टर लॉगिन)</li>
+                          <li>सब-यूज़र आपके चैनल प्रोफ़ाइल और ब्रांडिंग के साथ सीधे काम कर सकते हैं।</li>
+                        </ul>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNormalUserTab('membership');
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-2"
+                      >
+                        <Crown className="w-4 h-4" />
+                        <span>प्लान अपग्रेड करें (Upgrade Plan)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* Pro / VIP / Admin management interface */
+                    <div className="space-y-5">
+                      {/* Add sub-user form */}
+                      {subUsersList.length < subUsersMaxLimit ? (
+                        <form onSubmit={handleInviteSubUser} className="p-4 rounded-xl bg-slate-900 border border-cyan-900/40 space-y-3">
+                          <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                            <PlusCircle className="w-4 h-4 text-cyan-400" />
+                            <span>नया सब-यूज़र जोड़ें</span>
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                                सब-यूज़र का ईमेल (Google Email) *
+                              </label>
+                              <input
+                                type="email"
+                                required
+                                value={subUserEmailInput}
+                                onChange={(e) => setSubUserEmailInput(e.target.value)}
+                                placeholder="reporter@example.com"
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl text-xs text-white outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                                रिपोर्टर / सब-यूज़र का नाम (वैकल्पिक)
+                              </label>
+                              <input
+                                type="text"
+                                value={subUserNameInput}
+                                onChange={(e) => setSubUserNameInput(e.target.value)}
+                                placeholder="रिपोर्टर नाम"
+                                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl text-xs text-white outline-none"
+                              />
+                            </div>
+                          </div>
+                          {subUserError && (
+                            <div className="p-2.5 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded-lg flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                              <span>{subUserError}</span>
+                            </div>
+                          )}
+                          {subUserSuccess && (
+                            <div className="p-2.5 bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs rounded-lg flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                              <span>{subUserSuccess}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="submit"
+                              disabled={isInvitingSubUser}
+                              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-2"
+                            >
+                              {isInvitingSubUser ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                              <span>सब-यूज़र जोड़ें</span>
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="p-3 bg-cyan-950/30 border border-cyan-800/40 rounded-xl text-xs text-cyan-300 flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          <span>आपने अपनी अधिकतम सीमा ({subUsersMaxLimit} सब-यूज़र) पूरी कर ली है। नया सब-यूज़र जोड़ने के लिए पहले किसी मौजूदा सब-यूज़र को हटाएं या VIP Desk में अपग्रेड करें।</span>
+                        </div>
+                      )}
+
+                      {/* Sub-users list */}
+                      <div className="space-y-2">
+                        <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                          <span>संबद्ध सब-यूज़र सूची ({subUsersList.length})</span>
+                        </h4>
+                        {subUsersList.length === 0 ? (
+                          <div className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-xl text-center text-xs text-slate-400">
+                            अभी तक कोई सब-यूज़र नहीं जोड़ा गया है। ऊपर दिए गए फॉर्म से सब-यूज़र का ईमेल दर्ज करें।
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-slate-800/80 rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+                            {subUsersList.map((sub, idx) => (
+                              <div key={sub.id || idx} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+                                <div className="min-w-0">
+                                  <div className="font-bold text-white flex items-center gap-2">
+                                    <span className="truncate">{sub.subUserEmail}</span>
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                      सक्रिय (Active)
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-3">
+                                    {sub.subUserName && <span>नाम: {sub.subUserName}</span>}
+                                    <span>जोड़ा गया: {new Date(sub.createdAt).toLocaleDateString('hi-IN')}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSubUser(sub.id)}
+                                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg transition cursor-pointer"
+                                  title="सब-यूज़र हटाएं"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* OPTION FOR PRO / VIP / ADMIN: टेम्प्लेट व कस्टम फ्रेम्स मैनेजर */}
             {canAccessTemplateManager(currentUser) && (

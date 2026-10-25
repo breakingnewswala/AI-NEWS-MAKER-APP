@@ -647,6 +647,7 @@ const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
 const PROFILES_DB_FILE = path.join(process.cwd(), "user_profiles_db.json");
 const LOGO_REQUESTS_DB_FILE = path.join(process.cwd(), "logo_change_requests_db.json");
 const REWARDS_DB_FILE = path.join(process.cwd(), "rewards_database.json");
+const SUB_USERS_DB_FILE = path.join(process.cwd(), "sub_users_db.json");
 const UPLOAD_LOGOS_DIR = path.join(process.cwd(), "public", "uploads", "logos");
 const WEB_UPLOAD_LOGOS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "logos");
 const UPLOAD_VIDEOS_DIR = path.join(process.cwd(), "public", "uploads", "videos");
@@ -756,6 +757,38 @@ function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
     return true;
   } catch (err: any) {
     console.error("Error saving rewards_database.json:", err.message);
+    return false;
+  }
+}
+
+interface StoredSubUser {
+  id: string;
+  primaryEmail: string;
+  subUserEmail: string;
+  subUserName?: string;
+  createdAt: number;
+  status: "active" | "invited";
+}
+
+function loadSubUsersDatabase(): StoredSubUser[] {
+  try {
+    if (fs.existsSync(SUB_USERS_DB_FILE)) {
+      const raw = fs.readFileSync(SUB_USERS_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (err: any) {
+    console.error("Error reading sub_users_db.json:", err.message);
+  }
+  return [];
+}
+
+function saveSubUsersDatabase(data: StoredSubUser[]): boolean {
+  try {
+    fs.writeFileSync(SUB_USERS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch (err: any) {
+    console.error("Error saving sub_users_db.json:", err.message);
     return false;
   }
 }
@@ -2151,6 +2184,255 @@ app.post("/api/wallet/claim-welcome-reward", (req, res) => {
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 10.1 POST /api/rewards/first-time-export - 500 Coins for 1st graphic, 500 for 1st video (Atomic & Idempotent)
+app.post("/api/rewards/first-time-export", (req, res) => {
+  try {
+    const { email, userId, type, rewardType } = req.body || {};
+    const effectiveRewardType = rewardType || type;
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "User email or ID required" });
+    }
+    if (effectiveRewardType !== "graphic" && effectiveRewardType !== "video") {
+      return res.status(400).json({ error: "Invalid reward type. Must be 'graphic' or 'video'." });
+    }
+
+    const rDb = loadRewardsDatabase();
+    const walletKey = cleanEmail || cleanUserId;
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    if (!rDb.welcomeRewards) {
+      rDb.welcomeRewards = {};
+    }
+    if (!rDb.welcomeRewards[walletKey]) {
+      rDb.welcomeRewards[walletKey] = {};
+    }
+
+    const userRewards = rDb.welcomeRewards[walletKey];
+    const isClaimed = effectiveRewardType === "graphic" ? Boolean(userRewards.graphicClaimed) : Boolean(userRewards.videoClaimed);
+
+    if (isClaimed) {
+      return res.json({
+        success: true,
+        alreadyClaimed: true,
+        rewardCoins: 0,
+        wallet: rDb.wallets[walletKey],
+        message: effectiveRewardType === "graphic"
+          ? "प्रथम ग्राफिक डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
+          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है。"
+      });
+    }
+
+    const rewardCoins = 500;
+    rDb.wallets[walletKey].coinBalance += rewardCoins;
+    rDb.wallets[walletKey].totalEarnedCoins += rewardCoins;
+
+    if (effectiveRewardType === "graphic") {
+      userRewards.graphicClaimed = true;
+    } else {
+      userRewards.videoClaimed = true;
+    }
+
+    const txId = `tx-welcome-${effectiveRewardType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: effectiveRewardType === "graphic"
+        ? "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)"
+        : "वेलकम रिवॉर्ड: प्रथम सफल वीडियो डाउनलोड (500 कॉइन)",
+      transactionType: "credit",
+      type: "credit",
+      coinAmount: rewardCoins,
+      amount: rewardCoins,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "system",
+    } as any;
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      claimed: true,
+      awarded: true,
+      rewardCoins,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `बधाई! प्रथम ${effectiveRewardType === "graphic" ? "ग्राफिक" : "वीडियो"} डाउनलोड पर 500 वेलकम कॉइन्स आपके वॉलेट में जुड़ गए हैं!`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// SUB-USERS ENDPOINTS (Section 10 & 11)
+// GET /api/user/sub-users - List sub-users for a primary user with tier limits
+app.get("/api/user/sub-users", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || req.query.primaryEmail || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.status(400).json({ success: false, error: "Primary user email is required" });
+    }
+
+    const allProfiles = loadProfilesDatabase();
+    const prof: any = allProfiles[rawEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === rawEmail) || {};
+    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || rawEmail === "admin.ainewsmaker@gmail.com" || rawEmail === "breakingnewswala.com@gmail.com";
+    
+    // Tier limit determination:
+    // Basic: 0, Advanced: 0, Pro: 1, VIP Desk (ultra): 3, Admin: 99
+    const tier = (prof.tier || "basic").toString().toLowerCase();
+    const planName = (prof.planName || "").toString().toUpperCase();
+    let allowedLimit = 0;
+    if (isAdmin) {
+      allowedLimit = 99;
+    } else if (tier === "ultra" || planName.includes("VIP")) {
+      allowedLimit = 3;
+    } else if (tier === "professional" || tier === "pro" || planName.includes("PRO")) {
+      allowedLimit = 1;
+    } else {
+      allowedLimit = 0;
+    }
+
+    const allSubs = loadSubUsersDatabase();
+    const userSubs = allSubs.filter((s) => s.primaryEmail.toLowerCase().trim() === rawEmail);
+    const parentLink = allSubs.find((s) => s.subUserEmail.toLowerCase().trim() === rawEmail);
+
+    return res.json({
+      success: true,
+      primaryEmail: rawEmail,
+      allowedLimit,
+      maxSubUsers: allowedLimit,
+      currentCount: userSubs.length,
+      subUsers: userSubs,
+      isSubUser: Boolean(parentLink),
+      parentPrimaryEmail: parentLink ? parentLink.primaryEmail : null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/user/sub-users/invite - Primary user invites a sub-user by email
+app.post("/api/user/sub-users/invite", (req, res) => {
+  try {
+    const { primaryEmail, subUserEmail, subUserName } = req.body || {};
+    const cleanPrimary = (primaryEmail || "").toString().toLowerCase().trim();
+    const cleanSub = (subUserEmail || "").toString().toLowerCase().trim();
+
+    if (!cleanPrimary || !cleanSub) {
+      return res.status(400).json({ success: false, error: "Primary email and sub-user email are required" });
+    }
+
+    if (cleanPrimary === cleanSub) {
+      return res.status(400).json({ success: false, error: "आप स्वयं के ईमेल को सब-यूज़र के रूप में नहीं जोड़ सकते।" });
+    }
+
+    const allProfiles = loadProfilesDatabase();
+    const prof: any = allProfiles[cleanPrimary] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanPrimary) || {};
+    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || cleanPrimary === "admin.ainewsmaker@gmail.com" || cleanPrimary === "breakingnewswala.com@gmail.com";
+
+    const tier = (prof.tier || "basic").toString().toLowerCase();
+    const planName = (prof.planName || "").toString().toUpperCase();
+    let allowedLimit = 0;
+    if (isAdmin) {
+      allowedLimit = 99;
+    } else if (tier === "ultra" || planName.includes("VIP")) {
+      allowedLimit = 3;
+    } else if (tier === "professional" || tier === "pro" || planName.includes("PRO")) {
+      allowedLimit = 1;
+    } else {
+      allowedLimit = 0;
+    }
+
+    if (allowedLimit <= 0) {
+      return res.status(403).json({
+        success: false,
+        error: "आपके वर्तमान प्लान में सब-यूज़र की अनुमति नहीं है। सब-यूज़र जोड़ने के लिए Pro (1 सब-यूज़र) या VIP Desk (3 सब-यूज़र) प्लान में अपग्रेड करें।"
+      });
+    }
+
+    const allSubs = loadSubUsersDatabase();
+    const userSubs = allSubs.filter((s) => s.primaryEmail.toLowerCase().trim() === cleanPrimary);
+
+    if (userSubs.length >= allowedLimit) {
+      return res.status(400).json({
+        success: false,
+        error: `आपके प्लान के अनुसार अधिकतम ${allowedLimit} सब-यूज़र ही जोड़े जा सकते हैं।`
+      });
+    }
+
+    const existingMatch = userSubs.find((s) => s.subUserEmail.toLowerCase().trim() === cleanSub);
+    if (existingMatch) {
+      return res.status(400).json({
+        success: false,
+        error: "यह ईमेल पहले से सब-यूज़र सूची में जुड़ा हुआ है।"
+      });
+    }
+
+    const newSub: StoredSubUser = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      primaryEmail: cleanPrimary,
+      subUserEmail: cleanSub,
+      subUserName: (subUserName || "").toString().trim(),
+      createdAt: Date.now(),
+      status: "active",
+    };
+
+    allSubs.push(newSub);
+    saveSubUsersDatabase(allSubs);
+
+    return res.json({
+      success: true,
+      subUser: newSub,
+      message: `सब-यूज़र (${cleanSub}) सफलतापूर्वक जोड़ा गया!`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// DELETE /api/user/sub-users/:id - Delete a linked sub-user
+app.delete("/api/user/sub-users/:id", (req, res) => {
+  try {
+    const subId = req.params.id;
+    let allSubs = loadSubUsersDatabase();
+    const idx = allSubs.findIndex((s) => s.id === subId);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: "सब-यूज़र रिकॉर्ड नहीं मिला।" });
+    }
+
+    allSubs.splice(idx, 1);
+    saveSubUsersDatabase(allSubs);
+
+    return res.json({
+      success: true,
+      message: "सब-यूज़र सफलतापूर्वक हटा दिया गया।"
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// GET /api/admin/sub-users - Master Admin directory listing of all sub-users
+app.get("/api/admin/sub-users", (_req, res) => {
+  try {
+    const allSubs = loadSubUsersDatabase();
+    return res.json({
+      success: true,
+      subUsers: allSubs,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 
@@ -5389,7 +5671,7 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
 
       const trulyNew: StoredNewsPost[] = [];
       for (const p of fetchedPosts) {
-        p.status = p.status || "PENDING_APPROVAL";
+        p.status = p.status || "APPROVED";
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         if (!existingIds.has(p.id) && !existingTitles.has(titleKey)) {
           existingIds.add(p.id);
@@ -5399,7 +5681,7 @@ app.post("/api/admin/rss-sync", async (_req, res) => {
           // Selective update & persistence: preserve existing approval/rejection status
           const match = existingPosts.find((ep) => ep.id === p.id || ep.title.trim().toLowerCase().slice(0, 40) === titleKey);
           if (match && !match.status) {
-            match.status = "PENDING_APPROVAL";
+            match.status = "APPROVED";
           }
         }
       }
@@ -5785,6 +6067,47 @@ app.post("/api/user-profile", async (req, res) => {
 
     const existing: any = allProfiles[cleanId] || {};
 
+    // Username and Mobile locking:
+    // If user is non-admin and username/mobileNumber already exists in profile, keep existing
+    let finalUsername = profile.username !== undefined ? profile.username : existing.username;
+    if (!isAdmin && existing.username && existing.username.trim()) {
+      finalUsername = existing.username;
+    }
+    let finalMobile = (profile.mobileNumber || profile.mobile) !== undefined ? (profile.mobileNumber || profile.mobile) : existing.mobileNumber;
+    if (!isAdmin && existing.mobileNumber && existing.mobileNumber.trim()) {
+      finalMobile = existing.mobileNumber;
+    }
+
+    // Backend uniqueness enforcement for username
+    const normUsername = (finalUsername || "").toString().toLowerCase().trim().replace(/^@/, '');
+    if (normUsername) {
+      for (const [k, p] of Object.entries(allProfiles)) {
+        const otherEmail = (p.email || k).toLowerCase().trim();
+        const thisEmail = (profile.email || cleanId).toLowerCase().trim();
+        if (otherEmail !== thisEmail && k !== cleanId) {
+          const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, '');
+          if (otherUname && otherUname === normUsername) {
+            return res.status(409).json({ success: false, error: "यह यूज़रनेम पहले से किसी अन्य यूज़र द्वारा उपयोग में है।" });
+          }
+        }
+      }
+    }
+
+    // Backend uniqueness enforcement for 10-digit mobile number
+    const normMobile = (finalMobile || "").toString().replace(/\D/g, '').slice(-10);
+    if (normMobile.length === 10) {
+      for (const [k, p] of Object.entries(allProfiles)) {
+        const otherEmail = (p.email || k).toLowerCase().trim();
+        const thisEmail = (profile.email || cleanId).toLowerCase().trim();
+        if (otherEmail !== thisEmail && k !== cleanId) {
+          const otherMob = (p.mobileNumber || p.mobile || "").toString().replace(/\D/g, '').slice(-10);
+          if (otherMob.length === 10 && otherMob === normMobile) {
+            return res.status(409).json({ success: false, error: "यह मोबाइल नंबर पहले से पंजीकृत है।" });
+          }
+        }
+      }
+    }
+
     // Non-admin callers cannot escalate their role or tier
     const safeRole = isAdmin
       ? (profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"))
@@ -5798,7 +6121,7 @@ app.post("/api/user-profile", async (req, res) => {
       ...profile,
       userId: profile.userId || profile.uid || existing.userId || cleanId,
       uid: profile.uid || profile.userId || existing.uid || cleanId,
-      username: profile.username || existing.username || "",
+      username: finalUsername || "",
       fullName: profile.fullName || profile.name || existing.fullName || "",
       role: safeRole,
       tier: safeTier,
@@ -5810,7 +6133,7 @@ app.post("/api/user-profile", async (req, res) => {
       channelLogoPngUrl: profile.channelLogoPngUrl || existing.channelLogoPngUrl,
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
-      mobileNumber: profile.mobileNumber || profile.mobile || existing.mobileNumber || "",
+      mobileNumber: finalMobile || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
       customHeaderPng: profile.customHeaderPng !== undefined ? profile.customHeaderPng : existing.customHeaderPng,
@@ -14000,7 +14323,10 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     }
 
     // 1. Privileged accounts (Super Admin & Admin) have unlimited VIP access
-    if (cleanEmail && isProtectedAdminAccount(cleanEmail)) {
+    const allProfiles = loadProfilesDatabase();
+    const prof: any = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
+    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === 'admin' || prof.role === 'superadmin';
+    if (cleanEmail && isAdminAccount) {
       return res.json({
         allowed: true,
         plan: "ultra",

@@ -20,7 +20,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({
     }
   });
   useEffect(() => {
-    document.title = 'Terms & Conditions - AI News Maker';
+    document.title = 'AI News Maker';
     window.scrollTo(0, 0);
   }, []);
 

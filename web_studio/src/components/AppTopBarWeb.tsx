@@ -317,20 +317,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </button>
             )}
 
-            {/* 4-Steps Welcome & Guide Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('open_auth_welcome_screen'));
-                }
-              }}
-              className="px-2.5 py-1.5 text-amber-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-amber-500/30 rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 font-bold shrink-0"
-              title="4-स्टेप्स गाइड व लॉगिन"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="hidden sm:inline">4-स्टेप्स गाइड</span>
-            </button>
 
             {/* Refresh Button - Hidden on Control Panel, Studio, and Newsroom (Part H) */}
             {!isControlPanel && currentTab !== 'studio' && currentTab !== 'newsroom' && (

@@ -203,6 +203,7 @@ export const ChannelOnboardingModal: React.FC<ChannelOnboardingModalProps> = ({
         websiteUrl: websiteUrl.trim(),
         channelName: finalHi,
         currentEmail: (initialProfile as any)?.email,
+        mobileNumber: mobileNumber.trim(),
       });
       if (!uniqCheck.valid) {
         setErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');

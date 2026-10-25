@@ -36,7 +36,7 @@ export const AccountDeletionPage: React.FC<AccountDeletionPageProps> = ({
   } | null>(null);
 
   useEffect(() => {
-    document.title = 'Account Deletion - AI News Maker';
+    document.title = 'AI News Maker';
     window.scrollTo(0, 0);
     if (currentUser) {
       const userMobile = (currentUser as any)?.mobile || currentUser?.mobileNumber;

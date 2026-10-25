@@ -537,7 +537,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
       {/* Frame List with Admin Tier Access Control */}
       <div className="space-y-4">
-        {filteredFrames.map((frame) => {
+        {filteredFrames.map((frame, index) => {
           const cfg = templateConfigs[frame.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[frame.id] || {
             allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
             isActive: true,
@@ -603,7 +603,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   ) : (
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
-                        <span>{displayName}</span>
+                        <span>फ्रेम #{index + 1}: {displayName}</span>
                       </h4>
                       <button
                         type="button"

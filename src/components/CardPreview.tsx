@@ -1163,7 +1163,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain"
                 />
               </div>
-              <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+              <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
                 {card.location && card.location.trim() && card.location.trim() !== 'लोकेशन'
                   ? card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()
                   : 'लोकेशन'}
@@ -1268,7 +1268,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-[#EA580C] to-amber-500 flex items-center justify-center shrink-0 shadow-xs">
                     <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                   </div>
-                  <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                  <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
                     {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                   </span>
                 </div>
@@ -1392,7 +1392,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center shrink-0 shadow-xs">
                   <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-950 stroke-[2.5]" />
                 </div>
-                <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate">
+                <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
                   {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
                 </span>
               </div>
@@ -1607,7 +1607,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             {card.showLocation !== false && (
               <div className="bg-white border-2 border-[#E11D48] rounded-md px-3 py-1 flex items-center gap-1.5 shadow-xs">
                 <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#E11D48] fill-[#E11D48] shrink-0" />
-                <span className="font-extrabold text-xs sm:text-sm text-neutral-900 font-['Baloo_2'] tracking-wide">
+                <span className="font-extrabold text-xs sm:text-sm text-neutral-900 font-['Baloo_2'] tracking-wide inline-block translate-y-[2px] leading-tight">
                   {card.location || 'खबर की लोकेशन'}
                 </span>
               </div>

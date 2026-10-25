@@ -1344,7 +1344,7 @@ function drawLocationBadge(
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(locationText, x + 34, y + badgeH / 2 + 1);
+  ctx.fillText(locationText, x + 34, y + badgeH / 2 + 3);
 
   ctx.restore();
 }
@@ -1886,7 +1886,7 @@ async function drawGraphic001Canvas(
     ctx.fillStyle = '#090A0E';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(cleanLoc, textStartX, pinCenterY);
+    ctx.fillText(cleanLoc, textStartX, pinCenterY + 2);
     ctx.restore();
   }
 
@@ -2267,7 +2267,7 @@ async function drawGraphic002Canvas(
     ctx.font = '900 24px "Noto Sans Devanagari", "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(cleanLoc.slice(0, 24), locTextX, locBoxY + locBoxH / 2);
+    ctx.fillText(cleanLoc.slice(0, 24), locTextX, locBoxY + locBoxH / 2 + 2);
     ctx.restore();
   }
 
@@ -2746,7 +2746,7 @@ async function drawGraphic003Canvas(
     ctx.font = '900 24px "Noto Sans Devanagari", "Poppins", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(cleanLoc.slice(0, 24), locTextX, locBoxY + locBoxH / 2);
+    ctx.fillText(cleanLoc.slice(0, 24), locTextX, locBoxY + locBoxH / 2 + 2);
     ctx.restore();
   }
 
@@ -3474,7 +3474,7 @@ async function drawDefaultJacketContent(
 
     // Location text
     ctx.fillStyle = '#111827';
-    ctx.fillText(locText, boxX + 46, boxY + boxH / 2 + 1);
+    ctx.fillText(locText, boxX + 46, boxY + boxH / 2 + 3);
   }
 
   // 4. Top-Right: YOUR LOGO or Custom Logo (with user logoScale) - only if master branding enabled
@@ -6694,10 +6694,11 @@ function triggerGraphicWelcomeReward() {
     }
     if (!email) return;
 
-    fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+    // Call atomic first-time export reward endpoint
+    fetch(getApiUrl('/api/rewards/first-time-export'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, rewardType: 'graphic' }),
+      body: JSON.stringify({ email, type: 'graphic' }),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -6709,6 +6710,13 @@ function triggerGraphicWelcomeReward() {
         }
       })
       .catch(() => {});
+
+    // Also call legacy wallet endpoint for backward compatibility
+    fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, rewardType: 'graphic' }),
+    }).catch(() => {});
   } catch {}
 }
 
@@ -6731,29 +6739,58 @@ function triggerGraphicWelcomeReward() {
         }
       }
 
-      // 2. Blob-based object URL download (Primary Web strategy)
+      // 2. Blob-based object URL download (Primary Web strategy with mobile compatibility)
       let downloadTriggered = false;
+      const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
       if (typeof exportCanvas.toBlob === 'function') {
         try {
           exportCanvas.toBlob(
-            (blob) => {
+            async (blob) => {
               if (blob) {
                 downloadTriggered = true;
                 const objectUrl = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.download = cleanFilename;
-                link.href = objectUrl;
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                setTimeout(() => {
-                  if (link.parentNode) {
-                    document.body.removeChild(link);
+
+                // Mobile-friendly download: try anchor click first
+                try {
+                  const link = document.createElement('a');
+                  link.download = cleanFilename;
+                  link.href = objectUrl;
+                  link.style.display = 'none';
+                  document.body.appendChild(link);
+                  link.click();
+                  setTimeout(() => {
+                    if (link.parentNode) {
+                      document.body.removeChild(link);
+                    }
+                  }, 1000);
+                } catch (clickErr) {
+                  console.warn('Anchor click failed:', clickErr);
+                  // Mobile Web Share fallback
+                  if (isMobile && navigator.share && navigator.canShare) {
+                    try {
+                      const file = new File([blob], cleanFilename, { type: mime });
+                      if (navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                          files: [file],
+                          title: cleanFilename,
+                        });
+                      }
+                    } catch (shareErr) {
+                      console.warn('Mobile share failed:', shareErr);
+                    }
                   }
-                  URL.revokeObjectURL(objectUrl);
-                  triggerGraphicWelcomeReward();
-                  resolve(true);
-                }, 400);
+                }
+
+                // Keep objectUrl alive for 60 seconds so mobile download managers can finish writing the file
+                setTimeout(() => {
+                  try {
+                    URL.revokeObjectURL(objectUrl);
+                  } catch {}
+                }, 60000);
+
+                triggerGraphicWelcomeReward();
+                resolve(true);
               } else {
                 fallbackDirectDownload();
               }
@@ -6785,9 +6822,22 @@ function triggerGraphicWelcomeReward() {
               if (link.parentNode) {
                 document.body.removeChild(link);
               }
-              triggerGraphicWelcomeReward();
-              resolve(true);
-            }, 300);
+            }, 1000);
+
+            // On mobile devices where download attribute might be blocked, open in new tab
+            if (isMobile) {
+              setTimeout(() => {
+                try {
+                  const win = window.open(dataUrl, '_blank');
+                  if (!win) {
+                    window.location.href = dataUrl;
+                  }
+                } catch {}
+              }, 400);
+            }
+
+            triggerGraphicWelcomeReward();
+            resolve(true);
             return;
           }
         } catch (fallbackErr) {

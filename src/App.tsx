@@ -394,43 +394,10 @@ export default function App() {
     };
   }, [navigateToTab]);
 
-  // Synchronize clean browser page title without hashtags
+  // Keep the browser tab title consistently "AI News Maker"
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    switch (currentTab) {
-      case 'home':
-        document.title = 'Home - AI News Maker';
-        break;
-      case 'videos':
-        document.title = 'Videos & Reels - AI News Maker';
-        break;
-      case 'studio':
-      case 'generator':
-        document.title = 'Graphic Studio - AI News Maker';
-        break;
-      case 'newsroom':
-      case 'drafts':
-      case 'epaper':
-        document.title = 'Newsroom - AI News Maker';
-        break;
-      case 'profile':
-      case 'export':
-        document.title = 'Control Room - AI News Maker';
-        break;
-      case 'terms':
-        document.title = 'Terms & Conditions - AI News Maker';
-        break;
-      case 'privacy':
-        document.title = 'Privacy Policy - AI News Maker';
-        break;
-      case 'delete-account':
-        document.title = 'Account Deletion - AI News Maker';
-        break;
-      case 'support':
-        document.title = 'Support & Contact - AI News Maker';
-        break;
-      default:
-        document.title = 'AI News Maker';
+    if (typeof document !== 'undefined') {
+      document.title = 'AI News Maker';
     }
   }, [currentTab]);
 
@@ -1049,9 +1016,10 @@ export default function App() {
     setCurrentUser(null);
     setIsOnboardingCompleted(true);
     setIsUserMenuOpen(false);
-    // Stay on current screen (e.g. Profile/Control room) instead of kicking user to home
     showToast('लॉगआउट सफल!');
-    setIsLoginModalOpen(true);
+    setShowAuthWelcomeScreen(true);
+    setIsLoginModalOpen(false);
+    navigateToTab('home');
   };
 
   // Save to localStorage whenever card changes

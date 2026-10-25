@@ -1220,8 +1220,23 @@ export function checkAccountUniqueness(input: {
   username?: string;
   websiteUrl?: string;
   currentEmail?: string;
+  mobileNumber?: string;
 }): { valid: boolean; error?: string } {
-  const cleanEmail = (input.currentEmail || '').trim().toLowerCase();
+  let cleanEmail = (input.currentEmail || '').trim().toLowerCase();
+  if (!cleanEmail && typeof window !== 'undefined') {
+    try {
+      const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+      if (sess) {
+        const u = JSON.parse(sess);
+        cleanEmail = (u.email || '').trim().toLowerCase();
+      }
+    } catch {}
+  }
+
+  const cleanChannel = (input.channelName || '').trim().toLowerCase();
+  const cleanUsername = (input.username || '').trim().toLowerCase().replace(/^@/, '');
+  const cleanMobile = (input.mobileNumber || '').replace(/[^0-9]/g, '').slice(-10);
+
   const isPrivileged =
     cleanEmail === 'admin.ainewsmaker@gmail.com' ||
     cleanEmail === 'admin@breakingnewswala.com' ||
@@ -1229,9 +1244,6 @@ export function checkAccountUniqueness(input: {
     cleanEmail.includes('admin') ||
     cleanEmail.includes('superadmin') ||
     cleanEmail.includes('breakingnews');
-
-  const cleanChannel = (input.channelName || '').trim().toLowerCase();
-  const cleanUsername = (input.username || '').trim().toLowerCase().replace(/^@/, '');
 
   const reservedNames = ['admin', 'official', 'breakingnewswala', 'ainewsmaker', 'superadmin'];
   if (!isPrivileged && (reservedNames.includes(cleanChannel) || reservedNames.includes(cleanUsername))) {
@@ -1241,11 +1253,20 @@ export function checkAccountUniqueness(input: {
   try {
     const users = getPlanUsers();
     for (const u of users) {
-      if (input.currentEmail && u.email.toLowerCase() === input.currentEmail.toLowerCase()) {
+      if (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) {
         continue;
+      }
+      if (cleanUsername && u.username && u.username.toLowerCase().replace(/^@/, '') === cleanUsername) {
+        return { valid: false, error: 'यह यूज़रनेम किसी अन्य सदस्य द्वारा पहले से पंजीकृत है।' };
       }
       if (cleanChannel && u.channelName && u.channelName.toLowerCase() === cleanChannel) {
         return { valid: false, error: 'यह चैनल नाम किसी अन्य सदस्य द्वारा पहले से पंजीकृत है।' };
+      }
+      if (cleanMobile && cleanMobile.length === 10 && u.mobile) {
+        const um = u.mobile.replace(/[^0-9]/g, '').slice(-10);
+        if (um === cleanMobile) {
+          return { valid: false, error: 'यह मोबाइल नंबर किसी अन्य सदस्य द्वारा पहले से पंजीकृत है।' };
+        }
       }
     }
   } catch {}
