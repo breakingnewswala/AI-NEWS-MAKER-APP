@@ -46,6 +46,7 @@ import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
 import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
+import { generate5BalancedHeadlineOptions } from '../lib/speakerUtils';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
 import { generateVideoDownloadFileName } from '../lib/dateUtils';
 import { saveVideoDraft } from '../lib/draftsManager';
@@ -1234,7 +1235,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     return `🎬 【वीडियो बुलेटिन】\n\n🚨 ${activeHeadline}\n${subHeadline ? `📌 ${subHeadline}\n` : ''}${locLine}🏷️ चैनल: ${channelTag}\n🌐 वेबसाइट: ${websiteUrl}\n📱 संपर्क: ${mobileNumber}\n\n${userTag} #BreakingNews #VideoReport #DigitalNews #LiveNews`;
   }, [activeHeadline, subHeadline, location, channelTag, websiteUrl, mobileNumber, profile?.username, showLocation]);
 
-  // Raw Script to Headlines AI Generator (Part E.11)
+  // Raw Script to Headlines AI Generator reusing canonical AI Tools rules (Part 5)
   const handleGenerateFromRawScript = async () => {
     if (!rawScriptText.trim()) {
       showToast('कृपया पहले रॉ स्क्रिप्ट या खबर का विवरण दर्ज करें');
@@ -1243,26 +1244,55 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     setIsGeneratingRawHeadlines(true);
     try {
       const raw = rawScriptText.trim();
-      const res = await processNewsLocally(raw);
+
+      // Step 1: Call canonical AI Tools backend endpoint (/api/process-news-command)
+      try {
+        const response = await fetch(getApiUrl('/api/process-news-command'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: raw,
+            command: `Extract high-impact Hindi breaking news headlines and journalistic summary from this script: "${raw}". Produce factual, non-flattery journalistic headline.`,
+            mode: 'text',
+          }),
+        });
+
+        if (response.ok) {
+          const rawJson = await response.json();
+          const data = rawJson?.data || rawJson;
+          if (data && (data.headline || data.title)) {
+            const primary = (data.headline || data.title || '').trim();
+            const factSentences = (data.summary || data.caption || raw)
+              .split(/[।.\n!?]+/)
+              .map((s: string) => s.trim())
+              .filter((s: string) => s.length >= 10);
+            const suggestions = generate5BalancedHeadlineOptions(primary, factSentences, data.location || location).slice(0, 4);
+            setRawScriptSuggestions(suggestions);
+            setHeadline(suggestions[0] || primary);
+            if (data.location && !location) setLocation(data.location);
+            if (data.caption && !videoCaption) setVideoCaption(data.caption);
+            showToast('✅ AI टूल्स नियमों द्वारा 4 नए हेडलाइन सुझाव तैयार हैं!');
+            return;
+          }
+        }
+      } catch (netErr) {
+        console.warn('Network call to process-news-command failed, falling back to canonical local rules:', netErr);
+      }
+
+      // Step 2: Canonical fallback using processNewsLocally & generate5BalancedHeadlineOptions
+      const res = processNewsLocally(raw);
       const sentences = raw
         .split(/[।.\n!?]+/)
         .map((s) => s.trim())
-        .filter((s) => s.length > 5);
+        .filter((s) => s.length >= 10);
 
-      const base = (res as any)?.title || (res as any)?.headline || sentences[0] || 'बड़ा खुलासा: मुख्य समाचार';
-      const cleanBase = base.replace(/^(बड़ा अपडेट:|ब्रेकिंग:|खुलासा:)\s*/, '');
-      const s1 = cleanBase.length > 58 ? cleanBase.slice(0, 55) + '...' : cleanBase;
-      const s2 = `बड़ा फैसला: ${s1}`;
-      const s3 = sentences[1] && sentences[1].length > 8
-        ? (sentences[1].length > 55 ? sentences[1].slice(0, 52) + '...' : sentences[1])
-        : `विशेष रिपोर्ट: ${s1}`;
-      const s4 = sentences[2] && sentences[2].length > 8
-        ? (sentences[2].length > 55 ? sentences[2].slice(0, 52) + '...' : sentences[2])
-        : `न्यूज़रूम बुलेटिन: ${s1}`;
+      const base = (res as any)?.headline || (res as any)?.title || sentences[0] || 'मुख्य समाचार बुलेटिन';
+      const suggestions = generate5BalancedHeadlineOptions(base, sentences, (res as any)?.location || location).slice(0, 4);
 
-      const suggestions = [s1, s2, s3, s4];
       setRawScriptSuggestions(suggestions);
-      setHeadline(s1);
+      setHeadline(suggestions[0] || base);
+      if ((res as any)?.location && !location) setLocation((res as any).location);
+      if ((res as any)?.caption && !videoCaption) setVideoCaption((res as any).caption);
       showToast('✅ 4 नए हेडलाइन सुझाव तैयार हैं!');
     } catch {
       showToast('हेडलाइन जनरेट करने में समस्या आई');

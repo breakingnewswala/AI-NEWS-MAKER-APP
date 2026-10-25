@@ -2944,8 +2944,8 @@ export default function App() {
         />
       )}
 
-      {/* Website Footer — Home Feed Only per user request */}
-      {currentTab === 'home' && (
+      {/* Website Footer — Shared on Home, Video & Reels, and Newsroom */}
+      {(currentTab === 'home' || currentTab === 'videos' || currentTab === 'newsroom' || currentTab === 'drafts') && (
         <AppFooterWeb
           onNavigateToTab={navigateToTab}
           onOpenPlans={() => navigateToTab('profile')}

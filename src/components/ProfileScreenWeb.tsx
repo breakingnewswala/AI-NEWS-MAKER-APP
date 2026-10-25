@@ -2605,13 +2605,39 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onLogout}
-            className="px-3.5 py-1.5 bg-red-950/60 hover:bg-red-900/80 border border-red-800 text-red-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            लॉगआउट
-          </button>
+          <div className="flex items-center gap-2">
+            {isRealAdmin && (
+              <button
+                type="button"
+                onClick={() => handleSwitchAdminMode(adminSystemMode === 'admin' ? 'test' : 'admin')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border shadow-xs ${
+                  adminSystemMode === 'test'
+                    ? 'bg-purple-600/90 hover:bg-purple-500 text-white border-purple-400'
+                    : 'bg-slate-900 hover:bg-slate-850 text-amber-400 border-slate-700/80 hover:border-amber-400/50'
+                }`}
+                title={adminSystemMode === 'test' ? 'टेस्ट मोड सक्रिय - एडमिन मोड में बदलें' : 'एडमिन मोड - टेस्ट मोड में बदलें'}
+              >
+                {adminSystemMode === 'test' ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                    <span>🧪 टेस्ट</span>
+                  </>
+                ) : (
+                  <>
+                    <span>⚡ एडमिन</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={onLogout}
+              className="px-3.5 py-1.5 bg-red-950/60 hover:bg-red-900/80 border border-red-800 text-red-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              लॉगआउट
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2798,99 +2824,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* SYSTEM MODES CONTROLLER (ADMIN ONLY): ADMIN MODE vs TEST MODE             */}
-        {/* Modes != Plans != Promo Codes                                            */}
-        {/* ========================================================================= */}
-        {isRealAdmin && (
-          <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 border-2 border-purple-500/80 rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-400 flex items-center justify-center text-purple-300 shadow-inner shrink-0">
-                  <FlaskConical className="w-6 h-6 text-purple-300" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base font-black text-white">
-                      सिस्टम मोड
-                    </h3>
-                    <span className="px-2 py-0.5 bg-purple-900 text-purple-200 text-[10px] font-black rounded uppercase border border-purple-500">
-                      {adminSystemMode === 'admin' ? '⚡ एडमिन मोड' : '🧪 टेस्ट मोड'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-purple-200/80 mt-0.5">
-                    सिस्टम मोड प्लान्स से अलग हैं। टेस्ट मोड में आप किसी भी प्लान का यूज़र अनुभव सीधे टेस्ट कर सकते हैं।
-                  </p>
-                </div>
-              </div>
-
-              {/* Status Badge - Single authoritative switcher is in the Control Panel Header beside notifications */}
-              <div className="flex items-center gap-2 bg-slate-950/80 px-3 py-2 rounded-xl border border-purple-500/50 shrink-0">
-                <span className="text-xs font-bold text-slate-300">सक्रिय मोड:</span>
-                <span className={`px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1.5 ${
-                  adminSystemMode === 'test'
-                    ? 'bg-purple-600 text-white border border-purple-400'
-                    : 'bg-red-600 text-white border border-red-500'
-                }`}>
-                  {adminSystemMode === 'test' ? '🧪 टेस्ट मोड सक्रिय' : '⚡ एडमिन मोड सक्रिय'}
-                </span>
-              </div>
-            </div>
-
-            {/* If Test Mode is Active: Plan Selector (BASIC, ADVANCE, PRO, VIP DESK) */}
-            {adminSystemMode === 'test' && (
-              <div className="bg-slate-950/90 border border-purple-400/50 rounded-xl p-4 space-y-3 animate-in slide-in-from-top-2">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs font-black text-purple-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>टेस्ट हेतु प्लान चुनें:</span>
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    वर्तमान टेस्ट अनुभव:{' '}
-                    <strong className="text-amber-400 font-mono text-xs">{PLAN_KEY_MAP[testPlanTier]}</strong>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['basic', 'advanced', 'professional', 'ultra'] as UserPlanTier[]).map((tier) => {
-                    const isSelected = testPlanTier === tier;
-                    const keyName = PLAN_KEY_MAP[tier];
-
-                    return (
-                      <button
-                        key={tier}
-                        type="button"
-                        onClick={() => handleSelectTestPlan(tier)}
-                        className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer border flex flex-col items-center justify-center gap-0.5 ${
-                          isSelected
-                            ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 border-amber-300 ring-2 ring-amber-400/60 shadow-lg'
-                            : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800'
-                        }`}
-                      >
-                        <span>{keyName}</span>
-                        <span className="text-[9.5px] opacity-80 font-normal">
-                          {tier === 'basic'
-                            ? 'वॉटरमार्क सहित'
-                            : tier === 'advanced'
-                            ? 'फुल एचडी'
-                            : tier === 'professional'
-                            ? 'वीडियो स्टूडियो'
-                            : 'वीआईपी फ्रेम्स (4K)'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {testModeMsg && (
-              <div className="text-xs text-purple-200 bg-purple-950/60 p-2.5 rounded-xl border border-purple-800/80 font-bold animate-pulse">
-                {testModeMsg}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ADMIN vs NORMAL USER RENDER */}
         {isAdmin ? (

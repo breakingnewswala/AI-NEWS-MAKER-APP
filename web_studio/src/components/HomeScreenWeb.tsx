@@ -51,22 +51,41 @@ import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 
 // Social Media Brand Icons for Story Feature (Part H)
 export const FacebookIcon = () => (
-  <svg className="w-3.5 h-3.5 text-blue-500 fill-current" viewBox="0 0 24 24">
-    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 512 512">
+    <rect width="512" height="512" rx="104" fill="#1877F2"/>
+    <path d="M372 256h-66v196h-82V256h-42v-70h42v-46c0-56 34.5-86 84-86 23.8 0 44.5 1.8 50.5 2.6v58.5h-34.6c-27.2 0-32.5 12.9-32.5 31.9V186h65.8l-9.2 70z" fill="#FFFFFF"/>
   </svg>
 );
 
 export const InstagramIcon = () => (
-  <svg className="w-3.5 h-3.5 text-pink-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 512 512">
+    <defs>
+      <radialGradient id="ig-rad-home" cx="15%" cy="100%" r="105%">
+        <stop offset="0%" stopColor="#FFDC80"/>
+        <stop offset="10%" stopColor="#FCAF45"/>
+        <stop offset="45%" stopColor="#F77737"/>
+        <stop offset="60%" stopColor="#F56040"/>
+        <stop offset="75%" stopColor="#FD1D1D"/>
+        <stop offset="90%" stopColor="#E1306C"/>
+      </radialGradient>
+      <radialGradient id="ig-rad2-home" cx="0%" cy="100%" r="140%">
+        <stop offset="35%" stopColor="#C13584" stopOpacity="0"/>
+        <stop offset="70%" stopColor="#833AB4" stopOpacity="0.8"/>
+        <stop offset="100%" stopColor="#405DE6" stopOpacity="1"/>
+      </radialGradient>
+    </defs>
+    <rect width="512" height="512" rx="115" fill="url(#ig-rad-home)"/>
+    <rect width="512" height="512" rx="115" fill="url(#ig-rad2-home)"/>
+    <rect x="96" y="96" width="320" height="320" rx="80" fill="none" stroke="#FFFFFF" strokeWidth="32"/>
+    <circle cx="256" cy="256" r="76" fill="none" stroke="#FFFFFF" strokeWidth="32"/>
+    <circle cx="348" cy="164" r="20" fill="#FFFFFF"/>
   </svg>
 );
 
 export const WhatsAppIcon = () => (
-  <svg className="w-3.5 h-3.5 text-emerald-500 fill-current" viewBox="0 0 24 24">
-    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z" />
+  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 512 512">
+    <circle cx="256" cy="256" r="256" fill="#25D366"/>
+    <path d="M256.1 92C165.5 92 92 165.5 92 256.1c0 31.6 8.9 61.1 24.5 86.3L92 420l80.2-24.1c24.2 14.2 52.4 22.4 83.9 22.4 90.6 0 164.1-73.5 164.1-164.1S346.7 92 256.1 92zm95.4 233.1c-4 11.2-23.2 21.6-32.3 22.9-8.4 1.2-19.1 1.7-61.9-15.6-51.5-20.9-84.6-73.4-87.2-76.9-2.5-3.5-20.8-27.7-20.8-52.8 0-25.1 13.1-37.4 17.7-42.5 4.6-5.1 10-6.4 13.4-6.4s6.7.3 9.6.5c3.1.2 7.3-.8 11.4 9.1 4.2 10.2 14.4 35.1 15.6 37.6 1.3 2.5 2.1 5.5.5 8.7-1.7 3.3-2.5 5.3-5 8.3-2.5 2.9-5.3 6.6-7.6 8.8-2.5 2.5-5.1 5.3-2.2 10.3 2.9 5 13 21.4 27.9 34.6 19.2 17.1 35.4 22.4 40.4 24.9 5.1 2.5 8 2.1 11-1.3 2.9-3.4 12.6-14.7 16-19.8 3.4-5.1 6.7-4.2 11.3-2.5 4.6 1.7 29.1 13.7 34.1 16.2 5 2.5 8.4 3.8 9.6 5.9 1.3 2 1.3 11.8-2.7 23z" fill="#FFFFFF"/>
   </svg>
 );
 import { getApiUrl } from '../lib/apiConfig';
@@ -1629,27 +1648,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </span>
                     )}
                     <div className="flex items-center gap-2">
-                      {/* 1. पूरी खबर पढ़ें - in-place expansion */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedCardId(
-                            expandedCardId === `highlight-${post.id}`
-                              ? null
-                              : `highlight-${post.id}`
-                          )
-                        }
-                        className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                        <span className="truncate">
-                          {expandedCardId === `highlight-${post.id}`
-                            ? 'संक्षिप्त करें'
-                            : 'पूरी खबर पढ़ें'}
-                        </span>
-                      </button>
-
-                      {/* 2. खबर से ग्राफिक बनाएं / कॉइन अनलॉक */}
+                      {/* खबर से ग्राफिक बनाएं / कॉइन अनलॉक */}
                       {isPostRestricted(post) ? (
                         <button
                           type="button"
@@ -1675,15 +1674,32 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </button>
                       )}
 
-                      {/* 3. रिपोर्ट करें - Hidden for Admin per Part G */}
+                      {/* Admin View: वेबसाइट पर जाएँ */}
+                      {canModerate && (
+                        post.sourceUrl ? (
+                          <a
+                            href={post.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer shrink-0"
+                            title="मूल वेबसाइट पर खबर देखें"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span>वेबसाइट</span>
+                          </a>
+                        ) : null
+                      )}
+
+                      {/* Ordinary User: प्रमुख रिपोर्ट करें बटन */}
                       {!canModerate && (
                         <button
                           type="button"
                           onClick={() => setReportingPost(post)}
-                          className="p-1.5 bg-slate-800/80 hover:bg-rose-950/50 hover:text-rose-400 text-slate-400 rounded-xl border border-slate-700/60 transition-colors cursor-pointer"
+                          className="py-1.5 px-2.5 bg-slate-800/80 hover:bg-rose-950/70 hover:text-rose-300 text-slate-300 rounded-xl border border-slate-700/60 font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0"
                           title="इस खबर की रिपोर्ट करें"
                         >
-                          <Flag className="w-3.5 h-3.5" />
+                          <Flag className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span>रिपोर्ट करें</span>
                         </button>
                       )}
                     </div>
@@ -1855,147 +1871,22 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span>Select</span>
                       </label>
 
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {/* 0. RSS/Web Approval Button if pending */}
-                        {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              approveRssPost(post.id);
-                              setApprovedRssIds(getApprovedRssIds());
-                            }}
-                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
-                            title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
-                          >
-                            <Check className="w-3 h-3 text-white" />
-                            <span>स्वीकृत करें (Approve)</span>
-                          </button>
-                        )}
-
-                        {/* 1. Thumbnail Source Toggle (Source / Default / Manual) */}
+                      {/* RSS/Web Approval Button if pending */}
+                      {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                         <button
                           type="button"
-                          onClick={() => {
-                            const cur = post.imageSource || (defaultThumbnailIds.has(post.id) ? 'default' : 'source');
-                            let next: 'source' | 'default' | 'manual' = 'source';
-                            if (cur === 'source') {
-                              next = 'default';
-                              toggleDefaultThumbnail(post.id);
-                            } else if (cur === 'default') {
-                              if (post.manualThumbnailUrl) {
-                                next = 'manual';
-                              } else {
-                                setEditingPost(post);
-                                return;
-                              }
-                            } else {
-                              next = 'source';
-                            }
-                            if (onEditNews) {
-                              onEditNews({ ...post, imageSource: next });
-                            }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            approveRssPost(post.id);
+                            setApprovedRssIds(getApprovedRssIds());
                           }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer ${
-                            post.imageSource === 'manual'
-                              ? 'bg-purple-500/30 text-purple-300 border border-purple-500/60'
-                              : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
-                              ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                          }`}
-                          title="थंबनेल स्रोत बदलें (सोर्स / डिफ़ॉल्ट / मैन्युअल)"
+                          className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
+                          title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
                         >
-                          <span>
-                            {post.imageSource === 'manual'
-                              ? '📷 मैन्युअल'
-                              : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
-                              ? '📷 डिफ़ॉल्ट'
-                              : '📷 सोर्स'}
-                          </span>
+                          <Check className="w-3 h-3 text-white" />
+                          <span>स्वीकृत करें (Approve)</span>
                         </button>
-
-                        {/* 2. Highlight Button */}
-                        <button
-                          type="button"
-                          onClick={() => onToggleHighlightNews && onToggleHighlightNews(post.id)}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition cursor-pointer ${
-                            isHighlighted
-                              ? 'bg-amber-400 text-slate-950 shadow-sm'
-                              : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
-                          }`}
-                          title="खबर को हाइलाइट करें"
-                        >
-                          <Star className={`w-3 h-3 ${isHighlighted ? 'fill-slate-950' : 'text-amber-400'}`} />
-                          <span>{isHighlighted ? 'हाइलाइटेड' : 'हाइलाइट'}</span>
-                        </button>
-
-                        {/* 2.5 Bonus News Toggle Button in Admin Bar */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (onEditNews) {
-                              onEditNews({
-                                ...post,
-                                isBonus: !post.isBonus,
-                                rewardCoins: post.rewardCoins || 100,
-                              });
-                            }
-                          }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition cursor-pointer ${
-                            post.isBonus
-                              ? 'bg-yellow-400 text-slate-950 shadow-sm'
-                              : 'bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700'
-                          }`}
-                          title="बोनस खबर टॉगल करें"
-                        >
-                          <Coins className={`w-3 h-3 ${post.isBonus ? 'fill-slate-950' : 'text-yellow-400'}`} />
-                          <span>{post.isBonus ? 'बोनस सक्रिय' : 'बोनस'}</span>
-                        </button>
-
-                        {/* 2.6 Coin Value Config Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCoinConfigPost(post);
-                            setCoinConfigCost(post.coinCost || 50);
-                            setCoinConfigPlans(post.restrictedPlans || ['Basic']);
-                          }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 transition cursor-pointer ${
-                            post.coinCost && post.coinCost > 0
-                              ? 'bg-amber-400 text-slate-950 shadow-sm'
-                              : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
-                          }`}
-                          title="कॉइन वैल्यू और रिस्ट्रिक्टेड प्लान्स कॉन्फ़िगर करें"
-                        >
-                          <Coins className="w-3 h-3 text-amber-400" />
-                          <span>{post.coinCost && post.coinCost > 0 ? `${post.coinCost} कॉइन` : 'कॉइन सेट करें'}</span>
-                        </button>
-
-                        {/* 3. Edit Button */}
-                        <button
-                          type="button"
-                          onClick={() => setEditingPost(post)}
-                          className="px-2 py-0.5 bg-blue-900/60 hover:bg-blue-800 border border-blue-600 text-blue-200 text-[10px] font-bold rounded-lg flex items-center gap-1 transition cursor-pointer"
-                          title="खबर एडिट करें"
-                        >
-                          <Edit className="w-3 h-3" />
-                          <span>एडिट</span>
-                        </button>
-
-                        {/* 4. Delete Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm('क्या आप इस खबर को हटाना चाहते हैं?')) {
-                              onDeleteNews && onDeleteNews(post.id);
-                            }
-                          }}
-                          className="px-1.5 py-0.5 bg-red-950/60 hover:bg-red-900 border border-red-700 text-red-300 text-[10px] font-bold rounded-lg flex items-center gap-0.5 transition cursor-pointer"
-                          title="खबर हटाएं"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                      )}
                     </div>
                   )}
 
@@ -2132,35 +2023,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   </div>
 
                   {/* Dedicated Action Button for Pending RSS in Admin View */}
-                  {canModerate && post.id.startsWith('rss-') && (
+                  {canModerate && post.id.startsWith('rss-') && !isRssPostApproved(post, approvedRssIds) && (
                     <div className="px-4 pb-2 flex items-center gap-2">
-                      {post.sourceUrl && (
-                        <a
-                          href={post.sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                          title="मूल वेबसाइट पर खबर देखें"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-                          <span>वेबसाइट पर जाएँ</span>
-                        </a>
-                      )}
-                      {!isRssPostApproved(post, approvedRssIds) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            approveRssPost(post.id, post);
-                            setApprovedRssIds(getApprovedRssIds());
-                          }}
-                          className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
-                          title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
-                        >
-                          <Check className="w-4 h-4 text-white" />
-                          <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          approveRssPost(post.id, post);
+                          setApprovedRssIds(getApprovedRssIds());
+                        }}
+                        className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
+                        title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
+                      >
+                        <Check className="w-4 h-4 text-white" />
+                        <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
+                      </button>
                     </div>
                   )}
 
@@ -2225,35 +2102,45 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               : 'bg-gradient-to-r from-red-600/20 hover:from-red-600/40 to-amber-600/20 border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-white'
                           } border font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98`}
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                           <span>{isNewsGraphicCreated(currentUser?.email, post.id) ? 'ग्राफिक्स फिर से बनाएँ' : 'खबर से ग्राफिक बनाएं'}</span>
                         </button>
                       )}
 
-                      <button
-                        onClick={() =>
-                          setExpandedCardId(expandedCardId === post.id ? null : post.id)
-                        }
-                        className={`py-2 px-3 rounded-xl transition-colors font-bold text-xs flex items-center justify-center gap-1.5 border ${
-                          expandedCardId === post.id
-                            ? 'bg-amber-500 text-slate-950 border-amber-400'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700/60'
-                        }`}
-                        title="पूरी खबर पढ़ें"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>{expandedCardId === post.id ? 'संक्षिप्त करें' : 'पूरी खबर पढ़ें'}</span>
-                      </button>
+                      {/* Admin: 'वेबसाइट पर जाएँ' moved to position previously occupied by 'पूरी खबर पढ़ें' */}
+                      {canModerate && (
+                        post.sourceUrl ? (
+                          <a
+                            href={post.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                            title="मूल वेबसाइट पर खबर देखें"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span>वेबसाइट पर जाएँ</span>
+                          </a>
+                        ) : (
+                          <span
+                            className="py-2 px-2.5 rounded-xl bg-slate-800/50 text-slate-500 border border-slate-800 font-bold text-xs flex items-center justify-center gap-1 shrink-0 cursor-not-allowed"
+                            title="वेबसाइट लिंक उपलब्ध नहीं है"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            <span>वेबसाइट</span>
+                          </span>
+                        )
+                      )}
 
-                      {/* Report button hidden for Admin per Part G */}
+                      {/* Ordinary User: Prominent, clearly visible 'रिपोर्ट करें' button with icon and readable label */}
                       {!canModerate && (
                         <button
                           type="button"
                           onClick={() => setReportingPost(post)}
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 border border-slate-700/60 transition-colors cursor-pointer"
+                          className="py-2 px-3 rounded-xl bg-slate-800/90 hover:bg-rose-950/80 text-slate-300 hover:text-rose-300 border border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                           title="इस खबर की रिपोर्ट करें"
                         >
-                          <Flag className="w-3.5 h-3.5" />
+                          <Flag className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span>रिपोर्ट करें</span>
                         </button>
                       )}
                     </div>
@@ -2282,6 +2169,141 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span className="text-[9px] bg-slate-700 text-amber-300 px-1 py-0.2 rounded">शीघ्र</span>
                       </button>
                     </div>
+
+                    {/* Administrator-only controls: Arranged in two neat rows of three below Social Media Story action */}
+                    {canModerate && (
+                      <div className="w-full mt-1.5 pt-2 border-t border-slate-800/80 space-y-1.5">
+                        {/* First Row: 3 controls (Source, Highlight, Bonus) */}
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {/* 1. Thumbnail Source Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = post.imageSource || (defaultThumbnailIds.has(post.id) ? 'default' : 'source');
+                              let next: 'source' | 'default' | 'manual' = 'source';
+                              if (cur === 'source') {
+                                next = 'default';
+                                toggleDefaultThumbnail(post.id);
+                              } else if (cur === 'default') {
+                                if (post.manualThumbnailUrl) {
+                                  next = 'manual';
+                                } else {
+                                  setEditingPost(post);
+                                  return;
+                                }
+                              } else {
+                                next = 'source';
+                              }
+                              if (onEditNews) {
+                                onEditNews({ ...post, imageSource: next });
+                              }
+                            }}
+                            className={`py-1.5 px-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer truncate ${
+                              post.imageSource === 'manual'
+                                ? 'bg-purple-500/30 text-purple-300 border border-purple-500/60'
+                                : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
+                                ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                            }`}
+                            title="थंबनेल स्रोत बदलें (सोर्स / डिफ़ॉल्ट / मैन्युअल)"
+                          >
+                            <span className="truncate">
+                              {post.imageSource === 'manual'
+                                ? '📷 मैन्युअल'
+                                : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
+                                ? '📷 डिफ़ॉल्ट'
+                                : '📷 सोर्स'}
+                            </span>
+                          </button>
+
+                          {/* 2. Highlight Button */}
+                          <button
+                            type="button"
+                            onClick={() => onToggleHighlightNews && onToggleHighlightNews(post.id)}
+                            className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
+                              isHighlighted
+                                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+                            }`}
+                            title="खबर को हाइलाइट करें"
+                          >
+                            <Star className={`w-3 h-3 shrink-0 ${isHighlighted ? 'fill-slate-950' : 'text-amber-400'}`} />
+                            <span className="truncate">{isHighlighted ? 'हाइलाइटेड' : 'हाइलाइट'}</span>
+                          </button>
+
+                          {/* 3. Bonus Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onEditNews) {
+                                onEditNews({
+                                  ...post,
+                                  isBonus: !post.isBonus,
+                                  rewardCoins: post.rewardCoins || 100,
+                                });
+                              }
+                            }}
+                            className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
+                              post.isBonus
+                                ? 'bg-yellow-400 text-slate-950 shadow-sm'
+                                : 'bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700'
+                            }`}
+                            title="बोनस खबर टॉगल करें"
+                          >
+                            <Coins className={`w-3 h-3 shrink-0 ${post.isBonus ? 'fill-slate-950' : 'text-yellow-400'}`} />
+                            <span className="truncate">{post.isBonus ? 'बोनस सक्रिय' : 'बोनस'}</span>
+                          </button>
+                        </div>
+
+                        {/* Second Row: 3 controls (Coin settings, Edit, Delete) */}
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {/* 4. Coin Value Config Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCoinConfigPost(post);
+                              setCoinConfigCost(post.coinCost || 50);
+                              setCoinConfigPlans(post.restrictedPlans || ['Basic']);
+                            }}
+                            className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
+                              post.coinCost && post.coinCost > 0
+                                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+                            }`}
+                            title="कॉइन वैल्यू और रिस्ट्रिक्टेड प्लान्स कॉन्फ़िगर करें"
+                          >
+                            <Coins className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span className="truncate">{post.coinCost && post.coinCost > 0 ? `${post.coinCost} कॉइन` : 'कॉइन सेट'}</span>
+                          </button>
+
+                          {/* 5. Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingPost(post)}
+                            className="py-1.5 px-1.5 bg-blue-900/60 hover:bg-blue-800 border border-blue-600 text-blue-200 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
+                            title="खबर एडिट करें"
+                          >
+                            <Edit className="w-3 h-3 shrink-0" />
+                            <span className="truncate">एडिट</span>
+                          </button>
+
+                          {/* 6. Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('क्या आप इस खबर को हटाना चाहते हैं?')) {
+                                onDeleteNews && onDeleteNews(post.id);
+                              }
+                            }}
+                            className="py-1.5 px-1.5 bg-red-950/60 hover:bg-red-900 border border-red-700 text-red-300 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
+                            title="खबर हटाएं"
+                          >
+                            <Trash2 className="w-3 h-3 shrink-0 text-red-400" />
+                            <span className="truncate">हटाएं</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

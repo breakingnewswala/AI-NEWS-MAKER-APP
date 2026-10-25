@@ -1670,8 +1670,9 @@ function getInitialRichNewsPosts() {
     }
   ];
 }
-var SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1e3;
-var THREE_DAYS_MS = SEVEN_DAYS_MS;
+var FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1e3;
+var SEVEN_DAYS_MS = FOUR_DAYS_MS;
+var THREE_DAYS_MS = FOUR_DAYS_MS;
 function resolveAllDatabaseLocations(filename) {
   const cwd = process.cwd();
   const candidates = [
@@ -3681,7 +3682,6 @@ runTrialExpirationAndNotificationCheck();
 setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1e3);
 var VIDEOS_DB_FILE = import_path.default.join(process.cwd(), "videos_database.json");
 var DELETED_VIDEOS_FILE = import_path.default.join(process.cwd(), "deleted_videos_ids.json");
-var FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1e3;
 function loadDeletedVideoIds() {
   try {
     const locations = resolveAllDatabaseLocations("deleted_videos_ids.json");
@@ -3736,9 +3736,14 @@ function loadVideosDatabase() {
       }
     }
     const deletedSet = loadDeletedVideoIds();
+    const now = Date.now();
     const validVideos = videos.filter((v) => {
       if (!v || !v.id) return false;
       if (deletedSet.has(v.id)) return false;
+      const createdAt = Number(v.createdAt) || 0;
+      if (createdAt > 0 && now - createdAt > FOUR_DAYS_MS) {
+        return false;
+      }
       return true;
     });
     validVideos.sort((a, b) => {
@@ -3771,6 +3776,42 @@ function saveVideosDatabase(videos) {
     return false;
   }
 }
+function runFourDayFeedRetentionCleanup() {
+  try {
+    const now = Date.now();
+    const newsPosts = loadNewsDatabase();
+    if (newsPosts.length > 0) {
+      const activeNews = newsPosts.filter((p) => {
+        if (!p || !p.id) return false;
+        const postTime = Number(p.timestamp) || 0;
+        if (postTime > 0 && now - postTime > FOUR_DAYS_MS) {
+          return false;
+        }
+        return true;
+      });
+      if (activeNews.length !== newsPosts.length && activeNews.length > 0) {
+        saveNewsDatabase(activeNews);
+      }
+    }
+    const videos = loadVideosDatabase();
+    if (videos.length > 0) {
+      const activeVideos = videos.filter((v) => {
+        if (!v || !v.id) return false;
+        const createdAt = Number(v.createdAt) || 0;
+        if (createdAt > 0 && now - createdAt > FOUR_DAYS_MS) {
+          return false;
+        }
+        return true;
+      });
+      if (activeVideos.length !== videos.length && activeVideos.length > 0) {
+        saveVideosDatabase(activeVideos);
+      }
+    }
+  } catch (err) {
+    console.error("Error in runFourDayFeedRetentionCleanup:", err?.message || err);
+  }
+}
+setInterval(runFourDayFeedRetentionCleanup, 30 * 60 * 1e3);
 app.get("/api/videos", (_req, res) => {
   try {
     const videos = loadVideosDatabase();

@@ -306,11 +306,11 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                     window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
                   }
                 }}
-                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-500/40 font-bold rounded-xl text-xs shadow-xs transition cursor-pointer shrink-0"
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-500/40 font-bold rounded-xl text-xs shadow-xs transition cursor-pointer shrink max-w-[85px] sm:max-w-none overflow-hidden"
                 title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
               >
                 <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="font-mono font-black min-w-[20px] text-center">
+                <span className="font-mono font-black min-w-[16px] text-center truncate">
                   {walletBalance !== null ? walletBalance : (isWalletLoading ? '···' : '0')}
                 </span>
                 <span className="text-[10px] hidden sm:inline">कॉइन्स</span>
@@ -344,7 +344,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </button>
             )}
 
-            {/* Admin Mode / Test Mode Switcher: EXCLUSIVELY in Admin Control Panel header beside notifications */}
+            {/* Admin Mode / Test Mode Switcher: EXCLUSIVELY on Mobile Header in Control Panel (Desktop & Tablet have it beside Logout in Control Panel) */}
             {isAdminUser && isControlPanel && (
               <button
                 type="button"
@@ -353,7 +353,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   setAdminSystemMode(nextMode);
                   setAdminSystemModeState(nextMode);
                 }}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border shadow-xs ${
+                className={`md:hidden px-2 py-1 rounded-xl text-xs font-black transition-all flex items-center gap-1 cursor-pointer shrink-0 border shadow-xs ${
                   adminSystemMode === 'test'
                     ? 'bg-purple-600/90 hover:bg-purple-500 text-white border-purple-400'
                     : 'bg-slate-900 hover:bg-slate-850 text-amber-400 border-slate-700/80 hover:border-amber-400/50'
@@ -373,8 +373,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </button>
             )}
 
-            {/* Real-time Notifications */}
-              <div className="relative">
+            {/* Real-time Notifications: Hidden on Mobile Control Panel per Requirement 1.A */}
+              <div className={`relative ${isControlPanel && isAdminUser ? 'hidden md:block' : ''}`}>
                 <button
                   onClick={() => {
                     const next = !showNotifications;

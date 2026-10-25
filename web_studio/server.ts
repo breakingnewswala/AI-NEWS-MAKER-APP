@@ -955,9 +955,10 @@ function getInitialRichNewsPosts(): StoredNewsPost[] {
   ];
 }
 
-// 7-Day Auto Delete Rule: News posts older than 7 days are automatically removed
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const THREE_DAYS_MS = SEVEN_DAYS_MS; // Backwards-compatible alias for 7-day auto delete
+// 4-Day Auto Retention Rule: Eligible Home feed news & Video feed items older than 4 days (96 hours) are automatically removed
+const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = FOUR_DAYS_MS;
+const THREE_DAYS_MS = FOUR_DAYS_MS;
 
 // Helper to resolve all candidate database file locations across environments (root, web_studio, cwd)
 function resolveAllDatabaseLocations(filename: string): string[] {
@@ -3448,7 +3449,7 @@ setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1000);
 // ============================================================================
 const VIDEOS_DB_FILE = path.join(process.cwd(), "videos_database.json");
 const DELETED_VIDEOS_FILE = path.join(process.cwd(), "deleted_videos_ids.json");
-const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+// (FOUR_DAYS_MS defined globally above)
 
 interface StoredVideoItem {
   id: string;
@@ -3545,11 +3546,15 @@ function loadVideosDatabase(): StoredVideoItem[] {
     }
 
     const deletedSet = loadDeletedVideoIds();
-    // Videos are permanently preserved across deployments!
-    // Never auto-purge based on age. Only exclude videos explicitly deleted by Admin.
+    const now = Date.now();
+    // Videos are preserved across deployments; eligible feed items older than 4 days (96h) are auto-removed
     const validVideos = videos.filter((v) => {
       if (!v || !v.id) return false;
       if (deletedSet.has(v.id)) return false;
+      const createdAt = Number(v.createdAt) || 0;
+      if (createdAt > 0 && (now - createdAt) > FOUR_DAYS_MS) {
+        return false;
+      }
       return true;
     });
 
@@ -3585,6 +3590,49 @@ function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
     return false;
   }
 }
+
+// Scheduled 4-day automatic feed retention cleanup (runs periodically, non-destructive to permanent configurations)
+function runFourDayFeedRetentionCleanup(): void {
+  try {
+    const now = Date.now();
+    // 1. Clean eligible expired home news posts (>4 days / 96h)
+    const newsPosts = loadNewsDatabase();
+    if (newsPosts.length > 0) {
+      const activeNews = newsPosts.filter((p) => {
+        if (!p || !p.id) return false;
+        const postTime = Number(p.timestamp) || 0;
+        if (postTime > 0 && (now - postTime) > FOUR_DAYS_MS) {
+          return false;
+        }
+        return true;
+      });
+      if (activeNews.length !== newsPosts.length && activeNews.length > 0) {
+        saveNewsDatabase(activeNews);
+      }
+    }
+
+    // 2. Clean eligible expired video feed items (>4 days / 96h)
+    const videos = loadVideosDatabase();
+    if (videos.length > 0) {
+      const activeVideos = videos.filter((v) => {
+        if (!v || !v.id) return false;
+        const createdAt = Number(v.createdAt) || 0;
+        if (createdAt > 0 && (now - createdAt) > FOUR_DAYS_MS) {
+          return false;
+        }
+        return true;
+      });
+      if (activeVideos.length !== videos.length && activeVideos.length > 0) {
+        saveVideosDatabase(activeVideos);
+      }
+    }
+  } catch (err: any) {
+    console.error("Error in runFourDayFeedRetentionCleanup:", err?.message || err);
+  }
+}
+
+// Run cleanup every 30 minutes
+setInterval(runFourDayFeedRetentionCleanup, 30 * 60 * 1000);
 
 // 1. GET /api/videos - Real-time videos for all users & admins
 app.get("/api/videos", (_req, res) => {
