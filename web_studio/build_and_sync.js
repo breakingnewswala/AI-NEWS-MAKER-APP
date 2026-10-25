@@ -145,14 +145,14 @@ if (fs.existsSync(dbPath)) {
 
     if (fs.existsSync(rootFile)) {
       try {
-        const c = fs.readFileSync(rootFile, 'utf-8');
-        if (c && c.trim().length > 2) content = c;
+        const c = fs.readFileSync(rootFile, 'utf-8').replace(/^\uFEFF/, '').trim();
+        if (c && c.length >= 2) content = c;
       } catch {}
     }
     if (!content && fs.existsSync(studioFile)) {
       try {
-        const c = fs.readFileSync(studioFile, 'utf-8');
-        if (c && c.trim().length > 2) content = c;
+        const c = fs.readFileSync(studioFile, 'utf-8').replace(/^\uFEFF/, '').trim();
+        if (c && c.length >= 2) content = c;
       } catch {}
     }
 
@@ -173,6 +173,7 @@ if (fs.existsSync(dbPath)) {
   syncDatabaseFile('users_master_database.json');
   syncDatabaseFile('users_accounts_db.json');
   syncDatabaseFile('user_profiles_db.json');
+  syncDatabaseFile('sub_users_db.json');
   syncDatabaseFile('categories_database.json');
   syncDatabaseFile('news_template_configs.json');
 

@@ -99,6 +99,294 @@
   ],
   "transactions": [
     {
+      "id": "tx-frame-1792962000355-scae",
+      "transactionId": "tx-frame-1792962000355-scae",
+      "userId": "coin_test_1792962000344@example.com",
+      "userEmail": "coin_test_1792962000344@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792962000355,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792962000347-pchv",
+      "transactionId": "tx-credit-1792962000347-pchv",
+      "userId": "coin_test_1792962000344@example.com",
+      "userEmail": "coin_test_1792962000344@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792962000347,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792961895078-fjn2",
+      "transactionId": "tx-frame-1792961895078-fjn2",
+      "userId": "coin_test_1792961895050@example.com",
+      "userEmail": "coin_test_1792961895050@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792961895078,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792961895054-6k2p",
+      "transactionId": "tx-credit-1792961895054-6k2p",
+      "userId": "coin_test_1792961895050@example.com",
+      "userEmail": "coin_test_1792961895050@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792961895054,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792961859214-kguv",
+      "transactionId": "tx-frame-1792961859214-kguv",
+      "userId": "coin_test_1792961859207@example.com",
+      "userEmail": "coin_test_1792961859207@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792961859214,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792961859210-29nh",
+      "transactionId": "tx-credit-1792961859210-29nh",
+      "userId": "coin_test_1792961859207@example.com",
+      "userEmail": "coin_test_1792961859207@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792961859210,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792961841557-dnup",
+      "transactionId": "tx-frame-1792961841557-dnup",
+      "userId": "coin_test_1792961841547@example.com",
+      "userEmail": "coin_test_1792961841547@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792961841557,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792961841551-4g1x",
+      "transactionId": "tx-credit-1792961841551-4g1x",
+      "userId": "coin_test_1792961841547@example.com",
+      "userEmail": "coin_test_1792961841547@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792961841551,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792961740250-pp3g",
+      "transactionId": "tx-frame-1792961740250-pp3g",
+      "userId": "coin_test_1792961740242@example.com",
+      "userEmail": "coin_test_1792961740242@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792961740250,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792961740244-82qc",
+      "transactionId": "tx-credit-1792961740244-82qc",
+      "userId": "coin_test_1792961740242@example.com",
+      "userEmail": "coin_test_1792961740242@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792961740245,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792961721260-8y09",
+      "transactionId": "tx-frame-1792961721260-8y09",
+      "userId": "coin_test_1792961721226@example.com",
+      "userEmail": "coin_test_1792961721226@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792961721260,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792961721237-6yxh",
+      "transactionId": "tx-credit-1792961721237-6yxh",
+      "userId": "coin_test_1792961721226@example.com",
+      "userEmail": "coin_test_1792961721226@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792961721237,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792961541632-426c",
+      "transactionId": "tx-frame-1792961541632-426c",
+      "userId": "coin_test_1792961541608@example.com",
+      "userEmail": "coin_test_1792961541608@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792961541632,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792961541610-g2of",
+      "transactionId": "tx-credit-1792961541610-g2of",
+      "userId": "coin_test_1792961541608@example.com",
+      "userEmail": "coin_test_1792961541608@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792961541611,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792956577136-t720",
+      "transactionId": "tx-frame-1792956577136-t720",
+      "userId": "coin_test_1792956577101@example.com",
+      "userEmail": "coin_test_1792956577101@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792956577136,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792956577105-ma4j",
+      "transactionId": "tx-credit-1792956577105-ma4j",
+      "userId": "coin_test_1792956577101@example.com",
+      "userEmail": "coin_test_1792956577101@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792956577105,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1792955463505-0075",
+      "transactionId": "tx-frame-1792955463505-0075",
+      "userId": "coin_test_1792955463477@example.com",
+      "userEmail": "coin_test_1792955463477@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792955463505,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792955463480-75rq",
+      "transactionId": "tx-credit-1792955463480-75rq",
+      "userId": "coin_test_1792955463477@example.com",
+      "userEmail": "coin_test_1792955463477@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792955463480,
+      "createdBy": "admin"
+    },
+    {
       "id": "tx-frame-1792946071266-b9yf",
       "transactionId": "tx-frame-1792946071266-b9yf",
       "userId": "coin_test_1792946071208@example.com",
@@ -1720,6 +2008,51 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
+    },
+    "coin_test_1792955463477@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792956577101@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792961541608@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792961721226@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792961740242@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792961841547@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792961859207@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792961895050@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1792962000344@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
     }
   },
   "welcomeRewards": {
@@ -2014,6 +2347,69 @@
         "unlockedAt": 1792946071266,
         "expiresAt": 1792952999999,
         "dateStr": "2026-10-25"
+      }
+    },
+    "coin_test_1792955463477@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792955463505,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792956577101@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792956577136,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792961541608@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792961541632,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792961721226@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792961721260,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792961740242@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792961740250,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792961841547@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792961841557,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792961859207@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792961859214,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792961895050@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792961895078,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792962000344@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792962000355,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
       }
     }
   }

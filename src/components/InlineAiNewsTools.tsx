@@ -173,6 +173,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 }) => {
   const isAdminOrSuperAdmin = isUserAdmin(currentUser) || isUserSuperAdmin(currentUser);
   const userPlan = (currentUser?.package || currentUser?.role || currentUser?.tier || 'basic').toLowerCase().trim();
+  const isVipDeskUser = Boolean(
+    isAdminOrSuperAdmin ||
+    ['ultra', 'vip_dash', 'vip-dash', 'vip', 'vip_desk', 'vip desk'].includes(userPlan) ||
+    ((currentUser as any)?.planName && String((currentUser as any).planName).toUpperCase().includes('VIP'))
+  );
   const canUseOpenAi = ['pro', 'professional', 'vip_dash', 'vip-dash', 'ultra', 'vip desk', 'admin', 'superadmin'].includes(userPlan) || isAdminOrSuperAdmin;
 
   // Restore previous session from localStorage so headlines are preserved across view/tab changes
@@ -252,10 +257,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   // 3 Caption Styles: detailed (3 paragraphs), bullets (bullet points), short (2 paragraphs)
   const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
-  const isAutomatedEntry = Boolean(
-    card.sourceNewsId ||
-    (autoFillNews && (autoFillNews.newsId || autoFillNews.autoTrigger))
-  );
   const isExecutingRef = React.useRef<boolean>(false);
   const activeRequestIdRef = React.useRef<number>(0);
   const activeNewsIdRef = React.useRef<string>('');
@@ -481,14 +482,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const effectiveTargetUrl = hasValidUrl ? normalizeInputUrl(rawUrl) : (rawUrl.startsWith('http') ? rawUrl : '');
     const rawContent = autoFillNews.fullNews || autoFillNews.summary || autoFillNews.title || '';
     
-    if (effectiveTargetUrl) {
-      setActiveTab('link');
-      setLinkUrl(effectiveTargetUrl);
-    } else {
-      setActiveTab('command');
-      setLinkUrl('');
-    }
-    
+    const targetLink = effectiveTargetUrl || rawUrl || '';
+    setActiveTab('link');
+    setLinkUrl(targetLink);
     setInputText(rawContent);
     setError(null);
 
@@ -512,14 +508,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
     }
 
-    // Only auto-trigger once per triggerKey. If already triggered or if headlines already exist for this session, DO NOT re-trigger!
-    if (autoFillNews.autoTrigger && !isAlreadyTriggered) {
+    // Auto-trigger "लिंक से AI हेडलाइन बनाएं" directly when arriving from Home Screen feed
+    if (autoFillNews.autoTrigger) {
       try {
         processedKeys.push(triggerKey);
         sessionStorage.setItem('ai_news_auto_triggered_keys', JSON.stringify(processedKeys.slice(-20)));
       } catch {}
       autoFillNews.autoTrigger = false;
-      triggerProcessDirectly(effectiveTargetUrl, rawContent, autoFillNews);
+      triggerProcessDirectly(targetLink, rawContent, autoFillNews);
     }
   }, [autoFillNews]);
 
@@ -677,7 +673,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         } catch {}
       }
 
-      const opts: string[] = [];
+      let opts: string[] = [];
       if (Array.isArray(res.headlineOptions) && res.headlineOptions.length > 0) {
         res.headlineOptions.forEach((h: string) => {
           const cleanH = cleanHeadlineText(h);
@@ -688,7 +684,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) {
           if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
-            opts.push(cleanMain);
+            opts.unshift(cleanMain);
           }
         }
       }
@@ -696,7 +692,27 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       if (opts.length === 0 && res.headline) {
         opts.push(cleanHeadlineText(res.headline));
       }
-      setHeadlineOptions(opts.slice(0, 5));
+
+      if (isVipDeskUser) {
+        if (opts.length < 5) {
+          const baseTitle = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
+          const sourceText = extraData?.fullNews || extraData?.summary || res.summary || '';
+          const sourceLoc = cleanLocationField(res.location || extraData?.location || '');
+          const factSentences = (sourceText || baseTitle)
+            .split(/[।\n]+|\.\s+/)
+            .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+            .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+          const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+          const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+          fitted.forEach((h) => {
+            if (opts.length < 5 && !opts.includes(h)) opts.push(h);
+          });
+        }
+        setHeadlineOptions(opts.slice(0, 5));
+      } else {
+        setHeadlineOptions(opts.slice(0, 1));
+      }
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
@@ -998,17 +1014,45 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setResult(res);
       setActiveGeneratedProvider((data.data?.actualProvider as ('gemini' | 'openai')) || effectiveProvider);
 
-      const rawOpts: string[] = [];
+      let rawOpts: string[] = [];
       if (Array.isArray(res.headlineOptions) && res.headlineOptions.length > 0) {
         res.headlineOptions.forEach((h: string) => {
           const cleanH = cleanHeadlineText(h);
           if (cleanH && !rawOpts.includes(cleanH)) rawOpts.push(cleanH);
         });
       }
+      if (res.headline) {
+        const cleanMain = cleanHeadlineText(res.headline);
+        if (cleanMain && !rawOpts.includes(cleanMain)) {
+          if (!rawOpts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
+            rawOpts.unshift(cleanMain);
+          }
+        }
+      }
       if (rawOpts.length === 0 && res.headline) {
         rawOpts.push(cleanHeadlineText(res.headline));
       }
-      setHeadlineOptions(rawOpts.slice(0, 5));
+
+      if (isVipDeskUser) {
+        if (rawOpts.length < 5) {
+          const baseTitle = cleanHeadlineText(rawOpts[0] || res.headline || 'ताज़ा समाचार');
+          const sourceText = res.summary || inputText || '';
+          const sourceLoc = cleanLocationField(res.location || '');
+          const factSentences = (sourceText || baseTitle)
+            .split(/[।\n]+|\.\s+/)
+            .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+            .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+          const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+          const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+          fitted.forEach((h) => {
+            if (rawOpts.length < 5 && !rawOpts.includes(h)) rawOpts.push(h);
+          });
+        }
+        setHeadlineOptions(rawOpts.slice(0, 5));
+      } else {
+        setHeadlineOptions(rawOpts.slice(0, 1));
+      }
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main);
 
@@ -1182,22 +1226,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
       }
     }
+    const updatedCaption = formatCaptionByStyle(
+      captionStyle,
+      cleanOpt,
+      result?.location || card.location || '',
+      result?.summary || card.summary || '',
+      result || undefined,
+      linkUrl
+    );
     if (result) {
       setResult({
         ...result,
         headline: cleanOpt,
         formattedHeadline: formatted,
+        summary: updatedCaption,
       });
     }
     onChange({
       headline: cleanOpt,
       formattedHeadline: formatted,
+      summary: updatedCaption,
     });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(updatedCaption).catch(() => {});
+    }
   };
 
   // Regenerate 5 brand new headline options from the same canonical news context
   const handleRegenerateHeadlines = async () => {
     if (isRegenerating || loading) return;
+    if (!isVipDeskUser) {
+      setError('यह सुविधा केवल पात्र VIP Desk उपयोगकर्ताओं के लिए उपलब्ध है।');
+      return;
+    }
     if (aiProvider === 'openai' && !canUseOpenAi) {
       setError('यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।');
       return;
@@ -1403,23 +1464,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   return (
     <div className="space-y-3 relative">
-      {/* Full Blocking Loading Overlay */}
-      {loading && (
-        <div className="absolute inset-0 z-50 bg-neutral-950/90 backdrop-blur-sm rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in">
-          <div className="relative">
-            <Loader2 className="w-12 h-12 text-yellow-400 animate-spin" />
-            <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-pulse" />
-          </div>
-          <div className="space-y-1.5 max-w-md">
-            <h4 className="text-base font-black text-white">
-              मूल समाचार पढ़ा और सत्यापित किया जा रहा है... कृपया प्रतीक्षा करें
-            </h4>
-            <p className="text-xs text-neutral-300">
-              स्रोत आलेख का विश्लेषण कर 5 संतुलित हेडलाइन्स व सोशल मीडिया कैप्शन तैयार किए जा रहे हैं
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* AI Card Official Information Banner */}
       <div className="bg-blue-950/40 border border-blue-800/60 rounded-xl p-3 flex items-start gap-2.5 text-blue-200">
@@ -1554,26 +1598,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Loading state indicator */}
-      {loading && !result && (
-        <div className="bg-neutral-950 border border-blue-500/50 rounded-xl p-5 text-center space-y-3 animate-in fade-in">
-          <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
-          <h4 className="text-sm font-black text-white">
-            {aiProvider === 'openai' ? 'ChatGPT द्वारा 5 संतुलित AI हेडलाइन तैयार हो रही हैं...' : 'खबर से 5 संतुलित AI हेडलाइन तैयार हो रही हैं...'}
-          </h4>
-          <p className="text-xs text-slate-400">कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर 5 संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।</p>
-        </div>
-      )}
-
-      {loading && result && (
-        <div className="bg-blue-950/40 border border-blue-500/40 rounded-xl p-2.5 flex items-center justify-between text-xs text-blue-200 animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
-            <span>AI द्वारा 5 मुख्य हेडलाइंस तैयार — गहरा संपादकीय विश्लेषण जारी...</span>
-          </div>
-        </div>
-      )}
 
       {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
       <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
@@ -1755,8 +1779,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         <button
           type="button"
           onClick={() => handleProcess()}
-          disabled={loading}
-          className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 ${
+          disabled={loading || isRegenerating}
+          className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-75 ${
             activeTab === 'link'
               ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
               : 'bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950'
@@ -1764,8 +1788,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         >
           {loading ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>AI खबर का विश्लेषण कर रहा है...</span>
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
+              <span>AI खबर का विश्लेषण कर रहा है... कृपया प्रतीक्षा करें</span>
             </>
           ) : activeTab === 'link' ? (
             <>
@@ -1780,6 +1804,23 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           )}
         </button>
 
+        {/* Active Waiting Card While Generating */}
+        {loading && (
+          <div className="bg-blue-950/60 border border-blue-500/50 rounded-xl p-4 text-center space-y-2 animate-in fade-in shadow-lg">
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
+              <h4 className="text-sm font-black text-white">
+                {aiProvider === 'openai'
+                  ? 'चैट जीपीटी द्वारा 5 संतुलित AI हेडलाइन तैयार हो रही हैं...'
+                  : 'AI खबर का विश्लेषण कर 5 संतुलित हेडलाइन तैयार कर रहा है...'}
+              </h4>
+            </div>
+            <p className="text-xs text-blue-200">
+              कृपया प्रतीक्षा करें... 5 संतुलित AI हेडलाइन विकल्प और 3 पैराग्राफ सोशल मीडिया कैप्शन तैयार किए जा रहे हैं।
+            </p>
+          </div>
+        )}
+
         {/* Error message */}
         {error && (
           <div className="p-3 rounded-lg bg-red-900/40 border border-red-800 text-red-200 text-xs flex items-center justify-between gap-2">
@@ -1790,7 +1831,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             <button
               type="button"
               onClick={() => handleProcess()}
-              className="px-2 py-0.5 rounded bg-red-800 text-white font-bold text-[10px] shrink-0 flex items-center gap-1"
+              className="px-2 py-0.5 rounded bg-red-800 text-white font-bold text-[10px] shrink-0 flex items-center gap-1 cursor-pointer"
             >
               <RefreshCw className="w-2.5 h-2.5" />
               <span>पुनः प्रयास</span>
@@ -1824,19 +1865,25 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
             <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
               <Check className="w-4 h-4 text-green-400" />
-              <span>तैयार AI हेडलाइन ({headlineOptions.length || 5} विकल्प उपलब्ध)</span>
+              <span>
+                {isVipDeskUser
+                  ? `तैयार AI हेडलाइन (${headlineOptions.length || 5} विकल्प उपलब्ध)`
+                  : 'तैयार AI हेडलाइन'}
+              </span>
             </span>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleRegenerateHeadlines}
-                disabled={isRegenerating || loading}
-                className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-                <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 5 नई हेडलाइन्स बनाएं (Regenerate)'}</span>
-              </button>
+              {isVipDeskUser && (
+                <button
+                  type="button"
+                  onClick={handleRegenerateHeadlines}
+                  disabled={isRegenerating || loading}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+                  <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 5 नई हेडलाइन्स बनाएं (Regenerate)'}</span>
+                </button>
+              )}
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
                 📍 {result.location || card.location || 'मध्य प्रदेश'}
               </span>
@@ -1850,8 +1897,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts */}
-          {headlineOptions.length > 0 && (
+          {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts (VIP Desk Only) */}
+          {isVipDeskUser && headlineOptions.length > 1 && (
             <div className="space-y-1.5">
               <span className="text-[11px] text-neutral-400 font-bold">
                 तैयार 5 संतुलित AI हेडलाइन विकल्प (पसंदीदा पर एक क्लिक करें):
@@ -1875,6 +1922,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
+                        {/* Radio button circle */}
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isSelected ? 'border-yellow-400 bg-yellow-400/20' : 'border-neutral-600'}`}>
+                          {isSelected && <div className="w-2 h-2 rounded-full bg-yellow-400" />}
+                        </div>
                         <span className="text-[11px] font-black text-yellow-400 tracking-wide">
                           विकल्प {idx + 1}
                         </span>
@@ -1891,7 +1942,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                         </div>
                       )}
                     </div>
-                    <div className="leading-snug text-neutral-200">
+                    <div className="leading-snug text-neutral-200 pl-6">
                       {displayText}
                     </div>
                   </div>

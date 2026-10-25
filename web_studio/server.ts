@@ -18,7 +18,7 @@ const PORT = parseInt(process.env.PORT || "8080", 10);
 // Security Headers & Safe CORS Middleware
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.removeHeader("X-Frame-Options");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
@@ -813,7 +813,8 @@ interface StoredSubUser {
 function loadSubUsersDatabase(): StoredSubUser[] {
   try {
     if (fs.existsSync(SUB_USERS_DB_FILE)) {
-      const raw = fs.readFileSync(SUB_USERS_DB_FILE, "utf-8");
+      const raw = fs.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     }
@@ -8193,14 +8194,14 @@ export function getAiFeaturesConfig(): any {
   return {
     headlineRegeneration: {
       enabled: true,
-      allowedTiers: ["basic", "advanced", "advance", "pro", "professional", "vip", "vip desk", "ultra", "admin"],
+      allowedTiers: ["vip", "vip desk", "vip_desk", "vip_dash", "vip-dash", "ultra", "admin", "superadmin"],
       maxRegenerationsPerSession: 10,
       requireAuthentication: false,
     },
     permissions: {
       regenerateHeadlines: {
-        allowedTiers: ["basic", "advanced", "advance", "pro", "professional", "vip", "vip desk", "admin"],
-        allowAllTiers: true
+        allowedTiers: ["vip", "vip desk", "vip_desk", "vip_dash", "vip-dash", "ultra", "admin", "superadmin"],
+        allowAllTiers: false
       }
     }
   };
@@ -8225,43 +8226,22 @@ export function saveAiFeaturesConfig(cfg: any): boolean {
 }
 
 export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
-  if (!config) return true;
+  if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
 
-  const perm = config.permissions?.regenerateHeadlines;
-  if (perm) {
-    if (perm.allowAllTiers === true) return true;
-    if (Array.isArray(perm.allowedTiers)) {
-      const lowerTiers = perm.allowedTiers.map((t: string) => t.toLowerCase().trim());
-      if (lowerTiers.includes("*") || lowerTiers.includes("all")) return true;
-      return lowerTiers.some((t: string) => {
-        if (t === effectiveTier) return true;
-        if ((effectiveTier === "ultra" || effectiveTier === "vip desk" || effectiveTier === "vip_dash" || effectiveTier === "vip-dash" || effectiveTier === "vip") &&
-            (t === "vip" || t === "vip_desk" || t === "vip_dash" || t === "vip-dash" || t === "ultra")) return true;
-        if ((effectiveTier === "professional" || effectiveTier === "pro") && (t === "pro" || t === "professional")) return true;
-        if ((effectiveTier === "advance" || effectiveTier === "advanced") && (t === "advance" || t === "advanced")) return true;
-        if (effectiveTier === "admin" || t === "admin") return true;
-        return false;
-      });
-    }
-  }
+  const lowerTier = (effectiveTier || "basic").toLowerCase().trim();
+  const isVipOrAdmin = (
+    lowerTier === "ultra" ||
+    lowerTier === "vip desk" ||
+    lowerTier === "vip_desk" ||
+    lowerTier === "vip_dash" ||
+    lowerTier === "vip-dash" ||
+    lowerTier === "vip" ||
+    lowerTier === "admin" ||
+    lowerTier === "superadmin"
+  );
 
-  const regenAllowed = config.headlineRegeneration?.allowedTiers;
-  if (Array.isArray(regenAllowed)) {
-    const lowerTiers = regenAllowed.map((t: string) => t.toLowerCase().trim());
-    if (lowerTiers.includes("*") || lowerTiers.includes("all")) return true;
-    return lowerTiers.some((t: string) => {
-      if (t === effectiveTier) return true;
-      if ((effectiveTier === "ultra" || effectiveTier === "vip desk" || effectiveTier === "vip_dash" || effectiveTier === "vip-dash" || effectiveTier === "vip") &&
-          (t === "vip" || t === "vip_desk" || t === "vip_dash" || t === "vip-dash" || t === "ultra")) return true;
-      if ((effectiveTier === "professional" || effectiveTier === "pro") && (t === "pro" || t === "professional")) return true;
-      if ((effectiveTier === "advance" || effectiveTier === "advanced") && (t === "advance" || t === "advanced")) return true;
-      if (effectiveTier === "admin" || t === "admin") return true;
-      return false;
-    });
-  }
-
-  return true;
+  return isVipOrAdmin;
 }
 
 export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
@@ -10106,9 +10086,14 @@ export function ensureHashtagHierarchy(
         const p3 = sentences.slice(2).join("। ") + "।";
         finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       } else if (sentences.length === 2) {
-        finalBodyText = `${sentences[0]}।\n\n${sentences[1]}।`;
+        const locPrefix = location && location !== "विशेष कवरेज" ? `${location} में ` : "";
+        finalBodyText = `${sentences[0]}।\n\n${sentences[1]}।\n\n${locPrefix}मामले में प्रशासनिक और कानूनी स्तर पर आवश्यक कार्रवाई जारी है तथा अधिकारियों द्वारा पूरी स्थिति पर लगातार निगरानी रखी जा रही है।`;
       } else {
-        finalBodyText = rawParagraphs.length > 0 ? rawParagraphs.join("\n\n") : rawBody;
+        const p1 = (sentences[0] || rawBody || "ताज़ा समाचार घटनाक्रम") + "।";
+        const p2 = "घटना से जुड़े मुख्य तथ्यों और विवरणों की पुष्टि की जा रही है तथा प्रत्यक्षदर्शियों व संबंधित पक्षों से आवश्यक जानकारी जुटाई जा रही है।";
+        const locPrefix = location && location !== "विशेष कवरेज" ? `${location} में ` : "";
+        const p3 = `${locPrefix}मामले में प्रशासन द्वारा संज्ञान लेकर आगे की वैधानिक प्रक्रिया अमल में लाई जा रही है।`;
+        finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       }
     }
   }
@@ -10223,13 +10208,41 @@ function formatCaptionVariants(
     .map((s) => s.trim())
     .filter((s) => s.length > 5);
 
-  const baseText = sentences.length > 0 ? sentences.join("। ") + "।" : cleanHeadline;
+  let detailedParas: string[] = [];
+  if (sentences.length >= 6) {
+    detailedParas = [
+      sentences.slice(0, Math.ceil(sentences.length / 3)).join("। ") + "।",
+      sentences.slice(Math.ceil(sentences.length / 3), Math.ceil((sentences.length * 2) / 3)).join("। ") + "।",
+      sentences.slice(Math.ceil((sentences.length * 2) / 3)).join("। ") + "।",
+    ];
+  } else if (sentences.length >= 3) {
+    detailedParas = [
+      sentences[0] + "।",
+      sentences[1] + "।",
+      sentences.slice(2).join("। ") + "।",
+    ];
+  } else if (sentences.length === 2) {
+    const locPrefix = location && location !== "विशेष कवरेज" ? `${location} में ` : "";
+    detailedParas = [
+      sentences[0] + "।",
+      sentences[1] + "।",
+      `${locPrefix}मामले में प्रशासनिक और कानूनी स्तर पर आवश्यक कार्रवाई जारी है तथा अधिकारियों द्वारा पूरी स्थिति पर लगातार निगरानी रखी जा रही है।`,
+    ];
+  } else {
+    const p1 = (sentences[0] || cleanHeadline) + "।";
+    const p2 = "घटना से जुड़े मुख्य तथ्यों और विवरणों की पुष्टि की जा रही है तथा प्रत्यक्षदर्शियों व संबंधित पक्षों से आवश्यक जानकारी जुटाई जा रही है।";
+    const locPrefix = location && location !== "विशेष कवरेज" ? `${location} में ` : "";
+    const p3 = `${locPrefix}मामले में प्रशासन द्वारा संज्ञान लेकर आगे की वैधानिक प्रक्रिया अमल में लाई जा रही है।`;
+    detailedParas = [p1, p2, p3];
+  }
+
+  const detailedText = detailedParas.join("\n\n");
   const bulletItems = (sentences.length > 0 ? sentences.slice(0, 4) : [cleanHeadline]).map((b) => `• ${b}`);
 
   return {
-    captionDetailed: baseText,
+    captionDetailed: detailedText,
     captionBullets: bulletItems.join("\n"),
-    captionShort: sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : baseText,
+    captionShort: sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : (sentences[0] ? `${sentences[0]}।` : cleanHeadline),
   };
 }
 
@@ -11285,8 +11298,13 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" न जोड़ें।
    - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
    - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं।
-   - summary / captionDetailed: ठीक 3 विस्तृत पैराग्राफ में सीधे घटना के तथ्यों से शुरू करते हुए पूरी खबर।
-   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो।
+   - summary / captionDetailed (विस्तृत 3 पैराग्राफ समाचार रिपोर्ट):
+     * अनिवार्य रूप से ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में पूरी खबर लिखें (कुल 150 से 250 शब्द)।
+     * पैराग्राफ 1 (मुख्य घटनाक्रम): घटना कहाँ हुई, कब हुई और क्या हुआ — संपूर्ण विवरण (कम से कम 3-4 वाक्य)।
+     * पैराग्राफ 2 (पृष्ठभूमि व साक्ष्य): घटना की पृष्ठभूमि, कारण, प्रत्यक्षदर्शियों/पीड़ितों के बयान और मुख्य संदर्भ (कम से कम 3-4 वाक्य)।
+     * पैराग्राफ 3 (कार्रवाई व वर्तमान स्थिति): पुलिस, प्रशासन, अस्पताल या संबंधित विभाग की कार्रवाई, दर्ज मामले, जांच की स्थिति और आगे क्या होगा (कम से कम 3-4 वाक्य)।
+     * किसी भी स्थिति में 1-2 पंक्तियों का संक्षिप्त सारांश न दें; सोशल मीडिया पाठकों के लिए यह एक संपूर्ण विस्तृत समाचार रिपोर्ट होनी चाहिए।
+   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 4 से 6 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो।
    - captionShort: ठीक 2 संक्षिप्त पैराग्राफ, सीधे मुख्य घटनाक्रम से शुरू।
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}

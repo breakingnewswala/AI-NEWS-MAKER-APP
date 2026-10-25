@@ -2,16 +2,14 @@
   "headlineRegeneration": {
     "enabled": true,
     "allowedTiers": [
-      "advanced",
-      "advance",
-      "pro",
-      "professional",
       "vip",
       "vip-dash",
       "vip_dash",
       "vip desk",
       "vip_desk",
-      "admin"
+      "ultra",
+      "admin",
+      "superadmin"
     ],
     "maxRegenerationsPerSession": 10,
     "requireAuthentication": false
@@ -93,14 +91,14 @@
   "permissions": {
     "regenerateHeadlines": {
       "allowedTiers": [
-        "advanced",
-        "advance",
-        "pro",
-        "professional",
         "vip",
         "vip-dash",
         "vip_dash",
-        "vip_desk"
+        "vip desk",
+        "vip_desk",
+        "ultra",
+        "admin",
+        "superadmin"
       ],
       "allowAllTiers": false
     }

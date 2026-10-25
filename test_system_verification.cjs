@@ -464,7 +464,7 @@ async function runTests() {
     const testAdminConfig = {
       permissions: {
         regenerateHeadlines: {
-          allowedTiers: ['advanced', 'advance', 'pro', 'professional', 'vip', 'vip-dash', 'vip_dash', 'vip_desk'],
+          allowedTiers: ['ultra', 'vip', 'vip-dash', 'vip_dash', 'vip_desk', 'vip desk'],
           allowAllTiers: false,
         },
       },
@@ -479,7 +479,7 @@ async function runTests() {
     const getAiConfigBasicRes = await request('GET', '/api/ai-features-config?tier=basic');
     assert(
       getAiConfigBasicRes.body.canRegenerateHeadlines === false,
-      'Basic tier is correctly identified as not permitted when restricted to Pro/VIP'
+      'Basic tier is correctly identified as not permitted when restricted to VIP Desk'
     );
 
     const regenBlockedRes = await request('POST', '/api/regenerate-headlines', {
@@ -494,19 +494,20 @@ async function runTests() {
       'POST /api/regenerate-headlines returns 403 Forbidden for disallowed tier'
     );
 
-    // Verify Pro, Advanced, and VIP-Dash tiers are permitted
+    // Verify Pro and Advanced tiers are NOT permitted (User requirement: only VIP Desk permitted)
     const getAiConfigProRes = await request('GET', '/api/ai-features-config?tier=pro');
     assert(
-      getAiConfigProRes.body.canRegenerateHeadlines === true,
-      'Pro tier is permitted to regenerate headlines'
+      getAiConfigProRes.body.canRegenerateHeadlines === false,
+      'Pro tier is NOT permitted to regenerate headlines'
     );
 
     const getAiConfigAdvRes = await request('GET', '/api/ai-features-config?tier=advanced');
     assert(
-      getAiConfigAdvRes.body.canRegenerateHeadlines === true,
-      'Advanced tier is permitted to regenerate headlines'
+      getAiConfigAdvRes.body.canRegenerateHeadlines === false,
+      'Advanced tier is NOT permitted to regenerate headlines'
     );
 
+    // Verify VIP-Dash tier is permitted
     const getAiConfigVipRes = await request('GET', '/api/ai-features-config?tier=vip-dash');
     assert(
       getAiConfigVipRes.body.canRegenerateHeadlines === true,
@@ -523,7 +524,7 @@ async function runTests() {
     const initialHeadline = 'कानपुर में कालिंदी एक्सप्रेस को उड़ाने की साजिश नाकाम, ट्रैक पर मिला गैस सिलेंडर';
 
     const regenSuccessRes = await request('POST', '/api/regenerate-headlines', {
-      userTier: 'pro',
+      userTier: 'vip-dash',
       canonicalContext: testCanonicalContext,
       previousHeadlines: [initialHeadline],
     });

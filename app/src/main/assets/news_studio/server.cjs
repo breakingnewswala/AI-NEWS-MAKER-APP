@@ -1014,7 +1014,7 @@ var app = (0, import_express.default)();
 var PORT = parseInt(process.env.PORT || "8080", 10);
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.removeHeader("X-Frame-Options");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
@@ -1089,6 +1089,7 @@ function getAuthenticatedUser(req) {
   return verifyAuthToken(token);
 }
 var MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
+var MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 var REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 var UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 function extractAdminEmail(req) {
@@ -1100,12 +1101,12 @@ function extractAdminEmail(req) {
 function isAuthorizedMasterAdmin(req) {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) return true;
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL) return true;
     if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
   }
   const adminKey = req.headers["x-admin-key"] || req.headers["x-master-admin-key"];
@@ -1117,12 +1118,12 @@ function isAuthorizedMasterAdmin(req) {
 function isAuthorizedAdmin(req) {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
     if (user.role === "admin" || user.role === "superadmin") return true;
   }
   const adminKey = req.headers["x-admin-key"];
@@ -1508,7 +1509,8 @@ function saveRewardsDatabase(db) {
 function loadSubUsersDatabase() {
   try {
     if (import_fs.default.existsSync(SUB_USERS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(SUB_USERS_DB_FILE, "utf-8");
+      const raw = import_fs.default.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     }
@@ -6814,7 +6816,10 @@ app.post("/api/admin/update-user", (req, res) => {
 });
 app.post("/api/admin/block-user", (req, res) => {
   try {
-    const { userId, userEmail, blockedBy } = req.body;
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const { userId, userEmail, blockedBy, reason } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
@@ -6832,13 +6837,28 @@ app.post("/api/admin/block-user", (req, res) => {
     if (isProtectedAdminAccount(users[idx].email) || users[idx].role === "superadmin" || users[idx].role === "admin") {
       return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u094B\u0902 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092E\u0924\u093F \u0928\u0939\u0940\u0902 \u0939\u0948" });
     }
+    const blockedReasonText = reason || "\u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0928\u0940\u0924\u093F \u0909\u0932\u094D\u0932\u0902\u0918\u0928 \u0905\u0925\u0935\u093E \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0917\u0924\u093F\u0935\u093F\u0927\u093F \u0915\u0947 \u0915\u093E\u0930\u0923 \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964";
     users[idx].isBlocked = true;
     users[idx].blockedAt = Date.now();
     users[idx].blockedBy = blockedBy || "Admin";
+    users[idx].blockedReason = blockedReasonText;
     users[idx].unblockedAt = null;
     users[idx].unblockedBy = null;
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex(
+        (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
+      );
+      if (aIdx >= 0) {
+        accounts[aIdx].isBlocked = true;
+        accounts[aIdx].blockedAt = Date.now();
+        accounts[aIdx].blockedReason = blockedReasonText;
+        saveUsersDatabase(accounts);
+      }
+    } catch {
+    }
     return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948", user: users[idx] });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -6846,6 +6866,9 @@ app.post("/api/admin/block-user", (req, res) => {
 });
 app.post("/api/admin/unblock-user", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { userId, userEmail, unblockedBy } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
@@ -6859,10 +6882,24 @@ app.post("/api/admin/unblock-user", (req, res) => {
       return res.status(404).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
     }
     users[idx].isBlocked = false;
+    users[idx].blockedReason = null;
     users[idx].unblockedAt = Date.now();
     users[idx].unblockedBy = unblockedBy || "Admin";
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex(
+        (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
+      );
+      if (aIdx >= 0) {
+        accounts[aIdx].isBlocked = false;
+        accounts[aIdx].blockedReason = null;
+        accounts[aIdx].unblockedAt = Date.now();
+        saveUsersDatabase(accounts);
+      }
+    } catch {
+    }
     return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948", user: users[idx] });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -6870,6 +6907,9 @@ app.post("/api/admin/unblock-user", (req, res) => {
 });
 app.post("/api/admin/delete-user", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { userId, userEmail } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) return res.status(400).json({ error: "userId is required" });
@@ -6892,6 +6932,14 @@ app.post("/api/admin/delete-user", (req, res) => {
     if (targetUser?.email) delete allProfiles[targetUser.email.toLowerCase().trim()];
     if (targetUser?.username) delete allProfiles[targetUser.username.toLowerCase().trim()];
     saveProfilesDatabase(allProfiles);
+    try {
+      let accounts = loadUsersDatabase();
+      accounts = accounts.filter(
+        (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier) && (!targetUser?.email || u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim())
+      );
+      saveUsersDatabase(accounts);
+    } catch {
+    }
     return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -6899,6 +6947,9 @@ app.post("/api/admin/delete-user", (req, res) => {
 });
 app.post("/api/admin/update-user", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { userId, updates } = req.body;
     const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
     if (!identifier) {
@@ -6932,6 +6983,21 @@ app.post("/api/admin/update-user", (req, res) => {
       updatedUser = users[idx];
       saveUsersMasterDatabase(users);
       syncUserToProfiles(updatedUser);
+      try {
+        let accounts = loadUsersDatabase();
+        const aIdx = accounts.findIndex(
+          (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
+        );
+        if (aIdx >= 0) {
+          accounts[aIdx] = {
+            ...accounts[aIdx],
+            ...updates,
+            updatedAt: Date.now()
+          };
+          saveUsersDatabase(accounts);
+        }
+      } catch {
+      }
     } else {
       updatedUser = registerOrUpdateUserAuthoritative({
         ...updates,
@@ -7440,14 +7506,14 @@ function getAiFeaturesConfig() {
   return {
     headlineRegeneration: {
       enabled: true,
-      allowedTiers: ["basic", "advanced", "advance", "pro", "professional", "vip", "vip desk", "ultra", "admin"],
+      allowedTiers: ["vip", "vip desk", "vip_desk", "vip_dash", "vip-dash", "ultra", "admin", "superadmin"],
       maxRegenerationsPerSession: 10,
       requireAuthentication: false
     },
     permissions: {
       regenerateHeadlines: {
-        allowedTiers: ["basic", "advanced", "advance", "pro", "professional", "vip", "vip desk", "admin"],
-        allowAllTiers: true
+        allowedTiers: ["vip", "vip desk", "vip_desk", "vip_dash", "vip-dash", "ultra", "admin", "superadmin"],
+        allowAllTiers: false
       }
     }
   };
@@ -7469,38 +7535,11 @@ function saveAiFeaturesConfig(cfg) {
   }
 }
 function isRegenerateAllowed(config, effectiveTier) {
-  if (!config) return true;
+  if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
-  const perm = config.permissions?.regenerateHeadlines;
-  if (perm) {
-    if (perm.allowAllTiers === true) return true;
-    if (Array.isArray(perm.allowedTiers)) {
-      const lowerTiers = perm.allowedTiers.map((t) => t.toLowerCase().trim());
-      if (lowerTiers.includes("*") || lowerTiers.includes("all")) return true;
-      return lowerTiers.some((t) => {
-        if (t === effectiveTier) return true;
-        if ((effectiveTier === "ultra" || effectiveTier === "vip desk" || effectiveTier === "vip_dash" || effectiveTier === "vip-dash" || effectiveTier === "vip") && (t === "vip" || t === "vip_desk" || t === "vip_dash" || t === "vip-dash" || t === "ultra")) return true;
-        if ((effectiveTier === "professional" || effectiveTier === "pro") && (t === "pro" || t === "professional")) return true;
-        if ((effectiveTier === "advance" || effectiveTier === "advanced") && (t === "advance" || t === "advanced")) return true;
-        if (effectiveTier === "admin" || t === "admin") return true;
-        return false;
-      });
-    }
-  }
-  const regenAllowed = config.headlineRegeneration?.allowedTiers;
-  if (Array.isArray(regenAllowed)) {
-    const lowerTiers = regenAllowed.map((t) => t.toLowerCase().trim());
-    if (lowerTiers.includes("*") || lowerTiers.includes("all")) return true;
-    return lowerTiers.some((t) => {
-      if (t === effectiveTier) return true;
-      if ((effectiveTier === "ultra" || effectiveTier === "vip desk" || effectiveTier === "vip_dash" || effectiveTier === "vip-dash" || effectiveTier === "vip") && (t === "vip" || t === "vip_desk" || t === "vip_dash" || t === "vip-dash" || t === "ultra")) return true;
-      if ((effectiveTier === "professional" || effectiveTier === "pro") && (t === "pro" || t === "professional")) return true;
-      if ((effectiveTier === "advance" || effectiveTier === "advanced") && (t === "advance" || t === "advanced")) return true;
-      if (effectiveTier === "admin" || t === "admin") return true;
-      return false;
-    });
-  }
-  return true;
+  const lowerTier = (effectiveTier || "basic").toLowerCase().trim();
+  const isVipOrAdmin = lowerTier === "ultra" || lowerTier === "vip desk" || lowerTier === "vip_desk" || lowerTier === "vip_dash" || lowerTier === "vip-dash" || lowerTier === "vip" || lowerTier === "admin" || lowerTier === "superadmin";
+  return isVipOrAdmin;
 }
 function isTierAllowedForOpenAI(tier, role) {
   const cleanRole = (role || "").toLowerCase().trim();

@@ -1241,10 +1241,7 @@ export default function App() {
         const isExternalUrl = (u?: string) => {
           if (!u || !u.startsWith('http')) return false;
           const lower = u.toLowerCase();
-          return !lower.includes('ainewsmaker.online') &&
-                 !lower.includes('breakingnewswala.com') &&
-                 !lower.includes('localhost') &&
-                 !lower.includes('127.0.0.1');
+          return !lower.includes('localhost') && !lower.includes('127.0.0.1');
         };
         const effectiveLink = isExternalUrl(newsData.url) ? newsData.url : undefined;
         const effectiveLoc = newsData.location || 'मध्य प्रदेश';
@@ -1856,7 +1853,9 @@ export default function App() {
       !post.sourceUrl.includes('localhost') &&
       !post.sourceUrl.includes('127.0.0.1')
     );
-    const effectiveLink = hasExternalSource ? post.sourceUrl.trim() : '';
+    const effectiveLink = hasExternalSource
+      ? post.sourceUrl.trim()
+      : (post.id ? `https://www.ainewsmaker.online/news/${encodeURIComponent(post.id)}` : '');
     const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');
@@ -1979,14 +1978,14 @@ export default function App() {
       imageUrl: targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,
-      autoTrigger: Boolean(effectiveLink),
+      autoTrigger: true,
       timestamp: Date.now(),
       additionalPhotos: articlePhotos,
     });
 
     navigateToTab('studio');
-    setActiveStep(2); // Redirect straight to Step 2 (Step 2A AI Link tool)
-    setToastMessage(effectiveLink ? '✅ खबर का लिंक बॉक्स 1 में लोड हुआ और AI हेडलाइन तैयार!' : 'खबर स्टूडियो में लोड हुई। आप सीधे लिंक दर्ज कर सकते हैं।');
+    setActiveStep(2); // Redirect straight to Step 2 (Graphic Photo Studio AI Tools)
+    setToastMessage('✅ AI टूल्स में खबर लोड हुई — संतुलित हेडलाइन व कैप्शन तैयार हो रहे हैं!');
     setTimeout(() => {
       scrollToStepById('step-ai');
     }, 150);
