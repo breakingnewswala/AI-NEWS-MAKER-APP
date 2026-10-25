@@ -230,11 +230,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               channelNameEn: cloudP.channelNameEn || prev.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
               channelLogoUrl: resolvedLogo,
               channelLogoPngUrl: resolvedLogo,
+              channelLogoGifUrl: cloudP.channelLogoGifUrl || prev.channelLogoGifUrl || '',
+              channelLogoType: cloudP.channelLogoType || prev.channelLogoType || 'png',
               username: cloudP.username || prev.username,
               mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
               whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
-              socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(cloudP.socialIcons || prev.socialIcons || {}) },
+              district: cloudP.district || prev.district || '',
+              state: cloudP.state || prev.state || '',
+              address: cloudP.address || prev.address || '',
+              pincode: cloudP.pincode || prev.pincode || '',
+              socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0) ? cloudP.socialIcons : (prev.socialIcons || DEFAULT_SOCIAL_ICONS),
+              customHeaderPng: cloudP.customHeaderPng !== undefined ? cloudP.customHeaderPng : (prev.customHeaderPng || ''),
+              customFooterPng: cloudP.customFooterPng !== undefined ? cloudP.customFooterPng : (prev.customFooterPng || ''),
             };
             try {
               localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(merged));
@@ -1113,6 +1121,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       const dataUrl = uploadEvent.target?.result as string;
       if (dataUrl) {
         let finalUrl = dataUrl;
+        const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+        const cleanUserId = currentUser?.userId || cleanEmail;
         try {
           const res = await fetch(getApiUrl('/api/upload-logo'), {
             method: 'POST',
@@ -1121,6 +1131,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               dataUrl,
               logoType: 'gif',
               username: channelProfile.username || currentUser?.username || 'admin',
+              email: cleanEmail,
+              userId: cleanUserId,
             }),
           });
           const data = await res.json();
@@ -1130,7 +1142,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         } catch (err) {
           console.warn('GIF upload server sync warning:', err);
         }
-        const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
         setChannelProfile((prev) => {
           const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
           const updated = {
@@ -1159,19 +1170,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 channelLogoGifUrl: finalUrl,
               }),
             }).catch(() => {});
-
-            if (cleanEmail) {
-              fetch(getApiUrl('/api/admin/update-user'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  userId: cleanEmail,
-                  updates: {
-                    channelLogoGifUrl: finalUrl,
-                  },
-                }),
-              }).catch(() => {});
-            }
           } catch {}
 
           if (typeof window !== 'undefined') {
@@ -1360,7 +1358,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     setIsJpgModalOpen(true);
   };
 
-  const handleSaveChannelBranding = () => {
+  const handleSaveChannelBranding = async () => {
     // Check account uniqueness and restricted brands
     const uniqCheck = checkAccountUniqueness({
       username: channelProfile.username,
@@ -1460,34 +1458,22 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         channelLogoUrl: primaryPngLogo,
         channelLogoPngUrl: primaryPngLogo,
         channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
+        district: channelProfile.district || '',
+        state: channelProfile.state || '',
+        address: channelProfile.address || '',
+        pincode: channelProfile.pincode || '',
+        socialIcons: channelProfile.socialIcons,
       };
-      fetch(getApiUrl('/api/user-profile'), {
+      const res = await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(serverPayload),
-      }).catch(() => {});
-
-      if (cleanEmail) {
-        fetch(getApiUrl('/api/admin/update-user'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: cleanEmail,
-            updates: {
-              name: channelProfile.fullName || currentUser?.name,
-              channelName: channelProfile.channelNameHi,
-              channelLogoUrl: primaryPngLogo,
-              channelLogoPngUrl: primaryPngLogo,
-              channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
-              mobile: channelProfile.mobileNumber,
-              websiteUrl: channelProfile.websiteUrl,
-              username: channelProfile.username,
-            },
-          }),
-        }).catch(() => {});
+      });
+      if (!res.ok) {
+        showToast('चेतावनी: सर्वर पर प्रोफाइल सहेजने में समस्या आई');
       }
     } catch (err) {
-      console.warn('Cloud server sync failed:', err);
+      console.warn('Cloud server sync warning:', err);
     }
 
     // Dispatch update event for active studio card
@@ -2666,13 +2652,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     <div className="min-h-screen bg-slate-950 text-white pb-28">
       {/* Top Header */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 shadow-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between text-center sm:text-left gap-3">
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
               <Sliders className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-white flex items-center gap-2">
+              <h1 className="text-xl font-black text-white flex items-center justify-center sm:justify-start gap-2">
                 <span>{isAdmin ? 'एडमिन कंट्रोल पैनल' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
                 {testModeEnabled && isAdmin && (
                   <span className="px-2 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[10px] font-black rounded-full uppercase flex items-center gap-1">
@@ -2681,7 +2667,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </span>
                 )}
               </h1>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 mt-0.5">
                 {isAdmin
                   ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
                   : 'प्रोफाइल विवरण, 7-Day Free Trial Basic व प्रोमो कोड रिडीम'}
@@ -2689,7 +2675,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             {isRealAdmin && (
               <button
                 type="button"
@@ -2931,7 +2917,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                    <span>1</span>
+                    <User className="w-5 h-5 text-slate-950" />
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -2960,7 +2946,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                    <span>2</span>
+                    <Crown className="w-5 h-5 text-slate-950" />
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -2995,7 +2981,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                    <span>🪙</span>
+                    <Coins className="w-5 h-5 text-slate-950" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -3540,7 +3526,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                    <span>4</span>
+                    <ShieldCheck className="w-5 h-5 text-white" />
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -3574,7 +3560,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                    <span>5</span>
+                    <LogOut className="w-5 h-5 text-white" />
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-red-200 block truncate">

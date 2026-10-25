@@ -13,7 +13,10 @@ function sleep(ms) {
 function request(method, path, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
-    const reqHeaders = { ...headers };
+    const reqHeaders = {
+      'x-admin-email': 'breakingnewswala.com@gmail.com',
+      ...headers,
+    };
     let bodyData = null;
     if (body) {
       bodyData = JSON.stringify(body);

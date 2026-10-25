@@ -14,6 +14,9 @@ import {
   FileSpreadsheet,
   Smartphone,
   Coins,
+  LogOut,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import {
@@ -34,6 +37,11 @@ import {
   getNotificationPermissionStatus,
   fetchNotificationsFromServer,
   AppNotification,
+  getSoundSettings,
+  saveSoundSettings,
+  playNormalNotificationSound,
+  playBreakingNewsAlertSound,
+  AppSoundSettings,
 } from '../lib/notificationManager';
 import { getApiUrl } from '../lib/apiConfig';
 
@@ -45,6 +53,7 @@ interface AppTopBarWebProps {
   onOpenAppUpdate?: () => void;
   onRefresh: () => void;
   onNavigateToTab: (tab: any) => void;
+  onLogout?: () => void;
 }
 
 export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
@@ -54,9 +63,11 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   onOpenAppUpdate,
   onRefresh,
   onNavigateToTab,
+  onLogout,
 }) => {
   const { language, setLanguage, isHindi } = useLanguage();
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  const [soundSettings, setSoundSettings] = useState<AppSoundSettings>(() => getSoundSettings());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [currentTier, setCurrentTier] = useState<string>(() => {
     return getUserSubscription().tier;
@@ -359,6 +370,19 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </button>
             )}
 
+            {/* Mobile Header: Logout beside Admin Switcher when on Control Panel / Profile */}
+            {isControlPanel && onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="md:hidden px-2.5 py-1 rounded-xl text-xs font-bold bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 flex items-center gap-1 cursor-pointer shrink-0 shadow-xs"
+                title="लॉगआउट"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>लॉगआउट</span>
+              </button>
+            )}
+
             {/* Real-time Notifications: Hidden on Mobile Control Panel per Requirement 1.A */}
               <div className={`relative ${isControlPanel && isAdminUser ? 'hidden md:block' : ''}`}>
                 <button
@@ -376,10 +400,9 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 >
                   <Bell className="w-4 h-4" />
                   {unreadCount > 0 && (
-                    <>
-                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-slate-950 animate-ping" />
-                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-slate-950" />
-                    </>
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-slate-950 shadow-md">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
                   )}
                 </button>
 
@@ -415,6 +438,86 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                           ✕
                         </button>
                       </div>
+                    </div>
+
+                    {/* Sound Settings & Controls */}
+                    <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                          {soundSettings.soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5 text-slate-500" />}
+                          <span>ध्वनि अलर्ट (Sound Alerts)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = saveSoundSettings({ soundEnabled: !soundSettings.soundEnabled });
+                            setSoundSettings(updated);
+                            if (updated.soundEnabled) playNormalNotificationSound();
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition ${
+                            soundSettings.soundEnabled
+                              ? 'bg-amber-400 text-slate-950'
+                              : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                          }`}
+                        >
+                          {soundSettings.soundEnabled ? 'चालू (ON)' : 'बंद (OFF)'}
+                        </button>
+                      </div>
+
+                      {soundSettings.soundEnabled && (
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80 text-[10px]">
+                          <div>
+                            <div className="flex items-center justify-between text-slate-400 mb-0.5">
+                              <span>सामान्य पिंग</span>
+                              <button
+                                type="button"
+                                onClick={() => playNormalNotificationSound()}
+                                className="text-amber-400 hover:underline cursor-pointer"
+                              >
+                                टेस्ट
+                              </button>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={soundSettings.normalVolume}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                const updated = saveSoundSettings({ normalVolume: v });
+                                setSoundSettings(updated);
+                              }}
+                              className="w-full accent-amber-400 cursor-pointer"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between text-slate-400 mb-0.5">
+                              <span>ब्रेकिंग अलर्ट चाइम</span>
+                              <button
+                                type="button"
+                                onClick={() => playBreakingNewsAlertSound()}
+                                className="text-red-400 hover:underline cursor-pointer font-bold"
+                              >
+                                टेस्ट
+                              </button>
+                            </div>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={soundSettings.breakingVolume}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                const updated = saveSoundSettings({ breakingVolume: v });
+                                setSoundSettings(updated);
+                              }}
+                              className="w-full accent-red-500 cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Permission Request Prompt if not granted */}

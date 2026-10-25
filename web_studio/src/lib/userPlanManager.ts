@@ -4,24 +4,39 @@ import { getApiUrl } from './apiConfig';
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
 export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
-export const SUPER_ADMIN_EMAILS = [
-  'admin.ainewsmaker@gmail.com',
-  'breakingnewswala.com@gmail.com',
-];
+export const MASTER_ADMIN_EMAIL = 'breakingnewswala.com@gmail.com';
+export const REGULAR_ADMIN_EMAIL = 'admin.ainewsmaker@gmail.com';
+export const SUPER_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL];
+export const ALL_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL, REGULAR_ADMIN_EMAIL];
+export const UNAUTHORIZED_ADMIN_EMAILS = ['editor.bnwtv@gmail.com'];
 
-export function isUserSuperAdmin(userOrEmail?: any): boolean {
+export function isUserMasterAdmin(userOrEmail?: any): boolean {
   if (!userOrEmail) return false;
+  let email = '';
   if (typeof userOrEmail === 'string') {
-    const clean = userOrEmail.replace(/\s+/g, '').toLowerCase().trim();
-    return clean === 'superadmin' || clean === 'master_admin_001' || SUPER_ADMIN_EMAILS.includes(clean);
+    email = userOrEmail.replace(/\s+/g, '').toLowerCase().trim();
+  } else {
+    email = (userOrEmail.email || '').replace(/\s+/g, '').toLowerCase().trim();
   }
-  const email = (userOrEmail.email || '').replace(/\s+/g, '').toLowerCase().trim();
-  const username = (userOrEmail.username || '').replace(/\s+/g, '').toLowerCase().trim();
-  const uid = (userOrEmail.uid || userOrEmail.userId || '').replace(/\s+/g, '').toLowerCase().trim();
-  const role = (userOrEmail.role || '').toLowerCase().trim();
-  return role === 'superadmin' || SUPER_ADMIN_EMAILS.includes(email) || username === 'superadmin' || uid === 'master_admin_001';
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+  return email === MASTER_ADMIN_EMAIL;
 }
 
+export function isUserRegularAdmin(userOrEmail?: any): boolean {
+  if (!userOrEmail) return false;
+  let email = '';
+  if (typeof userOrEmail === 'string') {
+    email = userOrEmail.replace(/\s+/g, '').toLowerCase().trim();
+  } else {
+    email = (userOrEmail.email || '').replace(/\s+/g, '').toLowerCase().trim();
+  }
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+  return email === REGULAR_ADMIN_EMAIL;
+}
+
+export function isUserSuperAdmin(userOrEmail?: any): boolean {
+  return isUserMasterAdmin(userOrEmail);
+}
 
 export function isEffectiveSuperAdmin(user?: any): boolean {
   if (!user) {
@@ -30,13 +45,13 @@ export function isEffectiveSuperAdmin(user?: any): boolean {
         const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
         if (stored) {
           const parsed = JSON.parse(stored);
-          return isUserSuperAdmin(parsed);
+          return isUserMasterAdmin(parsed);
         }
       } catch {}
     }
     return false;
   }
-  return isUserSuperAdmin(user);
+  return isUserMasterAdmin(user);
 }
 
 
@@ -56,6 +71,7 @@ export interface UserSubscriptionInfo {
   isBlocked?: boolean;
   blockedAt?: number | null;
   blockedBy?: string | null;
+  blockedReason?: string | null;
   isLocked?: boolean;
   primaryMobile?: string;
   isMobileLocked: boolean;
@@ -598,6 +614,7 @@ export interface PlanUserRecord {
   isBlocked?: boolean;
   blockedAt?: number | null;
   blockedBy?: string | null;
+  blockedReason?: string | null;
   unblockedAt?: number | null;
   unblockedBy?: string | null;
   createdAt?: number;
@@ -613,38 +630,10 @@ export interface PlanUserRecord {
 
 export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
   {
-    userId: 'user-1791697518060',
-    email: 'admin.ainewsmaker@gmail.com',
-    name: 'सुपर एडमिन (Super Admin)',
-    fullName: 'सुपर एडमिन (Super Admin)',
-    username: 'AI News Maker',
-    role: 'superadmin',
-    tier: 'ultra',
-    planName: 'VIP DESK',
-    channelName: 'एआई न्यूज़ मेकर',
-    channelNameHi: 'एआई न्यूज़ मेकर',
-    channelNameEn: 'AI News Maker',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
-    mobile: '9669802408',
-    mobileNumber: '9669802408',
-    district: 'हेडक्वार्टर सेंट्रल डेस्क',
-    websiteUrl: 'ainewsmaker.online',
-    isBlocked: false,
-    isProfileLocked: true,
-    isLocked: true,
-    createdAt: 1791697518060,
-    trialStartedAt: 1791697518060,
-    trialEndsAt: 2107057518060,
-    expiresAt: 2107057518060,
-    activatedVia: 'Super Admin Preset',
-    hasActivePaidPlan: true,
-  },
-  {
     userId: 'usr_627265616b69',
     email: 'breakingnewswala.com@gmail.com',
     name: 'मुख्य संपादक',
-    fullName: 'मुख्य संपादक',
+    fullName: 'मास्टर एडमिन (Master Admin)',
     username: 'breakingnewswala',
     role: 'superadmin',
     tier: 'ultra',
@@ -665,83 +654,36 @@ export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
     trialStartedAt: 1791792137805,
     trialEndsAt: 2107057518060,
     expiresAt: 2107057518060,
-    activatedVia: 'Admin Preset',
+    activatedVia: 'Master Admin Preset',
     hasActivePaidPlan: true,
   },
   {
-    userId: 'usr_khabridas_101',
-    email: 'khabridasnews@gmail.com',
-    name: 'खबरिदास न्यूज़ (Khabridas News)',
-    fullName: 'खबरिदास न्यूज़ (Khabridas News)',
-    username: 'khabridasnews',
-    role: 'user',
-    tier: 'basic',
-    planName: 'BASIC',
-    channelName: 'खबरिदास न्यूज़',
-    channelNameHi: 'खबरिदास न्यूज़',
-    channelNameEn: 'Khabridas News',
+    userId: 'user-1791697518060',
+    email: 'admin.ainewsmaker@gmail.com',
+    name: 'एडमिन (Admin)',
+    fullName: 'एडमिन (Admin)',
+    username: 'AI News Maker',
+    role: 'admin',
+    tier: 'ultra',
+    planName: 'VIP DESK',
+    channelName: 'एआई न्यूज़ मेकर',
+    channelNameHi: 'एआई न्यूज़ मेकर',
+    channelNameEn: 'AI News Maker',
     channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    mobile: '9876543210',
-    mobileNumber: '9876543210',
-    district: 'ग्वालियर',
-    websiteUrl: 'https://khabridasnews.com',
-    isBlocked: false,
-    isProfileLocked: false,
-    createdAt: 1791892712618,
-    trialStartedAt: 1791892712618,
-    trialEndsAt: 1792497512618,
-    daysRemaining: 5,
-    hoursRemaining: 2,
-  },
-  {
-    userId: 'usr_rituraj_102',
-    email: 'riturajtomarorchha@gmail.com',
-    name: 'ऋतुराज तोमर (ओरछा)',
-    fullName: 'ऋतुराज तोमर (ओरछा)',
-    username: 'riturajtomarorchha',
-    role: 'user',
-    tier: 'basic',
-    planName: 'BASIC',
-    channelName: 'ओरछा बुंदेलखंड न्यूज़',
-    channelNameHi: 'ओरछा बुंदेलखंड न्यूज़',
-    channelNameEn: 'Orchha Bundelkhand News',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    mobile: '9876543211',
-    mobileNumber: '9876543211',
-    district: 'ओरछा / निवाड़ी',
+    channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+    mobile: '9669802408',
+    mobileNumber: '9669802408',
+    district: 'हेडक्वार्टर सेंट्रल डेस्क',
     websiteUrl: 'ainewsmaker.online',
     isBlocked: false,
-    isProfileLocked: false,
-    createdAt: 1791892712618,
-    trialStartedAt: 1791892712618,
-    trialEndsAt: 1792497512618,
-    daysRemaining: 5,
-    hoursRemaining: 2,
-  },
-  {
-    userId: 'usr_anmolsandesh_103',
-    email: 'digital.anmolsandesh@gmail.com',
-    name: 'Anmol Sandesh',
-    fullName: 'Anmol Sandesh',
-    username: 'anmolsandesh',
-    role: 'user',
-    tier: 'basic',
-    planName: 'BASIC',
-    channelName: 'अनमोल संदेश',
-    channelNameHi: 'अनमोल संदेश',
-    channelNameEn: 'Anmol Sandesh',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    mobile: '9425000998',
-    mobileNumber: '9425000998',
-    district: 'सेंट्रल डेस्क',
-    websiteUrl: 'anmolsandesh.com',
-    isBlocked: false,
-    isProfileLocked: false,
-    createdAt: 1791892712618,
-    trialStartedAt: 1791892712618,
-    trialEndsAt: 1792497512618,
-    daysRemaining: 5,
-    hoursRemaining: 2,
+    isProfileLocked: true,
+    isLocked: true,
+    createdAt: 1791697518060,
+    trialStartedAt: 1791697518060,
+    trialEndsAt: 2107057518060,
+    expiresAt: 2107057518060,
+    activatedVia: 'Admin Preset',
+    hasActivePaidPlan: true,
   },
 ];
 
@@ -941,17 +883,21 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const hasPaidPlan = storedTier !== 'basic';
   const isTrialActive = !isExpired && (storedTier === 'basic' || storedTier === 'ultra');
 
+  // Module J: Trial-period users receive the same VIP Desk feature and name tag
+  const effectiveTier: UserPlanTier = (isTrialActive && !hasPaidPlan) ? 'ultra' : storedTier;
+  const effectivePlanName: PlanKeyName = (isTrialActive && !hasPaidPlan) ? 'VIP DESK' : (matchedUser?.planName || PLAN_KEY_MAP[storedTier] || 'BASIC');
+
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
   const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || undefined;
 
   return {
-    tier: storedTier,
-    planName: matchedUser?.planName || PLAN_KEY_MAP[storedTier] || 'BASIC',
+    tier: effectiveTier,
+    planName: effectivePlanName,
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isTrialExpired: isExpired && storedTier === 'basic',
+    isTrialExpired: isExpired && (storedTier === 'basic' || !hasPaidPlan),
     isPlanExpired: isExpired,
     daysRemaining,
     hoursRemaining,
@@ -960,6 +906,7 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     isBlocked,
     blockedAt: matchedUser?.blockedAt,
     blockedBy: matchedUser?.blockedBy,
+    blockedReason: (matchedUser as any)?.blockedReason || (activeEmail ? localStorage.getItem(`user_blocked_reason_${activeEmail}`) : null) || 'व्यवस्थापक नीति उल्लंघन अथवा अनधिकृत गतिविधि के कारण आपका खाता ब्लॉक किया गया है।',
     primaryMobile: primaryMobile.trim() || undefined,
     isMobileLocked,
     expiresAt,
@@ -1043,23 +990,14 @@ export function getEffectiveUserTier(currentUser?: any): UserPlanTier {
 
 export function isUserAdmin(user: any): boolean {
   if (!user) return false;
-  if (isUserSuperAdmin(user)) return true;
-  const role = (user.role || "").toLowerCase().trim();
-  if (role === "admin" || role === "superadmin") return true;
-  
-  if (typeof window !== "undefined") {
-    try {
-      const email = (user.email || user.username || "").toLowerCase().trim();
-      if (email) {
-        const users = getPlanUsers();
-        const matched = users.find((u) => u.email.toLowerCase().trim() === email);
-        if (matched && (matched.role === "admin" || matched.role === "superadmin")) {
-          return true;
-        }
-      }
-    } catch {}
+  let email = '';
+  if (typeof user === 'string') {
+    email = user.replace(/\s+/g, '').toLowerCase().trim();
+  } else {
+    email = (user.email || user.username || '').replace(/\s+/g, '').toLowerCase().trim();
   }
-  return false;
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL;
 }
 
 /**
@@ -1767,12 +1705,15 @@ export async function adminUpdateCloudUser(
   return { success: true };
 }
 
-export async function adminDeleteCloudUser(userId: string): Promise<{ success: boolean; error?: string }> {
+export async function adminDeleteCloudUser(userEmailOrId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(getApiUrl('/api/admin/delete-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({
+        userEmail: userEmailOrId,
+        userId: userId || userEmailOrId,
+      }),
     });
     if (res.ok) return await res.json();
   } catch {}
@@ -1802,9 +1743,12 @@ export function adminDeleteUserRecord(emailOrUserId: string): boolean {
     const users = getPlanUsers();
     const clean = emailOrUserId.toLowerCase().trim();
     const filtered = users.filter(
-      (u) => u.email.toLowerCase().trim() !== clean && u.userId?.toLowerCase().trim() !== clean
+      (u) => u.email?.toLowerCase().trim() !== clean && u.userId?.toLowerCase().trim() !== clean
     );
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(filtered));
+    try {
+      localStorage.removeItem(`user_profile_${clean}`);
+    } catch {}
     window.dispatchEvent(new Event('ai_news_plan_users_changed'));
     return true;
   } catch (e) {

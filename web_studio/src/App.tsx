@@ -84,6 +84,7 @@ import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { AccountDeletionPage } from './components/AccountDeletionPage';
 import { SupportContactPage } from './components/SupportContactPage';
 import { AppFooterWeb } from './components/AppFooterWeb';
+import { triggerBreakingNewsAlert } from './lib/notificationManager';
 import {
   isUserAdmin,
   setAdminSystemMode,
@@ -342,6 +343,21 @@ export default function App() {
 
   // Navigate to tab cleanly using HTML5 history without visible hashtags
   const navigateToTab = useCallback((tab: AppTab) => {
+    const isCurrentlyBlocked = typeof window !== 'undefined' && (() => {
+      try {
+        const sess = localStorage.getItem('reporter_auth_session');
+        if (sess) {
+          const u = JSON.parse(sess);
+          const email = (u?.email || '').toLowerCase().trim();
+          if (email === 'breakingnewswala.com@gmail.com' || email === 'admin.ainewsmaker@gmail.com') return false;
+          return localStorage.getItem(`user_blocked_${email}`) === 'true';
+        }
+      } catch {}
+      return false;
+    })();
+    if (isCurrentlyBlocked && tab !== 'support' && tab !== 'home' && tab !== 'profile') {
+      return;
+    }
     const target = tab === ('epaper' as any) ? 'newsroom' : tab;
     setCurrentTab(target);
     if (typeof window !== 'undefined') {
@@ -1129,6 +1145,15 @@ export default function App() {
     userSubscription?.isTrialExpired ||
     (userSubscription?.daysRemaining !== undefined && userSubscription.daysRemaining <= 0)
   );
+  const isUserBlocked = !isAdminUser && Boolean(
+    userSubscription?.isBlocked ||
+    (currentUser?.email && localStorage.getItem(`user_blocked_${currentUser.email.toLowerCase().trim()}`) === 'true')
+  );
+  const [blockReviewMessage, setBlockReviewMessage] = useState('');
+  const [blockReviewMobile, setBlockReviewMobile] = useState('');
+  const [isSubmittingBlockReview, setIsSubmittingBlockReview] = useState(false);
+  const [blockReviewSubmitted, setBlockReviewSubmitted] = useState(false);
+
   const [isExpiredModalDismissed, setIsExpiredModalDismissed] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('expired_plan_modal_dismissed') === 'true';
@@ -1893,16 +1918,35 @@ export default function App() {
     if (safeTargetImage) articlePhotos.push(safeTargetImage);
     else if (targetImageForStudio) articlePhotos.push(targetImageForStudio);
 
+    const isValidArticlePhoto = (url: string) => {
+      if (!url || typeof url !== 'string') return false;
+      const lower = url.toLowerCase();
+      if (
+        lower.includes('placeholder') ||
+        lower.includes('logo') ||
+        lower.includes('icon') ||
+        lower.includes('avatar') ||
+        lower.includes('favicon')
+      ) {
+        return false;
+      }
+      return true;
+    };
+
     if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
       post.additionalPhotos.forEach((p) => {
-        const safeP = safeProxy(p);
-        if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
+        if (isValidArticlePhoto(p)) {
+          const safeP = safeProxy(p);
+          if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
+        }
       });
     }
     if ((post as any).extractedArticlePhotos && Array.isArray((post as any).extractedArticlePhotos)) {
       (post as any).extractedArticlePhotos.forEach((p: string) => {
-        const safeP = safeProxy(p);
-        if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
+        if (isValidArticlePhoto(p)) {
+          const safeP = safeProxy(p);
+          if (safeP && !articlePhotos.includes(safeP)) articlePhotos.push(safeP);
+        }
       });
     }
 
@@ -2020,7 +2064,17 @@ export default function App() {
   };
 
   const handleToggleHighlightNews = (postId: string) => {
-    const updated = posts.map((p) => (p.id === postId ? { ...p, breaking: !p.breaking } : p));
+    let triggeredStory: NewsFeedPost | undefined;
+    const updated = posts.map((p) => {
+      if (p.id === postId) {
+        const nextBreaking = !p.breaking;
+        if (nextBreaking) {
+          triggeredStory = { ...p, breaking: true };
+        }
+        return { ...p, breaking: nextBreaking };
+      }
+      return p;
+    });
     setPosts(updated);
     try {
       localStorage.setItem('app_news_posts_v2', JSON.stringify(updated));
@@ -2028,7 +2082,16 @@ export default function App() {
       // ignore
     }
     syncPostsToServer(updated);
-    setToastMessage('खबर का स्टेटस अपडेट हुआ!');
+    if (triggeredStory) {
+      triggerBreakingNewsAlert({
+        id: triggeredStory.id,
+        title: triggeredStory.title,
+        summary: triggeredStory.content?.slice(0, 100),
+      });
+      setToastMessage('🚨 ब्रेकिंग न्यूज़ अलर्ट जारी किया गया!');
+    } else {
+      setToastMessage('खबर का स्टेटस अपडेट हुआ!');
+    }
   };
 
   const handleEditNews = (editedPost: NewsFeedPost) => {
@@ -2088,41 +2151,9 @@ export default function App() {
             <span>{toastMessage}</span>
           </div>
         )}
-        <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-          <div className="text-xs text-amber-400 font-bold flex items-center gap-2">
-            <span>⚡</span>
-            <span>प्रीव्यू मोड सक्रिय</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (!currentUser) {
-                setCurrentUser(DEFAULT_REPORTER_USER);
-              }
-              try {
-                localStorage.setItem('is_onboarding_completed', 'true');
-              } catch {}
-              setShowAuthWelcomeScreen(false);
-              navigateToTab('home');
-            }}
-            className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs cursor-pointer shadow-md transition"
-          >
-            🏠 सीधे होम स्क्रीन पर जाएं
-          </button>
-        </div>
         <AuthWelcomeScreen
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
-          onSkipToHome={() => {
-            if (!currentUser) {
-              setCurrentUser(DEFAULT_REPORTER_USER);
-            }
-            try {
-              localStorage.setItem('is_onboarding_completed', 'true');
-            } catch {}
-            setShowAuthWelcomeScreen(false);
-            navigateToTab('home');
-          }}
           onLoginSuccess={(user) => {
             const isAdmin = isUserAdmin(user);
             setCurrentUser(user);
@@ -2207,26 +2238,144 @@ export default function App() {
         />
       </div>
 
-      {/* Blocked Account Warning Banner */}
-      {userSubscription?.isBlocked && (
-        <div className="w-full bg-rose-950/95 text-white border-b-2 border-rose-500 py-3 px-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm font-bold z-40 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-2.5 max-w-4xl mx-auto sm:mx-0">
-            <span className="text-xl">🚫</span>
-            <div>
-              <span className="font-black text-rose-300">खाता ब्लॉक है: </span>
-              <span>आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। आपकी सभी सेवाएं व टूल्स अस्थाई रूप से रोक दिए गए हैं।</span>
+      {/* Blocked Account Warning Banner & Lock Screen Modal (Module I) */}
+      {isUserBlocked && (
+        <>
+          <div className="w-full bg-rose-950/95 text-white border-b-2 border-rose-500 py-3 px-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm font-bold z-40 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center gap-2.5 max-w-4xl mx-auto sm:mx-0">
+              <span className="text-xl">🚫</span>
+              <div>
+                <span className="font-black text-rose-300">खाता ब्लॉक है: </span>
+                <span>आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। आपकी सभी सेवाएं व टूल्स अस्थाई रूप से रोक दिए गए हैं।</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigateToTab('support');
+              }}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
+            >
+              सहायता / सपोर्ट डेस्क
+            </button>
+          </div>
+
+          {/* Blocked User Lock Screen Modal (Module I) */}
+          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-slate-900 border-2 border-rose-600 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-5 animate-in zoom-in-95">
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-2xl bg-rose-950/80 border-2 border-rose-500 text-rose-400 mx-auto flex items-center justify-center text-3xl shadow-lg">
+                  🚫
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-white">
+                  खाता लॉक / ब्लॉक किया गया है
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 font-medium">
+                  आपकी प्रोफ़ाइल एडमिन द्वारा लॉक की गई है। कारण जानने या समीक्षा का अनुरोध करने के लिए नीचे दिए गए विकल्प का उपयोग करें।
+                </p>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>ईमेल आईडी:</span>
+                  <span className="font-mono text-white font-bold">{currentUser?.email || 'अनाम यूज़र'}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>स्थिति:</span>
+                  <span className="text-rose-400 font-black">अस्थाई रूप से निलंबित (Blocked)</span>
+                </div>
+              </div>
+
+              {blockReviewSubmitted ? (
+                <div className="p-4 bg-emerald-950/80 border border-emerald-500 rounded-2xl text-emerald-200 text-xs sm:text-sm font-bold text-center space-y-2">
+                  <div className="text-2xl">✅</div>
+                  <div>आपका समीक्षा अनुरोध एडमिन को भेज दिया गया है।</div>
+                  <div className="text-xs text-emerald-400 font-normal">एडमिन द्वारा समीक्षा के उपरांत आपका खाता सक्रिय किया जाएगा।</div>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!blockReviewMessage.trim()) {
+                      alert('कृपया समीक्षा अनुरोध का विवरण दर्ज करें!');
+                      return;
+                    }
+                    setIsSubmittingBlockReview(true);
+                    try {
+                      await fetch(getApiUrl('/api/support/requests'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          userId: currentUser?.userId || '',
+                          userName: currentUser?.name || 'संपादक',
+                          userEmail: currentUser?.email || '',
+                          userMobile: blockReviewMobile || '',
+                          message: `[ब्लॉक समीक्षा अनुरोध]: ${blockReviewMessage}`,
+                          reportType: 'review_blocked',
+                        }),
+                      });
+                      setBlockReviewSubmitted(true);
+                    } catch (err) {
+                      alert('अनुरोध भेजने में समस्या आई। कृपया पुनः प्रयास करें।');
+                    } finally {
+                      setIsSubmittingBlockReview(false);
+                    }
+                  }}
+                  className="space-y-3"
+                >
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      ब्लॉक समीक्षा अनुरोध विवरण / स्पष्टीकरण *
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={blockReviewMessage}
+                      onChange={(e) => setBlockReviewMessage(e.target.value)}
+                      placeholder="कृपया अपने चैनल का विवरण या अनुरोध लिखें..."
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-rose-400 focus:outline-hidden"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      संपर्क मोबाइल / व्हाट्सएप नंबर
+                    </label>
+                    <input
+                      type="tel"
+                      value={blockReviewMobile}
+                      onChange={(e) => setBlockReviewMobile(e.target.value)}
+                      placeholder="10 अंकों का मोबाइल नंबर"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-rose-400 focus:outline-hidden"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingBlockReview}
+                    className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shadow-lg cursor-pointer"
+                  >
+                    {isSubmittingBlockReview ? 'अनुरोध भेजा जा रहा है...' : 'ब्लॉक समीक्षा अनुरोध सबमिट करें'}
+                  </button>
+                </form>
+              )}
+
+              <div className="pt-2 border-t border-slate-800 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem('reporter_auth_session');
+                      sessionStorage.clear();
+                    } catch {}
+                    window.location.reload();
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  लॉगआउट करें
+                </button>
+              </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              navigateToTab('support');
-            }}
-            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition"
-          >
-            सहायता / सपोर्ट डेस्क
-          </button>
-        </div>
+        </>
       )}
 
       {/* Plan / Trial Expired Warning Banner (Part 7: Centered & Constrained to max-w-5xl) */}
@@ -2414,130 +2563,89 @@ export default function App() {
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
               <div className="lg:hidden w-full flex flex-col min-h-screen">
-                {/* 🔒 STICKY WORKSPACE HEADER: 65% Live Preview + 35% Editor Steps Selector */}
                 <div
                   id="mobile-studio-workspace"
-                  className="sticky top-0 z-30 w-full bg-slate-950/95 backdrop-blur-md border-b-2 border-slate-800 p-2 shadow-2xl transition-all"
+                  className="w-full bg-slate-950/95 p-2 shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
                 >
-                  <div className="w-full flex flex-col items-center max-w-lg mx-auto">
-                      {/* TOP ROW: 70% Live Preview + 30% Steps Selector List */}
-                      <div className="w-full flex items-start gap-2">
-                        {/* 4:5 Proportional Live Preview (70% Width) */}
-                        <div className="w-[70%] shrink-0 aspect-[4/5] rounded-xl overflow-hidden ring-1 ring-neutral-800 shadow-xl bg-black flex items-center justify-center relative">
-                          <CardPreview
-                            card={card}
-                            className="w-full h-full"
-                            showSafeZone={showSafeZone}
-                            onChange={handleUpdateCard}
-                          />
-                        </div>
+                  {/* 2. Preview canvas (4:5 or selected ratio) near top */}
+                  <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
+                    <CardPreview
+                      card={card}
+                      className="w-full h-full"
+                      showSafeZone={showSafeZone}
+                      onChange={handleUpdateCard}
+                    />
+                  </div>
 
-                        {/* Compact Editor Steps Selector List (30% Width) */}
-                        <div className="w-[30%] shrink-0 flex flex-col gap-1 overflow-y-auto h-[calc(70vw*1.25)] max-h-[420px] pr-0.5 scrollbar-thin">
-                          <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider mb-0.5 flex items-center gap-1 shrink-0">
-                            <span>🛠️</span>
-                            <span>स्टेप्स</span>
-                          </div>
+                  {/* 3. Compact Refresh and Draft controls */}
+                  <div className="flex items-center justify-between w-full max-w-[340px] sm:max-w-[400px] py-1.5 px-1">
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 shadow-sm" />
+                      <span className="text-red-400 font-black">लाइव कैनवास (4:5)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveDraft}
+                        className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 text-[11px] font-bold rounded-lg border border-amber-600/50 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        title="ड्राफ्ट सेव करें"
+                      >
+                        <Bookmark className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>ड्राफ्ट</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetCard}
+                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        title="नया सत्र / रीसेट"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                        <span>रिफ्रेश</span>
+                      </button>
+                    </div>
+                  </div>
 
-                          {STUDIO_STEPS.map((s) => {
-                            const isActive = activeStep === s.step;
-                            return (
-                              <button
-                                key={s.step}
-                                type="button"
-                                onClick={() => {
-                                  setActiveStep(s.step);
-                                  const el = document.getElementById('mobile-active-step-commands');
-                                  if (el) {
-                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                  }
-                                }}
-                                className={`w-full flex-1 max-h-[36px] py-1 px-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer text-left ${
-                                  isActive
-                                    ? "bg-amber-400 text-slate-950 shadow-md ring-1 ring-amber-300 font-black"
-                                    : "bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800"
-                                }`}
-                                title={s.title}
-                              >
-                                <span className="text-xs shrink-0">{s.icon}</span>
-                                <span className="truncate leading-tight">{s.name}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* FULL-WIDTH CONTROL BAR (100% Viewport Width Container, Edge-to-Edge) */}
-                      <div className="w-[100vw] relative left-[calc(-50vw+50%)] my-2 bg-white border-y border-slate-200/90 py-1.5 shadow-md">
-                        <div className="w-full max-w-lg mx-auto px-2 grid grid-cols-4 gap-1.5">
-                          {/* 1. JPG (Download) */}
+                  {/* 4. Horizontal left-to-right editor steps with progress */}
+                  <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-lg my-1">
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 px-1">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>ग्राफिक निर्माण (स्टेप {activeStep}/7)</span>
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border bg-amber-400/20 text-amber-300 border-amber-400/30">
+                        {Math.round((activeStep / 7) * 100)}% पूर्ण
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
+                      {STUDIO_STEPS.map((s) => {
+                        const isActive = activeStep === s.step;
+                        return (
                           <button
-                            type="button"
-                            onClick={() => handleDownload("jpeg")}
-                            disabled={downloading || (isActionLocked && !isCurrentCardBonus)}
-                            className={`py-2 px-1 font-black text-[10px] sm:text-xs rounded-lg border shadow-xs flex items-center justify-center gap-1 transition active:scale-95 ${
-                              isActionLocked && !isCurrentCardBonus
-                                ? 'bg-slate-200 text-slate-400 border-slate-300 opacity-60 cursor-not-allowed'
-                                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 border-amber-500 cursor-pointer'
-                            }`}
-                            title={isActionLocked && !isCurrentCardBonus ? 'ट्रायल समाप्त — डाउनलोड लॉक' : '1080x1350 True 4:5 JPG डाउनलोड'}
-                          >
-                            {isActionLocked && !isCurrentCardBonus ? <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />}
-                            <span className="truncate">{downloading ? "..." : "JPG"}</span>
-                          </button>
-
-                          {/* 2. Caption */}
-                          <button
+                            key={s.step}
                             type="button"
                             onClick={() => {
-                              if (isActionLocked && !isCurrentCardBonus) {
-                                showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
-                                setCurrentTab('profile');
-                              } else {
-                                setIsCaptionModalOpen(true);
+                              setActiveStep(s.step);
+                              const el = document.getElementById('mobile-active-step-commands');
+                              if (el) {
+                                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                               }
                             }}
-                            disabled={isActionLocked && !isCurrentCardBonus}
-                            className={`py-2 px-1 font-bold text-[10px] sm:text-xs rounded-lg border shadow-xs flex items-center justify-center gap-1 transition active:scale-95 ${
-                              isActionLocked && !isCurrentCardBonus
-                                ? 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-850 border-slate-300/80 cursor-pointer'
+                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                              isActive
+                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md'
+                                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
                             }`}
-                            title={isActionLocked && !isCurrentCardBonus ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन और सोशल शेयर'}
                           >
-                            {isActionLocked && !isCurrentCardBonus ? <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <Share2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
-                            <span className="truncate">कैप्शन</span>
+                            <span>{s.icon}</span>
+                            <span>{s.name}</span>
                           </button>
-
-                          {/* 3. Draft */}
-                          <button
-                            type="button"
-                            onClick={handleSaveDraft}
-                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                            title="ड्राफ्ट सेव करें"
-                            aria-label="ड्राफ्ट सेव करें"
-                          >
-                            <Bookmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span className="truncate">Draft</span>
-                          </button>
-
-                          {/* 4. Refresh */}
-                          <button
-                            type="button"
-                            onClick={handleResetCard}
-                            className="py-2 px-1 bg-slate-100 hover:bg-slate-200 text-slate-850 font-bold text-[10px] sm:text-xs rounded-lg border border-slate-300/80 shadow-xs flex items-center justify-center gap-1 cursor-pointer transition active:scale-95"
-                            title="रीसेट / नया ग्राफिक सेशन"
-                            aria-label="रीसेट करें"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span className="truncate">रिफ्रेश</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Distinct Horizontal Partition / Divider Line */}
-                      <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-700/80 shadow-sm" />
+                        );
+                      })}
+                    </div>
                   </div>
+
+                  {/* Distinct Horizontal Partition / Divider Line */}
+                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
                 </div>
 
                 {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}

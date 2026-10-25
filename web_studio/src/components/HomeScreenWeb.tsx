@@ -1507,9 +1507,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       )}
 
                       {/* Bottom Info on Image */}
+                      {/* Bottom Info on Image: Location & Time */}
                       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-white">
                         <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md font-bold text-amber-300 border border-amber-500/30 truncate max-w-[55%] text-[11px]">
-                          {post.categoryName}
+                          {post.location ? `📍 ${post.location}` : post.categoryName}
                         </span>
                         <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md text-[10px] text-slate-300">
                           {formatDynamicTime(post.timestamp, post.publishedTime)}
@@ -1517,51 +1518,45 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                     </div>
 
-                    {/* Meta info */}
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1.5">
-                      <Clock className="w-3 h-3 text-amber-400 shrink-0" />
-                      <span>{formatDynamicTime(post.timestamp, post.publishedTime)}</span>
-                      <span>•</span>
-                      <span className="text-amber-300 font-semibold truncate max-w-[40%]">
-                        {post.categoryName}
-                      </span>
-                      {canModerate && (
-                        <>
-                          <span>•</span>
-                          <span className="text-slate-400 font-medium truncate max-w-[35%]">
+                    {/* Meta info (duplicate time & location removed beneath highlighted card per Module L) */}
+                    {(canModerate || post.sourceUrl) && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-1.5 flex-wrap">
+                        {canModerate && (
+                          <span className="text-slate-400 font-medium truncate max-w-[45%]">
                             [चैनल: {cleanViewerChannel(post.sourceChannel)}]
                           </span>
-                          {post.sourceUrl && (
-                            <a
-                              href={post.sourceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-blue-300 text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 border border-slate-700"
-                              title="मूल वेबसाइट पर खबर देखें"
-                            >
-                              <ExternalLink className="w-2.5 h-2.5" />
-                              <span>वेबसाइट पर जाएँ</span>
-                            </a>
-                          )}
-                          {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                approveRssPost(post.id, post);
-                                setApprovedRssIds(getApprovedRssIds());
-                              }}
-                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
-                              title="इस RSS खबर को स्वीकृत करें"
-                            >
-                              <Check className="w-3 h-3" />
-                              <span>स्वीकृत करें</span>
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                        )}
+                        {canModerate && post.sourceUrl && <span>•</span>}
+                        {post.sourceUrl && (
+                          <a
+                            href={post.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-blue-300 text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 border border-slate-700"
+                            title="मूल वेबसाइट पर खबर देखें"
+                          >
+                            <ExternalLink className="w-2.5 h-2.5" />
+                            <span>वेबसाइट पर जाएँ</span>
+                          </a>
+                        )}
+                        {canModerate && (post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              approveRssPost(post.id, post);
+                              setApprovedRssIds(getApprovedRssIds());
+                            }}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
+                            title="इस RSS खबर को स्वीकृत करें"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>स्वीकृत करें</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {/* Headline */}
                     <div className="flex items-start justify-between gap-1 mb-1.5">

@@ -25,16 +25,13 @@ service cloud.firestore {
     }
 
     function isMasterAdminEmail() {
-      return isSignedIn() && (
-        request.auth.token.email == 'admin.ainewsmaker@gmail.com' ||
-        request.auth.token.email == 'breakingnewswala.com@gmail.com' ||
-        request.auth.token.email == 'editor.bnwtv@gmail.com'
-      );
+      return isSignedIn() && request.auth.token.email == 'breakingnewswala.com@gmail.com';
     }
 
     function isAdmin() {
       return isSignedIn() && (
         isMasterAdminEmail() ||
+        request.auth.token.email == 'admin.ainewsmaker@gmail.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }

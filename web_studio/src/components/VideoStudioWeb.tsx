@@ -2260,6 +2260,161 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       ? 'aspect-[4/3] max-w-[480px]'
       : 'aspect-square max-w-[420px]';
 
+  const renderAspectRatioAndFramesBox = () => (
+    <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-neutral-900 border-2 border-amber-500/60 rounded-2xl p-3 sm:p-5 space-y-3.5 shadow-xl mb-4">
+      {/* Row 1: Mode Switcher (Web only, hidden on Mobile per Section 1) */}
+      {!isMobile && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+              वीडियो मोड (Editing Mode):
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsReadyToUseMode(true);
+                showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) सक्रिय');
+              }}
+              className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                isReadyToUseMode
+                  ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md ring-2 ring-amber-300'
+                  : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+              }`}
+            >
+              <span>⚡ Quick Video Mode</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsReadyToUseMode(false);
+                showToast('🎬 स्टूडियो मोड (Studio Mode) सक्रिय');
+              }}
+              className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                !isReadyToUseMode
+                  ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
+                  : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+              }`}
+            >
+              <span>🎬 Studio Mode</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Row 2: Aspect Ratio Selector (Section 3: Single horizontal row: 9:16, 1:1, 4:5, 4:3) */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold text-slate-300 flex items-center gap-1.5">
+            <Film className="w-3.5 h-3.5 text-amber-400" />
+            <span>आस्पेक्ट रेशियो (Aspect Ratio):</span>
+          </span>
+          {isRatioLocked && (
+            <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
+              🔒 9:16 रील्स रेशियो लॉक
+            </span>
+          )}
+        </div>
+
+        {isRatioLocked ? (
+          <div className="p-2.5 bg-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-400 font-black text-xs">🔒 9:16 रील्स / शॉर्ट्स (लॉक)</span>
+              <span className="text-[10px] text-slate-400 hidden sm:inline">(रील्स वीडियो का रेशियो 9:16 पर सुरक्षित है)</span>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-black">
+              9:16
+            </span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            {[
+              { id: '9:16', label: '9:16', desc: 'रील्स / शॉर्ट्स' },
+              { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
+              { id: '4:5', label: '4:5', desc: 'फ़ीड / पोस्ट' },
+              { id: '4:3', label: '4:3', desc: 'क्लासिक टीवी' },
+            ].map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => {
+                  const newAspect = r.id as VideoAspect;
+                  setAspect(newAspect);
+                  const newCompatible = getCompatibleFrames({
+                    aspectRatio: newAspect,
+                    isOnly4_5,
+                    hasCoreCrop: Boolean(cropRegion),
+                  });
+                  if (newCompatible.length > 0 && !newCompatible.some((f) => f.id === selectedFrameId)) {
+                    setSelectedFrameId(newCompatible[0].id);
+                  }
+                  showToast(`रेशियो ${r.label} चुना गया`);
+                }}
+                className={`p-2 rounded-xl border text-center transition cursor-pointer ${
+                  aspect === r.id
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
+                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs font-black">{r.label}</div>
+                <div className="text-[9px] opacity-80 truncate">{r.desc}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Row 3: Frame Selection (Section 4: Placed immediately after Aspect Ratio selector) */}
+      <div className="space-y-2 pt-2.5 border-t border-slate-800">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold text-slate-300 flex items-center gap-1.5">
+            <Tv className="w-3.5 h-3.5 text-amber-400" />
+            <span>फ़्रेम डिज़ाइन ({compatibleFrames.length} कंपैटिबल फ़्रेम):</span>
+          </span>
+          <span className="text-[10px] text-amber-400 font-mono">
+            {aspect} के अनुकूल
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {compatibleFrames.map((f) => {
+            const isSel = selectedFrameId === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => {
+                  setSelectedFrameId(f.id);
+                  showToast(`✅ ${f.nameHi} चुना गया`);
+                }}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                  isSel
+                    ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-lg p-1 bg-slate-900 rounded-lg shrink-0">
+                  {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-amber-300 flex items-center justify-between">
+                    <span className="truncate">{f.nameHi}</span>
+                    {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                    {f.description}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="w-full max-w-full overflow-x-clip flex flex-col gap-4 pb-24 text-slate-900">
       {initialVideo && (
@@ -2276,6 +2431,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       )}
 
       <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6">
+        {/* Mobile: Aspect Ratio and Frames selection box immediately above Live Canvas (Module N) */}
+        <div className="w-full block lg:hidden">
+          {renderAspectRatioAndFramesBox()}
+        </div>
+
         {/* LEFT COLUMN (42%): Live Video Canvas with Sticky Jacket Overlay */}
         <aside className="w-full lg:w-[42%] lg:sticky lg:top-[72px] self-start max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 overflow-y-auto">
           <div className="w-full bg-black p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col items-center">
@@ -2962,161 +3122,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             onChange={handleCustomAudioUpload}
           />
 
-          {/* ============================================================ */}
-          {/* TOP BAR: MODE SWITCHER & PRIMARY RATIO SELECTOR             */}
-          {/* Available on both Mobile & Desktop (Part D.6, E.7, F.13)     */}
-          {/* ============================================================ */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-neutral-900 border-2 border-amber-500/60 rounded-2xl p-3 sm:p-5 space-y-3.5 shadow-xl mb-4">
-            {/* Row 1: Mode Switcher (Web only, hidden on Mobile per Section 1) */}
-            {!isMobile && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-black uppercase tracking-wider text-amber-300">
-                    वीडियो मोड (Editing Mode):
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsReadyToUseMode(true);
-                      showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) सक्रिय');
-                    }}
-                    className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      isReadyToUseMode
-                        ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md ring-2 ring-amber-300'
-                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    <span>⚡ Quick Video Mode</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsReadyToUseMode(false);
-                      showToast('🎬 स्टूडियो मोड (Studio Mode) सक्रिय');
-                    }}
-                    className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      !isReadyToUseMode
-                        ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
-                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    <span>🎬 Studio Mode</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Row 2: Aspect Ratio Selector (Section 3: Single horizontal row: 9:16, 1:1, 4:5, 4:3) */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                  <Film className="w-3.5 h-3.5 text-amber-400" />
-                  <span>आस्पेक्ट रेशियो (Aspect Ratio):</span>
-                </span>
-                {isRatioLocked && (
-                  <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
-                    🔒 9:16 रील्स रेशियो लॉक
-                  </span>
-                )}
-              </div>
-
-              {isRatioLocked ? (
-                <div className="p-2.5 bg-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-amber-400 font-black text-xs">🔒 9:16 रील्स / शॉर्ट्स (लॉक)</span>
-                    <span className="text-[10px] text-slate-400 hidden sm:inline">(रील्स वीडियो का रेशियो 9:16 पर सुरक्षित है)</span>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-black">
-                    9:16
-                  </span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
-                  {[
-                    { id: '9:16', label: '9:16', desc: 'रील्स / शॉर्ट्स' },
-                    { id: '1:1', label: '1:1', desc: 'स्क्वायर' },
-                    { id: '4:5', label: '4:5', desc: 'फ़ीड / पोस्ट' },
-                    { id: '4:3', label: '4:3', desc: 'क्लासिक टीवी' },
-                  ].map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => {
-                        const newAspect = r.id as VideoAspect;
-                        setAspect(newAspect);
-                        const newCompatible = getCompatibleFrames({
-                          aspectRatio: newAspect,
-                          isOnly4_5,
-                          hasCoreCrop: Boolean(cropRegion),
-                        });
-                        if (newCompatible.length > 0 && !newCompatible.some((f) => f.id === selectedFrameId)) {
-                          setSelectedFrameId(newCompatible[0].id);
-                        }
-                        showToast(`रेशियो ${r.label} चुना गया`);
-                      }}
-                      className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                        aspect === r.id
-                          ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
-                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="text-xs font-black">{r.label}</div>
-                      <div className="text-[9px] opacity-80 truncate">{r.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Row 3: Frame Selection (Section 4: Placed immediately after Aspect Ratio selector) */}
-            <div className="space-y-2 pt-2.5 border-t border-slate-800">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                  <Tv className="w-3.5 h-3.5 text-amber-400" />
-                  <span>फ़्रेम डिज़ाइन ({compatibleFrames.length} कंपैटिबल फ़्रेम):</span>
-                </span>
-                <span className="text-[10px] text-amber-400 font-mono">
-                  {aspect} के अनुकूल
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {compatibleFrames.map((f) => {
-                  const isSel = selectedFrameId === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFrameId(f.id);
-                        showToast(`✅ ${f.nameHi} चुना गया`);
-                      }}
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
-                        isSel
-                          ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="text-lg p-1 bg-slate-900 rounded-lg shrink-0">
-                        {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-black text-amber-300 flex items-center justify-between">
-                          <span className="truncate">{f.nameHi}</span>
-                          {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                          {f.description}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Desktop Aspect Ratio and Frames Box (hidden on mobile per Module N) */}
+          <div className="hidden lg:block">
+            {renderAspectRatioAndFramesBox()}
           </div>
 
           {/* ============================================================ */}

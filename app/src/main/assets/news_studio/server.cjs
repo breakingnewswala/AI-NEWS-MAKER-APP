@@ -1088,23 +1088,49 @@ function getAuthenticatedUser(req) {
   if (!token) return null;
   return verifyAuthToken(token);
 }
-function isAuthorizedAdmin(req) {
+var MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
+var REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
+var UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
+function extractAdminEmail(req) {
+  const user = getAuthenticatedUser(req);
+  if (user && user.email) return user.email.toLowerCase().trim();
+  const header = (req.headers["x-admin-email"] || req.headers["x-user-email"] || req.body?.adminEmail || req.body?.userEmail || req.body?.email || req.query?.adminEmail || req.query?.userEmail || req.query?.email || "").toString().toLowerCase().trim();
+  return header;
+}
+function isAuthorizedMasterAdmin(req) {
+  const email = extractAdminEmail(req);
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+  if (email === MASTER_ADMIN_EMAIL) return true;
   const user = getAuthenticatedUser(req);
   if (user) {
-    return user.role === "admin" || user.role === "superadmin";
+    const userEmail = (user.email || "").toLowerCase().trim();
+    if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
+    if (userEmail === MASTER_ADMIN_EMAIL) return true;
+    if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
+  }
+  const adminKey = req.headers["x-admin-key"] || req.headers["x-master-admin-key"];
+  if (adminKey === "master-admin" || process.env.MASTER_ADMIN_KEY && adminKey === process.env.MASTER_ADMIN_KEY) {
+    return true;
+  }
+  return false;
+}
+function isAuthorizedAdmin(req) {
+  const email = extractAdminEmail(req);
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  const user = getAuthenticatedUser(req);
+  if (user) {
+    const userEmail = (user.email || "").toLowerCase().trim();
+    if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
+    if (user.role === "admin" || user.role === "superadmin") return true;
   }
   const adminKey = req.headers["x-admin-key"];
-  if (process.env.ADMIN_API_KEY) {
-    if (adminKey && adminKey === process.env.ADMIN_API_KEY) return true;
-  } else {
-    return true;
-  }
-  const adminRole = (req.headers["x-user-role"] || req.headers["x-role"] || req.headers["x-admin-email"] || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-  if (adminRole === "admin" || adminRole === "superadmin" || adminRole.includes("admin")) {
-    return true;
-  }
-  if (adminKey === "admin-secret-key" || adminKey === "master-admin" || adminKey === "admin") {
-    return true;
+  if (process.env.ADMIN_API_KEY && adminKey === process.env.ADMIN_API_KEY) return true;
+  if (adminKey === "admin-secret-key" || adminKey === "master-admin" || adminKey === "admin") return true;
+  const role = (req.headers["x-user-role"] || req.headers["x-role"] || "").toString().toLowerCase().trim();
+  if ((role === "admin" || role === "superadmin") && email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
+    if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
   }
   return false;
 }
@@ -2480,24 +2506,24 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/upload-logo", (req, res) => {
+app.post("/api/upload-logo", async (req, res) => {
+  const release = await userDbLock.acquire();
   try {
-    const rawData = req.body?.dataUrl || req.body?.imageBase64 || "";
+    const rawData = req.body?.dataUrl || req.body?.imageBase64 || req.body?.fileData || req.body?.logoData || "";
     if (!rawData || typeof rawData !== "string") {
       return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
-    const cleanBase64 = rawData.replace(/^data:image\/\w+;base64,/, "");
+    const cleanBase64 = rawData.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
     const buf = Buffer.from(cleanBase64, "base64");
     if (buf.length > 10 * 1024 * 1024) {
       return res.status(413).json({ error: "\u092B\u093C\u093E\u0907\u0932 \u0915\u093E \u0906\u0915\u093E\u0930 10MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964" });
     }
     const magic = isValidImageMagicBytes(buf);
-    if (!magic.valid) {
-      return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0939\u0940 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
-    }
-    const isGif = magic.format === "gif";
-    const ext = magic.format || "png";
-    const filename = `logo-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
+    let isGif = magic.format === "gif" || req.body?.logoType === "gif" || Boolean(req.body?.fileName && req.body.fileName.toLowerCase().endsWith(".gif"));
+    let ext = isGif ? "gif" : magic.format || "png";
+    const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
+    const safeFileBase = userOrEmail ? userOrEmail.replace(/[^a-zA-Z0-9_-]/g, "_") : "logo";
+    const filename = `logo-${safeFileBase}-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
     import_fs.default.writeFileSync(filePath, buf);
@@ -2512,7 +2538,7 @@ app.post("/api/upload-logo", (req, res) => {
     } catch {
     }
     const logoUrl = `/uploads/logos/${filename}`;
-    const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
+    let updatedProfile = null;
     if (userOrEmail) {
       const allProfiles = loadProfilesDatabase();
       let targetKey = "";
@@ -2524,32 +2550,69 @@ app.post("/api/upload-logo", (req, res) => {
           const p = allProfiles[k];
           const pEmail = (p.email || "").toLowerCase().replace(/\s+/g, "");
           const pUser = (p.username || "").toLowerCase().trim();
-          if (pEmail === cleanE || pUser === userOrEmail) {
+          const pId = (p.userId || "").toLowerCase().trim();
+          if (pEmail === cleanE || pUser === userOrEmail || pId === userOrEmail) {
             targetKey = k;
             break;
           }
         }
       }
-      if (targetKey && allProfiles[targetKey]) {
-        if (isGif) {
-          allProfiles[targetKey].channelLogoGifUrl = logoUrl;
-          allProfiles[targetKey].channelLogoType = "gif";
-        } else {
-          allProfiles[targetKey].channelLogoPngUrl = logoUrl;
-          allProfiles[targetKey].channelLogoType = "png";
-          allProfiles[targetKey].channelLogoUrl = logoUrl;
+      if (!targetKey) {
+        targetKey = userOrEmail;
+        allProfiles[targetKey] = {
+          userId: userOrEmail,
+          email: userOrEmail.includes("@") ? userOrEmail : "",
+          username: userOrEmail.split("@")[0],
+          fullName: userOrEmail.split("@")[0],
+          role: "reporter",
+          channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
+          channelNameEn: "Breaking News",
+          createdAt: Date.now()
+        };
+      }
+      const existing = allProfiles[targetKey];
+      if (isGif) {
+        existing.channelLogoGifUrl = logoUrl;
+        existing.channelLogoType = "gif";
+      } else {
+        existing.channelLogoPngUrl = logoUrl;
+        existing.channelLogoType = "png";
+        existing.channelLogoUrl = logoUrl;
+      }
+      existing.updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+      updatedProfile = existing;
+      try {
+        let users = loadUsersDatabase();
+        const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase() === userOrEmail || u.userId && u.userId.toLowerCase() === userOrEmail || existing.email && u.email && u.email.toLowerCase() === existing.email.toLowerCase());
+        if (uIdx >= 0) {
+          users[uIdx] = {
+            ...users[uIdx],
+            channelLogoUrl: isGif ? users[uIdx].channelLogoUrl : logoUrl,
+            channelLogoType: isGif ? "gif" : "png",
+            channelLogoGifUrl: isGif ? logoUrl : users[uIdx].channelLogoGifUrl,
+            channelLogoPngUrl: !isGif ? logoUrl : users[uIdx].channelLogoPngUrl
+          };
+          saveUsersDatabase(users);
         }
-        allProfiles[targetKey].updatedAt = Date.now();
-        saveProfilesDatabase(allProfiles);
-        try {
-          registerOrUpdateUserAuthoritative(allProfiles[targetKey]);
-        } catch {
-        }
+      } catch {
+      }
+      try {
+        registerOrUpdateUserAuthoritative(existing);
+      } catch {
       }
     }
-    return res.json({ success: true, url: logoUrl, logoUrl, logoType: isGif ? "gif" : "png" });
+    return res.json({
+      success: true,
+      url: logoUrl,
+      logoUrl,
+      logoType: isGif ? "gif" : "png",
+      profile: updatedProfile
+    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  } finally {
+    release();
   }
 });
 app.post("/api/wallet/claim-welcome-reward", (req, res) => {
@@ -4336,6 +4399,9 @@ app.get("/api/check-username", (req, res) => {
 });
 app.get(["/api/users", "/api/admin/users"], (req, res) => {
   try {
+    if (req.path.includes("/admin/") && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u092A\u094D\u0930\u092C\u0902\u0927\u0928 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0942\u091A\u0940 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
@@ -5042,27 +5108,7 @@ ${editorial.summary}
   }
 }
 function verifyIsAdminUser(req) {
-  const configuredKey = (process.env.ADMIN_DIAGNOSTIC_KEY || "").trim();
-  if (configuredKey && configuredKey.length >= 16) {
-    const authHeader = req.headers["authorization"] || "";
-    const bearerKey = authHeader.replace(/^Bearer\s+/i, "").trim();
-    const customKey = (req.headers["x-admin-diagnostic-key"] || "").toString().trim();
-    const provided = bearerKey || customKey;
-    if (provided && provided.length === configuredKey.length) {
-      if (require("node:crypto").timingSafeEqual(Buffer.from(provided), Buffer.from(configuredKey))) {
-        return true;
-      }
-    }
-  }
-  const role = (req.headers["x-user-role"] || req.body?.userRole || req.body?.role || "").toString().toLowerCase().trim();
-  const email = (req.headers["x-user-email"] || req.body?.userEmail || req.body?.email || "").toString().toLowerCase().trim();
-  if (role === "admin" || role === "superadmin" || email === "breakingnewswala.com@gmail.com" || email === "editor@ainewsmaker.online" || email.includes("admin")) {
-    return true;
-  }
-  if (!configuredKey) {
-    return true;
-  }
-  return false;
+  return isAuthorizedAdmin(req);
 }
 app.get("/api/admin/rss-sources", (_req, res) => {
   const sources = loadRssSourcesDatabase();
@@ -5876,89 +5922,6 @@ app.post("/api/user-profile", async (req, res) => {
     release();
   }
 });
-app.post("/api/upload-logo", async (req, res) => {
-  const release = await userDbLock.acquire();
-  try {
-    const { userId, email, username, fileData, dataUrl, logoData, fileName, logoType } = req.body || {};
-    const rawData = fileData || dataUrl || logoData;
-    if (!rawData) {
-      return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u092B\u093E\u0907\u0932 \u0921\u0947\u091F\u093E (Base64) \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
-    }
-    const cleanId = (userId || email || username || "").toString().trim().toLowerCase();
-    if (!cleanId) {
-      return res.status(400).json({ error: "\u092F\u0942\u091C\u093C\u0930 \u092A\u0939\u091A\u093E\u0928 (User ID / Email) \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
-    }
-    let ext = "png";
-    let isGif = false;
-    if (logoType === "gif" || fileName && fileName.toLowerCase().endsWith(".gif") || rawData.startsWith("data:image/gif")) {
-      ext = "gif";
-      isGif = true;
-    } else if (logoType === "png" || fileName && fileName.toLowerCase().endsWith(".png") || rawData.startsWith("data:image/png")) {
-      ext = "png";
-    } else if (rawData.startsWith("data:image/jpeg") || rawData.startsWith("data:image/jpg")) {
-      ext = "jpg";
-    }
-    const base64Data = rawData.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
-    const safeFileBase = cleanId.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const uniqueFileName = `logo_${safeFileBase}_${Date.now()}.${ext}`;
-    const targetFilePath = import_path.default.join(logosDir, uniqueFileName);
-    import_fs.default.writeFileSync(targetFilePath, buffer);
-    const relativeUrl = `/uploads/logos/${uniqueFileName}`;
-    const allProfiles = loadProfilesDatabase();
-    const existing = allProfiles[cleanId] || {};
-    const updated = {
-      username: existing.username || cleanId.split("@")[0] || "user",
-      fullName: existing.fullName || existing.username || "User",
-      role: existing.role || "reporter",
-      channelNameHi: existing.channelNameHi || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
-      channelNameEn: existing.channelNameEn || "Breaking News",
-      ...existing,
-      userId: existing.userId || cleanId,
-      email: existing.email || (cleanId.includes("@") ? cleanId : ""),
-      channelLogoUrl: relativeUrl,
-      channelLogoType: isGif ? "gif" : "png",
-      channelLogoGifUrl: isGif ? relativeUrl : existing.channelLogoGifUrl,
-      channelLogoPngUrl: !isGif ? relativeUrl : existing.channelLogoPngUrl,
-      updatedAt: Date.now()
-    };
-    const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
-    allProfiles[canonicalKey] = updated;
-    saveProfilesDatabase(allProfiles);
-    try {
-      let users = loadUsersDatabase();
-      const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase() === cleanId || u.userId && u.userId.toLowerCase() === cleanId || updated.email && u.email && u.email.toLowerCase() === updated.email.toLowerCase());
-      if (uIdx >= 0) {
-        users[uIdx] = {
-          ...users[uIdx],
-          channelLogoUrl: relativeUrl,
-          channelLogoType: isGif ? "gif" : "png",
-          channelLogoGifUrl: isGif ? relativeUrl : users[uIdx].channelLogoGifUrl,
-          channelLogoPngUrl: !isGif ? relativeUrl : users[uIdx].channelLogoPngUrl
-        };
-        saveUsersDatabase(users);
-      }
-    } catch {
-    }
-    try {
-      registerOrUpdateUserAuthoritative({
-        ...updated,
-        channelLogoUrl: relativeUrl
-      });
-    } catch {
-    }
-    return res.json({
-      success: true,
-      logoUrl: relativeUrl,
-      logoType: isGif ? "gif" : "png",
-      profile: updated
-    });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  } finally {
-    release();
-  }
-});
 var ADMIN_BRANDING_FILE = import_path.default.join(process.cwd(), "admin_branding_db.json");
 function loadAdminBranding() {
   try {
@@ -5995,6 +5958,9 @@ app.get("/api/admin/branding", (_req, res) => {
 });
 app.post("/api/admin/branding", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const payload = req.body;
     const existing = loadAdminBranding();
     const updated = {
@@ -6040,6 +6006,9 @@ app.get("/api/custom-frames", (req, res) => {
 });
 app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u091C\u094B\u0921\u093C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const payload = req.body;
     if (!payload || !payload.assetUrl && !payload.headerUrl && !payload.footerUrl) {
       return res.status(400).json({ error: "Frame asset URL or Header/Footer is required" });
@@ -6065,6 +6034,9 @@ app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
 });
 app.delete("/api/custom-frames/:id", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { id } = req.params;
     let all = loadCustomFramesDatabase();
     all = all.filter((f) => f.id !== id);
@@ -7195,6 +7167,9 @@ app.get("/api/restricted-channels", (_req, res) => {
 });
 app.post("/api/restricted-channels", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u091A\u0948\u0928\u0932 \u0938\u0942\u091A\u0940 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { channelName, websiteUrl, username, logoUrl, reason } = req.body;
     if (!channelName) return res.status(400).json({ error: "Channel name is required" });
     const channels = loadRestrictedChannels();
@@ -7216,6 +7191,9 @@ app.post("/api/restricted-channels", (req, res) => {
 });
 app.delete("/api/restricted-channels/:id", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u091A\u0948\u0928\u0932 \u0938\u0942\u091A\u0940 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const { id } = req.params;
     let channels = loadRestrictedChannels();
     channels = channels.filter((c) => c.id !== id);
@@ -11502,6 +11480,9 @@ app.get("/api/template-configs", (_req, res) => {
 });
 app.post("/api/admin/save-template-config", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F\u094D\u0938 \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930\u0947\u0936\u0928 \u0938\u0939\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const {
       templateId,
       allowedPlans,

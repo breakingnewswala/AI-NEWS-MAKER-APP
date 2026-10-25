@@ -52,8 +52,10 @@ import {
   Award,
   Loader2,
   Music,
+  User,
 } from 'lucide-react';
 import {
+  isUserMasterAdmin,
   isUserSuperAdmin,
   isEffectiveSuperAdmin,
   syncCloudUsers,
@@ -248,7 +250,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     }
   };
 
-  const isSuperAdminUser = isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
+  const isSuperAdminUser = isUserMasterAdmin(effectiveCurrentUser) || isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
+
+  // Module C Security: Regular admin cannot view or access the 5 restricted tabs
+  useEffect(() => {
+    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'users' || subTab === 'restricted')) {
+      setSubTab('');
+    }
+  }, [isSuperAdminUser, subTab]);
 
   // Restricted Channels Management State
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
@@ -934,10 +943,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   // Branding Editor Handlers
   
-  const handleDeleteUser = (email: string, name?: string) => {
-    if (window.confirm(`क्या आप निश्चित रूप से यूज़र "${name || email}" का प्रोफाइल/अकाउंट डिलीट करना चाहते हैं?`)) {
+  const handleDeleteUser = async (email: string, name?: string, userId?: string) => {
+    if (window.confirm(`क्या आप निश्चित रूप से यूज़र "${name || email}" का प्रोफाइल/अकाउंट हमेशा के लिए डिलीट करना चाहते हैं?`)) {
       adminDeleteUserRecord(email);
-      adminDeleteCloudUser(email).catch(() => {});
+      await adminDeleteCloudUser(email, userId).catch(() => {});
       setPlanUsers(getPlanUsers());
     }
   };
@@ -1129,7 +1138,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                <span>1</span>
+                <User className="w-5 h-5 text-slate-950" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -1170,7 +1179,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                <span>2</span>
+                <Crown className="w-5 h-5 text-slate-950" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -1262,8 +1271,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 3: प्लान्स मैनेजर (PLANS MANAGER)                                    */}
+        {/* STEP 3: प्लान्स मैनेजर (PLANS MANAGER) - Master Admin Only                 */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'plans' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1272,7 +1282,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>3</span>
+                <CreditCard className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -1483,11 +1493,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
+        )}
 
 
         {/* ========================================================================= */}
-        {/* STEP 4: टेम्पलेट मैनेजर (TEMPLATE MANAGER)                                */}
+        {/* STEP 4: टेम्पलेट मैनेजर (TEMPLATE MANAGER) - Master Admin Only             */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'templates' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1496,7 +1508,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>4</span>
+                <Layers className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -1520,6 +1532,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
+        )}
 
         {/* ========================================================================= */}
         {/* STEP 5: Music Library / म्यूजिक लाइब्रेरी                                 */}
@@ -1532,7 +1545,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                <span>5</span>
+                <Music className="w-5 h-5 text-slate-950" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -1559,8 +1572,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 6: प्रोमो कोड्स मैनेजर (PROMO CODES MANAGER)                          */}
+        {/* STEP 6: प्रोमो कोड्स मैनेजर (PROMO CODES MANAGER) - Master Admin Only       */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'promocodes' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1569,7 +1583,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>6</span>
+                <Ticket className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -1940,11 +1954,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
+        )}
 
 
         {/* ========================================================================= */}
-        {/* STEP 7: यूजर्स मैनेजर (USERS MANAGER)                                      */}
+        {/* STEP 7: यूज़र्स प्रबंधन (USERS MANAGER) - Master Admin Only                */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'users' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1953,11 +1969,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>7</span>
+                <Users className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  7. यूजर्स मैनेजर
+                  7. यूज़र्स प्रबंधन
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर (यूज़र डेटा संपादन व सुरक्षा)
@@ -2751,10 +2767,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                 <button
                                   type="button"
                                   disabled={isSuper}
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (window.confirm(`क्या आप यूजर "${u.name || u.email}" का प्रोफाइल व पूरा डेटाबेस हमेशा के लिए हटाना चाहते हैं?`)) {
                                       adminDeleteUserRecord(u.email);
-                                      adminDeleteCloudUser(u.userId);
+                                      await adminDeleteCloudUser(u.email, u.userId).catch(() => {});
                                       setPlanUsers(getPlanUsers());
                                     }
                                   }}
@@ -3191,10 +3207,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+        </div>
         )}
-      </div>
 
 
         {/* ========================================================================= */}
@@ -3208,15 +3225,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                <span>8</span>
+                <Coins className="w-5 h-5 text-slate-950" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm sm:text-base font-black text-white block truncate">
-                    8. बोनस रिवॉर्ड्स व क्लेम रिव्यू मैनेजर
+                    8. बोनस पुरस्कार व क्लेम रिव्यू प्रबंधन
                   </span>
                   <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
-                    Rewards & Claims
+                    पुरस्कार व क्लेम्स
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
@@ -3556,7 +3573,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>9</span>
+                <Rss className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -4206,7 +4223,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>10</span>
+                <Globe className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -4495,8 +4512,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 11: प्रतिबंधित चैनल सुरक्षा सूची (RESTRICTED CHANNELS SECURITY LIST) */}
+        {/* STEP 11: प्रतिबंधित चैनल सुरक्षा सूची (RESTRICTED CHANNELS) - Master Admin Only */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -4505,7 +4523,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>11</span>
+                <ShieldAlert className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -4841,6 +4859,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
+        )}
 
         {/* ========================================================================= */}
         {/* STEP 12: सहायता एवं नीतियाँ (HELP & POLICIES)                               */}
@@ -4853,7 +4872,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <span>12</span>
+                <ShieldCheck className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
@@ -4876,54 +4895,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <HelpAndPoliciesView />
             </div>
           )}
-        </div>
-
-        {/* PERMANENT ADMIN SYSTEM CONTROL & APK DOWNLOAD AT BOTTOM OF CONTROL PANEL */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-4 my-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold">
-                ⚙️
-              </div>
-              <div>
-                <h3 className="text-base font-black text-white flex items-center gap-2">
-                  एडमिन सिस्टम टूल्स व एक्शन बटन्स (Admin Control Actions)
-                </h3>
-                <p className="text-xs text-slate-400">
-                  गूगल शीट यूज़र्स सिंक व डेटाबेस बैकअप टूल
-                </p>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 bg-amber-500 text-slate-950 text-xs font-black rounded-lg">
-              ADMIN ONLY
-            </span>
-          </div>
-
-          <div className="pt-2">
-            {/* Google Sheets Users Sync Button */}
-            <button
-              type="button"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('ai_news_open_users_sheet_modal'));
-              }}
-              className="w-full p-4 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 rounded-xl flex items-center justify-between gap-3 group cursor-pointer transition shadow-lg"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold">
-                  📊
-                </div>
-                <div>
-                  <div className="text-xs sm:text-sm font-black text-white group-hover:text-emerald-300 transition">
-                    "एआई न्यूज़ मेकर ऐप की गूगल शीट" ऑटो-सिंक
-                  </div>
-                  <div className="text-[11px] sm:text-xs text-emerald-200/80">
-                    यूज़र्स डेटाबेस ऑटो-सिंक व गूगल शीट सेटिंग्स
-                  </div>
-                </div>
-              </div>
-              <FileSpreadsheet className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition" />
-            </button>
-          </div>
         </div>
     </div>
   );

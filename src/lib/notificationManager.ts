@@ -174,3 +174,189 @@ export function getNotificationPermissionStatus(): NotificationPermission | 'uns
   }
   return Notification.permission;
 }
+
+// ==========================================
+// SOUND CONTROLS & WEB AUDIO API SYNTHESIZER
+// ==========================================
+export interface AppSoundSettings {
+  soundEnabled: boolean;
+  normalVolume: number;   // 0.0 to 1.0
+  breakingVolume: number; // 0.0 to 1.0
+}
+
+const SOUND_SETTINGS_KEY = 'ai_news_sound_settings_v1';
+const DEFAULT_SOUND_SETTINGS: AppSoundSettings = {
+  soundEnabled: true,
+  normalVolume: 0.6,
+  breakingVolume: 0.9,
+};
+
+export function getSoundSettings(): AppSoundSettings {
+  if (typeof window === 'undefined') return DEFAULT_SOUND_SETTINGS;
+  try {
+    const raw = localStorage.getItem(SOUND_SETTINGS_KEY);
+    if (!raw) return DEFAULT_SOUND_SETTINGS;
+    const parsed = JSON.parse(raw);
+    return {
+      soundEnabled: parsed.soundEnabled !== undefined ? Boolean(parsed.soundEnabled) : true,
+      normalVolume: typeof parsed.normalVolume === 'number' ? Math.max(0, Math.min(1, parsed.normalVolume)) : 0.6,
+      breakingVolume: typeof parsed.breakingVolume === 'number' ? Math.max(0, Math.min(1, parsed.breakingVolume)) : 0.9,
+    };
+  } catch {
+    return DEFAULT_SOUND_SETTINGS;
+  }
+}
+
+export function saveSoundSettings(settings: Partial<AppSoundSettings>): AppSoundSettings {
+  const current = getSoundSettings();
+  const updated: AppSoundSettings = { ...current, ...settings };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(SOUND_SETTINGS_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('ai_news_sound_settings_updated', { detail: updated }));
+    } catch {}
+  }
+  return updated;
+}
+
+// Web Audio API Audio Context Helper
+let audioCtx: AudioContext | null = null;
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtxClass) return null;
+    if (!audioCtx || audioCtx.state === 'closed') {
+      audioCtx = new AudioCtxClass();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Standard notification ping (subtle, clean 880Hz -> 1320Hz bell)
+ */
+export function playNormalNotificationSound(): void {
+  const settings = getSoundSettings();
+  if (!settings.soundEnabled || settings.normalVolume <= 0) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
+
+    gain.gain.setValueAtTime(settings.normalVolume * 0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.25);
+  } catch {}
+}
+
+/**
+ * Louder Breaking News Alert Tone (Multi-tone urgent newsroom chime)
+ */
+export function playBreakingNewsAlertSound(): void {
+  const settings = getSoundSettings();
+  if (!settings.soundEnabled || settings.breakingVolume <= 0) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const notes = [
+      { freq: 587.33, start: 0.00, dur: 0.14 }, // D5
+      { freq: 880.00, start: 0.12, dur: 0.16 }, // A5
+      { freq: 1174.66, start: 0.26, dur: 0.35 }, // D6
+    ];
+
+    notes.forEach((n) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(n.freq, now + n.start);
+
+      const targetGain = settings.breakingVolume * 0.35;
+      gain.gain.setValueAtTime(targetGain, now + n.start);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.start + n.dur);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + n.start);
+      osc.stop(now + n.start + n.dur);
+    });
+  } catch {}
+}
+
+// ==========================================
+// BREAKING NEWS ALERT DEDUPLICATION & TRIGGER
+// ==========================================
+const SEEN_BREAKING_KEY = 'app_seen_breaking_news_ids_v1';
+
+function getSeenBreakingIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_BREAKING_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markBreakingIdSeen(id: string): void {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const seen = getSeenBreakingIds();
+    seen.add(id);
+    const arr = Array.from(seen).slice(-100); // keep last 100
+    localStorage.setItem(SEEN_BREAKING_KEY, JSON.stringify(arr));
+  } catch {}
+}
+
+/**
+ * Triggers Breaking News Alert if story was not previously alerted
+ */
+export function triggerBreakingNewsAlert(story: { id: string; title: string; summary?: string }): boolean {
+  if (!story || !story.id) return false;
+  const seen = getSeenBreakingIds();
+  if (seen.has(story.id)) {
+    return false; // Deduplicated!
+  }
+
+  markBreakingIdSeen(story.id);
+
+  // 1. Play louder Breaking News alert chime
+  playBreakingNewsAlertSound();
+
+  // 2. Add high-priority unread notification
+  addNotification({
+    id: `breaking_${story.id}`,
+    title: `🚨 ब्रेकिंग न्यूज़: ${story.title}`,
+    message: story.summary || 'प्रमुख समाचार डेस्क से ताज़ा अपडेट प्राप्त हुआ है।',
+    time: 'अभी',
+    type: 'news',
+    linkTab: 'home',
+    unread: true,
+  });
+
+  return true;
+}
+
