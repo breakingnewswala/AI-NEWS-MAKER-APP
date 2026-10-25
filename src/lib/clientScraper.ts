@@ -1,6 +1,6 @@
 // Client-side resilient news scraper for URL/Link processing in AI News Tools
 // Works seamlessly in static deployments (GitHub Pages, Firebase Hosting, Vercel)
-// and handles paywalled/Cloudflare-protected news sites via edge reader fallback.
+// and handles news sites via multi-tier edge reader and CORS proxy fallbacks.
 
 export interface ScrapedNewsArticle {
   title: string;
@@ -15,34 +15,23 @@ export interface ScrapedNewsArticle {
 function cleanExtractedTitle(title: string): string {
   if (!title) return '';
   return title
-    .replace(/\s*[|\-–—:]\s*(Dainik Bhaskar|दैनिक भास्कर|Amar Ujala|अमर उजाला|NDTV Khabar|NDTV India|NDTV|Aaj Tak|आज तक|News18|Patrika|पत्रिका|Navbharat Times|नवभारत टाइम्स|Hindustan|Live Hindustan|BBC News हिंदी|BBC Hindi|ABP News|Zee News|Jagran|दैनिक जागरण).*$/iu, '')
+    .replace(/\s*[|\-–—:]\s*(Dainik Bhaskar|दैनिक भास्कर|Amar Ujala|अमर उजाला|NDTV Khabar|NDTV India|NDTV|Aaj Tak|आज तक|News18|Patrika|पत्रिका|Navbharat Times|नवभारत टाइम्स|Hindustan|Live Hindustan|BBC News हिंदी|BBC Hindi|ABP News|Zee News|Jagran|दैनिक जागरण|Firstpost|The Hindu|Indian Express).*$/iu, '')
     .replace(/^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|ब्रेकिंग न्यूज|headline:|news:)\s*[:\-\s]*/i, '')
+    .replace(/^ताज़ा समाचार\s*[:\-\s]*/i, '')
     .trim();
 }
 
-function extractSlugKeywords(urlStr: string): string[] {
-  try {
-    const url = new URL(urlStr);
-    const pathParts = url.pathname.split('/').filter(Boolean);
-    const lastPart = pathParts[pathParts.length - 1] || '';
-    const cleanSlug = lastPart.replace(/\.html?$/i, '').replace(/[-_]+/g, ' ');
-    return cleanSlug.split(/\s+/).filter((w) => w.length > 2 && !/^\d+$/.test(w));
-  } catch {
-    return [];
-  }
-}
-
 /**
- * Scrapes news content from a URL directly from the client/browser using edge reader proxies.
+ * Scrapes news content from a URL directly from the client/browser using multi-tier edge reader proxies.
  * Solves CORS blocking and Cloudflare bot protection on live deployed websites.
  */
-export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 9000): Promise<ScrapedNewsArticle | null> {
+export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16000): Promise<ScrapedNewsArticle | null> {
   const trimmed = (rawUrl || '').trim();
   if (!trimmed) return null;
 
   const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 
-  // 1. Try Jina Reader edge proxy (CORS-friendly, extracts clean markdown and metadata)
+  // 1. Primary: Try Jina Reader edge proxy (CORS-friendly, extracts clean markdown and metadata)
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -61,7 +50,11 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 90
       if (text && text.trim().length > 60) {
         // Extract Title
         const tMatch = text.match(/^Title:\s*(.+)$/m);
-        const title = tMatch ? cleanExtractedTitle(tMatch[1].trim()) : '';
+        let title = tMatch ? cleanExtractedTitle(tMatch[1].trim()) : '';
+        if (!title) {
+          const h1Match = text.match(/^#\s+([^\n\r]+)/m);
+          if (h1Match) title = cleanExtractedTitle(h1Match[1].trim());
+        }
 
         // Extract URL source
         const uMatch = text.match(/^URL Source:\s*(.+)$/m);
@@ -73,7 +66,11 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 90
         if (cMatch) {
           rawContent = cMatch[1].trim();
         } else {
-          rawContent = text.replace(/^Title:.*$/m, '').replace(/^URL Source:.*$/m, '').trim();
+          rawContent = text
+            .replace(/^Title:.*$/m, '')
+            .replace(/^URL Source:.*$/m, '')
+            .replace(/^Published Time:.*$/m, '')
+            .trim();
         }
 
         // Extract Images from markdown ![]()
@@ -107,7 +104,11 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 90
 
         const description = cleanedBody.slice(0, 320);
 
-        if (title || cleanedBody.length >= 60) {
+        // Accept if title contains Hindi or body contains substantive Hindi content
+        const hasHindiInTitle = title && /[\u0900-\u097F]/.test(title);
+        const hasHindiInBody = cleanedBody.length >= 60 && /[\u0900-\u097F]/.test(cleanedBody);
+
+        if (hasHindiInTitle || hasHindiInBody) {
           return {
             title: title || 'ताज़ा समाचार घटनाक्रम',
             description,
@@ -122,18 +123,93 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 90
     console.warn('[clientScraper] Jina Reader fetch failed or timed out:', err?.message || err);
   }
 
-  // 2. URL slug fallback: extract keywords and build a structured story context
-  const slugWords = extractSlugKeywords(normalized);
-  if (slugWords.length >= 2) {
-    const topicKeywords = slugWords.join(' ');
-    return {
-      title: `ताज़ा समाचार: ${topicKeywords}`,
-      description: `वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय: ${topicKeywords}`,
-      content: `समाचार विवरण: यह खबर ${topicKeywords} से संबंधित है। घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं।`,
-      images: [],
-      sourceUrl: normalized,
-    };
+  // 2. Secondary fallback: Fetch HTML via AllOrigins CORS proxy and parse with DOMParser
+  try {
+    const corsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(normalized)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(corsUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const html = await res.text();
+      if (html && html.length > 200 && typeof DOMParser !== 'undefined') {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        const metaTitle =
+          doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+          doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
+          doc.querySelector('title')?.textContent ||
+          doc.querySelector('h1')?.textContent ||
+          '';
+        const title = cleanExtractedTitle(metaTitle);
+
+        const metaDesc =
+          doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
+          doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
+          doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
+          '';
+
+        const images: string[] = [];
+        const ogImage =
+          doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+          doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
+        if (ogImage && /^https?:\/\//i.test(ogImage)) {
+          images.push(ogImage);
+        }
+        doc.querySelectorAll('article img, .story-details img, .article-body img, main img, img').forEach((el) => {
+          const src = el.getAttribute('src') || el.getAttribute('data-src');
+          if (src && /^https?:\/\//i.test(src) && !images.includes(src)) {
+            const lower = src.toLowerCase();
+            if (
+              !lower.includes('logo') &&
+              !lower.includes('icon') &&
+              !lower.includes('.svg') &&
+              !lower.includes('badge') &&
+              !lower.includes('avatar')
+            ) {
+              images.push(src);
+            }
+          }
+        });
+
+        const pList: string[] = [];
+        doc.querySelectorAll('article p, .story-details p, .article-body p, main p, p').forEach((p) => {
+          const text = (p.textContent || '').trim();
+          if (
+            text.length > 25 &&
+            /[\u0900-\u097F]/.test(text) &&
+            !text.includes('कॉपी लिंक') &&
+            !text.includes('डाउनलोड करें') &&
+            !text.includes('शेयर करें')
+          ) {
+            pList.push(text);
+          }
+        });
+
+        const content = pList.join('\n\n').slice(0, 3500);
+        const description = metaDesc.trim() || pList[0] || '';
+
+        const hasHindiInTitle = title && /[\u0900-\u097F]/.test(title);
+        const hasHindiInBody = content.length >= 60 && /[\u0900-\u097F]/.test(content);
+
+        if (hasHindiInTitle || hasHindiInBody) {
+          return {
+            title: title || 'ताज़ा समाचार',
+            description: description.slice(0, 320),
+            content: content || description,
+            images: images.slice(0, 6),
+            sourceUrl: normalized,
+          };
+        }
+      }
+    }
+  } catch (corsErr: any) {
+    console.warn('[clientScraper] CORS proxy fallback failed:', corsErr?.message || corsErr);
   }
 
+  // 3. DO NOT return fake boilerplate sentences like "वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय"
+  // If no authentic Hindi content was retrieved, return null so caller can prompt user or use existing data cleanly.
   return null;
 }

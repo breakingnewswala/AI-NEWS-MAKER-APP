@@ -797,7 +797,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       // If URL was provided, attempt client-side edge scraping so real news facts and photos are used
       if (effectiveLink && (!fallbackText || fallbackText.length < 25)) {
         try {
-          const scraped = await scrapeNewsUrlClient(effectiveLink, 8000);
+          const scraped = await scrapeNewsUrlClient(effectiveLink, 16000);
           if (scraped) {
             fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
             if (scraped.images && scraped.images.length > 0) {
@@ -807,6 +807,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         } catch (scrapeErr) {
           console.warn('Client scrape fallback error in triggerProcessDirectly:', scrapeErr);
         }
+      }
+
+      if (effectiveLink && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
+        setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।');
+        setLoading(false);
+        isExecutingRef.current = false;
+        return;
       }
 
       const fallbackResult = processNewsLocally(
@@ -1054,7 +1061,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         // If URL was provided, attempt client-side edge scraping so real news facts and photos are used
         if (effectiveLink && (!fallbackText || fallbackText.length < 25)) {
           try {
-            const scraped = await scrapeNewsUrlClient(effectiveLink, 8000);
+            const scraped = await scrapeNewsUrlClient(effectiveLink, 16000);
             if (scraped) {
               fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
               if (scraped.images && scraped.images.length > 0) {
@@ -1064,6 +1071,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           } catch (scrapeErr) {
             console.warn('Client scrape fallback error in handleProcess:', scrapeErr);
           }
+        }
+
+        if (effectiveLink && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
+          setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।');
+          setLoading(false);
+          isExecutingRef.current = false;
+          return;
         }
 
         const fallbackResult = processNewsLocally(

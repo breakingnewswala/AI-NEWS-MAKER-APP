@@ -89,14 +89,7 @@ export function processNewsLocally(
       .trim();
   }
 
-  // If title is empty, check URL slug or content
   const targetUrl = linkUrl || (clean.startsWith('http') ? clean : undefined);
-  if (!extractedTitle && targetUrl) {
-    const slugWords = extractSlugKeywords(targetUrl);
-    if (slugWords.length > 0) {
-      extractedTitle = `ताज़ा समाचार: ${slugWords.slice(0, 6).join(' ')}`;
-    }
-  }
 
   // 2. Extract description / facts
   let extractedDesc = '';
@@ -111,8 +104,20 @@ export function processNewsLocally(
     extractedContent = contentMatch[1].trim();
   }
 
+  // If title is empty, look for genuine Hindi candidate sentence in content or clean input
+  if (!extractedTitle || !/[\u0900-\u097F]/.test(extractedTitle)) {
+    const candidateLines = `${extractedContent}\n${extractedDesc}\n${clean}`
+      .split(/[।\n]+|(?<=[^\d])\.\s+/)
+      .map((s) => cleanHeadlineText(s).trim())
+      .filter((s) => s.length >= 15 && /[\u0900-\u097F]/.test(s) && !/(?:वेबसाइट|क्लिक करें|शेयर करें|कॉपी लिंक)/i.test(s));
+    if (candidateLines.length > 0) {
+      extractedTitle = candidateLines[0];
+    }
+  }
+
   if (extractedDesc) {
     extractedDesc = extractedDesc
+      .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
       .replace(
         /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         ' '
@@ -126,6 +131,7 @@ export function processNewsLocally(
 
   if (extractedContent) {
     extractedContent = extractedContent
+      .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
       .replace(
         /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         ' '
@@ -206,6 +212,7 @@ export function processNewsLocally(
         let sent = s.replace(/#DOT#/g, '.').trim();
         sent = sent
           .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
+          .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|मुख्य समाचार विषय|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
           .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, '')
           .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
           .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, '')
@@ -216,6 +223,7 @@ export function processNewsLocally(
       .filter((s) => {
         if (s.length <= 15) return false;
         if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+        if (/(?:वेबसाइट लिंक से प्राप्त|मुख्य समाचार विषय|समाचार विवरण|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग)/i.test(s)) return false;
         if (!/[\u0900-\u097F]/.test(s)) return false;
         const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
         const englishCount = (s.match(/[A-Za-z]/g) || []).length;

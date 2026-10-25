@@ -50,7 +50,7 @@ export function cleanHeadlineText(text: any): string {
     )
     .replace(/^\d+[\.:\)\-–—]+\s*(?=[\u0900-\u097F])/u, '')
     .replace(
-      /^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|प्रेस नोट|प्रेस विज्ञप्ति|यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*[:\-–—]?\s*/i,
+      /^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|प्रेस नोट|प्रेस विज्ञप्ति|यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताज़?ा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*|वेबसाइट\s*लिंक\s*से\s*प्राप्त[:\s\-–—]*|मुख्य\s*समाचार\s*विषय[:\s\-–—]*|समाचार\s*विवरण[:\s\-–—]*)\s*[:\-–—]?\s*/i,
       ''
     )
     .replace(/^[\s:\-–—,;।.]+/g, '')
@@ -1167,6 +1167,7 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|शीर्षक|हेडलाइन|विवरण|सामग्री|कैप्शन|खबर|विस्तृत\s*कैप्शन|संक्षिप्त\s*कैप्शन|बुलेट\s*पॉइंट्स?)\s*[:\-–—.]*/gim, '');
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, '');
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, '');
+  rawBody = rawBody.replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|मुख्य समाचार विषय|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gim, '');
 
   // Strip press note flattery
   rawBody = sanitizePressNoteFlattery(rawBody, false);
@@ -1304,7 +1305,10 @@ export function ensureHashtagHierarchy(
       lower === '#bnwtv' ||
       lower.startsWith('#http') ||
       lower.startsWith('#www') ||
-      lower.startsWith('#url')
+      lower.startsWith('#url') ||
+      t.includes('-') ||
+      t.length > 25 ||
+      (t.match(/_/g) || []).length >= 2
     ) {
       continue;
     }

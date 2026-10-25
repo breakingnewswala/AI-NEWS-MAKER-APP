@@ -45,7 +45,12 @@ export function isStaticDeploymentHost(): boolean {
   return (
     host.endsWith('github.io') ||
     host.endsWith('.surge.sh') ||
-    host.endsWith('.gitlab.io')
+    host.endsWith('.gitlab.io') ||
+    host.endsWith('.web.app') ||
+    host.endsWith('.firebaseapp.com') ||
+    host.endsWith('.pages.dev') ||
+    host.endsWith('.netlify.app') ||
+    host.endsWith('.vercel.app')
   );
 }
 
@@ -79,8 +84,16 @@ export function getApiBaseUrl(): string {
 export function getApiUrl(endpoint: string): string {
   const base = getApiBaseUrl();
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  // If running in browser with same origin and no custom cloud override, relative path is clean
-  if (typeof window !== 'undefined' && window.location.protocol.startsWith('http') && !isAndroidWebView() && !getCustomCloudUrl()) {
+  const custom = getCustomCloudUrl();
+  if (custom) {
+    return `${custom}${cleanEndpoint}`;
+  }
+  // If running on a static host or inside Android WebView without custom cloud, use base
+  if (isStaticDeploymentHost() || isAndroidWebView()) {
+    return `${base}${cleanEndpoint}`;
+  }
+  // If running in browser with same origin and backend available
+  if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
     return cleanEndpoint;
   }
   return `${base}${cleanEndpoint}`;

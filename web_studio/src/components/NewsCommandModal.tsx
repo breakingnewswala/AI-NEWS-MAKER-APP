@@ -4,6 +4,8 @@ import { AIAnalysisResult } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { cleanHeadlineText, cleanLocationField, generate5BalancedHeadlineOptions, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
+import { scrapeNewsUrlClient } from '../lib/clientScraper';
+import { processNewsLocally } from '../lib/clientAiProcessor';
 
 interface NewsCommandModalProps {
   isOpen: boolean;
@@ -182,8 +184,41 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         setPhotoMode('manual');
       }
     } catch (err: any) {
-      console.error('Command processing error:', err);
-      setError(err.message || 'त्रुटि उत्पन्न हुई');
+      console.warn('Command processing network error, falling back to client engine:', err);
+      try {
+        let fallbackText = inputPayload || '';
+        let fallbackImages: string[] = [];
+        if (urlPayload && (!fallbackText || fallbackText.length < 25)) {
+          const scraped = await scrapeNewsUrlClient(urlPayload, 16000);
+          if (scraped) {
+            fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
+            if (scraped.images && scraped.images.length > 0) {
+              fallbackImages = scraped.images;
+            }
+          }
+        }
+
+        if (urlPayload && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
+          setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट सीधे बॉक्स में पेस्ट करें।');
+          return;
+        }
+
+        const fallbackResult = processNewsLocally(fallbackText || urlPayload, urlPayload || undefined);
+        setResult(fallbackResult);
+        const opts = fallbackResult.headlineOptions && fallbackResult.headlineOptions.length > 0
+          ? fallbackResult.headlineOptions
+          : [fallbackResult.headline];
+        setHeadlineOptions(opts);
+        setSelectedHeadlineIndex(0);
+        if (fallbackImages[0]) {
+          setUseWebsitePhoto(true);
+          setPhotoMode('website');
+        } else {
+          setPhotoMode('manual');
+        }
+      } catch (clientErr: any) {
+        setError('न्यूज़ प्रोसेस करने में समस्या आई। कृपया खबर का टेक्स्ट सीधे पेस्ट करें।');
+      }
     } finally {
       setLoading(false);
     }
