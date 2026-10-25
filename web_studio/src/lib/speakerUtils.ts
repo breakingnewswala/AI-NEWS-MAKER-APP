@@ -1257,12 +1257,7 @@ export function ensureHashtagHierarchy(
           secondPartSentences.slice(Math.ceil(secondPartSentences.length / 2)).join('। ') + '।',
         ];
       } else {
-        const locPrefix = location && location !== 'विशेष कवरेज' ? `${location} में ` : '';
-        cleanParas = [
-          rawParagraphs[0],
-          rawParagraphs[1],
-          `${locPrefix}मामले में प्रशासनिक और कानूनी स्तर पर आवश्यक कार्रवाई जारी है तथा अधिकारियों द्वारा पूरी स्थिति पर लगातार निगरानी रखी जा रही है।`,
-        ];
+        cleanParas = [rawParagraphs[0], rawParagraphs[1]];
       }
     } else {
       const sentences = rawBody
@@ -1275,21 +1270,12 @@ export function ensureHashtagHierarchy(
         const p3 = sentences.slice(3).join('। ') + '।';
         cleanParas = [p1, p2, p3];
       } else if (sentences.length === 2) {
-        const locPrefix = location && location !== 'विशेष कवरेज' ? `${location} में ` : '';
-        cleanParas = [
-          sentences[0] + '।',
-          sentences[1] + '।',
-          `${locPrefix}मामले में प्रशासनिक और कानूनी स्तर पर आवश्यक कार्रवाई जारी है तथा अधिकारियों द्वारा पूरी स्थिति पर लगातार निगरानी रखी जा रही है।`,
-        ];
+        cleanParas = [sentences[0] + '।', sentences[1] + '।'];
       } else {
-        const p1 = (sentences[0] || rawBody || 'ताज़ा समाचार घटनाक्रम') + '।';
-        const p2 = 'घटना से जुड़े मुख्य तथ्यों और विवरणों की पुष्टि की जा रही है तथा प्रत्यक्षदर्शियों व संबंधित पक्षों से आवश्यक जानकारी जुटाई जा रही है।';
-        const locPrefix = location && location !== 'विशेष कवरेज' ? `${location} में ` : '';
-        const p3 = `${locPrefix}मामले में प्रशासन द्वारा संज्ञान लेकर आगे की वैधानिक प्रक्रिया अमल में लाई जा रही है।`;
-        cleanParas = [p1, p2, p3];
+        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
       }
     }
-    finalBodyText = cleanParas.slice(0, 3).join('\n\n').trim();
+    finalBodyText = cleanParas.join('\n\n').trim();
   }
 
   // 3. Extract and construct hashtags

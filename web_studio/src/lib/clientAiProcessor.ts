@@ -286,34 +286,7 @@ export function processNewsLocally(
   ].filter(Boolean);
   const tagsStr = tagsList.join(' ');
 
-  let detailedParas: string[] = [];
-  if (allSentences.length >= 6) {
-    detailedParas = [
-      allSentences.slice(0, Math.ceil(allSentences.length / 3)).join('। ') + '।',
-      allSentences.slice(Math.ceil(allSentences.length / 3), Math.ceil((allSentences.length * 2) / 3)).join('। ') + '।',
-      allSentences.slice(Math.ceil((allSentences.length * 2) / 3)).join('। ') + '।',
-    ];
-  } else if (allSentences.length >= 3) {
-    detailedParas = [
-      allSentences[0] + '।',
-      allSentences[1] + '।',
-      allSentences.slice(2).join('। ') + '।',
-    ];
-  } else if (allSentences.length === 2) {
-    const locPrefix = detectedLocation && detectedLocation !== 'विशेष कवरेज' ? `${detectedLocation} में ` : '';
-    detailedParas = [
-      allSentences[0] + '।',
-      allSentences[1] + '।',
-      `${locPrefix}मामले में प्रशासनिक और कानूनी स्तर पर आवश्यक कार्रवाई जारी है तथा अधिकारियों द्वारा पूरी स्थिति पर लगातार निगरानी रखी जा रही है।`,
-    ];
-  } else {
-    const p1 = (allSentences[0] || headline) + '।';
-    const p2 = 'घटना से जुड़े मुख्य तथ्यों और विवरणों की पुष्टि की जा रही है तथा प्रत्यक्षदर्शियों व संबंधित पक्षों से आवश्यक जानकारी जुटाई जा रही है।';
-    const locPrefix = detectedLocation && detectedLocation !== 'विशेष कवरेज' ? `${detectedLocation} में ` : '';
-    const p3 = `${locPrefix}मामले में प्रशासन द्वारा संज्ञान लेकर आगे की वैधानिक प्रक्रिया अमल में लाई जा रही है।`;
-    detailedParas = [p1, p2, p3];
-  }
-  const captionDetailed = `${detailedParas.join('\n\n')}\n\n${tagsStr}`.trim();
+  const captionDetailed = allSentences.length > 0 ? `${allSentences.join('। ')}।\n\n${tagsStr}`.trim() : `${headline}\n\n${tagsStr}`.trim();
   const bulletItems = (allSentences.length > 0 ? allSentences.slice(0, 4) : [headline]).map((s) => `• ${s}`);
   const captionBullets = `${bulletItems.join('\n')}\n\n${tagsStr}`.trim();
   const captionShort = allSentences.length > 1

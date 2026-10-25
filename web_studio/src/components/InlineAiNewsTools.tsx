@@ -257,6 +257,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   // 3 Caption Styles: detailed (3 paragraphs), bullets (bullet points), short (2 paragraphs)
   const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
+  const isAutomatedEntry = Boolean(
+    card.sourceNewsId ||
+    (autoFillNews && (autoFillNews.newsId || autoFillNews.autoTrigger))
+  );
+  const [isManualInputMode, setIsManualInputMode] = useState<boolean>(false);
   const isExecutingRef = React.useRef<boolean>(false);
   const activeRequestIdRef = React.useRef<number>(0);
   const activeNewsIdRef = React.useRef<string>('');
@@ -482,9 +487,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const effectiveTargetUrl = hasValidUrl ? normalizeInputUrl(rawUrl) : (rawUrl.startsWith('http') ? rawUrl : '');
     const rawContent = autoFillNews.fullNews || autoFillNews.summary || autoFillNews.title || '';
     
-    const targetLink = effectiveTargetUrl || rawUrl || '';
-    setActiveTab('link');
-    setLinkUrl(targetLink);
+    if (effectiveTargetUrl) {
+      setActiveTab('link');
+      setLinkUrl(effectiveTargetUrl);
+    } else {
+      setActiveTab('command');
+      setLinkUrl('');
+    }
+    
     setInputText(rawContent);
     setError(null);
 
@@ -508,14 +518,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
     }
 
-    // Auto-trigger "लिंक से AI हेडलाइन बनाएं" directly when arriving from Home Screen feed
-    if (autoFillNews.autoTrigger) {
+    // Only auto-trigger once per triggerKey. If already triggered or if headlines already exist for this session, DO NOT re-trigger!
+    if (autoFillNews.autoTrigger && !isAlreadyTriggered) {
       try {
         processedKeys.push(triggerKey);
         sessionStorage.setItem('ai_news_auto_triggered_keys', JSON.stringify(processedKeys.slice(-20)));
       } catch {}
       autoFillNews.autoTrigger = false;
-      triggerProcessDirectly(targetLink, rawContent, autoFillNews);
+      triggerProcessDirectly(effectiveTargetUrl, rawContent, autoFillNews);
     }
   }, [autoFillNews]);
 

@@ -1241,7 +1241,10 @@ export default function App() {
         const isExternalUrl = (u?: string) => {
           if (!u || !u.startsWith('http')) return false;
           const lower = u.toLowerCase();
-          return !lower.includes('localhost') && !lower.includes('127.0.0.1');
+          return !lower.includes('ainewsmaker.online') &&
+                 !lower.includes('breakingnewswala.com') &&
+                 !lower.includes('localhost') &&
+                 !lower.includes('127.0.0.1');
         };
         const effectiveLink = isExternalUrl(newsData.url) ? newsData.url : undefined;
         const effectiveLoc = newsData.location || 'मध्य प्रदेश';
@@ -1853,9 +1856,7 @@ export default function App() {
       !post.sourceUrl.includes('localhost') &&
       !post.sourceUrl.includes('127.0.0.1')
     );
-    const effectiveLink = hasExternalSource
-      ? post.sourceUrl.trim()
-      : (post.id ? `https://www.ainewsmaker.online/news/${encodeURIComponent(post.id)}` : '');
+    const effectiveLink = hasExternalSource ? post.sourceUrl.trim() : '';
     const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');
