@@ -119,29 +119,29 @@ type AppTab =
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: '1. फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'स्टेप 1: फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
-  { step: 2, id: 'step-ai', label: '2. एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'स्टेप 2: AI ऑटोमेशन टूल्स (Automated News & Photo)' },
-  { step: 3, id: 'step-headline', label: '3. हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'स्टेप 3: मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: '4. फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'स्टेप 4: फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
-  { step: 5, id: 'step-location', label: '5. स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्टेप 5: स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
-  { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'स्टेप 6: लोगो, हेडर व फुटर PNG' },
-  { step: 7, id: 'step-download', label: '7. डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'स्टेप 7: डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
+  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
+  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स (Automated News & Photo)' },
+  { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
+  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
+  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
+  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'लोगो, हेडर व फुटर PNG' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
 ];
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
-  fullName: 'मुख्य संपादक',
-  channelNameHi: 'AI News Maker',
-  channelNameEn: 'AI NEWS MAKER',
+  fullName: 'मुख्य संपादक (Master Admin)',
+  channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
+  channelNameEn: 'BREAKING NEWS WALA',
   channelLogoUrl: '/assets/ai_news_maker_logo.png',
   channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
   channelLogoType: 'png',
-  username: 'ainewsmaker',
+  username: 'breakingnewswala',
   mobileNumber: '9669802408',
   whatsappNumber: '9669802408',
-  websiteUrl: 'ainewsmaker.online',
+  websiteUrl: 'breakingnewswala.com',
   showMobileNumber: true,
   showWebsite: true,
-  district: 'सेंट्रल डेस्क',
+  district: 'सेंट्रल डेस्क / भोपाल',
   socialIcons: {
     youtube: true,
     facebook: true,
@@ -152,20 +152,20 @@ export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
 };
 
 export const DEFAULT_REPORTER_USER: ReporterUser = {
-  userId: 'reporter-admin-01',
-  uid: 'reporter-admin-01',
-  id: 'reporter-admin-01',
-  username: 'ainewsmaker',
-  name: 'मुख्य संपादक',
-  role: 'admin',
-  district: 'सेंट्रल डेस्क',
-  email: 'admin.ainewsmaker@gmail.com',
-  channelName: 'AI News Maker',
+  userId: 'usr_627265616b69',
+  uid: 'usr_627265616b69',
+  id: 'usr_627265616b69',
+  username: 'breakingnewswala',
+  name: 'मुख्य संपादक (Master Admin)',
+  role: 'superadmin',
+  district: 'सेंट्रल डेस्क / भोपाल',
+  email: 'breakingnewswala.com@gmail.com',
+  channelName: 'ब्रेकिंग न्यूज़ वाला',
   channelLogoUrl: '/assets/ai_news_maker_logo.png',
-  channelWebsite: 'ainewsmaker.online',
+  channelWebsite: 'breakingnewswala.com',
   mobileNumber: '9669802408',
-  tier: 'pro',
-  planTier: 'pro',
+  tier: 'ultra',
+  planTier: 'ultra',
 };
 
 function getSavedChannelProfile(): ChannelProfile | null {
@@ -320,16 +320,16 @@ export default function App() {
       }
 
       // 2. Standard application tabs
-      if (path.includes('profile') || path.includes('admin') || path.includes('control') || path.includes('plans') || hash === 'profile' || fullUrl.includes('tab=profile')) {
+      if (hash === 'profile' || path === '/profile' || fullUrl.includes('tab=profile')) {
         return 'profile';
       }
-      if (path.includes('video') || hash === 'videos' || fullUrl.includes('tab=videos')) {
+      if (hash === 'videos' || path === '/videos' || fullUrl.includes('tab=videos')) {
         return 'videos';
       }
-      if (path.includes('studio') || path.includes('generator') || hash === 'studio' || hash === 'generator' || fullUrl.includes('tab=studio')) {
+      if (hash === 'studio' || hash === 'generator' || path === '/studio' || path === '/generator' || fullUrl.includes('tab=studio')) {
         return 'studio';
       }
-      if (path.includes('newsroom') || path.includes('epaper') || path.includes('drafts') || hash === 'newsroom' || hash === 'epaper' || fullUrl.includes('tab=newsroom')) {
+      if (hash === 'newsroom' || hash === 'epaper' || hash === 'drafts' || path === '/newsroom' || fullUrl.includes('tab=newsroom')) {
         return 'newsroom';
       }
 
@@ -672,7 +672,7 @@ export default function App() {
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
-  // Authentication session - loads from localStorage or Android native bridge
+  // Authentication session - loads from localStorage or Android native bridge, defaults to Master Admin
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
       const saved = localStorage.getItem('reporter_auth_session');
@@ -684,11 +684,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    const completed = localStorage.getItem('is_onboarding_completed');
-    if (completed === 'true') {
-      return DEFAULT_REPORTER_USER;
-    }
-    return null;
+    return DEFAULT_REPORTER_USER;
   });
 
   useEffect(() => {
@@ -696,31 +692,22 @@ export default function App() {
   }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
-    try {
-      const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedOnboarding === 'true') return true;
-      const saved = localStorage.getItem('reporter_auth_session');
-      if (saved) return true;
-      return false;
-    } catch {
-      return false;
-    }
-  });
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(true);
 
-  // Welcome flow with 4 steps & Google Login
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
+  // Welcome flow - default to false so Home screen is shown immediately
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(false);
+
+  // Ensure master admin session and channel profile are saved in localStorage
+  useEffect(() => {
     try {
-      const savedSession = localStorage.getItem('reporter_auth_session');
-      const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedSession || savedOnboarding === 'true') {
-        return false;
+      const saved = localStorage.getItem('reporter_auth_session');
+      if (!saved) {
+        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
+        localStorage.setItem('is_onboarding_completed', 'true');
+        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
       }
-      return true;
-    } catch {
-      return false;
-    }
-  });
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const handleOpenWelcome = () => setShowAuthWelcomeScreen(true);
@@ -2086,7 +2073,7 @@ export default function App() {
       triggerBreakingNewsAlert({
         id: triggeredStory.id,
         title: triggeredStory.title,
-        summary: triggeredStory.content?.slice(0, 100),
+        summary: (triggeredStory.summary || triggeredStory.content || triggeredStory.fullContent || '').slice(0, 100),
       });
       setToastMessage('🚨 ब्रेकिंग न्यूज़ अलर्ट जारी किया गया!');
     } else {

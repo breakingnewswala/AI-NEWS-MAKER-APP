@@ -2921,7 +2921,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      1. प्रोफाइल व चैनल विवरण
+                      प्रोफाइल व चैनल विवरण
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       चैनल लोगो, नाम, प्राइमरी नंबर, सोशल लिंक्स व ब्रांडिंग विवरण
@@ -2950,7 +2950,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      2. मेंबरशिप प्लान व अपग्रेड
+                      मेंबरशिप प्लान व अपग्रेड
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       वर्तमान प्लान, 7-डे फ्री ट्रायल, प्रोमो कोड रिडीम व अपग्रेड
@@ -2987,7 +2987,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 truncate">
                         <Coins className="w-4 h-4 text-amber-400 shrink-0 inline" />
-                        <span>3. रिवॉर्ड्स व पॉइंट्स वॉलेट</span>
+                        <span>रिवॉर्ड्स व पॉइंट्स वॉलेट</span>
                       </span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
                         Rewards Wallet
@@ -3530,7 +3530,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      4. सहायता एवं नीतियाँ
+                      सहायता एवं नीतियाँ
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
@@ -3564,7 +3564,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-red-200 block truncate">
-                      5. लॉगआउट
+                      लॉगआउट
                     </span>
                     <p className="text-xs text-red-400/80 truncate mt-0.5">
                       सुरक्षित रूप से अपने खाते से बाहर निकलें

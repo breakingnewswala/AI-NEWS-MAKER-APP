@@ -10,6 +10,7 @@ export interface NewsFeedPost {
   imageUrl?: string;
   breaking: boolean;
   isExclusive?: boolean;
+  content?: string;
   fullContent?: string;
   district?: string;
   location?: string;

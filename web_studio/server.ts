@@ -124,6 +124,7 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
 }
 
 const MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
+const MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 const REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 const UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 
@@ -147,13 +148,13 @@ function extractAdminEmail(req: any): string {
 function isAuthorizedMasterAdmin(req: express.Request): boolean {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) return true;
 
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL) return true;
     if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
   }
 
@@ -167,13 +168,13 @@ function isAuthorizedMasterAdmin(req: express.Request): boolean {
 function isAuthorizedAdmin(req: express.Request): boolean {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
 
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
     if (user.role === "admin" || user.role === "superadmin") return true;
   }
 
@@ -2912,6 +2913,7 @@ interface AuthoritativeUser {
   blockedBy?: string | null;
   unblockedAt?: number | null;
   unblockedBy?: string | null;
+  blockedReason?: string | null;
   createdAt: number;
   trialStartedAt: number;
   trialEndsAt: number;
@@ -7367,7 +7369,10 @@ app.post("/api/admin/update-user", (req, res) => {
 
 app.post("/api/admin/block-user", (req, res) => {
   try {
-    const { userId, userEmail, blockedBy } = req.body;
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को ब्लॉक कर सकते हैं।" });
+    }
+    const { userId, userEmail, blockedBy, reason } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी अनिवार्य है" });
@@ -7391,14 +7396,31 @@ app.post("/api/admin/block-user", (req, res) => {
       return res.status(403).json({ error: "एडमिन खातों को ब्लॉक करने की अनुमति नहीं है" });
     }
 
+    const blockedReasonText = reason || "व्यवस्थापक नीति उल्लंघन अथवा अनधिकृत गतिविधि के कारण आपका खाता ब्लॉक किया गया है।";
     users[idx].isBlocked = true;
     users[idx].blockedAt = Date.now();
     users[idx].blockedBy = blockedBy || 'Admin';
+    users[idx].blockedReason = blockedReasonText;
     users[idx].unblockedAt = null;
     users[idx].unblockedBy = null;
 
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+
+    // Also update users_accounts_db.json
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex(u =>
+        (u.email && u.email.toLowerCase().trim() === identifier) ||
+        (u.userId && u.userId.toLowerCase().trim() === identifier)
+      );
+      if (aIdx >= 0) {
+        accounts[aIdx].isBlocked = true;
+        accounts[aIdx].blockedAt = Date.now();
+        accounts[aIdx].blockedReason = blockedReasonText;
+        saveUsersDatabase(accounts);
+      }
+    } catch {}
 
     return res.json({ success: true, message: "उपयोगकर्ता को ब्लॉक कर दिया गया है", user: users[idx] });
   } catch (err: any) {
@@ -7408,6 +7430,9 @@ app.post("/api/admin/block-user", (req, res) => {
 
 app.post("/api/admin/unblock-user", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को अनब्लॉक कर सकते हैं।" });
+    }
     const { userId, userEmail, unblockedBy } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
@@ -7426,11 +7451,27 @@ app.post("/api/admin/unblock-user", (req, res) => {
     }
 
     users[idx].isBlocked = false;
+    users[idx].blockedReason = null;
     users[idx].unblockedAt = Date.now();
     users[idx].unblockedBy = unblockedBy || 'Admin';
 
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+
+    // Also update users_accounts_db.json
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex(u =>
+        (u.email && u.email.toLowerCase().trim() === identifier) ||
+        (u.userId && u.userId.toLowerCase().trim() === identifier)
+      );
+      if (aIdx >= 0) {
+        accounts[aIdx].isBlocked = false;
+        accounts[aIdx].blockedReason = null;
+        accounts[aIdx].unblockedAt = Date.now();
+        saveUsersDatabase(accounts);
+      }
+    } catch {}
 
     return res.json({ success: true, message: "उपयोगकर्ता को अनब्लॉक कर दिया गया है", user: users[idx] });
   } catch (err: any) {
@@ -7440,6 +7481,9 @@ app.post("/api/admin/unblock-user", (req, res) => {
 
 app.post("/api/admin/delete-user", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को डिलीट कर सकते हैं।" });
+    }
     const { userId, userEmail } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) return res.status(400).json({ error: "userId is required" });
@@ -7463,11 +7507,23 @@ app.post("/api/admin/delete-user", (req, res) => {
     );
     saveUsersMasterDatabase(users);
 
+    // Delete from user_profiles_db.json
     const allProfiles = loadProfilesDatabase();
     delete allProfiles[identifier];
     if (targetUser?.email) delete allProfiles[targetUser.email.toLowerCase().trim()];
     if (targetUser?.username) delete allProfiles[targetUser.username.toLowerCase().trim()];
     saveProfilesDatabase(allProfiles);
+
+    // Delete from users_accounts_db.json to prevent resurrection
+    try {
+      let accounts = loadUsersDatabase();
+      accounts = accounts.filter(u =>
+        (u.email && u.email.toLowerCase().trim() !== identifier) &&
+        (u.userId && u.userId.toLowerCase().trim() !== identifier) &&
+        (!targetUser?.email || (u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim()))
+      );
+      saveUsersDatabase(accounts);
+    } catch {}
 
     return res.json({ success: true, message: "उपयोगकर्ता सफलतापूर्वक हटा दिया गया" });
   } catch (err: any) {
@@ -7477,6 +7533,9 @@ app.post("/api/admin/delete-user", (req, res) => {
 
 app.post("/api/admin/update-user", (req, res) => {
   try {
+    if (!isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र सेटिंग्स अपडेट कर सकते हैं।" });
+    }
     const { userId, updates } = req.body;
     const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
     if (!identifier) {
@@ -7513,6 +7572,23 @@ app.post("/api/admin/update-user", (req, res) => {
       updatedUser = users[idx];
       saveUsersMasterDatabase(users);
       syncUserToProfiles(updatedUser);
+
+      // Also update users_accounts_db.json
+      try {
+        let accounts = loadUsersDatabase();
+        const aIdx = accounts.findIndex(u =>
+          (u.email && u.email.toLowerCase().trim() === identifier) ||
+          (u.userId && u.userId.toLowerCase().trim() === identifier)
+        );
+        if (aIdx >= 0) {
+          accounts[aIdx] = {
+            ...accounts[aIdx],
+            ...updates,
+            updatedAt: Date.now(),
+          };
+          saveUsersDatabase(accounts);
+        }
+      } catch {}
     } else {
       updatedUser = registerOrUpdateUserAuthoritative({
         ...updates,

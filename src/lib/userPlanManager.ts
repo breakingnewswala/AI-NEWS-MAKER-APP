@@ -5,9 +5,10 @@ export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
 export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
 export const MASTER_ADMIN_EMAIL = 'breakingnewswala.com@gmail.com';
+export const MASTER_ADMIN_ALT_EMAIL = 'breakingnewsvala.com@gmail.com';
 export const REGULAR_ADMIN_EMAIL = 'admin.ainewsmaker@gmail.com';
-export const SUPER_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL];
-export const ALL_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL, REGULAR_ADMIN_EMAIL];
+export const SUPER_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL, MASTER_ADMIN_ALT_EMAIL];
+export const ALL_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL, MASTER_ADMIN_ALT_EMAIL, REGULAR_ADMIN_EMAIL];
 export const UNAUTHORIZED_ADMIN_EMAILS = ['editor.bnwtv@gmail.com'];
 
 export function isUserMasterAdmin(userOrEmail?: any): boolean {
@@ -19,7 +20,7 @@ export function isUserMasterAdmin(userOrEmail?: any): boolean {
     email = (userOrEmail.email || '').replace(/\s+/g, '').toLowerCase().trim();
   }
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  return email === MASTER_ADMIN_EMAIL;
+  return email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL;
 }
 
 export function isUserRegularAdmin(userOrEmail?: any): boolean {
@@ -997,7 +998,7 @@ export function isUserAdmin(user: any): boolean {
     email = (user.email || user.username || '').replace(/\s+/g, '').toLowerCase().trim();
   }
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL;
+  return email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL;
 }
 
 /**

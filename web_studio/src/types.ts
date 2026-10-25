@@ -432,6 +432,11 @@ export interface ChannelProfile {
   fullName?: string;
   district?: string;
   location?: string;
+  state?: string;
+  address?: string;
+  pincode?: string;
+  customHeaderPng?: string;
+  customFooterPng?: string;
   isLocked?: boolean;
   tier?: string;
   email?: string;

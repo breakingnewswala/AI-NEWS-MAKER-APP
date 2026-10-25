@@ -203,7 +203,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           return;
         }
 
-        const fallbackResult = processNewsLocally(fallbackText || urlPayload, urlPayload || undefined);
+        const fallbackResult = processNewsLocally(fallbackText || urlPayload || '', urlPayload || undefined);
         setResult(fallbackResult);
         const opts = fallbackResult.headlineOptions && fallbackResult.headlineOptions.length > 0
           ? fallbackResult.headlineOptions

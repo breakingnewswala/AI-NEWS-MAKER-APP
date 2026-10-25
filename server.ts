@@ -124,6 +124,7 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
 }
 
 const MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
+const MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 const REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 const UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 
@@ -147,13 +148,13 @@ function extractAdminEmail(req: any): string {
 function isAuthorizedMasterAdmin(req: express.Request): boolean {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) return true;
 
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL) return true;
     if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
   }
 
@@ -167,13 +168,13 @@ function isAuthorizedMasterAdmin(req: express.Request): boolean {
 function isAuthorizedAdmin(req: express.Request): boolean {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
 
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
     if (user.role === "admin" || user.role === "superadmin") return true;
   }
 
@@ -2912,6 +2913,7 @@ interface AuthoritativeUser {
   blockedBy?: string | null;
   unblockedAt?: number | null;
   unblockedBy?: string | null;
+  blockedReason?: string | null;
   createdAt: number;
   trialStartedAt: number;
   trialEndsAt: number;

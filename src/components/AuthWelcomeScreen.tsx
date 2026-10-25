@@ -1560,7 +1560,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                             type="tel"
                             maxLength={10}
                             required
-                            readOnly={Boolean(subscription.isMobileLocked || channelProfile.mobileNumber || subscription.primaryMobile)}
+                            readOnly={Boolean(subscription.isMobileLocked || initialProfile.mobileNumber || subscription.primaryMobile)}
                             value={primaryMobileNumber}
                             onChange={(e) => {
                               const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
@@ -1571,7 +1571,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                             }}
                             placeholder="यहाँ अपना 10-अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)"
                             className={`w-full pl-9 pr-3 py-2 border rounded-xl text-xs sm:text-sm font-mono placeholder:text-slate-500/80 placeholder:font-normal ${
-                              subscription.isMobileLocked || channelProfile.mobileNumber || subscription.primaryMobile
+                              subscription.isMobileLocked || initialProfile.mobileNumber || subscription.primaryMobile
                                 ? 'bg-slate-900/60 border-slate-800 text-slate-300 cursor-not-allowed'
                                 : 'bg-slate-950 border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
                             }`}
