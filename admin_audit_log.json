@@ -1,5 +1,37 @@
 [
   {
+    "id": "audit_1792909892916_te3v",
+    "timestamp": 1792909892916,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792909892894",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792909892909_y21y",
+    "timestamp": 1792909892909,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792909892894",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792909749583_jt5v",
+    "timestamp": 1792909749583,
+    "adminEmail": "admin",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1792909749560",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1792909749575_5uly",
+    "timestamp": 1792909749575,
+    "adminEmail": "admin",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1792909749560",
+    "ip": "internal"
+  },
+  {
     "id": "audit_1792870178715_s61b",
     "timestamp": 1792870178715,
     "adminEmail": "admin",

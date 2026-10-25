@@ -23,7 +23,11 @@
     "createdAt": 1792849821694,
     "trialStartedAt": 1792849821694,
     "trialEndsAt": 1793454621694,
-    "lastLoginAt": 1792849821694
+    "lastLoginAt": 1792873722495,
+    "isTrialExpired": false,
+    "activatedAt": 1792849821694,
+    "expiresAt": 1793454621694,
+    "activatedVia": "Google Registration"
   },
   {
     "userId": "usr_rituraj_102",
@@ -53,7 +57,7 @@
     "activatedAt": 1791892712618,
     "expiresAt": 1792497512618,
     "activatedVia": "Free 7-Day VIP Trial",
-    "lastLoginAt": 1791892712618,
+    "lastLoginAt": 1792873722496,
     "trialWarningNotified": true,
     "isTrialExpired": true,
     "trialExpiredNotified": true
@@ -86,7 +90,7 @@
     "activatedAt": 1791892712618,
     "expiresAt": 1792497512618,
     "activatedVia": "Free 7-Day VIP Trial",
-    "lastLoginAt": 1791892712618,
+    "lastLoginAt": 1792873722498,
     "trialWarningNotified": true,
     "isTrialExpired": true,
     "trialExpiredNotified": true
@@ -119,7 +123,7 @@
     "activatedAt": 1791792137805,
     "expiresAt": 2107057518060,
     "activatedVia": "Admin Preset",
-    "lastLoginAt": 1791892712618
+    "lastLoginAt": 1792873722498
   },
   {
     "userId": "user-1791697518060",
@@ -133,7 +137,7 @@
     "channelName": "एआई न्यूज़ मेकर",
     "channelNameHi": "एआई न्यूज़ मेकर",
     "channelNameEn": "AI News Maker",
-    "channelLogoUrl": "/assets/ai_news_maker_logo.png",
+    "channelLogoUrl": "/uploads/logos/logo-1792873722327-c7fa3650.png",
     "channelLogoPngUrl": "/assets/ai_news_maker_logo.png",
     "channelLogoGifUrl": "",
     "channelLogoType": "png",
@@ -149,6 +153,6 @@
     "activatedAt": 1791697518060,
     "expiresAt": 2107057518060,
     "activatedVia": "Super Admin Preset",
-    "lastLoginAt": 1791892712618
+    "lastLoginAt": 1792873722499
   }
 ]

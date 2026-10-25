@@ -19,6 +19,8 @@ captures/
 # Node dependencies
 node_modules/
 **/node_modules/
+package-lock.json
+**/package-lock.json
 
 # Gradle files
 .gradle/
@@ -26,6 +28,8 @@ node_modules/
 # IDE & OS
 *.iml
 .idea/
+.vscode/
+**/.vscode/
 .DS_Store
 Thumbs.db
 .kotlin/

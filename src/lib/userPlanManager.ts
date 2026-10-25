@@ -1440,7 +1440,11 @@ export async function fetchLogoChangeRequests(userEmail?: string): Promise<LogoC
             const merged = [...data.requests, ...existing.filter((e) => !data.requests.some((r: any) => r.id === e.id))];
             localStorage.setItem('logo_change_requests', JSON.stringify(merged));
           }
-          window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('ai_news_logo_requests_updated'));
+            }
+          }, 0);
         }
         return data.requests;
       }
@@ -1660,7 +1664,11 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
             return timeB - timeA;
           });
           localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(merged));
-          window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+            }
+          }, 0);
           return merged;
         }
       }

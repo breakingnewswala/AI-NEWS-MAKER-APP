@@ -816,6 +816,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       try {
         (window as any).google.accounts.id.initialize({
           client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          use_fedcm_for_prompt: false,
+          auto_select: false,
           callback: (response: any) => {
             if (response.credential) {
               try {
@@ -833,13 +835,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             setIsLoggingIn(false);
           },
         });
-        (window as any).google.accounts.id.prompt((notification: any) => {
-          if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
-            setIsLoggingIn(false);
-            setLoginErrorMsg('Google लॉगिन प्रॉम्प्ट लोड नहीं हो सका। कृपया पुनः प्रयास करें।');
-          }
-        });
-        return;
+        if (window.self === window.top) {
+          (window as any).google.accounts.id.prompt((notification: any) => {
+            if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
+              setIsLoggingIn(false);
+              setLoginErrorMsg('Google लॉगिन प्रॉम्प्ट लोड नहीं हो सका। कृपया पुनः प्रयास करें।');
+            }
+          });
+          return;
+        }
       } catch (gsiErr) {
         console.warn('GSI prompt error:', gsiErr);
       }

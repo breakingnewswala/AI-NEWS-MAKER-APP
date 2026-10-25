@@ -99,7 +99,7 @@ export function buildHashtags(location?: string, existingTagsString?: string, ca
 
   const middleSlice = uniqueMidTags.slice(0, 6);
   const orderedTags: string[] = [];
-  if (firstTag) {
+  if (firstTag && firstTag.toLowerCase() !== '#ainewsmaker' && firstTag.toLowerCase() !== '#ai_news_maker') {
     orderedTags.push(firstTag);
   }
   orderedTags.push(...middleSlice);

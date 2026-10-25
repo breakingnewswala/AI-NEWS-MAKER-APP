@@ -1016,16 +1016,15 @@ export function generate5BalancedHeadlineOptions(
 
   const uniqueOptions: string[] = [];
 
-  const addOptionIfClean = (cand: string, skipSimilarityCheck: boolean = false) => {
+  const addOptionIfClean = (cand: string) => {
     if (!cand) return;
     const formatted = fitSingleHeadlineToTier(cand, 150);
     if (!formatted || formatted.length < 15) return;
     if (uniqueOptions.includes(formatted)) return;
-    if (!skipSimilarityCheck) {
-      const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.92);
-      if (isTooSimilar) return;
+    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.90);
+    if (!isTooSimilar) {
+      uniqueOptions.push(formatted);
     }
-    uniqueOptions.push(formatted);
   };
 
   // Option 1: Direct core event headline
@@ -1051,8 +1050,8 @@ export function generate5BalancedHeadlineOptions(
     if (base.includes(d)) {
       const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
       if (parts.length >= 2) {
-        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
-        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
+        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`);
+        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`);
       }
     }
   }
@@ -1062,11 +1061,11 @@ export function generate5BalancedHeadlineOptions(
   if (questionMatch) {
     const actor = questionMatch[1].trim();
     const action = questionMatch[2].trim();
-    addOptionIfClean(`${actor}: ${action}`, true);
-    addOptionIfClean(`${action}: जानिए कौन हैं ${actor}`, true);
-    addOptionIfClean(`${actor} की चर्चा: ${action}`, true);
-    addOptionIfClean(`${action}, ${actor} की मुख्य भूमिका`, true);
-    addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`, true);
+    addOptionIfClean(`${actor}: ${action}`);
+    addOptionIfClean(`${action}: जानिए कौन हैं ${actor}`);
+    addOptionIfClean(`${actor} की चर्चा: ${action}`);
+    addOptionIfClean(`${action}, ${actor} की मुख्य भूमिका`);
+    addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`);
   }
 
   // Action / Announcement restructuring using words from base
@@ -1083,12 +1082,12 @@ export function generate5BalancedHeadlineOptions(
   if (connectorMatches) {
     const cause = connectorMatches[1].trim();
     const effect = connectorMatches[2].trim();
-    addOptionIfClean(`${effect}: ${cause} का मामला`, true);
-    addOptionIfClean(`${cause}: ${effect}`, true);
+    addOptionIfClean(`${effect}: ${cause} का मामला`);
+    addOptionIfClean(`${cause}: ${effect}`);
   }
 
-  // If still fewer than 5, guarantee exactly 5 unique options using clean editorial angles without administration words
-  const editorialPrefixes = ["विशेष रिपोर्ट: ", "ग्राउंड रिपोर्ट: ", "प्रमुख घटनाक्रम: ", "नया अपडेट: ", "विस्तृत कवरेज: "];
+  // If still fewer than 5, guarantee exactly 5 unique options using clean editorial prefixes without administration words
+  const editorialPrefixes = ["बड़ी खबर: ", "ताज़ा अपडेट: ", "विशेष रिपोर्ट: ", "जानिए: ", "प्रमुख घटनाक्रम: "];
   for (const p of editorialPrefixes) {
     if (uniqueOptions.length >= 5) break;
     if (!base.startsWith(p)) {
@@ -1097,15 +1096,6 @@ export function generate5BalancedHeadlineOptions(
         uniqueOptions.push(fitted);
       }
     }
-  }
-
-  let seedIdx = 1;
-  while (uniqueOptions.length < 5) {
-    const backupCandidate = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${base}`, 150);
-    if (!uniqueOptions.includes(backupCandidate)) {
-      uniqueOptions.push(backupCandidate);
-    }
-    seedIdx++;
   }
 
   return uniqueOptions.slice(0, 5);
@@ -1180,6 +1170,9 @@ export function ensureHashtagHierarchy(
 
   // Strip press note flattery
   rawBody = sanitizePressNoteFlattery(rawBody, false);
+
+  // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, '').trim();
 
   // Strip leading headline duplicate if caption accidentally starts with the headline
   if (headlineToStrip && headlineToStrip.trim()) {
@@ -1331,22 +1324,29 @@ export function ensureHashtagHierarchy(
   }
 
   const middleSlice = filteredMiddleTags.slice(0, 6);
-  const finalTags: string[] = [];
-  if (userTag) {
-    finalTags.push(userTag);
+  const cleanFinalTags: string[] = [];
+  if (userTag && userTag.toLowerCase() !== '#ainewsmaker' && userTag.toLowerCase() !== '#ai_news_maker') {
+    cleanFinalTags.push(userTag);
   }
-  finalTags.push(...middleSlice);
-  finalTags.push('#AINewsMaker');
+  for (const t of middleSlice) {
+    const lower = t.toLowerCase();
+    if (lower !== '#ainewsmaker' && lower !== '#ai_news_maker') {
+      cleanFinalTags.push(t);
+    }
+  }
 
   const seen = new Set<string>();
   const orderedTags: string[] = [];
-  for (const t of finalTags) {
+  for (const t of cleanFinalTags) {
     const lower = t.toLowerCase();
     if (!seen.has(lower)) {
       seen.add(lower);
       orderedTags.push(t);
     }
   }
+
+  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
+  orderedTags.push('#AINewsMaker');
 
   return `${finalBodyText}\n\n${orderedTags.join(' ')}`.trim();
 }

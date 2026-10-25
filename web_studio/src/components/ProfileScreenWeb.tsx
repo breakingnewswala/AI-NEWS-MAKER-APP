@@ -408,10 +408,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   };
 
   useEffect(() => {
+    let isMounted = true;
     const handleLogoUpdates = () => {
-      setIsLockedForUserState(!isAdmin && isChannelProfileLocked(currentUser));
-      setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo'));
-      setGifReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif'));
+      setTimeout(() => {
+        if (!isMounted) return;
+        setIsLockedForUserState(!isAdmin && isChannelProfileLocked(currentUser));
+        setLogoReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo'));
+        setGifReqStatus(getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif'));
+      }, 0);
     };
 
     if (currentUser?.email) {
@@ -422,6 +426,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     window.addEventListener('ai_news_channel_profile_unlocked', handleLogoUpdates);
     window.addEventListener('ai_news_plan_users_changed', handleLogoUpdates);
     return () => {
+      isMounted = false;
       window.removeEventListener('ai_news_logo_requests_updated', handleLogoUpdates);
       window.removeEventListener('ai_news_channel_profile_unlocked', handleLogoUpdates);
       window.removeEventListener('ai_news_plan_users_changed', handleLogoUpdates);
@@ -2891,7 +2896,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         {isAdmin ? (
           <AdminPlansAndPackagesManager
             currentUser={currentUser}
-            onPlanChanged={() => setSubscription(getUserSubscription())}
+            onPlanChanged={() => setTimeout(() => setSubscription(getUserSubscription()), 0)}
             onOpenStudio={onOpenStudio}
             renderProfileContent={renderProfileOnlyContent}
             categories={categories}

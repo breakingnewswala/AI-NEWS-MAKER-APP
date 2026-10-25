@@ -285,18 +285,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       fetchUsers();
       fetchLogoReqs();
     }, 4000);
+    const handleLocalUsersSync = () => {
+      if (isMounted) setPlanUsers(getPlanUsers());
+    };
+    const handleLocalLogoReqsSync = () => {
+      if (isMounted) setLogoRequests(getLogoChangeRequests());
+    };
     window.addEventListener('focus', fetchUsers);
     window.addEventListener('focus', fetchLogoReqs);
-    window.addEventListener('ai_news_plan_users_changed', fetchUsers);
-    window.addEventListener('ai_news_logo_requests_updated', fetchLogoReqs);
+    window.addEventListener('ai_news_plan_users_changed', handleLocalUsersSync);
+    window.addEventListener('ai_news_logo_requests_updated', handleLocalLogoReqsSync);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('focus', fetchUsers);
       window.removeEventListener('focus', fetchLogoReqs);
-      window.removeEventListener('ai_news_plan_users_changed', fetchUsers);
-      window.removeEventListener('ai_news_logo_requests_updated', fetchLogoReqs);
+      window.removeEventListener('ai_news_plan_users_changed', handleLocalUsersSync);
+      window.removeEventListener('ai_news_logo_requests_updated', handleLocalLogoReqsSync);
     };
   }, [subTab]);
 

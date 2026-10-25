@@ -277,11 +277,48 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     }
 
-    // 2. Check Google Identity Services (GSI)
+    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+      try {
+        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const userData = await res.json();
+                if (userData?.email) {
+                  processGoogleUser(userData.email, userData.name);
+                  return;
+                }
+              } catch (fetchErr) {
+                console.warn('Google userinfo fetch error:', fetchErr);
+              }
+            }
+            setLoading(false);
+          },
+          error_callback: (error: any) => {
+            console.warn('Google auth popup error or closed:', error);
+            setLoading(false);
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        return;
+      } catch (oauthErr) {
+        console.warn('OAuth initTokenClient error:', oauthErr);
+      }
+    }
+
+    // 3. Check Google Identity Services (GSI) with FedCM disabled for iframes
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
         (window as any).google.accounts.id.initialize({
           client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          use_fedcm_for_prompt: false,
+          auto_select: false,
           callback: (response: any) => {
             if (response.credential) {
               try {
@@ -296,22 +333,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 console.warn('JWT decode err:', decErr);
               }
             }
+            setLoading(false);
           },
         });
-        (window as any).google.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            const promptEmail = prompt(
-              'Google लॉगिन: अपना Google ईमेल दर्ज करें:',
-              'breakingnewswala.com@gmail.com'
-            );
-            if (promptEmail) {
-              processGoogleUser(promptEmail);
-            } else {
-              setLoading(false);
+        if (window.self === window.top) {
+          (window as any).google.accounts.id.prompt((notification: any) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              const promptEmail = prompt(
+                'Google लॉगिन: अपना Google ईमेल दर्ज करें:',
+                'breakingnewswala.com@gmail.com'
+              );
+              if (promptEmail) {
+                processGoogleUser(promptEmail);
+              } else {
+                setLoading(false);
+              }
             }
-          }
-        });
-        return;
+          });
+          return;
+        }
       } catch (gsiErr) {
         console.warn('GSI error, falling back:', gsiErr);
       }

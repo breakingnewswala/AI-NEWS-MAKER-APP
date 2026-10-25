@@ -690,7 +690,6 @@ export default function App() {
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
   // Authentication session - loads from localStorage or Android native bridge
-  // Direct Preview Mode: Defaults to active reporter session so Home screen and all features work immediately without Google Login barrier
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
       const saved = localStorage.getItem('reporter_auth_session');
@@ -702,8 +701,11 @@ export default function App() {
     } catch {
       // ignore
     }
-    // Direct preview access on Web & APK
-    return DEFAULT_REPORTER_USER;
+    const completed = localStorage.getItem('is_onboarding_completed');
+    if (completed === 'true') {
+      return DEFAULT_REPORTER_USER;
+    }
+    return null;
   });
 
   useEffect(() => {
@@ -711,16 +713,37 @@ export default function App() {
   }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
-  // Direct Preview Mode: Defaults to true so Home screen is immediately displayed
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
       const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedOnboarding === 'false') return false;
-      return true;
+      if (savedOnboarding === 'true') return true;
+      const saved = localStorage.getItem('reporter_auth_session');
+      if (saved) return true;
+      return false;
     } catch {
-      return true;
+      return false;
     }
   });
+
+  // Welcome flow with 4 steps & Google Login
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
+    try {
+      const savedSession = localStorage.getItem('reporter_auth_session');
+      const savedOnboarding = localStorage.getItem('is_onboarding_completed');
+      if (savedSession || savedOnboarding === 'true') {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleOpenWelcome = () => setShowAuthWelcomeScreen(true);
+    window.addEventListener('open_auth_welcome_screen', handleOpenWelcome);
+    return () => window.removeEventListener('open_auth_welcome_screen', handleOpenWelcome);
+  }, []);
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState<boolean>(false);
@@ -2088,9 +2111,6 @@ export default function App() {
     return <RemotionTestStudio />;
   }
 
-  // Direct Preview Mode: Home screen renders directly without login barrier
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(false);
-
   if (showAuthWelcomeScreen) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
@@ -2108,6 +2128,12 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
+              if (!currentUser) {
+                setCurrentUser(DEFAULT_REPORTER_USER);
+              }
+              try {
+                localStorage.setItem('is_onboarding_completed', 'true');
+              } catch {}
               setShowAuthWelcomeScreen(false);
               navigateToTab('home');
             }}
@@ -2120,6 +2146,12 @@ export default function App() {
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
           onSkipToHome={() => {
+            if (!currentUser) {
+              setCurrentUser(DEFAULT_REPORTER_USER);
+            }
+            try {
+              localStorage.setItem('is_onboarding_completed', 'true');
+            } catch {}
             setShowAuthWelcomeScreen(false);
             navigateToTab('home');
           }}
