@@ -510,3 +510,6 @@ export interface UserWallet {
   pendingBalance: number; // Coins in pending claims
   updatedAt: number;
 }
+
+export type { ReporterUser } from './components/LoginModal';
+

@@ -44,6 +44,7 @@ import {
   Unlock,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
+import { ReporterUser } from '../types';
 import { isEffectiveAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';

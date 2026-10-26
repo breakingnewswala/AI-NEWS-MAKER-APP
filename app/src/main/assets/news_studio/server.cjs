@@ -1510,12 +1510,12 @@ function loadSubUsersDatabase() {
   try {
     if (import_fs.default.existsSync(SUB_USERS_DB_FILE)) {
       const raw = import_fs.default.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
-      if (!raw) return [];
+      if (!raw || raw === "[]" || raw === "{}") return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     }
   } catch (err) {
-    console.error("Error reading sub_users_db.json:", err.message);
+    saveSubUsersDatabase([]);
   }
   return [];
 }
@@ -3482,7 +3482,8 @@ function syncUserToProfiles(u) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
-      district: u.district || "",
+      district: u.district || u.location || "",
+      location: u.location || u.district || "",
       channelNameHi: u.channelNameHi || u.channelName || "",
       channelNameEn: u.channelNameEn || "",
       channelLogoUrl: u.channelLogoUrl || "",
@@ -3491,7 +3492,7 @@ function syncUserToProfiles(u) {
       channelLogoType: u.channelLogoType || "png",
       mobileNumber: u.mobileNumber || u.mobile || "",
       websiteUrl: u.websiteUrl || "",
-      socialIcons: u.socialIcons,
+      socialIcons: u.socialIcons || allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons || void 0,
       updatedAt: Date.now()
     };
     if (u.email) {
@@ -3530,7 +3531,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const existing = users[idx];
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
-    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? rawReqUser || existing.username || "breakingnewswala" : rawReqUser || existing.username || cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username);
+    const safeUsername = rawReqUser || existing.username || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username));
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -3546,9 +3547,13 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
-      district: userPayload.district || existing.district || "",
+      district: userPayload.district || userPayload.location || existing.district || existing.location || "",
+      location: userPayload.location || userPayload.district || existing.location || existing.district || "",
+      state: userPayload.state || existing.state || "",
+      address: userPayload.address || existing.address || "",
+      pincode: userPayload.pincode || existing.pincode || "",
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
-      socialIcons: userPayload.socialIcons || existing.socialIcons,
+      socialIcons: userPayload.socialIcons !== void 0 ? userPayload.socialIcons : existing.socialIcons,
       role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
       tier: isSuper ? "ultra" : existing.tier || userPayload.tier || "basic",
       planName: isSuper ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
@@ -3568,7 +3573,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   } else {
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
-    const safeUsername = cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? rawReqUser || "breakingnewswala" : rawReqUser || cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name);
+    const safeUsername = rawReqUser || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name));
     const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString("hex").slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
     updatedRecord = {
       userId: deterministicUserId,
@@ -3585,7 +3590,11 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelLogoType: userPayload.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || "",
-      district: userPayload.district || "",
+      district: userPayload.district || userPayload.location || "",
+      location: userPayload.location || userPayload.district || "",
+      state: userPayload.state || "",
+      address: userPayload.address || "",
+      pincode: userPayload.pincode || "",
       websiteUrl: userPayload.websiteUrl || "",
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? "superadmin" : userPayload.role || "user",

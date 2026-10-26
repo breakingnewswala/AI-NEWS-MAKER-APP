@@ -1448,7 +1448,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       mobile: finalPhone || channelProfile.mobileNumber,
       username: channelProfile.username,
       district: finalDistrict,
-      location: finalDistrict,
       isLocked: !isAdmin,
     });
 
@@ -1481,7 +1480,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         headers: {
           'Content-Type': 'application/json',
           'x-admin-key': 'master-admin',
-          'x-user-role': isAdmin ? 'admin' : 'reporter',
+          'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
           'x-admin-email': cleanEmail,
           'x-user-email': cleanEmail,
         },

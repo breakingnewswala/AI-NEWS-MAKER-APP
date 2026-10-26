@@ -814,12 +814,12 @@ function loadSubUsersDatabase(): StoredSubUser[] {
   try {
     if (fs.existsSync(SUB_USERS_DB_FILE)) {
       const raw = fs.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
-      if (!raw) return [];
+      if (!raw || raw === "[]" || raw === "{}") return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     }
   } catch (err: any) {
-    console.error("Error reading sub_users_db.json:", err.message);
+    saveSubUsersDatabase([]);
   }
   return [];
 }
@@ -2900,6 +2900,9 @@ interface AuthoritativeUser {
   whatsappNumber?: string;
   state?: string;
   district?: string;
+  location?: string;
+  address?: string;
+  pincode?: string;
   assembly?: string;
   village?: string;
   role: 'superadmin' | 'admin' | 'reporter' | 'user';
@@ -3259,7 +3262,8 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
-      district: u.district || '',
+      district: u.district || u.location || '',
+      location: u.location || u.district || '',
       channelNameHi: u.channelNameHi || u.channelName || '',
       channelNameEn: u.channelNameEn || '',
       channelLogoUrl: u.channelLogoUrl || '',
@@ -3268,7 +3272,7 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       channelLogoType: u.channelLogoType || 'png',
       mobileNumber: u.mobileNumber || u.mobile || '',
       websiteUrl: u.websiteUrl || '',
-      socialIcons: u.socialIcons,
+      socialIcons: u.socialIcons || (allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons) || undefined,
       updatedAt: Date.now(),
     };
     // Purge duplicate aliases for the same email in user_profiles_db

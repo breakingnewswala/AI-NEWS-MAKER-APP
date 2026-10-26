@@ -645,10 +645,20 @@ export default function App() {
           const deletedRaw = localStorage.getItem('app_deleted_video_ids');
           const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
           const cleanList = data.videos.filter((v: any) => !deletedSet.has(v.id) && !isDummyVideo(v));
-          setVideos(cleanList);
-          try {
-            localStorage.setItem('app_admin_videos', JSON.stringify(cleanList));
-          } catch {}
+          setVideos((prev) => {
+            const map = new Map<string, any>();
+            cleanList.forEach((v: any) => map.set(v.id, v));
+            prev.forEach((v: any) => {
+              if (!map.has(v.id) && !deletedSet.has(v.id) && !isDummyVideo(v)) {
+                map.set(v.id, v);
+              }
+            });
+            const merged = Array.from(map.values());
+            try {
+              localStorage.setItem('app_admin_videos', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
       }
     } catch (err) {
