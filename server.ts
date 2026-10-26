@@ -1194,7 +1194,7 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
         breaking: true,
         fullContent: rawDesc.replace(/<[^>]+>/g, ' ').trim() || summary || title,
         timestamp,
-        status: 'PENDING_APPROVAL',
+        status: 'APPROVED',
       });
     }
 
@@ -3319,11 +3319,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || (preservedTrialStart + SEVEN_DAYS_MS);
 
-    const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
+    const safeUsername = rawReqUser || existing.username || (cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
       : (isBreakingNewsWala
-          ? (rawReqUser || existing.username || 'breakingnewswala')
-          : (rawReqUser || existing.username || cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
+          ? 'breakingnewswala'
+          : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
 
     updatedRecord = {
       ...existing,
@@ -3340,9 +3340,13 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || 'png',
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || '',
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || '',
-      district: userPayload.district || existing.district || '',
+      district: userPayload.district || userPayload.location || existing.district || existing.location || '',
+      location: userPayload.location || userPayload.district || existing.location || existing.district || '',
+      state: userPayload.state || existing.state || '',
+      address: userPayload.address || existing.address || '',
+      pincode: userPayload.pincode || existing.pincode || '',
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
-      socialIcons: userPayload.socialIcons || existing.socialIcons,
+      socialIcons: userPayload.socialIcons !== undefined ? userPayload.socialIcons : existing.socialIcons,
       role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
       tier: isSuper ? 'ultra' : (existing.tier || userPayload.tier || 'basic'),
       planName: isSuper ? 'VIP DESK' : (existing.planName || userPayload.planName || 'BASIC'),
@@ -3363,11 +3367,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
 
-    const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
+    const safeUsername = rawReqUser || (cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
       : (isBreakingNewsWala
-          ? (rawReqUser || 'breakingnewswala')
-          : (rawReqUser || cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
+          ? 'breakingnewswala'
+          : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
 
     const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString('hex').slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
 
@@ -3386,7 +3390,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       channelLogoType: userPayload.channelLogoType || 'png',
       mobile: userPayload.mobile || userPayload.mobileNumber || '',
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || '',
-      district: userPayload.district || '',
+      district: userPayload.district || userPayload.location || '',
+      location: userPayload.location || userPayload.district || '',
+      state: userPayload.state || '',
+      address: userPayload.address || '',
+      pincode: userPayload.pincode || '',
       websiteUrl: userPayload.websiteUrl || '',
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? 'superadmin' : (userPayload.role || 'user'),

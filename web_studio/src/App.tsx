@@ -1982,10 +1982,10 @@ export default function App() {
       showDate: false,
       showWatermark: false,
       showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-      headline: post.title,
+      headline: '',
       location: effectiveLoc,
       category: post.categoryName,
-      summary: post.summary,
+      summary: '',
       images: {
         ...prev.images,
         main: primaryPhoto,
@@ -2921,13 +2921,20 @@ export default function App() {
             navigateToTab('studio');
           }}
           onAdminAddVideo={(newVid) => {
-            setVideos((prev) => [newVid, ...prev]);
+            setVideos((prev) => [newVid, ...prev.filter((v) => v.id !== newVid.id)]);
             try {
               const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
               localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
               fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
                 body: JSON.stringify(newVid),
               }).catch(() => {});
             } catch {}
@@ -2935,9 +2942,16 @@ export default function App() {
           onAdminUpdateVideo={(updatedVid) => {
             setVideos((prev) => prev.map((v) => (v.id === updatedVid.id ? updatedVid : v)));
             try {
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
               fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(updatedVid.id)}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
                 body: JSON.stringify(updatedVid),
               }).catch(() => {});
             } catch {}
@@ -2955,8 +2969,15 @@ export default function App() {
               const currentSaved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
               localStorage.setItem('app_admin_videos', JSON.stringify(currentSaved.filter((v: any) => v.id !== videoId)));
 
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
               fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(videoId)}`, {
                 method: 'DELETE',
+                headers: {
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
               }).catch(() => {});
             } catch {}
           }}

@@ -60,10 +60,12 @@ service cloud.firestore {
              'uid', 'name', 'email', 'username', 'role', 'tier',
              'channelName', 'channelNameEn', 'channelLogoUrl',
              'channelLogoPngUrl', 'channelLogoGifUrl', 'channelLogoType',
-             'mobileNumber', 'district', 'avatarUrl', 'photoUrl',
-             'isLocked', 'isMobileLocked', 'createdAt', 'lastLoginAt', 'updatedAt'
+             'mobileNumber', 'whatsappNumber', 'district', 'location',
+             'state', 'address', 'pincode', 'websiteUrl', 'socialIcons',
+             'showMobileNumber', 'showWebsite', 'customHeaderPng', 'customFooterPng',
+             'avatarUrl', 'photoUrl', 'isLocked', 'isMobileLocked', 'createdAt', 'lastLoginAt', 'updatedAt'
            ])
-        && data.uid == request.auth.uid
+        && (data.uid == request.auth.uid || isAdmin())
         && data.email is string && data.email.size() <= 200;
     }
 
@@ -92,11 +94,23 @@ service cloud.firestore {
                     && (isAdmin() || existing().authorId == request.auth.uid);
     }
 
+    // Videos and Reels: Read allowed for all users, Write strictly admin
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin Configured RSS & Web sources: Read allowed, Write strictly admin
+    match /rss_sources/{sourceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Users Profiles
     match /users/{userId} {
       allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow list: if isAdmin();
-      allow create: if isOwner(userId)
+      allow create: if (isOwner(userId) || isAdmin())
                     && isValidUserProfile(incoming())
                     && (incoming().role == null || incoming().role == 'reporter' || incoming().role == 'user' || isAdmin());
       allow update: if (isOwner(userId) || isAdmin())

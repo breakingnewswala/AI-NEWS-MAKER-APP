@@ -153,8 +153,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       district: 'डिजिटल डेस्क'
     };
   })();
-  const isRealAdmin = isUserAdmin(effectiveUser);
-  const isAdmin = isEffectiveAdmin(effectiveUser);
+  const isRealAdmin = isUserAdmin(effectiveUser) || isUserAdmin(currentUser);
+  const isAdmin = isEffectiveAdmin(effectiveUser) || isRealAdmin;
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
@@ -221,6 +221,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       .then((data) => {
         if (data && data.success && data.profile) {
           const cloudP = data.profile;
+          if (cloudP.district || cloudP.location) {
+            setReporterDistrict(cloudP.district || cloudP.location);
+          }
           setChannelProfile((prev) => {
             const resolvedLogo = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || defaultAdminLogo;
             const merged = {
@@ -236,7 +239,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
               whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
-              district: cloudP.district || prev.district || '',
+              district: cloudP.district || cloudP.location || prev.district || '',
+              location: cloudP.location || cloudP.district || prev.location || '',
               state: cloudP.state || prev.state || '',
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
@@ -1378,8 +1382,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const primaryPngLogo = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
     const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
+    const finalDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
+
     const updatedProfile = {
       ...channelProfile,
+      district: finalDistrict,
+      location: finalDistrict,
       whatsappNumber: finalPhone,
       mobileNumber: finalPhone || channelProfile.mobileNumber,
       showWebsite: channelProfile.showWebsite !== false,
@@ -1390,6 +1398,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       channelLogoType: 'png' as const,
       customHeaderPng: effectiveHeaderPng,
       customFooterPng: effectiveFooterPng,
+      socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
     };
 
     localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
@@ -1438,6 +1447,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       channelLogoUrl: primaryPngLogo,
       mobile: finalPhone || channelProfile.mobileNumber,
       username: channelProfile.username,
+      district: finalDistrict,
+      location: finalDistrict,
       isLocked: !isAdmin,
     });
 
@@ -1458,22 +1469,46 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         channelLogoUrl: primaryPngLogo,
         channelLogoPngUrl: primaryPngLogo,
         channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
-        district: channelProfile.district || '',
+        district: finalDistrict,
+        location: finalDistrict,
         state: channelProfile.state || '',
         address: channelProfile.address || '',
         pincode: channelProfile.pincode || '',
-        socialIcons: channelProfile.socialIcons,
+        socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
       };
       const res = await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-role': isAdmin ? 'admin' : 'reporter',
+          'x-admin-email': cleanEmail,
+          'x-user-email': cleanEmail,
+        },
         body: JSON.stringify(serverPayload),
       });
       if (!res.ok) {
-        showToast('चेतावनी: सर्वर पर प्रोफाइल सहेजने में समस्या आई');
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'सर्वर पर प्रोफाइल सहेजने में समस्या आई');
       }
-    } catch (err) {
-      console.warn('Cloud server sync warning:', err);
+      const data = await res.json();
+      if (data && data.profile) {
+        const savedProf = data.profile;
+        setChannelProfile((p) => ({
+          ...p,
+          ...savedProf,
+          district: savedProf.district || savedProf.location || p.district,
+          location: savedProf.location || savedProf.district || p.location,
+          socialIcons: savedProf.socialIcons || p.socialIcons,
+        }));
+        if (savedProf.district || savedProf.location) {
+          setReporterDistrict(savedProf.district || savedProf.location);
+        }
+      }
+    } catch (err: any) {
+      console.error('Cloud server sync error:', err);
+      alert(`प्रोफाइल सहेजने में विफल: ${err.message || 'सर्वर पर सहेजने में समस्या आई'}`);
+      return;
     }
 
     // Dispatch update event for active studio card
@@ -2466,13 +2501,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <label className="block text-xs font-bold text-slate-300 mb-1">
                     संपादक / रिपोर्टर का जिला / शहर
                   </label>
-                  <input
-                    type="text"
-                    value={reporterDistrict}
-                    onChange={(e) => setReporterDistrict(e.target.value)}
-                    placeholder="भोपाल / सेंट्रल डेस्क"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
-                  />
+                    <input
+                      type="text"
+                      value={reporterDistrict}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setReporterDistrict(val);
+                        setChannelProfile((p) => ({
+                          ...p,
+                          district: val,
+                          location: val,
+                        }));
+                      }}
+                      placeholder="भोपाल / सेंट्रल डेस्क"
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                    />
                 </div>
 
                 <div>

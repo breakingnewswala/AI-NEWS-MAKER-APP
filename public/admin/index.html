@@ -540,12 +540,19 @@
       text-transform: uppercase;
     }
 
+    @keyframes subtleHeadlineTyping {
+      0%, 100% { border-right: 2px solid transparent; }
+      50% { border-right: 2px solid #c62828; }
+    }
+
     .jacket-body-headline {
       font-size: 16px;
       font-weight: 900;
       line-height: 1.35;
       color: #0f172a;
       margin: 8px 0;
+      display: inline-block;
+      animation: subtleHeadlineTyping 1.8s ease-in-out infinite;
     }
 
     .jacket-body-sub {
@@ -880,7 +887,10 @@
         <div class="panel">
           <div class="panel-header">
             <h3><span>🎨</span> मास्टर जैकेट कस्टमाइज़र एवं लाइव 1080x1350 कैनवास प्रीव्यू</h3>
-            <button class="btn btn-gold btn-sm" onclick="alert('मास्टर ब्रैंडिंग सेटिंग्स मोबाइल ऐप और वेब दोनों पर सिंक हो गई!')">सुरक्षित करें एवं सिंक करें</button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button class="btn btn-outline btn-sm" onclick="openJacketFullPreviewModal()">Preview Full Export</button>
+              <button class="btn btn-gold btn-sm" onclick="alert('मास्टर ब्रैंडिंग सेटिंग्स मोबाइल ऐप और वेब दोनों पर सिंक हो गई!')">सुरक्षित करें एवं सिंक करें</button>
+            </div>
           </div>
           <div class="panel-body">
             <div class="jacket-studio-grid">
@@ -1238,7 +1248,39 @@
       alert(`${name} RSS फीड जुड़ गई और होम फीड पर पोस्ट बॉक्स लाइव हो गया!`);
     }
 
+    // Full Export Preview Modal
+    function openJacketFullPreviewModal() {
+      const liveFrame = document.getElementById('live-jacket-frame');
+      const modalInner = document.getElementById('full-modal-inner');
+      if (liveFrame && modalInner) {
+        modalInner.innerHTML = liveFrame.innerHTML;
+      }
+      document.getElementById('jacket-full-modal').classList.add('active');
+    }
+    function closeJacketFullPreviewModal() {
+      document.getElementById('jacket-full-modal').classList.remove('active');
+    }
+
     renderTables();
   </script>
+
+  <!-- JACKET FULL PREVIEW MODAL (1080x1350 Mobile Style) -->
+  <div class="modal-backdrop" id="jacket-full-modal">
+    <div class="modal-content" style="max-width: 460px; padding: 20px; background: #0f172a; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.75);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+        <h4 style="margin: 0; color: #f1f5f9; font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+          <span>📱</span> 1080×1350 मास्टर जैकेट फुल एक्सपोर्ट प्रीव्यू
+        </h4>
+        <button style="background: none; border: none; color: #94a3b8; font-size: 18px; cursor: pointer;" onclick="closeJacketFullPreviewModal()">✕</button>
+      </div>
+      <div style="aspect-ratio: 4/5; width: 100%; max-height: 560px; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; flex-direction: column;" id="full-export-card-preview">
+        <div id="full-modal-inner" style="width: 100%; height: 100%; display: flex; flex-direction: column;"></div>
+      </div>
+      <div style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-outline btn-sm" onclick="closeJacketFullPreviewModal()">बंद करें</button>
+        <button class="btn btn-gold btn-sm" onclick="alert('1080x1350 HD कार्ड रेंडर सफल!')">HD डाउनलोड</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

@@ -166,7 +166,7 @@ export const FeaturePromotionCard: React.FC<FeaturePromotionCardProps> = ({
 
     return (
       <div
-        className={`col-span-1 md:col-span-2 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-amber-500/40 p-4 sm:p-5 shadow-xl flex flex-col justify-between space-y-3 relative overflow-hidden group ${className}`}
+        className={`col-span-1 md:col-span-2 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-amber-500/40 p-4 sm:p-5 shadow-xl flex flex-col justify-start gap-3.5 relative overflow-hidden group ${className}`}
       >
         <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
           <div className="flex items-center gap-2">
@@ -187,15 +187,38 @@ export const FeaturePromotionCard: React.FC<FeaturePromotionCardProps> = ({
           </button>
         </div>
 
-        {/* 4 to 6 Feature Items filling available space cleanly without empty void */}
+        {/* Central Workflow Hero Showcase - Elegantly fills available card space without empty void */}
+        <div className="p-3 sm:p-3.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-inner">
+          <div className="space-y-1 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+              <span className="text-xs sm:text-sm font-black text-amber-300">
+                ऑल-इन-वन डिजिटल न्यूज़ क्रिएटर स्टूडियो
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed">
+              किसी भी खबर से 5 संतुलित हेडलाइन, सोशल कैप्शन और 50+ रेडी-टू-यूज़ फ्रेम्स में प्रोफेशनल न्यूज़ ग्राफिक व वीडियो तैयार करें।
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateToTab('studio')}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer transition hover:scale-105 active:scale-95"
+          >
+            <span>अभी बनाएं</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 6 Feature Items filling available space cleanly without empty void */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-          {displayFeatures.map((feat, idx) => {
+          {displayFeatures.map((feat) => {
             const IconC = feat.icon;
             return (
               <div
                 key={feat.id}
                 onClick={() => handleAction(feat)}
-                className={`p-2.5 rounded-xl bg-slate-900/90 border ${feat.borderColor} hover:border-amber-400 transition cursor-pointer flex flex-col justify-between group/card ${idx >= 4 ? 'hidden sm:flex' : ''}`}
+                className={`p-2.5 rounded-xl bg-slate-900/90 border ${feat.borderColor} hover:border-amber-400 transition cursor-pointer flex flex-col justify-between group/card shadow-xs`}
               >
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">

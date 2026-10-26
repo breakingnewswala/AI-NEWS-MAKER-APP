@@ -378,9 +378,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const buildFiveStoryOptions = (
     existing: string[],
     baseH: string = '',
-    _summaryText: string = '',
-    _locationText: string = '',
-    _sourceTitle: string = ''
+    summaryText: string = '',
+    locationText: string = '',
+    sourceTitle: string = ''
   ): string[] => {
     const combined: string[] = [];
     if (existing && Array.isArray(existing)) {
@@ -391,8 +391,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
       }
     }
-    if (combined.length === 0 && baseH) {
-      combined.push(cleanHeadlineText(baseH).replace(/[।\.\,\!\?\:\-]+$/g, '').trim());
+    const prime = cleanHeadlineText(combined[0] || baseH || sourceTitle || 'ताज़ा समाचार').replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+    if (combined.length === 0 && prime) {
+      combined.push(prime);
+    }
+    if (combined.length < 5) {
+      const factSentences = (summaryText || prime)
+        .split(/[।\n]+|\.\s+/)
+        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      const supp = generate5BalancedHeadlineOptions(prime, factSentences, locationText);
+      const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, prime, locationText);
+      for (const f of fitted) {
+        if (combined.length >= 5) break;
+        if (!combined.includes(f)) combined.push(f);
+      }
     }
     return combined.slice(0, 5);
   };
@@ -502,6 +515,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setError(null);
       setCaptionCopied(false);
       lastTriggerPayloadRef.current = '';
+      setResult(null);
+      setHeadlineOptions([]);
+      setSelectedHeadlineIndex(0);
+      setGeneratedAiImageUrl(null);
     }
     activeNewsIdRef.current = currentNewsId;
 
@@ -559,6 +576,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         sessionStorage.setItem('ai_news_auto_triggered_keys', JSON.stringify(processedKeys.slice(-20)));
       } catch {}
       autoFillNews.autoTrigger = false;
+      setLoading(true);
+      setResult(null);
+      setHeadlineOptions([]);
+      setSelectedHeadlineIndex(0);
       triggerProcessDirectly(effectiveTargetUrl, rawContent, autoFillNews);
     }
   }, [autoFillNews]);
@@ -1694,7 +1715,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       </div>
 
       {/* 1. Automated Home-to-AI Workflow Loading Screen: Hides Box 1, Box 2, pasted URL, generation buttons, and stale headlines */}
-      {isAutomatedEntry && loading && (
+      {isAutomatedEntry && (loading || (Boolean(autoFillNews?.autoTrigger) && !result)) && (
         <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl animate-in fade-in my-2">
           <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
             <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />

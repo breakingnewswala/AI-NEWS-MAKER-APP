@@ -96,7 +96,9 @@
         "vip-dash",
         "vip_dash",
         "vip_desk",
-        "vip desk"
+        "vip desk",
+        "admin",
+        "superadmin"
       ],
       "allowAllTiers": false
     }
