@@ -4724,6 +4724,15 @@ function saveRssSourcesDatabase(sources) {
       } catch {
       }
     }
+    try {
+      const adapter = require_server_firestore_adapter();
+      adapter.firestoreWriteDoc("app_settings", "rss_sources_config", {
+        sources: cleaned,
+        updatedAt: Date.now()
+      }).catch(() => {
+      });
+    } catch {
+    }
     return true;
   } catch (err) {
     console.error("Error writing rss_sources_database.json:", err.message);
@@ -7590,9 +7599,10 @@ function resolveUserTierAndRole(req) {
   return { tier: reqTier, role: reqRole };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3-flash-preview",
   "gemini-flash-latest",
-  "gemini-3.1-flash-lite"
+  "gemini-3.8-flash"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -9896,6 +9906,7 @@ ${rawLink}` : rawLink;
         apiKey: activeGeminiKey,
         httpOptions: {
           headers: {
+            "x-goog-api-key": activeGeminiKey,
             "User-Agent": "aistudio-build"
           }
         }
@@ -9950,12 +9961,14 @@ ${rawLink}` : rawLink;
       }
     } else {
       let geminiSuccess = false;
+      let lastGeminiErr = null;
       try {
         parsedData = await runGemini();
         geminiSuccess = true;
         actualProvider = "gemini";
         console.log("[News AI] Successfully generated news content via Gemini AI");
       } catch (geminiError) {
+        lastGeminiErr = geminiError;
         console.warn(`[News AI] Gemini unavailable (${geminiError?.status || geminiError?.message?.slice(0, 70)})`);
       }
       if (!geminiSuccess && modelAccessCfg.gemini?.allowFallback) {
@@ -9972,10 +9985,14 @@ ${rawLink}` : rawLink;
         }
       }
       if (!parsedData) {
-        console.log("[News AI] Generating local structured editorial draft");
-        const fallbackSource = rawInputText || fetchedArticleSnippet || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
-        parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines, extractedArticleMeta, channelUsername);
-        actualProvider = "local";
+        const isKeyMissing = lastGeminiErr?.message?.includes("GEMINI_API_KEY");
+        const errMsg = isKeyMissing ? "GEMINI_API_KEY \u0938\u0930\u094D\u0935\u0930 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" : "\u091C\u0947\u092E\u093F\u0928\u0940 \u090F\u0906\u0908 (Gemini AI) \u0938\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u0935 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 (Retry) \u0915\u0930\u0947\u0902\u0964";
+        return res.status(502).json({
+          success: false,
+          error: errMsg,
+          canRetry: true,
+          details: lastGeminiErr?.message || "Gemini service temporarily unavailable"
+        });
       }
     }
     if (parsedData) {
@@ -10396,7 +10413,12 @@ JSON Output Schema:
       }
       const ai = new import_genai.GoogleGenAI({
         apiKey: activeGeminiKey,
-        httpOptions: { headers: { "User-Agent": "aistudio-build" } }
+        httpOptions: {
+          headers: {
+            "x-goog-api-key": activeGeminiKey,
+            "User-Agent": "aistudio-build"
+          }
+        }
       });
       const response = await generateWithFallbackAndRetry(
         ai,

@@ -4735,6 +4735,14 @@ function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
       } catch {}
     }
 
+    try {
+      const adapter = require("./server_firestore_adapter.cjs");
+      adapter.firestoreWriteDoc("app_settings", "rss_sources_config", {
+        sources: cleaned,
+        updatedAt: Date.now()
+      }).catch(() => {});
+    } catch {}
+
     return true;
   } catch (err: any) {
     console.error("Error writing rss_sources_database.json:", err.message);
@@ -8315,9 +8323,10 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
   "gemini-3.1-flash-lite",
+  "gemini-3-flash-preview",
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -11632,6 +11641,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         apiKey: activeGeminiKey,
         httpOptions: {
           headers: {
+            "x-goog-api-key": activeGeminiKey,
             "User-Agent": "aistudio-build",
           },
         },
@@ -11697,12 +11707,14 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     } else {
       // requestedAiProvider === "gemini"
       let geminiSuccess = false;
+      let lastGeminiErr: any = null;
       try {
         parsedData = await runGemini();
         geminiSuccess = true;
         actualProvider = "gemini";
         console.log("[News AI] Successfully generated news content via Gemini AI");
       } catch (geminiError: any) {
+        lastGeminiErr = geminiError;
         console.warn(`[News AI] Gemini unavailable (${geminiError?.status || geminiError?.message?.slice(0, 70)})`);
       }
 
@@ -11721,10 +11733,16 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       }
 
       if (!parsedData) {
-        console.log("[News AI] Generating local structured editorial draft");
-        const fallbackSource = rawInputText || fetchedArticleSnippet || "ताज़ा समाचार अपडेट";
-        parsedData = createLocalNewsFallback(fallbackSource, linkUrl, targetMaxLines, extractedArticleMeta, channelUsername);
-        actualProvider = "local";
+        const isKeyMissing = lastGeminiErr?.message?.includes("GEMINI_API_KEY");
+        const errMsg = isKeyMissing
+          ? "GEMINI_API_KEY सर्वर में सेट नहीं है।"
+          : "जेमिनी एआई (Gemini AI) से हेडलाइंस व विश्लेषण तैयार करने में त्रुटि हुई। कृपया पुनः प्रयास (Retry) करें।";
+        return res.status(502).json({
+          success: false,
+          error: errMsg,
+          canRetry: true,
+          details: lastGeminiErr?.message || "Gemini service temporarily unavailable"
+        });
       }
     }
 
@@ -12225,7 +12243,12 @@ JSON Output Schema:
       }
       const ai = new GoogleGenAI({
         apiKey: activeGeminiKey,
-        httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+        httpOptions: {
+          headers: {
+            "x-goog-api-key": activeGeminiKey,
+            "User-Agent": "aistudio-build",
+          },
+        },
       });
       const response = await generateWithFallbackAndRetry(
         ai,
