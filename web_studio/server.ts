@@ -3222,7 +3222,7 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
 }
 
 function extractUserIdentifier(req: express.Request): string | undefined {
-  const headerEmail = (req.headers["x-user-email"] as string) || undefined;
+  const headerEmail = (req.headers["x-user-email"] as string) || (req.headers["x-admin-email"] as string) || undefined;
   const headerUid = (req.headers["x-user-id"] as string) || undefined;
   const bodyEmail = req.body?.email || req.body?.userEmail || req.body?.reporterEmail;
   const bodyUid = req.body?.userId || req.body?.uid;
@@ -8303,10 +8303,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-flash-lite-latest",
-  "gemini-3-flash-preview",
   "gemini-3.8-flash",
   "gemini-flash-latest",
+  "gemini-3.1-flash-lite",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -10203,13 +10202,37 @@ function formatCaptionVariants(
     .map((s) => s.trim())
     .filter((s) => s.length > 5);
 
-  const baseText = sentences.length > 0 ? sentences.join("। ") + "।" : cleanHeadline;
-  const bulletItems = (sentences.length > 0 ? sentences.slice(0, 4) : [cleanHeadline]).map((b) => `• ${b}`);
+  let p1 = "";
+  let p2 = "";
+  let p3 = "";
+
+  if (sentences.length >= 6) {
+    const chunk = Math.ceil(sentences.length / 3);
+    p1 = sentences.slice(0, chunk).join("। ") + "।";
+    p2 = sentences.slice(chunk, chunk * 2).join("। ") + "।";
+    p3 = sentences.slice(chunk * 2).join("। ") + "।";
+  } else if (sentences.length >= 3) {
+    p1 = sentences[0] + "।";
+    p2 = sentences[1] + "।";
+    p3 = sentences.slice(2).join("। ") + "।";
+  } else if (sentences.length === 2) {
+    p1 = sentences[0] + "।";
+    p2 = sentences[1] + "।";
+    p3 = `${location ? `${location} से जुड़े इस` : "इस"} मामले में आगे की विस्तृत जानकारी की प्रतीक्षा है।`;
+  } else {
+    p1 = sentences[0] ? sentences[0] + "।" : cleanHeadline;
+    p2 = `${location ? `${location} क्षेत्र में` : ""} सामने आए इस घटनाक्रम पर संबंधित विभाग और प्रशासन संज्ञान ले रहा है।`;
+    p3 = "मामले में जांच व आगे की आवश्यक कार्रवाई जारी है।";
+  }
+
+  const captionDetailed = `${p1}\n\n${p2}\n\n${p3}`;
+  const bulletItems = (sentences.length > 0 ? sentences.slice(0, 5) : [cleanHeadline]).map((b) => `• ${b}`);
+  const captionShort = sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : p1;
 
   return {
-    captionDetailed: baseText,
+    captionDetailed,
     captionBullets: bulletItems.join("\n"),
-    captionShort: sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : baseText,
+    captionShort,
   };
 }
 
@@ -11140,7 +11163,10 @@ export function fitHeadlinesTo5TierRanges(
 export const GEMINI_NEWS_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    headline: { type: Type.STRING },
+    headline: {
+      type: Type.STRING,
+      description: "Primary journalistic headline in Devanagari Hindi (target 100-150 visible characters, max 150, concise, active, no trailing period or punctuation)",
+    },
     headlineOptions: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
@@ -11149,14 +11175,36 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     highlightWords: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
+      description: "2 to 4 key names or significant action words to highlight",
     },
-    formattedHeadline: { type: Type.STRING },
-    location: { type: Type.STRING },
-    summary: { type: Type.STRING },
-    captionDetailed: { type: Type.STRING },
-    captionBullets: { type: Type.STRING },
-    captionShort: { type: Type.STRING },
-    category: { type: Type.STRING },
+    formattedHeadline: {
+      type: Type.STRING,
+      description: "Headline with highlighted words marked with [yellow]word[/yellow]",
+    },
+    location: {
+      type: Type.STRING,
+      description: "Clean city, district, or state without category keywords or URLs",
+    },
+    summary: {
+      type: Type.STRING,
+      description: "Comprehensive 3-paragraph Hindi news summary covering all facts, figures, names, locations, dates, and developments from the source. Must NOT begin with the headline or title. Exactly 3 substantive paragraphs separated by blank lines, concluding with hashtags ending with #AINewsMaker",
+    },
+    captionDetailed: {
+      type: Type.STRING,
+      description: "Rich, detailed 3-paragraph Hindi social media caption. Directly begins with factual details (who, what, where, when, context) without repeating the headline. 3 substantive paragraphs separated by blank lines, concluding with hashtags ending with #AINewsMaker",
+    },
+    captionBullets: {
+      type: Type.STRING,
+      description: "Key facts in 3 to 5 clear bullet points, each starting with '• ' and ending with '।'. Concluding with hashtags ending with #AINewsMaker. Must not repeat the headline",
+    },
+    captionShort: {
+      type: Type.STRING,
+      description: "Crisp 2-paragraph Hindi news summary with key facts and concluding hashtags ending with #AINewsMaker. Must not repeat the headline",
+    },
+    category: {
+      type: Type.STRING,
+      description: "News category (हादसा / प्रशासन / राजनीति / विकास / अपराध / कारोबार)",
+    },
     suggestedImagePrompt: { type: Type.STRING },
     isAiGeneratedPhoto: { type: Type.BOOLEAN },
     speakerName: { type: Type.STRING },
@@ -11261,13 +11309,13 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - शुद्ध, मानक देवनागरी हिंदी। किसी भी हेडलाइन के अंत में पूर्णविराम (. या ।) न लगाएं।
 6. स्थान (Location):
    - केवल शुद्ध शहर, जिला या राज्य (जैसे "ग्वालियर, मध्य प्रदेश" या "नई दिल्ली")। स्थान में कभी कोई URL या वाक्य न डालें।
-7. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs):
-   - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" न जोड़ें।
+7. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs, FULL JOURNALISTIC DETAILS):
+   - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" कभी न जोड़ें।
    - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
-   - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं।
-   - summary / captionDetailed: ठीक 3 विस्तृत पैराग्राफ में सीधे घटना के तथ्यों से शुरू करते हुए पूरी खबर।
-   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो।
-   - captionShort: ठीक 2 संक्षिप्त पैराग्राफ, सीधे मुख्य घटनाक्रम से शुरू।
+   - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं। सीधे घटना के पुष्ट तथ्यों, मुख्य व्यक्तियों, स्थान और घटनाक्रम से शुरुआत करें।
+   - summary व captionDetailed: पूर्ण विवरण सहित ठीक 3 विस्तृत पैराग्राफ (substantive paragraphs) लिखें। इसमें समाचार के सभी महत्वपूर्ण तथ्य, नाम, स्थान, दिनांक, संदर्भ, और आगे की कार्रवाई शामिल होनी चाहिए। छोटा या अधूरा कैप्शन कभी न लिखें।
+   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो।
+   - captionShort: ठीक 2 संतुलित पैराग्राफ, सीधे मुख्य घटनाक्रम व तथ्यों से शुरू।
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
@@ -11593,6 +11641,12 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
 
     const userResolution = resolveUserTierAndRole(req);
     const userTier = userResolution.tier;
+    const isVipDeskUser = Boolean(
+      userResolution.role === "admin" ||
+      userResolution.role === "superadmin" ||
+      ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userTier.toLowerCase().trim()) ||
+      String((req.body as any)?.userTier || "").toLowerCase().includes("vip")
+    );
 
     const aiFeaturesCfg = getAiFeaturesConfig();
     const modelAccessCfg = aiFeaturesCfg.aiModelAccess || {};
@@ -11764,6 +11818,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
         parsedData.location
       );
+      if (!isVipDeskUser && Array.isArray(parsedData.headlineOptions)) {
+        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 1);
+      } else if (Array.isArray(parsedData.headlineOptions)) {
+        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
+      }
       if (parsedData.headlineOptions.length > 0) {
         parsedData.headline = parsedData.headlineOptions[0];
       }
@@ -11891,6 +11950,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     }
 
     if (parsedData) {
+      if (!isVipDeskUser && Array.isArray(parsedData.headlineOptions)) {
+        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 1);
+      } else if (Array.isArray(parsedData.headlineOptions)) {
+        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
+      }
       parsedData.actualProvider = actualProvider;
       parsedData.pickedImages = pickedImages;
       parsedData.extractedArticlePhotos = extractedPhotos.length > 0 ? extractedPhotos : (pickedImages.main ? [pickedImages.main] : []);

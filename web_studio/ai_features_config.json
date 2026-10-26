@@ -91,14 +91,12 @@
   "permissions": {
     "regenerateHeadlines": {
       "allowedTiers": [
+        "ultra",
         "vip",
         "vip-dash",
         "vip_dash",
-        "vip desk",
         "vip_desk",
-        "ultra",
-        "admin",
-        "superadmin"
+        "vip desk"
       ],
       "allowAllTiers": false
     }

@@ -158,8 +158,13 @@ export function cleanAiToolsMemory(): void {
     try {
       sessionStorage.removeItem('ai_news_auto_triggered_keys');
     } catch {}
+    globalIsExecuting = false;
+    globalActiveTriggerKey = '';
   } catch {}
 }
+
+let globalIsExecuting = false;
+let globalActiveTriggerKey = '';
 
 export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   card,
@@ -320,9 +325,32 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setError(null);
       setAiPhotoPrompt('');
       lastTriggerPayloadRef.current = '';
+      globalIsExecuting = false;
+      globalActiveTriggerKey = '';
     };
     window.addEventListener('ai_news_studio_reset', handleStudioReset);
     return () => window.removeEventListener('ai_news_studio_reset', handleStudioReset);
+  }, []);
+
+  // Synchronize state across desktop and mobile component instances
+  useEffect(() => {
+    const handleStateSynced = (e: any) => {
+      const d = e?.detail;
+      if (!d) return;
+      setLoading(false);
+      isExecutingRef.current = false;
+      globalIsExecuting = false;
+      if (d.result) setResult(d.result);
+      if (d.headlineOptions) setHeadlineOptions(d.headlineOptions);
+      if (typeof d.selectedHeadlineIndex === 'number') setSelectedHeadlineIndex(d.selectedHeadlineIndex);
+      if (d.linkUrl !== undefined) setLinkUrl(d.linkUrl);
+      if (d.inputText !== undefined) setInputText(d.inputText);
+      if (d.activeGeneratedProvider) setActiveGeneratedProvider(d.activeGeneratedProvider);
+      if (d.error) setError(d.error);
+      else setError(null);
+    };
+    window.addEventListener('ai_tools_state_synced', handleStateSynced);
+    return () => window.removeEventListener('ai_tools_state_synced', handleStateSynced);
   }, []);
 
   // Auto-detect available AI providers on mount (seamless failover to OpenAI if available)
@@ -520,6 +548,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     // Only auto-trigger once per triggerKey. If already triggered or if headlines already exist for this session, DO NOT re-trigger!
     if (autoFillNews.autoTrigger && !isAlreadyTriggered) {
+      if (globalActiveTriggerKey === triggerKey && globalIsExecuting) {
+        return;
+      }
+      globalActiveTriggerKey = triggerKey;
+      globalIsExecuting = true;
       try {
         processedKeys.push(triggerKey);
         sessionStorage.setItem('ai_news_auto_triggered_keys', JSON.stringify(processedKeys.slice(-20)));
@@ -582,7 +615,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
 
     const payloadKey = `${effectiveLink}|${effectiveText}|${extraData?.timestamp || ''}`;
-    if (lastTriggerPayloadRef.current === payloadKey && isExecutingRef.current) {
+    if ((lastTriggerPayloadRef.current === payloadKey && isExecutingRef.current) || (globalActiveTriggerKey === payloadKey && globalIsExecuting && lastTriggerPayloadRef.current === payloadKey)) {
       return;
     }
     const requestId = ++activeRequestIdRef.current;
@@ -593,6 +626,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       currentAbortControllerRef.current = null;
     }
     isExecutingRef.current = true;
+    globalIsExecuting = true;
+    globalActiveTriggerKey = payloadKey;
     lastTriggerPayloadRef.current = payloadKey;
     if (extraData?.timestamp) {
       lastProcessedTimeRef.current = extraData.timestamp;
@@ -774,7 +809,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        extraData?.summary || res.summary || '',
+        res.captionDetailed || res.summary || extraData?.summary || '',
         res,
         effectiveLink || url
       );
@@ -800,6 +835,22 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       setLoading(false);
       isExecutingRef.current = false;
+      globalIsExecuting = false;
+
+      // Broadcast state to keep mobile and desktop editor instances in 100% lockstep
+      window.dispatchEvent(
+        new CustomEvent('ai_tools_state_synced', {
+          detail: {
+            result: res,
+            headlineOptions: isVipDeskUser ? opts.slice(0, 5) : opts.slice(0, 1),
+            selectedHeadlineIndex: 0,
+            linkUrl: effectiveLink || url,
+            inputText: effectiveText,
+            activeGeneratedProvider: (data.data?.actualProvider as ('gemini' | 'openai')) || aiProvider,
+            error: null,
+          },
+        })
+      );
     } catch (err: any) {
       if (
         isResetRef.current ||
@@ -808,12 +859,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       ) {
         setLoading(false);
         isExecutingRef.current = false;
+        globalIsExecuting = false;
         return;
       }
       if (aiProvider === 'openai') {
-        setError(err.message || 'चैट जीपीटी (OpenAI) से विश्लेषण विफल रहा। कृपया API कुंजी या नेटवर्क की जाँच करें।');
+        const errorMsg = err.message || 'चैट जीपीटी (OpenAI) से विश्लेषण विफल रहा। कृपया API कुंजी या नेटवर्क की जाँच करें।';
+        setError(errorMsg);
         setLoading(false);
         isExecutingRef.current = false;
+        globalIsExecuting = false;
+        window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
         return;
       }
       console.warn('API error, executing client AI fallback:', err);
@@ -836,9 +891,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
 
       if (effectiveLink && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
-        setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।');
+        const errorMsg = 'इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।';
+        setError(errorMsg);
         setLoading(false);
         isExecutingRef.current = false;
+        globalIsExecuting = false;
+        window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
         return;
       }
 
@@ -860,7 +918,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
         if (cleanMain && !opts.includes(cleanMain)) {
           if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
-            opts.push(cleanMain);
+            opts.unshift(cleanMain);
           }
         }
       }
@@ -880,7 +938,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           localStorage.setItem('ai_news_canonical_context', JSON.stringify(fallbackResult.canonicalContext));
         } catch {}
       }
-      setHeadlineOptions(finalOpts.slice(0, 5));
+      setHeadlineOptions(isVipDeskUser ? finalOpts.slice(0, 5) : finalOpts.slice(0, 1));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!fallbackImages[0] || !!extraData?.imageUrl);
 
@@ -894,7 +952,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        extraData?.summary || fallbackResult.summary || '',
+        fallbackResult.captionDetailed || fallbackResult.summary || extraData?.summary || '',
         fallbackResult,
         effectiveLink || url
       );
@@ -922,9 +980,24 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
+
+      window.dispatchEvent(
+        new CustomEvent('ai_tools_state_synced', {
+          detail: {
+            result: fallbackResult,
+            headlineOptions: isVipDeskUser ? finalOpts.slice(0, 5) : finalOpts.slice(0, 1),
+            selectedHeadlineIndex: 0,
+            linkUrl: effectiveLink || url,
+            inputText: effectiveText,
+            activeGeneratedProvider: 'gemini',
+            error: null,
+          },
+        })
+      );
     } finally {
       setLoading(false);
       isExecutingRef.current = false;
+      globalIsExecuting = false;
     }
   };
 
@@ -1646,105 +1719,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       )}
 
-      {/* Tab Selector & Inputs: Simplified Mode vs Manual Mode */}
-      {isAutomatedEntry && !isManualInputMode ? (
-        /* Simplified AI Tools Interface (Home-to-Studio Workflow) */
-        <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3 sm:p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-neutral-800/80">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-black text-white">सक्रिय AI मॉडल:</span>
-              <div className="flex items-center gap-1 bg-neutral-900 p-0.5 rounded-lg border border-neutral-800">
-                <button
-                  type="button"
-                  disabled={loading || isRegenerating}
-                  onClick={() => handleGenerateWithProvider('gemini')}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                    aiProvider === 'gemini'
-                      ? 'bg-yellow-400 text-neutral-950 shadow-sm'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  title="गूगल जेमिनी AI द्वारा हेडलाइन व कैप्शन बनाएं"
-                >
-                  <Zap className="w-3 h-3" />
-                  <span>Gemini AI</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={loading || isRegenerating}
-                  onClick={() => {
-                    if (!canUseOpenAi) {
-                      setError('यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।');
-                      return;
-                    }
-                    handleGenerateWithProvider('openai');
-                  }}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                    aiProvider === 'openai'
-                      ? 'bg-emerald-500 text-neutral-950 shadow-sm'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                  title={canUseOpenAi ? 'चैट जीपीटी (OpenAI)' : 'यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।'}
-                >
-                  <Bot className="w-3 h-3" />
-                  <span>चैट जीपीटी (OpenAI)</span>
-                  {!canUseOpenAi && <span className="text-[9px] bg-neutral-800 text-amber-300 px-1 py-0.5 rounded font-mono ml-0.5">🔒 Pro/VIP</span>}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {activeGeneratedProvider && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-neutral-300 flex items-center gap-1">
-                  {activeGeneratedProvider === 'openai' ? (
-                    <span className="text-emerald-400 flex items-center gap-1"><Bot className="w-2.5 h-2.5" /> सक्रिय: ChatGPT</span>
-                  ) : (
-                    <span className="text-yellow-400 flex items-center gap-1"><Zap className="w-2.5 h-2.5" /> सक्रिय: Gemini AI</span>
-                  )}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsManualInputMode(true)}
-                className="text-[11px] font-bold text-neutral-400 hover:text-yellow-300 underline cursor-pointer transition-colors"
-                title="कस्टम लिंक या टेक्स्ट दर्ज करने के लिए बॉक्स 1 और 2 खोलें"
-              >
-                ➕ कस्टम लिंक / टेक्स्ट
-              </button>
-            </div>
-          </div>
-
-          {loading && !result && (
-            <div className="py-6 text-center space-y-2.5 animate-in fade-in">
-              <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
-              <h4 className="text-xs sm:text-sm font-black text-white">
-                {aiProvider === 'openai' ? 'ChatGPT द्वारा खबर का विश्लेषण व AI हेडलाइन तैयार हो रही हैं...' : 'AI द्वारा खबर का विश्लेषण व हेडलाइन तैयार हो रही हैं...'}
-              </h4>
-              <p className="text-[11px] text-neutral-400">कृपया प्रतीक्षा करें, हेडलाइन, स्थान और सोशल मीडिया कैप्शन तैयार किए जा रहे हैं।</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="p-3 rounded-lg bg-red-900/40 border border-red-800 text-red-200 text-xs flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                <span>{error}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleProcess()}
-                className="px-2 py-0.5 rounded bg-red-800 text-white font-bold text-[10px] shrink-0 flex items-center gap-1 cursor-pointer"
-              >
-                <RefreshCw className="w-2.5 h-2.5" />
-                <span>पुनः प्रयास</span>
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
-          <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
+      {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
+      <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
             <button
               type="button"
               disabled={loading || isRegenerating}
@@ -1966,8 +1942,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               </div>
             )}
           </div>
-        </>
-      )}
 
       {/* Result Section (Inline) */}
       {result && (

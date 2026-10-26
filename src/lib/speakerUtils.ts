@@ -1264,10 +1264,20 @@ export function ensureHashtagHierarchy(
         .split(/[।\n]+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 5);
-      if (sentences.length >= 3) {
-        const p1 = sentences.slice(0, 1).join('। ') + '।';
-        const p2 = sentences.slice(1, 3).join('। ') + '।';
+      if (sentences.length >= 6) {
+        const p1 = sentences.slice(0, 2).join('। ') + '।';
+        const p2 = sentences.slice(2, 4).join('। ') + '।';
+        const p3 = sentences.slice(4).join('। ') + '।';
+        cleanParas = [p1, p2, p3];
+      } else if (sentences.length >= 4) {
+        const p1 = sentences.slice(0, 2).join('। ') + '।';
+        const p2 = sentences.slice(2, 3).join('। ') + '।';
         const p3 = sentences.slice(3).join('। ') + '।';
+        cleanParas = [p1, p2, p3];
+      } else if (sentences.length >= 3) {
+        const p1 = sentences[0] + '।';
+        const p2 = sentences[1] + '।';
+        const p3 = sentences.slice(2).join('। ') + '।';
         cleanParas = [p1, p2, p3];
       } else if (sentences.length === 2) {
         cleanParas = [sentences[0] + '।', sentences[1] + '।'];

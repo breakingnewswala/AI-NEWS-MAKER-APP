@@ -701,10 +701,11 @@ export default function App() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('reporter_auth_session');
-      if (!saved) {
+      if (!saved || !saved.includes('breakingnewswala.com@gmail.com')) {
         localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
         localStorage.setItem('is_onboarding_completed', 'true');
         localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
+        setCurrentUser(DEFAULT_REPORTER_USER);
       }
     } catch {}
   }, []);
@@ -1850,13 +1851,14 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
+    const rawUrl = (post.sourceUrl || (post as any).url || (post as any).link || '').trim();
     const hasExternalSource = Boolean(
-      post.sourceUrl &&
-      post.sourceUrl.trim().startsWith('http') &&
-      !post.sourceUrl.includes('localhost') &&
-      !post.sourceUrl.includes('127.0.0.1')
+      rawUrl &&
+      rawUrl.startsWith('http') &&
+      !rawUrl.includes('localhost') &&
+      !rawUrl.includes('127.0.0.1')
     );
-    const effectiveLink = hasExternalSource ? post.sourceUrl.trim() : '';
+    const effectiveLink = hasExternalSource ? rawUrl : '';
     const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');
