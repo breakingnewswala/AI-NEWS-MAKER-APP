@@ -12,4 +12,9 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: GOOGLE_NODE_RUN_SCRIPTS
+    value: ""
+    availability:
+      - BUILD
+
 
