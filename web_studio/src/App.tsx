@@ -132,8 +132,8 @@ export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
   fullName: 'मुख्य संपादक (Master Admin)',
   channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
   channelNameEn: 'BREAKING NEWS WALA',
-  channelLogoUrl: '/assets/ai_news_maker_logo.png',
-  channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+  channelLogoUrl: '/assets/breaking_news_wala_logo.png',
+  channelLogoPngUrl: '/assets/breaking_news_wala_logo.png',
   channelLogoType: 'png',
   username: 'breakingnewswala',
   mobileNumber: '9669802408',
@@ -156,12 +156,12 @@ export const DEFAULT_REPORTER_USER: ReporterUser = {
   uid: 'usr_627265616b69',
   id: 'usr_627265616b69',
   username: 'breakingnewswala',
-  name: 'मुख्य संपादक (Master Admin)',
+  name: 'मुख्य संपादक',
   role: 'superadmin',
   district: 'सेंट्रल डेस्क / भोपाल',
   email: 'breakingnewswala.com@gmail.com',
   channelName: 'ब्रेकिंग न्यूज़ वाला',
-  channelLogoUrl: '/assets/ai_news_maker_logo.png',
+  channelLogoUrl: '/assets/breaking_news_wala_logo.png',
   channelWebsite: 'breakingnewswala.com',
   mobileNumber: '9669802408',
   tier: 'ultra',
@@ -672,19 +672,38 @@ export default function App() {
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
-  // Authentication session - loads from localStorage or Android native bridge, defaults to Master Admin
+  // Authentication session - loads from localStorage or Android native bridge, defaults to Master Admin (breakingnewswala.com@gmail.com)
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return null;
       const saved = localStorage.getItem('reporter_auth_session');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.email === 'breakingnewsala.com@gmail.com' || parsed.userId === 'usr_breakingnewsala')) {
+          localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
+          return DEFAULT_REPORTER_USER;
+        }
+        if (parsed && (parsed.email || parsed.username || parsed.userId)) {
+          return parsed;
+        }
+      }
       if ((window as any).AndroidBridge?.getUserSession) {
         const raw = (window as any).AndroidBridge.getUserSession();
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && (parsed.email || parsed.username)) return parsed;
+        }
       }
+      // Master Admin breakingnewswala.com@gmail.com session for preview
+      localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
+      localStorage.setItem('is_onboarding_completed', 'true');
+      localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
+      localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
+      return DEFAULT_REPORTER_USER;
     } catch {
-      // ignore
+      return DEFAULT_REPORTER_USER;
     }
-    return DEFAULT_REPORTER_USER;
   });
 
   useEffect(() => {
@@ -692,23 +711,27 @@ export default function App() {
   }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(true);
-
-  // Welcome flow - default to false so Home screen is shown immediately
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(false);
-
-  // Ensure master admin session and channel profile are saved in localStorage
-  useEffect(() => {
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem('reporter_auth_session');
-      if (!saved || !saved.includes('breakingnewswala.com@gmail.com')) {
-        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
-        localStorage.setItem('is_onboarding_completed', 'true');
-        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
-        setCurrentUser(DEFAULT_REPORTER_USER);
-      }
-    } catch {}
-  }, []);
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return false;
+      const flag = localStorage.getItem('is_onboarding_completed');
+      if (flag === 'true') return true;
+      if (flag === 'false') return false;
+      return true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Welcome flow - show AuthWelcomeScreen only if user explicitly logged out
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('user_explicitly_logged_out') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     const handleOpenWelcome = () => setShowAuthWelcomeScreen(true);
@@ -1011,6 +1034,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.setItem('user_explicitly_logged_out', 'true');
     localStorage.removeItem('reporter_auth_session');
     localStorage.removeItem('reporter_current_user');
     localStorage.removeItem('user_channel_profile');
@@ -1018,7 +1042,7 @@ export default function App() {
     localStorage.removeItem('ai_news_user');
     localStorage.removeItem('user_profile_data');
     setCurrentUser(null);
-    setIsOnboardingCompleted(true);
+    setIsOnboardingCompleted(false);
     setIsUserMenuOpen(false);
     showToast('लॉगआउट सफल!');
     setShowAuthWelcomeScreen(true);
@@ -2144,6 +2168,7 @@ export default function App() {
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
           onLoginSuccess={(user) => {
+            localStorage.removeItem('user_explicitly_logged_out');
             const isAdmin = isUserAdmin(user);
             setCurrentUser(user);
             setShowAuthWelcomeScreen(false);
@@ -2177,6 +2202,7 @@ export default function App() {
           onCompleteDetails={(profile, updatedUser) => {
             handleSaveProfile(profile);
             const userToSet = updatedUser || currentUser;
+            localStorage.removeItem('user_explicitly_logged_out');
             if (updatedUser) {
               setCurrentUser(userToSet);
             }

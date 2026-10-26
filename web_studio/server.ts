@@ -11818,9 +11818,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
         parsedData.location
       );
-      if (!isVipDeskUser && Array.isArray(parsedData.headlineOptions)) {
-        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 1);
-      } else if (Array.isArray(parsedData.headlineOptions)) {
+      if (Array.isArray(parsedData.headlineOptions)) {
         parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
       }
       if (parsedData.headlineOptions.length > 0) {
@@ -11950,9 +11948,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     }
 
     if (parsedData) {
-      if (!isVipDeskUser && Array.isArray(parsedData.headlineOptions)) {
-        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 1);
-      } else if (Array.isArray(parsedData.headlineOptions)) {
+      if (Array.isArray(parsedData.headlineOptions)) {
         parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
       }
       parsedData.actualProvider = actualProvider;

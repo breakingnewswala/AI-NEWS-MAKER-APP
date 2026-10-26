@@ -99,6 +99,53 @@
   ],
   "transactions": [
     {
+      "id": "tx-frame-1792988239533-6ido",
+      "transactionId": "tx-frame-1792988239533-6ido",
+      "userId": "coin_test_1792988239488@example.com",
+      "userEmail": "coin_test_1792988239488@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1792988239533,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1792988239492-vwrw",
+      "transactionId": "tx-credit-1792988239492-vwrw",
+      "userId": "coin_test_1792988239488@example.com",
+      "userEmail": "coin_test_1792988239488@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1792988239492,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-welcome-graphic-1792988142447-cqrp",
+      "transactionId": "tx-welcome-graphic-1792988142447-cqrp",
+      "userId": "breakingnewswala.com@gmail.com",
+      "userEmail": "breakingnewswala.com@gmail.com",
+      "description": "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 500,
+      "amount": 500,
+      "balanceAfter": 500,
+      "status": "completed",
+      "createdAt": 1792988142447,
+      "createdBy": "system"
+    },
+    {
       "id": "tx-frame-1792962000355-scae",
       "transactionId": "tx-frame-1792962000355-scae",
       "userId": "coin_test_1792962000344@example.com",
@@ -2053,10 +2100,23 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
+    },
+    "breakingnewswala.com@gmail.com": {
+      "coinBalance": 500,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 500
+    },
+    "coin_test_1792988239488@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
     }
   },
   "welcomeRewards": {
     "admin.ainewsmaker@gmail.com": {
+      "graphicClaimed": true
+    },
+    "breakingnewswala.com@gmail.com": {
       "graphicClaimed": true
     }
   },
@@ -2408,6 +2468,13 @@
     "coin_test_1792962000344@example.com": {
       "graphic_002": {
         "unlockedAt": 1792962000355,
+        "expiresAt": 1793039399999,
+        "dateStr": "2026-10-26"
+      }
+    },
+    "coin_test_1792988239488@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1792988239533,
         "expiresAt": 1793039399999,
         "dateStr": "2026-10-26"
       }
