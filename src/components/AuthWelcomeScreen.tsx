@@ -57,6 +57,8 @@ import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { getApiUrl } from '../lib/apiConfig';
 import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -268,7 +270,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
   // Home Screen Feature Stepper & Mandatory Agreement States
   const [homeStep, setHomeStep] = useState<1 | 2 | 3 | 4>(1);
-  const [maxUnlockedHomeStep, setMaxUnlockedHomeStep] = useState<number>(1);
+  const [maxUnlockedHomeStep, setMaxUnlockedHomeStep] = useState<number>(4);
   const [channelRulesAgreed, setChannelRulesAgreed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('user_channel_rules_agreed') === 'true';
@@ -703,10 +705,16 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     };
   }, []);
 
-  // Real Google Sign-In Trigger (Opens Google Account Chooser Popup with fallback)
-  const handleGoogleSignIn = () => {
+  // Real Google Sign-In Trigger (Firebase Auth Popup -> Android Bridge -> GIS Token Client -> GSI JWT)
+  const handleGoogleSignIn = async () => {
     setIsLoggingIn(true);
     setLoginErrorMsg('');
+
+    // Ensure rules agreement is recorded
+    setChannelRulesAgreed(true);
+    try {
+      localStorage.setItem('user_channel_rules_agreed', 'true');
+    } catch {}
 
     // 1. Android Bridge (Inside Android App WebView)
     if (typeof window !== 'undefined' && (window as any).AndroidBridge?.signInWithGoogle) {
@@ -718,11 +726,34 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    // 2. Firebase Auth signInWithPopup (Web Popup)
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const userCredential = await signInWithPopup(auth, provider);
+      if (userCredential?.user?.email) {
+        await handleGoogleUserSuccess(
+          userCredential.user.email,
+          userCredential.user.displayName || undefined,
+          userCredential.user.photoURL || undefined
+        );
+        return;
+      }
+    } catch (firebaseErr: any) {
+      console.warn('Firebase signInWithPopup notice:', firebaseErr);
+      if (firebaseErr?.code === 'auth/popup-closed-by-user') {
+        setIsLoggingIn(false);
+        return;
+      }
+      // If popup blocked or failed, fall through to GIS fallback
+    }
+
+    // 3. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
       try {
         const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          client_id: oAuthClientId,
           scope: 'email profile openid',
           callback: async (tokenResponse: any) => {
             if (tokenResponse?.access_token) {
@@ -732,7 +763,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 });
                 const userData = await res.json();
                 if (userData?.email) {
-                  handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
+                  await handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
                   return;
                 }
               } catch (fetchErr) {
@@ -754,21 +785,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 3. Google Identity Services ID fallback (JWT)
+    // 4. Google Identity Services ID fallback (JWT)
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
         (window as any).google.accounts.id.initialize({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          client_id: oAuthClientId,
           use_fedcm_for_prompt: false,
           auto_select: false,
-          callback: (response: any) => {
+          callback: async (response: any) => {
             if (response.credential) {
               try {
                 const payloadBase64 = response.credential.split('.')[1];
                 const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
                 const decoded = JSON.parse(decodedJson);
                 if (decoded?.email) {
-                  handleGoogleUserSuccess(decoded.email, decoded.name);
+                  await handleGoogleUserSuccess(decoded.email, decoded.name);
                   return;
                 }
               } catch (decErr) {
@@ -1154,6 +1185,27 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             {/* Stepper Views: Steps 1, 2, 3 (Feature Cards) vs Step 4 (Notice & Login) */}
             {homeStep < 4 ? (
               <div className="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-4 shadow-xl text-left">
+                {/* Direct Google Login Jump Banner */}
+                <div className="mb-3.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-red-500/15 to-amber-500/15 border border-amber-400/40 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-xs sm:text-sm font-black text-amber-300">
+                      सीधे अपने Google खाते से लॉगिन करना चाहते हैं?
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHomeStep(4);
+                      setMaxUnlockedHomeStep(4);
+                    }}
+                    className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ml-auto"
+                  >
+                    <span>गूगल लॉगिन (Step 4)</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
                 {/* Section Header with Step Title */}
                 <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
@@ -1340,53 +1392,49 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
                 {/* Google / Gmail Sign In (Primary Login) */}
                 <div className="space-y-2 pt-1">
-                  {channelRulesAgreed ? (
-                    <button
-                      type="button"
-                      onClick={handleGoogleSignIn}
-                      disabled={isLoggingIn}
-                      className="w-full py-3.5 sm:py-4 px-4 bg-white hover:bg-slate-100 text-slate-900 font-black text-sm rounded-xl shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-98 cursor-pointer border-2 border-amber-400 ring-4 ring-amber-400/30 hover:ring-amber-400/50 animate-in fade-in zoom-in-95 duration-200"
-                    >
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                        />
-                      </svg>
-                      <div className="flex flex-col items-start leading-tight">
-                        <span className="text-sm sm:text-base font-black text-slate-900">
-                          Google / Gmail से लॉगिन करें
-                        </span>
-                        <span className="text-[11px] text-amber-700 font-bold">
-                          {isLoggingIn
-                            ? 'Google से कनेक्ट हो रहा है...'
-                            : 'नया खाता स्वतः बन जाएगा • पुराने यूज़र्स सीधे स्टूडियो में'}
-                        </span>
-                      </div>
-                    </button>
-                  ) : (
-                    <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl text-center space-y-1">
-                      <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-300">
-                        <Lock className="w-4 h-4 text-amber-400" />
-                        <span>लॉगिन हेतु ऊपर दिए गए सहमति बॉक्स पर टिक मार्क (✓) करें</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        सहमति पर टिक करते ही गूगल लॉगिन बटन सक्रिय हो जाएगा।
-                      </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!channelRulesAgreed) {
+                        setChannelRulesAgreed(true);
+                        try {
+                          localStorage.setItem('user_channel_rules_agreed', 'true');
+                        } catch {}
+                      }
+                      handleGoogleSignIn();
+                    }}
+                    disabled={isLoggingIn}
+                    className="w-full py-3.5 sm:py-4 px-4 bg-white hover:bg-slate-100 text-slate-900 font-black text-sm rounded-xl shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-98 cursor-pointer border-2 border-amber-400 ring-4 ring-amber-400/30 hover:ring-amber-400/50 animate-in fade-in zoom-in-95 duration-200"
+                  >
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <div className="flex flex-col items-start leading-tight">
+                      <span className="text-sm sm:text-base font-black text-slate-900">
+                        Google / Gmail से लॉगिन करें
+                      </span>
+                      <span className="text-[11px] text-amber-700 font-bold">
+                        {isLoggingIn
+                          ? 'Google से कनेक्ट हो रहा है...'
+                          : 'नया खाता स्वतः बन जाएगा • पुराने यूज़र्स सीधे स्टूडियो में'}
+                      </span>
                     </div>
-                  )}
+                  </button>
 
                   <p className="text-[11px] text-slate-400 text-center">
                     💡 केवल एक क्लिक में लॉगिन करें। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।

@@ -40,6 +40,8 @@ import {
   Mic,
   Trash2,
   Plus,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
@@ -3136,35 +3138,41 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             /* ============================================================ */
             <div className="w-full flex flex-col gap-3 sm:gap-4">
               {/* Stepper Header Card */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-lg">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 px-1">
-                  <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>त्वरित वीडियो निर्माण (चरण {quickStep}/7)</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                        quickVideoValidation.completionPercentage === 100
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                          : 'bg-amber-400/20 text-amber-300 border-amber-400/30'
-                      }`}
-                    >
-                      {quickVideoValidation.completionPercentage}% पूर्ण
+              <div className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl">
+                <div className="flex flex-col gap-1 pb-2 mb-2 border-b border-slate-800 px-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/7)</span>
                     </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                          quickVideoValidation.completionPercentage === 100
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+                        }`}
+                      >
+                        {quickVideoValidation.completionPercentage}% पूर्ण
+                      </span>
+                    </div>
+                  </div>
+                  {/* Mobile swipe hint */}
+                  <div className="sm:hidden flex items-center justify-between text-[10px] text-amber-300/90 font-medium">
+                    <span>👉 और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
                   </div>
                 </div>
 
                 {/* Horizontal Step Navigation Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
                   {[
-                    { step: 1, label: '1. वीडियो', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
-                    { step: 2, label: '2. ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
-                    { step: 3, label: '3. हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
-                    { step: 4, label: '4. लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
-                    { step: 5, label: '5. लोगो व वॉटरमार्क', icon: Sparkles, ok: quickVideoValidation.stepsStatus[5] },
-                    { step: 6, label: '6. फ़ूटर व ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[6] },
-                    { step: 7, label: '7. डाउनलोड व कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 1, label: 'वीडियो', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
+                    { step: 2, label: 'ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
+                    { step: 3, label: 'हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
+                    { step: 4, label: 'लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
+                    { step: 5, label: 'लोगो-वॉटरमार्क', icon: Sparkles, ok: quickVideoValidation.stepsStatus[5] },
+                    { step: 6, label: 'फ़ूटर-ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[6] },
+                    { step: 7, label: 'डाउनलोड-कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const Icon = s.icon;
@@ -3181,6 +3189,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800'
                         }`}
                       >
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                          isActive ? 'bg-white text-red-600' : 'bg-amber-400 text-neutral-950'
+                        }`}>
+                          {s.step}
+                        </span>
                         <Icon className="w-3.5 h-3.5" />
                         <span>{s.label}</span>
                         {s.ok && !isActive && <Check className="w-3 h-3 text-emerald-400" />}
@@ -4195,23 +4208,24 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* Stepper Navigation Footer (Prev / Next Buttons) */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-bold">
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-bold gap-2">
                 <button
                   type="button"
                   onClick={() => setQuickStep((s) => Math.max(1, s - 1))}
                   disabled={quickStep === 1}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer hover:bg-slate-700 transition"
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer hover:bg-slate-700 transition flex items-center justify-center gap-1.5 active:scale-95"
                 >
-                  ◀ पिछला चरण
+                  <ChevronLeft className="w-4 h-4 text-slate-400" />
+                  <span>पिछला चरण</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setQuickStep((s) => Math.min(7, s + 1))}
-                  disabled={quickStep === 7}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white disabled:opacity-30 cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition"
+                  onClick={() => setQuickStep((s) => (s === 7 ? 1 : Math.min(7, s + 1)))}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition flex items-center justify-center gap-1.5 active:scale-95"
                 >
-                  अगला चरण ▶
+                  <span>{quickStep === 7 ? 'स्टेप 1 पर जाएं' : 'अगला चरण'}</span>
+                  <ChevronRight className="w-4 h-4 text-white" />
                 </button>
               </div>
             </div>

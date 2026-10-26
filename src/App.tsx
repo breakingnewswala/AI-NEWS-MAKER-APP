@@ -682,7 +682,7 @@ export default function App() {
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
-  // Authentication session - loads from localStorage or Android native bridge, defaults to Master Admin (breakingnewswala.com@gmail.com)
+  // Authentication session - loads from localStorage or Android native bridge
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
@@ -690,9 +690,12 @@ export default function App() {
       const saved = localStorage.getItem('reporter_auth_session');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && (parsed.email === 'breakingnewsala.com@gmail.com' || parsed.userId === 'usr_breakingnewsala')) {
-          localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
-          return DEFAULT_REPORTER_USER;
+        // Clear any leftover dummy session that gave automatic superadmin rights to new visitors
+        if (parsed && (parsed.userId === 'usr_627265616b69' || parsed.userId === 'usr_breakingnewsala')) {
+          localStorage.removeItem('reporter_auth_session');
+          localStorage.removeItem('is_onboarding_completed');
+          localStorage.removeItem('ai_news_maker_admin_system_mode');
+          return null;
         }
         if (parsed && (parsed.email || parsed.username || parsed.userId)) {
           return parsed;
@@ -705,14 +708,10 @@ export default function App() {
           if (parsed && (parsed.email || parsed.username)) return parsed;
         }
       }
-      // Master Admin breakingnewswala.com@gmail.com session for preview
-      localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
-      localStorage.setItem('is_onboarding_completed', 'true');
-      localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
-      localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
-      return DEFAULT_REPORTER_USER;
+      // New visitor: NOT logged in. Must sign in via Google to enter!
+      return null;
     } catch {
-      return DEFAULT_REPORTER_USER;
+      return null;
     }
   });
 
@@ -727,19 +726,24 @@ export default function App() {
       if (explicitLogout === 'true') return false;
       const flag = localStorage.getItem('is_onboarding_completed');
       if (flag === 'true') return true;
-      if (flag === 'false') return false;
-      return true;
+      return false;
     } catch {
-      return true;
+      return false;
     }
   });
 
-  // Welcome flow - show AuthWelcomeScreen only if user explicitly logged out
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login if not logged in or onboarding incomplete
   const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('user_explicitly_logged_out') === 'true';
-    } catch {
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return true;
+      const saved = localStorage.getItem('reporter_auth_session');
+      if (!saved) return true;
+      const flag = localStorage.getItem('is_onboarding_completed');
+      if (flag !== 'true') return true;
       return false;
+    } catch {
+      return true;
     }
   });
 
@@ -2165,7 +2169,15 @@ export default function App() {
     return <RemotionTestStudio />;
   }
 
-  if (showAuthWelcomeScreen) {
+  // Public legal and compliance pages are accessible without login
+  const isPublicLegalPage =
+    currentTab === 'terms' ||
+    currentTab === 'privacy' ||
+    currentTab === 'delete-account' ||
+    currentTab === 'support';
+
+  // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
+  if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
         {toastMessage && (
@@ -2630,15 +2642,16 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 4. Horizontal left-to-right editor steps with progress */}
-                  <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-lg my-1">
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 px-1">
-                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
+                  <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1">
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>ग्राफिक निर्माण (स्टेप {activeStep}/7)</span>
+                        <span>स्टेप {activeStep}/7</span>
                       </span>
-                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border bg-amber-400/20 text-amber-300 border-amber-400/30">
-                        {Math.round((activeStep / 7) * 100)}% पूर्ण
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
+                        <span>👉</span>
+                        <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
@@ -2657,12 +2670,21 @@ export default function App() {
                             }}
                             className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
                               isActive
-                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md'
-                                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
                             }`}
                           >
-                            <span>{s.icon}</span>
-                            <span>{s.name}</span>
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                isActive
+                                  ? 'bg-slate-950 text-amber-300'
+                                  : 'bg-amber-400 text-slate-950'
+                              }`}
+                            >
+                              {s.step}
+                            </span>
+                            <span className="text-sm shrink-0">{s.icon}</span>
+                            <span className="whitespace-nowrap font-bold">{s.name}</span>
                           </button>
                         );
                       })}

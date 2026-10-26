@@ -43,6 +43,7 @@ import {
   FolderOpen,
   AlertCircle,
   Info,
+  X,
 } from 'lucide-react';
 import {
   saveCustomFrame,
@@ -95,7 +96,9 @@ import {
   getActiveHeaderPng,
   setActiveHeaderPng,
 } from '../lib/headerUtils';
-import { extractLeaderFromHeadline, getEffectiveSpeaker } from '../lib/speakerUtils';
+import { extractLeaderFromHeadline, getEffectiveSpeaker, stripAllUrlsAndHyperlinks, cleanCaptionParagraphs } from '../lib/speakerUtils';
+import { CardPreview } from './CardPreview';
+import { getUserFirstHashtag, buildHashtags } from './CaptionModal';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getFormattedHindiDate } from '../lib/dateUtils';
 import { MorningJacketEditor } from './MorningJacketEditor';
@@ -454,6 +457,101 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     if (id) {
       scrollToStepById(id);
     }
+  };
+
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = React.useState<boolean>(false);
+  const [captionCopied, setCaptionCopied] = React.useState<boolean>(false);
+
+  const handleDirectCopyCaption = () => {
+    try {
+      const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
+      let newsStory = '';
+      if (card.summary && card.summary.trim()) {
+        let rawSummary = stripAllUrlsAndHyperlinks(card.summary.trim());
+        const tagMatch = rawSummary.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
+        let existingTags = '';
+        if (tagMatch) {
+          existingTags = tagMatch[0].trim();
+          rawSummary = rawSummary.substring(0, tagMatch.index).trim();
+        }
+        newsStory = rawSummary || cleanHeadline || 'मुख्य समाचार';
+        const tagsToUse = buildHashtags(card.location, existingTags, card);
+        const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
+        const firstUserTag = getUserFirstHashtag(card);
+        const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
+        navigator.clipboard.writeText(cleaned);
+      } else {
+        newsStory = cleanHeadline || 'मुख्य समाचार';
+        const tagsToUse = buildHashtags(card.location, undefined, card);
+        const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
+        const firstUserTag = getUserFirstHashtag(card);
+        const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
+        navigator.clipboard.writeText(cleaned);
+      }
+      setCaptionCopied(true);
+      setTimeout(() => setCaptionCopied(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy caption:', err);
+    }
+  };
+
+  const renderMobileStepNavigation = (stepNumber: number) => {
+    if (mobileViewMode !== 'steps') return null;
+    return (
+      <div className="pt-3 border-t border-neutral-800 flex items-center justify-between gap-2 text-xs">
+        {/* Left: पिछला चरण */}
+        {stepNumber > 1 ? (
+          <button
+            type="button"
+            onClick={() => handleGoToStep(stepNumber - 1)}
+            className="flex-1 py-2 px-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold flex items-center justify-center gap-1 border border-neutral-700/80 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-neutral-400" />
+            <span>पिछला चरण</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="flex-1 py-2 px-2 rounded-xl bg-neutral-900 text-neutral-600 font-medium flex items-center justify-center gap-1 border border-neutral-800 opacity-40 cursor-not-allowed text-[11px] sm:text-xs"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-neutral-600" />
+            <span>पिछला चरण</span>
+          </button>
+        )}
+
+        {/* Center: ग्राफिक प्रीव्यू देखें */}
+        <button
+          type="button"
+          onClick={() => setIsPreviewModalOpen(true)}
+          className="flex-1 py-2 px-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 font-bold flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+        >
+          <Eye className="w-3.5 h-3.5 text-blue-400" />
+          <span className="truncate">ग्राफिक प्रीव्यू देखें</span>
+        </button>
+
+        {/* Right: अगला चरण */}
+        {stepNumber < 7 ? (
+          <button
+            type="button"
+            onClick={() => handleGoToStep(stepNumber + 1)}
+            className="flex-1 py-2 px-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-neutral-950 font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+          >
+            <span>अगला चरण</span>
+            <ChevronRight className="w-3.5 h-3.5 text-neutral-950" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleGoToStep(1)}
+            className="flex-1 py-2 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+          >
+            <span>स्टेप 1 पर जाएं</span>
+            <ChevronRight className="w-3.5 h-3.5 text-white" />
+          </button>
+        )}
+      </div>
+    );
   };
 
   // Strictly enforce single photo layout for jacket-quote template
@@ -1397,19 +1495,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         )}
 
         {/* Step 1 Mobile Nav Button */}
-        {mobileViewMode === 'steps' && (
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 1 / {STEPS.length}</span>
-            <button
-              type="button"
-              onClick={() => handleGoToStep(2)}
-              className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-            >
-              <span>अगला: एआई टूल्स</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        {renderMobileStepNavigation(1)}
       </div>
 
       {/* 2. AI टूल्स - STEP 2 */}
@@ -1429,6 +1515,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </span>
           </div>
           <MorningJacketEditor card={card} onChange={onChange} />
+          {renderMobileStepNavigation(2)}
         </div>
       ) : (
         /* Standard Templates Step 2: AI ऑटोमेशन टूल्स */
@@ -1455,6 +1542,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             autoFillNews={autoFillNews}
             currentUser={currentUser}
           />
+          {renderMobileStepNavigation(2)}
         </div>
       )}
 
@@ -2346,27 +2434,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         </div>
 
         {/* Step 3 Nav Buttons */}
-        {mobileViewMode === 'steps' && (
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-            <button
-              type="button"
-              onClick={() => handleGoToStep(2)}
-              className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: AI टूल्स</span>
-            </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 3 / {STEPS.length}</span>
-            <button
-              type="button"
-              onClick={() => handleGoToStep(4)}
-              className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-            >
-              <span>अगला: फोटो लेआउट</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        {renderMobileStepNavigation(3)}
       </div>
 
       
@@ -3256,27 +3324,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         </div>
 
         {/* Step 4 Nav Buttons */}
-        {mobileViewMode === 'steps' && (
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-            <button
-              type="button"
-              onClick={() => handleGoToStep(3)}
-              className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: हेडलाइन</span>
-            </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 4 / {STEPS.length}</span>
-            <button
-              type="button"
-              onClick={() => handleGoToStep(5)}
-              className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-            >
-              <span>अगला: स्थान व दिनांक</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        {renderMobileStepNavigation(4)}
       </div>
 
       {/* ========================================================================= */}
@@ -3436,27 +3484,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         </div>
 
         {/* Single Step 5 Mobile Nav Buttons */}
-        {mobileViewMode === 'steps' && (
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-            <button
-              type="button"
-              onClick={() => handleGoToStep(4)}
-              className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>पिछला: फोटो व वॉटरमार्क</span>
-            </button>
-            <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 5 / {STEPS.length}</span>
-            <button
-              type="button"
-              onClick={() => handleGoToStep(6)}
-              className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-            >
-              <span>अगला: हैडर और फुटर</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        {renderMobileStepNavigation(5)}
       </div>
 
       {/* ========================================================================= */}
@@ -4367,27 +4395,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
 
             {/* Step 6 Navigation Buttons */}
-            {mobileViewMode === 'steps' && (
-              <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleGoToStep(5)}
-                  className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>पिछला: लोकेशन, तारीख और वॉटरमार्क</span>
-                </button>
-                <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 6 / {STEPS.length}</span>
-                <button
-                  type="button"
-                  onClick={() => handleGoToStep(7)}
-                  className="px-3.5 py-1.5 rounded-lg bg-yellow-400 text-neutral-950 font-black flex items-center gap-1 shadow cursor-pointer"
-                >
-                  <span>अगला: डाउनलोड</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
+            {renderMobileStepNavigation(6)}
           </div>
 
           
@@ -4399,7 +4407,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}
-          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 scroll-mt-28"
+          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 scroll-mt-28"
         >
           <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
             <div className="flex items-center gap-2">
@@ -4415,84 +4423,103 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </span>
           </div>
 
-          {/* Block 1: HD Card Export */}
-          <div className="bg-neutral-950/80 rounded-xl p-4 border border-neutral-800/80 flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-600 to-amber-500 flex items-center justify-center shrink-0 shadow-md text-white font-black">
-                <Download className="w-6 h-6" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-white font-bold text-sm sm:text-base">
-                  सोशल मीडिया रेडी न्यूज़ कार्ड
-                </span>
-                <span className="text-xs text-neutral-400">
-                  इंस्टाग्राम, फेसबुक, ट्विटर और व्हाट्सएप हेतु 4:5 आस्पेक्ट रेशियो में क्रिस्टल क्लीयर इमेज।
-                </span>
-              </div>
+          {/* 1. Prominent Live 4:5 Card Preview on Mobile & Desktop */}
+          <div className="bg-neutral-950 rounded-xl p-3 border border-neutral-800 flex flex-col items-center justify-center">
+            <div className="w-full max-w-[340px] aspect-[4/5] rounded-lg overflow-hidden shadow-2xl border border-neutral-700 flex items-center justify-center bg-black">
+              <CardPreview card={card} />
             </div>
+            <span className="text-[11px] text-neutral-400 mt-2 font-medium">
+              सोशल मीडिया (4:5 रेशियो) लाइव कार्ड प्रीव्यू
+            </span>
+          </div>
 
+          {/* 2. Exactly TWO Primary Side-by-Side Equal-Width Action Buttons */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* Left Red Button: सोशल मीडिया रेडी कार्ड डाउनलोड करें */}
             <button
               type="button"
               onClick={() => onDownload?.()}
               disabled={downloading}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-red-650 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-black text-sm sm:text-base shadow-lg border border-amber-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
+              className="py-3 px-2 sm:px-3 rounded-xl bg-gradient-to-r from-red-650 via-red-600 to-red-700 hover:from-red-600 hover:to-red-700 text-white font-black text-xs sm:text-sm shadow-lg border border-red-400 flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
             >
               <Download className="w-5 h-5 text-amber-300" />
-              <span>{downloading ? 'कार्ड तैयार हो रहा है...' : 'HD कार्ड डाउनलोड करें (JPG)'}</span>
+              <span className="leading-tight">
+                {downloading ? 'कार्ड तैयार हो रहा है...' : 'सोशल मीडिया रेडी कार्ड डाउनलोड करें'}
+              </span>
+            </button>
+
+            {/* Right Green Button: कैप्शन कॉपी करें */}
+            <button
+              type="button"
+              onClick={handleDirectCopyCaption}
+              className="py-3 px-2 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs sm:text-sm shadow-lg border border-emerald-400 flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            >
+              {captionCopied ? (
+                <>
+                  <Check className="w-5 h-5 text-yellow-300" />
+                  <span className="text-yellow-200 leading-tight">कैप्शन कॉपी हो गया! ✓</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-5 h-5 text-emerald-200" />
+                  <span className="leading-tight">कैप्शन कॉपी करें</span>
+                </>
+              )}
             </button>
           </div>
 
-          {/* Block 2: Ready-to-Post Caption & Share */}
-          <div className="bg-neutral-950/80 rounded-xl p-4 border border-neutral-800/80 flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-green-600/20 border border-green-500/30 flex items-center justify-center shrink-0 text-green-400">
-                <Share2 className="w-6 h-6" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-white font-bold text-sm sm:text-base">
-                  रेडी-टू-पोस्ट कैप्शन व हैशटैग्स
-                </span>
-                <span className="text-xs text-neutral-400">
-                  हेडलाइन, जिला और तारीख के साथ तैयार सोशल मीडिया टेक्स्ट को एक क्लिक में कॉपी करें।
-                </span>
-              </div>
-            </div>
-
+          {/* 3. Secondary link to detailed caption editor modal */}
+          <div className="text-center pt-1">
             <button
               type="button"
               onClick={onOpenCaptionModal}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-black text-sm sm:text-base shadow-lg border border-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
+              className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-4 flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
             >
-              <Share2 className="w-5 h-5 text-emerald-200" />
-              <span>कैप्शन बॉक्स खोलें व कॉपी करें</span>
+              <FileText className="w-3.5 h-3.5" />
+              <span>विस्तृत कैप्शन एडिटर व AI रीराइट खोलें</span>
             </button>
           </div>
 
-          {/* Mobile Step Nav */}
-          {mobileViewMode === 'steps' && (
-            <div className="flex items-center justify-between pt-3 border-t border-neutral-800 text-xs">
-              <button
-                type="button"
-                onClick={() => handleGoToStep(6)}
-                className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>पिछला: हैडर और फुटर</span>
-              </button>
-              <span className="text-neutral-500 font-semibold text-[11px]">स्टेप 7 / {STEPS.length}</span>
-              <button
-                type="button"
-                onClick={() => handleGoToStep(1)}
-                className="px-3.5 py-1.5 rounded-lg bg-red-600 text-white font-black flex items-center gap-1 shadow cursor-pointer"
-              >
-                <span>स्टेप 1 पर जाएं</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+          {/* 4. Bottom Standardized Step Navigation */}
+          {renderMobileStepNavigation(7)}
         </div>
       )}
         </>
+      )}
+
+      {/* Global Live Card Preview Modal for Mobile (Steps 1-6) */}
+      {isPreviewModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-5 overflow-y-auto">
+          <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-amber-400" />
+              <span className="text-white font-bold text-sm">लाइव ग्राफिक कार्ड प्रीव्यू (4:5)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPreviewModalOpen(false)}
+              className="p-1.5 rounded-lg bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 flex items-center justify-center py-4">
+            <div className="w-full max-w-[340px] aspect-[4/5] rounded-xl overflow-hidden shadow-2xl border border-neutral-700 bg-black flex items-center justify-center">
+              <CardPreview card={card} />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-neutral-800">
+            <button
+              type="button"
+              onClick={() => setIsPreviewModalOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs sm:text-sm cursor-pointer active:scale-98 transition"
+            >
+              एडिटिंग जारी रखें (बंद करें)
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

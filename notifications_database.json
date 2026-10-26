@@ -1,5 +1,16 @@
 [
   {
+    "id": "notif_video_vid-admin-1793024283931-4cw3",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "Test Video",
+    "time": "अभी",
+    "timestamp": 1793024283940,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
     "id": "notif_news_rss-src_aajtak_live-1792988285159",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
