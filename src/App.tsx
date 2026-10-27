@@ -688,17 +688,6 @@ export default function App() {
   // Authentication session - loads from localStorage, Android native bridge, or defaults to Master Admin (breakingnewswala.com@gmail.com)
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
-      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
-      if (explicitLogout === 'true') {
-        const saved = localStorage.getItem('reporter_auth_session');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && (parsed.email || parsed.username || parsed.userId)) {
-            return parsed;
-          }
-        }
-        return null;
-      }
       const saved = localStorage.getItem('reporter_auth_session');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -715,6 +704,7 @@ export default function App() {
       }
       // Default to Master Admin session (breakingnewswala.com@gmail.com) so preview screen opens Master Admin directly
       try {
+        localStorage.removeItem('user_explicitly_logged_out');
         localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
         localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
         localStorage.setItem('is_onboarding_completed', 'true');
@@ -731,30 +721,10 @@ export default function App() {
   }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
-    try {
-      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
-      if (explicitLogout === 'true') return false;
-      const flag = localStorage.getItem('is_onboarding_completed');
-      if (flag === 'false') return false;
-      return true;
-    } catch {
-      return true;
-    }
-  });
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(true);
 
-  // Welcome flow - show primary AuthWelcomeScreen with Google Login only if explicitly logged out or unauthenticated
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
-    try {
-      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
-      if (explicitLogout === 'true') return true;
-      const flag = localStorage.getItem('show_auth_welcome_screen');
-      if (flag === 'true') return true;
-      return false;
-    } catch {
-      return false;
-    }
-  });
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login only when explicitly requested
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(false);
 
   // Guest bypass mode - allows unauthenticated users to explore home screen without authentication barrier
   // Strict Auth Guard: Unauthenticated bypass disabled - all users must authenticate via Google
@@ -3216,19 +3186,11 @@ export default function App() {
             setVideos((prev) => [newVid, ...prev.filter((v) => v.id !== newVid.id)]);
             try {
               const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
-              localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
-              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
-              fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-admin-key': 'master-admin',
-                  'x-user-role': 'admin',
-                  'x-admin-email': adminEmail,
-                  'x-user-email': adminEmail,
-                },
-                body: JSON.stringify(newVid),
-              }).catch(() => {});
+              const cleanVid = { ...newVid };
+              if (cleanVid.videoUrl && cleanVid.videoUrl.startsWith('data:')) {
+                cleanVid.videoUrl = '';
+              }
+              localStorage.setItem('app_admin_videos', JSON.stringify([cleanVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
             } catch {}
           }}
           onAdminUpdateVideo={(updatedVid) => {

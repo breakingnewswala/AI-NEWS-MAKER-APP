@@ -4107,6 +4107,14 @@ function loadVideosDatabase(): StoredVideoItem[] {
 function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
   try {
     const locations = resolveAllDatabaseLocations("videos_database.json");
+    const extraLocations = [
+      path.join(process.cwd(), "public", "videos_database.json"),
+      path.join(process.cwd(), "web_studio", "public", "videos_database.json"),
+      path.join(process.cwd(), "app", "src", "main", "assets", "news_studio", "videos_database.json"),
+    ];
+    for (const extra of extraLocations) {
+      if (!locations.includes(extra)) locations.push(extra);
+    }
     const jsonStr = JSON.stringify(videos, null, 2);
     for (const loc of locations) {
       try {
@@ -4185,6 +4193,46 @@ app.post("/api/admin/videos/upload", (req, res) => {
     if (!videoData || !videoData.title || !videoData.videoUrl) {
       return res.status(400).json({ error: "वीडियो और शीर्षक दोनों अनिवार्य हैं।" });
     }
+
+    let finalVideoUrl = String(videoData.videoUrl || "").trim();
+    if (finalVideoUrl.startsWith("data:video/") || finalVideoUrl.startsWith("data:application/")) {
+      try {
+        let ext = "mp4";
+        if (finalVideoUrl.startsWith("data:video/webm")) ext = "webm";
+        else if (finalVideoUrl.startsWith("data:video/quicktime")) ext = "mov";
+        else if (finalVideoUrl.startsWith("data:video/x-m4v")) ext = "m4v";
+        const savedFilename = `video_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
+        const base64Data = finalVideoUrl.replace(/^data:[^;]+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        if (!fs.existsSync(UPLOAD_VIDEOS_DIR)) fs.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
+        if (!fs.existsSync(WEB_UPLOAD_VIDEOS_DIR)) fs.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
+        fs.writeFileSync(path.join(UPLOAD_VIDEOS_DIR, savedFilename), buffer);
+        try { fs.writeFileSync(path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename), buffer); } catch {}
+        finalVideoUrl = `/uploads/videos/${savedFilename}`;
+      } catch (err: any) {
+        console.error("Failed to convert base64 video to file:", err);
+      }
+    }
+
+    let finalThumbnailUrl = String(videoData.thumbnailUrl || "").trim();
+    if (finalThumbnailUrl.startsWith("data:image/")) {
+      try {
+        let ext = "jpg";
+        if (finalThumbnailUrl.startsWith("data:image/png")) ext = "png";
+        else if (finalThumbnailUrl.startsWith("data:image/webp")) ext = "webp";
+        const savedFilename = `thumb_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
+        const base64Data = finalThumbnailUrl.replace(/^data:image\/[^;]+;base64,/, "");
+        const buffer = Buffer.from(base64Data, "base64");
+        if (!fs.existsSync(UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
+        if (!fs.existsSync(WEB_UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
+        fs.writeFileSync(path.join(UPLOAD_THUMBNAILS_DIR, savedFilename), buffer);
+        try { fs.writeFileSync(path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename), buffer); } catch {}
+        finalThumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
+      } catch (err: any) {
+        console.error("Failed to convert base64 thumbnail to file:", err);
+      }
+    }
+
     const newVideo: StoredVideoItem = {
       id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: videoData.title.trim(),
@@ -4194,8 +4242,8 @@ app.post("/api/admin/videos/upload", (req, res) => {
       duration: videoData.duration || "01:30",
       channel: videoData.channel || "एडमिन वायरल डेस्क",
       views: videoData.views || "1K देखा गया",
-      videoUrl: videoData.videoUrl,
-      thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+      videoUrl: finalVideoUrl,
+      thumbnailUrl: finalThumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
       category: videoData.category || "वायरल",
       isBonus: Boolean(videoData.isBonus),
       rewardCoins: videoData.rewardCoins ? Number(videoData.rewardCoins) : (videoData.isBonus ? 50 : undefined),
@@ -4757,8 +4805,7 @@ app.post("/api/gemini/diagnostic-test", async (req, res) => {
   try {
     const ai = getGeminiClient(activeKey);
     const testModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash";
-    const testRes = await ai.models.generateContent({
-      model: testModel,
+    const testRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
       contents: "Respond with the single word: OK",
     });
     const latencyMs = Date.now() - startTime;
@@ -7446,6 +7493,9 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
+    if (!fs.existsSync(UPLOAD_VIDEOS_DIR)) fs.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
+    if (!fs.existsSync(WEB_UPLOAD_VIDEOS_DIR)) fs.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
+
     const filePath = path.join(UPLOAD_VIDEOS_DIR, savedFilename);
     const webFilePath = path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
     fs.writeFileSync(filePath, buffer);
@@ -7483,6 +7533,9 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
 
     const ext = magic.format || "jpg";
     const savedFilename = `thumb_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
+
+    if (!fs.existsSync(UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
+    if (!fs.existsSync(WEB_UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
 
     const filePath = path.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
     const webFilePath = path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
