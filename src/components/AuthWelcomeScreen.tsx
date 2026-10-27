@@ -43,7 +43,6 @@ import {
 import { ReporterUser } from './LoginModal';
 import { ChannelProfile } from '../types';
 import { LogoCropperModal } from './LogoCropperModal';
-import { GoogleAccountPickerModal } from './GoogleAccountPickerModal';
 import {
   getUserSubscription,
   savePrimaryMobileNumber,
@@ -59,7 +58,7 @@ import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { getApiUrl } from '../lib/apiConfig';
 import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
-import { GoogleAuthProvider, signInWithPopup, signInWithCredential } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithCredential, signInWithRedirect } from "firebase/auth";
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 
 function decodeGoogleJwt(token: string): { email?: string; name?: string; picture?: string } | null {
@@ -85,7 +84,6 @@ export interface AuthWelcomeScreenProps {
   onLoginSuccess: (user: ReporterUser) => void;
   onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser) => void;
   onOpenGoogleApiGuide?: () => void;
-  onSkipToHome?: () => void;
 }
 
 export const KNOWN_REGISTERED_USERS: Record<
@@ -267,7 +265,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   currentUser = null,
   onLoginSuccess,
   onCompleteDetails,
-  onSkipToHome,
 }) => {
   // Step State: 1 = Login / Sign Up, 2 = Channel & Reporter Details Setup
   const [currentStep, setCurrentStep] = useState<1 | 2>(() => {
@@ -358,9 +355,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [viewAllFeaturesMode, setViewAllFeaturesMode] = useState<boolean>(false);
   const [showEmailLoginForm, setShowEmailLoginForm] = useState<boolean>(false);
   const [customLoginEmail, setCustomLoginEmail] = useState<string>('');
-  const [isGoogleAccountPickerOpen, setIsGoogleAccountPickerOpen] = useState<boolean>(false);
-
-  // Auto-mount official Google Sign-In button on Step 4
+// Auto-mount official Google Sign-In button on Step 4
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
@@ -872,26 +867,59 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   };
 
-  // Real Google Sign-In Trigger (Android Bridge -> In-App Google Account Picker)
+  // Real Google Sign-In Trigger (Direct Official Google Popup & Account Selector)
   const handleGoogleSignIn = async () => {
     if (!channelRulesAgreed) {
-      setLoginErrorMsg('कृपया पहले चैनल दिशा-निर्देशों की सहमति के चेकबॉक्स को टिक करें।');
+      setLoginErrorMsg("कृपया पहले चैनल व प्रसारण नियमों की सहमति के चेकबॉक्स को टिक करें।");
       return;
     }
-    setLoginErrorMsg('');
+    setLoginErrorMsg("");
+    setIsLoggingIn(true);
 
     // 1. Android Bridge (Inside Android App WebView)
-    if (typeof window !== 'undefined' && (window as any).AndroidBridge?.signInWithGoogle) {
+    if (typeof window !== "undefined" && (window as any).AndroidBridge?.signInWithGoogle) {
       try {
         (window as any).AndroidBridge.signInWithGoogle();
         return;
       } catch (err) {
-        console.warn('AndroidBridge.signInWithGoogle err:', err);
+        console.warn("AndroidBridge.signInWithGoogle err:", err);
       }
     }
 
-    // 2. Open resilient in-app Google Account Picker (100% immune to origin_mismatch and popup blocks)
-    setIsGoogleAccountPickerOpen(true);
+    // 2. Direct Official Google Popup & Account Selector
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      if (result?.user?.email) {
+        await handleGoogleUserSuccess(
+          result.user.email,
+          result.user.displayName || undefined,
+          result.user.photoURL || undefined
+        );
+        return;
+      }
+    } catch (popupErr: any) {
+      console.warn("Google Popup sign-in error:", popupErr);
+      if (popupErr?.code === "auth/popup-blocked") {
+        try {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: "select_account" });
+          sessionStorage.setItem("google_redirect_in_progress", "true");
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirErr) {
+          console.error("Google Redirect error:", redirErr);
+          setLoginErrorMsg("ब्राउज़र द्वारा पॉपअप ब्लॉक कर दिया गया है। कृपया पॉपअप की अनुमति दें।");
+        }
+      } else if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
+        setLoginErrorMsg("Google लॉगिन रद्द किया गया। कृपया पुनः प्रयास करें।");
+      } else {
+        setLoginErrorMsg(popupErr?.message || "Google लॉगिन में समस्या आई। कृपया पुनः प्रयास करें।");
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   // File Upload: Directly takes full-size image first without auto-cropping
@@ -1191,18 +1219,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               ग्राफिक हो या वीडियो, सिर्फ 7 आसान चरणों में अपनी न्यूज़ तैयार करें
             </p>
 
-            {onSkipToHome && (
-              <div className="mb-3.5">
-                <button
-                  type="button"
-                  onClick={onSkipToHome}
-                  className="px-4 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-amber-400/50 text-amber-300 hover:text-white text-xs font-bold shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
-                >
-                  <Globe className="w-3.5 h-3.5 text-amber-400" />
-                  <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन न्यूज़ देखें) →</span>
-                </button>
-              </div>
-            )}
+            {/* Direct Home Bypass Permanently Removed */ null}
 
             {/* 4-Step Flow Stepper */}
             <div className="w-full mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 shadow-xl backdrop-blur-md">
@@ -2193,12 +2210,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       )}
 
       {/* Google Account Picker Modal (100% resilient on Web, zero origin_mismatch errors) */}
-      <GoogleAccountPickerModal
-        isOpen={isGoogleAccountPickerOpen}
-        onClose={() => setIsGoogleAccountPickerOpen(false)}
-        onSelectGoogleUser={handleGoogleUserSuccess}
-        isLoading={isLoggingIn}
-      />
+      {/* GoogleAccountPickerModal permanently removed */}
     </div>
   );
 };

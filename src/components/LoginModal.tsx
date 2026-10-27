@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "firebase/auth";
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
-import { GoogleAccountPickerModal } from './GoogleAccountPickerModal';
 import {
   Lock,
   User,
@@ -127,9 +126,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isGoogleAccountPickerOpen, setIsGoogleAccountPickerOpen] = useState(false);
-
-  // Focus on mount
+// Focus on mount
   useEffect(() => {
     if (isOpen) {
       setIsAdminMode(initialMode === 'admin');
@@ -277,24 +274,56 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }, 400);
   };
 
-  // Handle Real Google Login (Android Bridge or Resilient In-App Google Account Picker)
-  const handleGoogleLogin = () => {
+  // Handle Direct Real Google Login (Native Popup & Account Selector)
+  const handleGoogleLogin = async () => {
     if (loading) return;
     setErrorMessage(null);
+    setLoading(true);
 
     // 1. Check Native Android Bridge
-    if (typeof window !== 'undefined' && (window as any).AndroidBridge?.signInWithGoogle) {
+    if (typeof window !== "undefined" && (window as any).AndroidBridge?.signInWithGoogle) {
       try {
-        setLoading(true);
         (window as any).AndroidBridge.signInWithGoogle();
         return;
       } catch (err) {
-        console.warn('AndroidBridge.signInWithGoogle error:', err);
+        console.warn("AndroidBridge.signInWithGoogle error:", err);
       }
     }
 
-    // 2. Open Google Account Selector Modal (100% resilient on Web, zero origin_mismatch errors)
-    setIsGoogleAccountPickerOpen(true);
+    // 2. Direct Official Google Popup & Account Selector
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      if (result?.user?.email) {
+        await processGoogleUser(
+          result.user.email,
+          result.user.displayName || undefined,
+          result.user.photoURL || undefined
+        );
+        return;
+      }
+    } catch (popupErr: any) {
+      console.warn("Google Popup error in LoginModal:", popupErr);
+      if (popupErr?.code === "auth/popup-blocked") {
+        try {
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: "select_account" });
+          sessionStorage.setItem("google_redirect_in_progress", "true");
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirErr) {
+          console.error("Google Redirect error in LoginModal:", redirErr);
+          setErrorMessage("ब्राउज़र द्वारा पॉपअप ब्लॉक कर दिया गया है। कृपया पॉपअप की अनुमति दें।");
+        }
+      } else if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
+        setErrorMessage("Google लॉगिन रद्द किया गया।");
+      } else {
+        setErrorMessage(popupErr?.message || "Google लॉगिन में समस्या आई।");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Handle Sign In
@@ -789,14 +818,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       </div>
 
       {/* Google Account Picker Modal (100% resilient on Web, zero origin_mismatch errors) */}
-      <GoogleAccountPickerModal
-        isOpen={isGoogleAccountPickerOpen}
-        onClose={() => setIsGoogleAccountPickerOpen(false)}
-        onSelectGoogleUser={async (email, name) => {
-          await processGoogleUser(email, name);
-        }}
-        isLoading={loading}
-      />
+      {/* GoogleAccountPickerModal permanently removed */}
     </div>
   );
 };

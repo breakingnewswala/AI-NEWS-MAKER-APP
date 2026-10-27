@@ -757,14 +757,9 @@ export default function App() {
   });
 
   // Guest bypass mode - allows unauthenticated users to explore home screen without authentication barrier
-  const [bypassAuthForGuest, setBypassAuthForGuest] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem('guest_mode_active') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
+  // Strict Auth Guard: Unauthenticated bypass disabled - all users must authenticate via Google
+  const bypassAuthForGuest = false;
+  const setBypassAuthForGuest = (_val: boolean) => {};
   // Google Redirect Processing flag to prevent screen flicker and loops during OAuth return
   const [isRedirectProcessing, setIsRedirectProcessing] = useState<boolean>(() => {
     try {
@@ -2387,15 +2382,6 @@ export default function App() {
         <AuthWelcomeScreen
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
-          onSkipToHome={() => {
-            try {
-              sessionStorage.setItem('guest_mode_active', 'true');
-            } catch {}
-            setBypassAuthForGuest(true);
-            setShowAuthWelcomeScreen(false);
-            navigateToTab('home');
-            showToast('होम स्क्रीन पर आपका स्वागत है!');
-          }}
           onLoginSuccess={(user) => {
             try {
               sessionStorage.removeItem('guest_mode_active');
