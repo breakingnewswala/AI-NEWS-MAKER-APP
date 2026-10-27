@@ -117,10 +117,12 @@ export const GoogleAccountPickerModal: React.FC<GoogleAccountPickerModalProps> =
     setIsPopupAttempting(true);
     setErrorMsg('');
     try {
+      sessionStorage.setItem('google_redirect_in_progress', 'true');
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithRedirect(auth, provider);
     } catch (redirectErr: any) {
+      sessionStorage.removeItem('google_redirect_in_progress');
       console.warn('Google redirect login attempt error:', redirectErr);
       setErrorMsg('रीडायरेक्ट लॉगिन शुरू करने में त्रुटि: ' + (redirectErr?.message || 'कृपया 1-क्लिक खाते से लॉगिन करें।'));
       setIsPopupAttempting(false);

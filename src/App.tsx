@@ -22,7 +22,7 @@ import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModa
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
-import { getRedirectResult } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebaseConfig';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
@@ -66,6 +66,7 @@ import {
   Eye,
   EyeOff,
   Bookmark,
+  Loader2,
 } from 'lucide-react';
 import { VideoStudioWeb } from './components/VideoStudioWeb'; 
 import { RemotionTestStudio } from './components/RemotionTestStudio'; 
@@ -764,6 +765,15 @@ export default function App() {
     }
   });
 
+  // Google Redirect Processing flag to prevent screen flicker and loops during OAuth return
+  const [isRedirectProcessing, setIsRedirectProcessing] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('google_redirect_in_progress') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   useEffect(() => {
     const handleOpenWelcome = () => setShowAuthWelcomeScreen(true);
     window.addEventListener('open_auth_welcome_screen', handleOpenWelcome);
@@ -1077,8 +1087,10 @@ export default function App() {
     setIsUserMenuOpen(false);
     try {
       sessionStorage.removeItem('guest_mode_active');
+      sessionStorage.removeItem('google_redirect_in_progress');
     } catch {}
     setBypassAuthForGuest(false);
+    auth.signOut().catch(() => {});
     showToast('लॉगआउट सफल!');
     setShowAuthWelcomeScreen(true);
     setIsLoginModalOpen(false);
@@ -1252,36 +1264,130 @@ export default function App() {
     }
   }, []);
 
-  // Google Redirect Result Handler for seamless login after signInWithRedirect
+  // Google Redirect Result & Firebase Auth State Listener for seamless login
   useEffect(() => {
+    let isSubscribed = true;
+
+    const handleSuccessfulGoogleUser = (u: any) => {
+      if (!u || !u.email) return;
+      const cleanEmail = u.email.toLowerCase().trim();
+      const isMasterAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'admin.ainewsmaker@gmail.com';
+      const reporterUser: ReporterUser = {
+        id: u.uid || `user_${Date.now()}`,
+        name: u.displayName || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: isMasterAdmin ? 'admin' : 'reporter',
+        isSuperAdmin: isMasterAdmin,
+        avatarUrl: u.photoURL || undefined,
+      };
+
+      setCurrentUser(reporterUser);
+      setIsOnboardingCompleted(true);
+      setShowAuthWelcomeScreen(false);
+      setIsLoginModalOpen(false);
+      setIsRedirectProcessing(false);
+
+      try {
+        sessionStorage.removeItem('google_redirect_in_progress');
+        sessionStorage.removeItem('guest_mode_active');
+      } catch {}
+      setBypassAuthForGuest(false);
+
+      localStorage.removeItem('user_explicitly_logged_out');
+      localStorage.setItem('reporter_auth_session', JSON.stringify(reporterUser));
+      localStorage.setItem('is_onboarding_completed', 'true');
+
+      // Check or create profile
+      try {
+        const existingProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`) || localStorage.getItem('user_channel_profile');
+        if (!existingProfileStr) {
+          const defaultChannelProfile = {
+            channelName: reporterUser.name || 'AI News Channel',
+            reporterName: reporterUser.name,
+            reporterEmail: cleanEmail,
+            role: reporterUser.role,
+            isSuperAdmin: reporterUser.isSuperAdmin,
+          };
+          localStorage.setItem('user_channel_profile', JSON.stringify(defaultChannelProfile));
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(defaultChannelProfile));
+        }
+      } catch {}
+
+      // Background cloud sync
+      fetch(getApiUrl('/api/users/sync'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          name: reporterUser.name,
+          role: reporterUser.role,
+          avatarUrl: reporterUser.avatarUrl,
+        }),
+      }).catch(() => {});
+
+      if (isMasterAdmin) {
+        setAdminSystemMode('admin');
+        navigateToTab('profile');
+        showToast(`👑 स्वागत है, मुख्य व्यवस्थापक (${reporterUser.name})!`);
+      } else {
+        navigateToTab('home');
+        showToast(`👋 गूगल लॉगिन सफल, स्वागत है ${reporterUser.name}!`);
+      }
+    };
+
+    // 1. Process getRedirectResult
     getRedirectResult(auth)
       .then((result) => {
+        if (!isSubscribed) return;
         if (result && result.user && result.user.email) {
-          const u = result.user;
-          const cleanEmail = u.email.toLowerCase().trim();
-          const isMasterAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'admin.ainewsmaker@gmail.com';
-          const reporterUser: ReporterUser = {
-            id: u.uid || `user_${Date.now()}`,
-            name: u.displayName || cleanEmail.split('@')[0],
-            email: cleanEmail,
-            role: isMasterAdmin ? 'admin' : 'reporter',
-            isSuperAdmin: isMasterAdmin,
-            avatarUrl: u.photoURL || undefined,
-          };
-          setCurrentUser(reporterUser);
-          localStorage.removeItem('user_explicitly_logged_out');
-          localStorage.setItem('reporter_auth_session', JSON.stringify(reporterUser));
-          localStorage.setItem('is_onboarding_completed', 'true');
-          setShowAuthWelcomeScreen(false);
-          setIsLoginModalOpen(false);
-          showToast(`👋 गूगल लॉगिन सफल, स्वागत है ${reporterUser.name}!`);
+          handleSuccessfulGoogleUser(result.user);
+        } else {
+          setTimeout(() => {
+            if (isSubscribed) {
+              try {
+                sessionStorage.removeItem('google_redirect_in_progress');
+              } catch {}
+              setIsRedirectProcessing(false);
+            }
+          }, 2000);
         }
       })
       .catch((err) => {
+        if (!isSubscribed) return;
+        try {
+          sessionStorage.removeItem('google_redirect_in_progress');
+        } catch {}
+        setIsRedirectProcessing(false);
         if (err && err.code !== 'auth/credential-already-in-use') {
           console.warn('getRedirectResult notice:', err);
         }
       });
+
+    // 2. Firebase onAuthStateChanged listener (covers persisted session and redirect return)
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!isSubscribed) return;
+      if (firebaseUser && firebaseUser.email) {
+        const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+        if (explicitLogout !== 'true') {
+          handleSuccessfulGoogleUser(firebaseUser);
+        } else {
+          try {
+            sessionStorage.removeItem('google_redirect_in_progress');
+          } catch {}
+          setIsRedirectProcessing(false);
+        }
+      } else {
+        try {
+          sessionStorage.removeItem('google_redirect_in_progress');
+        } catch {}
+        setIsRedirectProcessing(false);
+      }
+    });
+
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+    };
   }, []);
 
   // Expose bridge functions for Android Native communication
@@ -2244,6 +2350,29 @@ export default function App() {
     currentTab === 'privacy' ||
     currentTab === 'delete-account' ||
     currentTab === 'support';
+
+  // Google Redirect in progress loading screen (prevents bounce/flicker)
+  if (isRedirectProcessing) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full border-4 border-amber-400/20 border-t-amber-400 animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg className="w-7 h-7" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-lg font-bold text-slate-100">गूगल प्रमाणीकरण सत्यापित हो रहा है...</h2>
+          <p className="text-xs text-slate-400">कृपया प्रतीक्षा करें, आपके खाते की जानकारी सुरक्षित रूप से लोड की जा रही है।</p>
+        </div>
+      </div>
+    );
+  }
 
   // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
   if (!isPublicLegalPage && !bypassAuthForGuest && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {

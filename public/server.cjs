@@ -1040,6 +1040,45 @@ if (!import_fs.default.existsSync(logosDir)) {
   import_fs.default.mkdirSync(logosDir, { recursive: true });
 }
 app.use("/uploads", import_express.default.static(publicUploadsDir));
+app.all("/__/auth/*", async (req, res) => {
+  const targetHost = "ai-news-maker-app.firebaseapp.com";
+  const targetUrl = `https://${targetHost}${req.originalUrl}`;
+  try {
+    const headers = {
+      host: targetHost,
+      accept: req.headers["accept"] || "*/*",
+      "user-agent": req.headers["user-agent"] || "Mozilla/5.0"
+    };
+    if (req.headers["content-type"]) {
+      headers["content-type"] = req.headers["content-type"];
+    }
+    if (req.headers["authorization"]) {
+      headers["authorization"] = req.headers["authorization"];
+    }
+    let bodyData = void 0;
+    if (["POST", "PUT", "PATCH"].includes(req.method.toUpperCase())) {
+      bodyData = typeof req.body === "object" ? JSON.stringify(req.body) : req.body;
+    }
+    const proxyRes = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body: bodyData,
+      redirect: "manual"
+    });
+    res.status(proxyRes.status);
+    proxyRes.headers.forEach((val, key) => {
+      const lower = key.toLowerCase();
+      if (lower !== "content-encoding" && lower !== "transfer-encoding") {
+        res.setHeader(key, val);
+      }
+    });
+    const buffer = await proxyRes.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.warn("[Auth Proxy] Error forwarding /__/auth request:", err?.message);
+    res.status(502).send("Auth Proxy Error");
+  }
+});
 var AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
 function generateAuthToken(user) {
   const payload = {

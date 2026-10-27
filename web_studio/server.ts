@@ -51,6 +51,54 @@ if (!fs.existsSync(logosDir)) {
 app.use("/uploads", express.static(publicUploadsDir));
 
 // ============================================================================
+// FIREBASE AUTHENTICATION TRANSPARENT PROXY (/__/auth/*)
+// Bypasses browser cross-origin storage partitioning, origin_mismatch and redirect drops
+// ============================================================================
+app.all("/__/auth/*", async (req, res) => {
+  const targetHost = "ai-news-maker-app.firebaseapp.com";
+  const targetUrl = `https://${targetHost}${req.originalUrl}`;
+  try {
+    const headers: Record<string, string> = {
+      host: targetHost,
+      accept: req.headers["accept"] || "*/*",
+      "user-agent": req.headers["user-agent"] || "Mozilla/5.0",
+    };
+    if (req.headers["content-type"]) {
+      headers["content-type"] = req.headers["content-type"];
+    }
+    if (req.headers["authorization"]) {
+      headers["authorization"] = req.headers["authorization"];
+    }
+
+    let bodyData: any = undefined;
+    if (["POST", "PUT", "PATCH"].includes(req.method.toUpperCase())) {
+      bodyData = typeof req.body === "object" ? JSON.stringify(req.body) : req.body;
+    }
+
+    const proxyRes = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body: bodyData,
+      redirect: "manual",
+    });
+
+    res.status(proxyRes.status);
+    proxyRes.headers.forEach((val, key) => {
+      const lower = key.toLowerCase();
+      if (lower !== "content-encoding" && lower !== "transfer-encoding") {
+        res.setHeader(key, val);
+      }
+    });
+
+    const buffer = await proxyRes.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err: any) {
+    console.warn("[Auth Proxy] Error forwarding /__/auth request:", err?.message);
+    res.status(502).send("Auth Proxy Error");
+  }
+});
+
+// ============================================================================
 // CRYPTOGRAPHIC SESSION TOKEN & AUTHENTICATION ENGINE (HMAC-SHA256 JWT)
 // ============================================================================
 const AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";

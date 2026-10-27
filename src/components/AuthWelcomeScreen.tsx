@@ -1462,7 +1462,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 {/* Google / Gmail Sign In (Single Gated Login Option) */}
                 <div className="space-y-3 pt-1">
                   {channelRulesAgreed ? (
-                    <button
+                    <>
+                      <button
                       type="button"
                       onClick={() => {
                         if (!channelRulesAgreed) {
@@ -1507,6 +1508,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         </span>
                       </div>
                     </button>
+                    {/* Official Google GSI Render Button (if loaded and rendered) */}
+                    <div id="google-official-welcome-btn" className="w-full flex justify-center empty:hidden my-1"></div>
+                  </>
                   ) : (
                     <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
                       <p className="text-xs text-slate-400">
