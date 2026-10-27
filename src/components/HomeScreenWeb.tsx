@@ -340,7 +340,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         approvedCaptionBullets: bulletsCap,
         approvedCaptionShort: shortCap,
         approvedPhotos: photos,
-        approvedPhotoLayout: photos.length >= 2 ? 'two_vertical' : 'single',
+        approvedPhotoLayout: photos.length >= 2 ? 'two' : 'single',
       });
       setEditorialSuccess('AI हेडलाइन (5 विकल्प), 3 कैप्शन और फ़ोटो तैयार हो गए! समीक्षा कर स्वीकृति दें।');
     } catch (err: any) {
@@ -369,7 +369,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       approvedPhotos: editingPost.approvedPhotos || (editingPost.imageUrl ? [editingPost.imageUrl] : []),
       approvedPhotoLayout: editingPost.approvedPhotoLayout || 'single',
       approvedBy: currentUser?.name || currentUser?.email || 'Master Admin',
-      approvedAt: new Date().toISOString(),
+      approvedAt: Date.now(),
     };
     setEditingPost(approvedPost);
     if (onEditNews) {

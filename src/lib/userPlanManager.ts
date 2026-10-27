@@ -956,7 +956,7 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const hoursRemaining = isExpired ? 0 : Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
   const minutesRemaining = isExpired ? 0 : Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
 
-  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
+  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || (matchedUser as any)?.activatedViaPromoCode || undefined;
   const hasPaidPlan = storedTier !== 'basic' || Boolean(promoUsed) || Boolean(matchedUser?.expiresAt && matchedUser.expiresAt > now);
   const isTrialActive = !isExpired && !hasPaidPlan;
 

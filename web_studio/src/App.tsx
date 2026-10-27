@@ -685,7 +685,7 @@ export default function App() {
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
-  // Authentication session - loads from localStorage, Android native bridge, or defaults to Master Admin (breakingnewswala.com@gmail.com)
+  // Authentication session - loads from localStorage or Android native bridge
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
       const saved = localStorage.getItem('reporter_auth_session');
@@ -702,17 +702,9 @@ export default function App() {
           if (parsed && (parsed.email || parsed.username)) return parsed;
         }
       }
-      // Default to Master Admin session (breakingnewswala.com@gmail.com) so preview screen opens Master Admin directly
-      try {
-        localStorage.removeItem('user_explicitly_logged_out');
-        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
-        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
-        localStorage.setItem('is_onboarding_completed', 'true');
-        localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
-      } catch {}
-      return DEFAULT_REPORTER_USER;
+      return null;
     } catch {
-      return DEFAULT_REPORTER_USER;
+      return null;
     }
   });
 
@@ -721,10 +713,26 @@ export default function App() {
   }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(true);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
+    try {
+      const session = localStorage.getItem('reporter_auth_session');
+      if (!session) return false;
+      return localStorage.getItem('is_onboarding_completed') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
-  // Welcome flow - show primary AuthWelcomeScreen with Google Login only when explicitly requested
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(false);
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login for unauthenticated visitors
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
+    try {
+      const session = localStorage.getItem('reporter_auth_session');
+      const onboarded = localStorage.getItem('is_onboarding_completed') === 'true';
+      return !session || !onboarded;
+    } catch {
+      return true;
+    }
+  });
 
   // Guest bypass mode - allows unauthenticated users to explore home screen without authentication barrier
   // Strict Auth Guard: Unauthenticated bypass disabled - all users must authenticate via Google
@@ -1239,6 +1247,7 @@ export default function App() {
       const isMasterAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'admin.ainewsmaker@gmail.com';
       const reporterUser: ReporterUser = {
         id: u.uid || `user_${Date.now()}`,
+        username: cleanEmail.split('@')[0],
         name: u.displayName || cleanEmail.split('@')[0],
         email: cleanEmail,
         role: isMasterAdmin ? 'admin' : 'reporter',
@@ -2120,7 +2129,7 @@ export default function App() {
       isBonus: Boolean(post.isBonus),
       originalHeadline: post.title,
       frameDesign: 'graphic_001',
-      layout: (post.editorialApproved && post.approvedPhotoLayout) ? post.approvedPhotoLayout : 'single',
+      layout: (post.editorialApproved && post.approvedPhotoLayout ? (post.approvedPhotoLayout === 'two' ? 'double' : (post.approvedPhotoLayout === 'three' ? 'grid-3' : 'single')) : 'single'),
       showDate: false,
       showWatermark: false,
       showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
@@ -2157,9 +2166,9 @@ export default function App() {
       approvedCaptionBullets: post.approvedCaptionBullets,
       approvedCaptionShort: post.approvedCaptionShort,
       approvedPhotos: post.approvedPhotos,
-      approvedPhotoLayout: post.approvedPhotoLayout,
+      approvedPhotoLayout: post.approvedPhotoLayout === 'two' ? 'two_vertical' : (post.approvedPhotoLayout === 'three' ? 'three_grid' : 'single'),
       approvedBy: post.approvedBy,
-      approvedAt: post.approvedAt,
+      approvedAt: typeof post.approvedAt === 'number' ? new Date(post.approvedAt).toISOString() : String(post.approvedAt || ''),
     });
 
     navigateToTab('studio');
@@ -2383,6 +2392,7 @@ export default function App() {
               // proceed
             }
             // Ensure onboarding is marked completed so the user enters the homepage immediately
+            try { localStorage.removeItem('ai_news_maker_admin_system_mode'); } catch {}
             setIsOnboardingCompleted(true);
             localStorage.setItem('is_onboarding_completed', 'true');
             navigateToTab('home');
@@ -2408,6 +2418,7 @@ export default function App() {
               setIsOnboardingCompleted(true);
               showToast('👑 मुख्य एडमिन कंट्रोल पैनल में आपका स्वागत है!');
             } else {
+              try { localStorage.removeItem('ai_news_maker_admin_system_mode'); } catch {}
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
               navigateToTab('home');

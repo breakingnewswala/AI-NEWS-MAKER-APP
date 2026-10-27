@@ -705,7 +705,6 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     }
     if (geminiKey !== undefined && String(geminiKey).trim().length > 5) {
       process.env.GEMINI_API_KEY = String(geminiKey).trim();
-      aiClient = null;
       saveAiKeysConfig({ geminiKey: String(geminiKey).trim() });
     }
     if (customDomain !== undefined) {
@@ -3055,6 +3054,7 @@ interface AuthoritativeUser {
   unblockedBy?: string | null;
   blockedReason?: string | null;
   createdAt: number;
+  updatedAt?: number;
   trialStartedAt: number;
   trialEndsAt: number;
   isTrialExpired?: boolean;

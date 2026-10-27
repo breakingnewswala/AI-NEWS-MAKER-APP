@@ -1498,7 +1498,6 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     }
     if (geminiKey !== void 0 && String(geminiKey).trim().length > 5) {
       process.env.GEMINI_API_KEY = String(geminiKey).trim();
-      aiClient = null;
       saveAiKeysConfig({ geminiKey: String(geminiKey).trim() });
     }
     if (customDomain !== void 0) {

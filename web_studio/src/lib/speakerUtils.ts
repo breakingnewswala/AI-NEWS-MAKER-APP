@@ -160,40 +160,7 @@ export function cleanHeadlineText(text: any): string {
   // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
 
-  // 17. Strip publisher ellipses and dangling incomplete words/letters
-  cleaned = stripDanglingIncompleteWords(cleaned);
-
   return cleaned;
-}
-
-/**
- * Strips publisher ellipses, trailing dangling single Devanagari consonants (e.g. cut "क", "ख"),
- * and trailing hanging postpositions/connectors that result from abrupt sentence truncations.
- */
-export function stripDanglingIncompleteWords(text: string): string {
-  if (!text) return '';
-  let s = String(text).trim();
-  // Remove multi-dots, unicode ellipses, and trailing dashes
-  s = s.replace(/(?:\.{2,}|…|--+|—+)+/g, ' ').trim();
-
-  let prev = '';
-  let iters = 0;
-  while (s && s !== prev && iters < 6) {
-    prev = s;
-    iters++;
-    // Strip trailing punctuation & spaces
-    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
-
-    // Strip trailing standalone single Devanagari consonant / incomplete letter (e.g. cut "क", "ख")
-    s = s.replace(/\s+[\u0915-\u0939]$/u, '').trim();
-
-    // Strip trailing dangling postpositions / conjunctions that make a headline incomplete
-    s = s.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले|किए|गए|हुए|रहा|रही|रहे|था|थी|थे))$/u, '').trim();
-
-    // Strip trailing punctuation again if connector removal exposed punctuation
-    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
-  }
-  return s;
 }
 
 const CATEGORY_KEYWORDS = [
@@ -939,7 +906,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  cleaned = stripDanglingIncompleteWords(cleaned);
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 
   // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
@@ -968,7 +935,8 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
   }
-  return stripDanglingIncompleteWords(result);
+  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
+  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 }
 
 /**
@@ -1011,18 +979,6 @@ export function fitHeadlinesTo5TierRanges(
     }
   }
 
-  let seedIdx = 1;
-  while (result.length < 5) {
-    const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
-      ? baseOrContext.trim()
-      : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (result[0] || 'मुख्य समाचार'));
-    const backup = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${baseText}`, 150);
-    if (!result.includes(backup)) {
-      result.push(backup);
-    }
-    seedIdx++;
-  }
-
   // Ensure all 5 slots conform strictly to 150 max ceiling
   return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
 }
@@ -1034,7 +990,7 @@ export function fitHeadlineNaturally(
   factSentence?: string | string[]
 ): string {
   if (!text) return "";
-  return stripDanglingIncompleteWords(cleanHeadlineText(text));
+  return cleanHeadlineText(text).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
 }
 
 /**
@@ -1047,13 +1003,13 @@ export function generate5BalancedHeadlineOptions(
   factSentences: string[] = [],
   location: string = ""
 ): string[] {
-  const cleanBase = stripDanglingIncompleteWords(
-    sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
-  );
+  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
+    .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
+    .trim();
 
   const validFacts = (factSentences || [])
-    .map((s) => stripDanglingIncompleteWords(sanitizePressNoteFlattery(cleanHeadlineText(s), true)))
-    .filter((s) => s.length >= 20 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
+    .map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim())
+    .filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
 
   const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "मुख्य समाचार अपडेट");
   const locPrefix = location && location !== "विशेष कवरेज" ? `${location}: ` : "";
@@ -1092,7 +1048,7 @@ export function generate5BalancedHeadlineOptions(
   for (const d of clauseDelims) {
     if (uniqueOptions.length >= 5) break;
     if (base.includes(d)) {
-      const parts = base.split(d).map((p) => stripDanglingIncompleteWords(p)).filter((p) => p.length >= 10);
+      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
       if (parts.length >= 2) {
         addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`);
         addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`);
@@ -1112,14 +1068,12 @@ export function generate5BalancedHeadlineOptions(
     addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`);
   }
 
-  // Action / Announcement restructuring using complete meaningful clauses from base
+  // Action / Announcement restructuring using words from base
   if (base.includes(" ने ") || base.includes(" को ") || base.includes(" में ")) {
-    const clauseMatch = base.match(/^(.+?(?:ने|को|में)\s+[^\s,।]+(?:\s+[^\s,।]+){2,8})/u);
-    if (clauseMatch && clauseMatch[1]) {
-      const naturalClause = stripDanglingIncompleteWords(clauseMatch[1]);
-      if (naturalClause.length >= 20 && naturalClause !== base) {
-        addOptionIfClean(naturalClause);
-      }
+    const words = base.split(/\s+/);
+    if (words.length >= 10) {
+      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
+      addOptionIfClean(naturalCut);
     }
   }
 
@@ -1198,8 +1152,9 @@ export function ensureHashtagHierarchy(
 ): string {
   if (!summaryText || typeof summaryText !== 'string') return summaryText || '';
 
-  // 1. Separate body text from any existing trailing hashtag block
-  let rawBody = summaryText.replace(/(?:\n\s*(?:#[a-zA-Z0-9_\u0900-\u097F]+[\s,]*)+)+$/gu, '').trim();
+  // 1. Separate body text from any existing hashtag line
+  const parts = summaryText.split(/\n\s*#/);
+  let rawBody = parts[0].trim();
 
   // Strip all URLs, web domains, and links (Zero URL policy)
   rawBody = stripAllUrlsAndHyperlinks(rawBody);
@@ -1217,8 +1172,8 @@ export function ensureHashtagHierarchy(
   // Strip press note flattery
   rawBody = sanitizePressNoteFlattery(rawBody, false);
 
-  // a. Strip all lingering inline or trailing hashtags from body text so they never pollute paragraphs
-  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, '').trim();
+  // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, '').trim();
 
   // Strip leading headline duplicate if caption accidentally starts with the headline
   if (headlineToStrip && headlineToStrip.trim()) {
@@ -1238,43 +1193,48 @@ export function ensureHashtagHierarchy(
   let finalBodyText = '';
 
   if (mode === 'bullet') {
-    // Bullet caption: 1 short intro sentence + 3-5 distinct meaningful bullets (Module 2.2)
     const rawLines = rawBody
       .split(/\n+/)
       .map((l) => l.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
       .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
 
-    const sentences = rawBody
-      .split(/[।\n]+|\.\s+/)
-      .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
-      .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
-
-    if (rawLines.length >= 3 && sentences.length > rawLines.length) {
-      const intro = `${sentences[0].replace(/[।\.\s]+$/, '')}।`;
-      const bullets = rawLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
-      finalBodyText = `${intro}\n\n${bullets}`;
-    } else if (sentences.length > 1) {
-      const intro = `${sentences[0].replace(/[।\.\s]+$/, '')}।`;
-      const bullets = sentences.slice(1, 5).map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`).join('\n');
-      finalBodyText = `${intro}\n\n${bullets}`;
-    } else {
-      const bullets = (sentences.length > 0 ? sentences.slice(0, 4) : ['मुख्य घटनाक्रम का विवरण'])
-        .map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`)
-        .join('\n');
-      finalBodyText = bullets;
+    let bulletLines = rawLines;
+    if (bulletLines.length < 3) {
+      const sents = rawBody
+        .split(/[।\n]+/)
+        .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+      bulletLines = sents.slice(0, 5);
     }
+    if (bulletLines.length === 0) {
+      bulletLines = [rawBody || 'ताज़ा घटनाक्रम की मुख्य जानकारी'];
+    }
+    finalBodyText = bulletLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
   } else if (mode === 'short') {
-    // Short caption: 1 to 3 short complete sentences (Module 2.3)
-    const sentences = rawBody
-      .split(/[।\n]+|\.\s+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+    // Concise Caption: ~2 concise sentences (approx 1-2 short paragraphs)
+    const rawParagraphs = rawBody
+      .split(/\n{2,}|\n(?=[^\s•])/g)
+      .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
+      .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
 
-    if (sentences.length >= 1) {
-      finalBodyText = sentences.slice(0, 3).map((s) => `${s.replace(/[।\.\s]+$/, '')}।`).join(' ');
+    let cleanParas: string[] = [];
+    if (rawParagraphs.length >= 2) {
+      cleanParas = [rawParagraphs[0], rawParagraphs.slice(1).join(' ')];
     } else {
-      finalBodyText = rawBody;
+      const sentences = rawBody
+        .split(/[।\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5);
+      if (sentences.length >= 2) {
+        cleanParas = [
+          sentences.slice(0, Math.ceil(sentences.length / 2)).join('। ') + '।',
+          sentences.slice(Math.ceil(sentences.length / 2)).join('। ') + '।',
+        ];
+      } else {
+        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
+      }
     }
+    finalBodyText = cleanParas.slice(0, 2).join('\n\n').trim();
   } else {
     // Mode 'detailed': Exactly 3 substantive paragraphs
     const rawParagraphs = rawBody
@@ -1328,27 +1288,22 @@ export function ensureHashtagHierarchy(
     finalBodyText = cleanParas.join('\n\n').trim();
   }
 
-  // Final cleanup of body text to guarantee zero URLs and zero stray inline hashtags
-  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText).replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, '').trim();
-
-  // 3. Extract and construct hashtags (Permanent Hashtag Hierarchy Rule)
-  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/gu) || [])
+  // 3. Extract and construct hashtags
+  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
-  // b. 1st tag: Configured username (#[username]), omit if absent or generic
-  const cleanUser = (username || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, '').trim();
-  const isGeneric = ['user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined', 'ainewsmaker', 'ai_news_maker', 'breakingnewswala', 'bnwtv'].includes(cleanUser.toLowerCase());
+  const cleanUser = (username || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
+  const isGeneric = ['user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined'].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : '';
 
   let locTag = '';
   if (location && location !== 'विशेष कवरेज') {
-    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, '');
+    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
     if (primaryCity && primaryCity.toLowerCase() !== 'location' && primaryCity !== 'स्थान') {
       locTag = `#${primaryCity}News`;
     }
   }
 
-  // c. Middle 4 to 6 hashtags: news location/topic related, STRICTLY excluding #ainewsmaker
   const filteredMiddleTags: string[] = [];
   for (const t of rawTags) {
     const lower = t.toLowerCase();
@@ -1358,7 +1313,6 @@ export function ensureHashtagHierarchy(
       lower === '#ai_news_maker' ||
       lower === '#breakingnewswala' ||
       lower === '#bnwtv' ||
-      lower === '#ब्रेकिंगन्यूजवाला' ||
       lower.startsWith('#http') ||
       lower.startsWith('#www') ||
       lower.startsWith('#url') ||
@@ -1371,17 +1325,14 @@ export function ensureHashtagHierarchy(
     filteredMiddleTags.push(t);
   }
 
-  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase()) && (!userTag || userTag.toLowerCase() !== locTag.toLowerCase())) {
+  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
     filteredMiddleTags.unshift(locTag);
   }
 
-  const defaultSeeds = ['#BreakingNews', '#HindiNews', '#LatestUpdate', '#NewsUpdate', '#CityNews'];
+  const defaultSeeds = ['#BreakingNews', '#HindiNews', '#LatestUpdate', '#NewsUpdate'];
   for (const seed of defaultSeeds) {
-    if (filteredMiddleTags.length >= 6) break;
-    if (
-      (!userTag || userTag.toLowerCase() !== seed.toLowerCase()) &&
-      !filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())
-    ) {
+    if (filteredMiddleTags.length >= 5) break;
+    if (!filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
       filteredMiddleTags.push(seed);
     }
   }
@@ -1408,10 +1359,9 @@ export function ensureHashtagHierarchy(
     }
   }
 
-  // d. Final hashtag: MANDATORY and strictly only #AINewsMaker as the very last tag
+  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
   orderedTags.push('#AINewsMaker');
 
-  // e. Exactly ONE blank line between body text and hashtag block
   return `${finalBodyText}\n\n${orderedTags.join(' ')}`.trim();
 }
 

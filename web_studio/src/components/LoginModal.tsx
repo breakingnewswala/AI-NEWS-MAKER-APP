@@ -138,7 +138,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   if (!isOpen) return null;
 
-  const processGoogleUser = async (rawEmail: string, displayName?: string) => {
+  const processGoogleUser = async (rawEmail: string, displayName?: string, photoURL?: string) => {
     // 1. Strict whitespace cleaning
     const cleanEmail = rawEmail.replace(/\s+/g, '').trim().toLowerCase();
 
@@ -647,38 +647,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <span>Google से जारी रखें (Continue with Google)</span>
               </button>
 
-              {/* Master Admin Fast 1-Click Access */}
-              <div className="pt-2 border-t border-neutral-800 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoading(true);
-                    setErrorMessage(null);
-                    processGoogleUser('breakingnewswala.com@gmail.com', 'ब्रेकिंग न्यूज़ वाला');
-                  }}
-                  disabled={loading}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-yellow-400/60"
-                >
-                  <Crown className="w-4 h-4 text-yellow-300" />
-                  <span>👑 मुख्य संपादक • मास्टर एडमिन 1-क्लिक लॉगिन</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoading(true);
-                    setErrorMessage(null);
-                    processGoogleUser('admin.ainewsmaker@gmail.com', 'सुपर एडमिन (AI News Maker)');
-                  }}
-                  disabled={loading}
-                  className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-850 text-blue-200 font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-blue-500/40"
-                >
-                  <Sparkles className="w-4 h-4 text-blue-400" />
-                  <span>🌟 सुपर एडमिन 1-क्लिक लॉगिन (admin.ainewsmaker@gmail.com)</span>
-                </button>
-                <p className="text-[10px] text-amber-400/70 text-center">
-                  बिना पॉपअप व बिना ओरिजिन एरर के 1-क्लिक में सीधा एक्सेस
-                </p>
-              </div>
+
 
               {/* Direct Username / Password Form Fallback */}
               <div className="pt-2 border-t border-neutral-800">
