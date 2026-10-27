@@ -39,6 +39,16 @@ export interface AutoFillNewsData {
   autoTrigger?: boolean;
   timestamp?: number;
   additionalPhotos?: string[];
+  editorialApproved?: boolean;
+  approvedHeadline?: string;
+  approvedHeadlines?: string[];
+  approvedCaptionDetailed?: string;
+  approvedCaptionBullets?: string;
+  approvedCaptionShort?: string;
+  approvedPhotos?: string[];
+  approvedPhotoLayout?: 'single' | 'two_vertical' | 'three_grid';
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 interface InlineAiNewsToolsProps {
