@@ -1,3 +1,4 @@
+const cleanBylineRegex = /^(?:संवाददाता|विशेष संवाददाता|ब्यूरो|एजेंसी|डेस्क|रिपोर्टर)[\s:,-]*/i;
 import { AIAnalysisResult } from '../types';
 import {
   cleanHeadlineText,

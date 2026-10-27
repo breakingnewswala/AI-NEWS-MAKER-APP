@@ -397,17 +397,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             },
           });
 
-          const btnContainer = document.getElementById('google-official-welcome-btn');
-          if (btnContainer && (window as any).google.accounts.id.renderButton) {
-            btnContainer.innerHTML = '';
-            (window as any).google.accounts.id.renderButton(btnContainer, {
-              theme: 'outline',
-              size: 'large',
-              width: Math.min(window.innerWidth - 60, 360),
-              text: 'continue_with',
-              shape: 'rectangular',
-            });
-          }
+          // Official GSI one-tap prompt if needed, but no duplicate renderButton in DOM
         } catch (e) {
           console.warn('Error initializing GSI renderButton:', e);
         }
@@ -1508,8 +1498,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         </span>
                       </div>
                     </button>
-                    {/* Official Google GSI Render Button (if loaded and rendered) */}
-                    <div id="google-official-welcome-btn" className="w-full flex justify-center empty:hidden my-1"></div>
                   </>
                   ) : (
                     <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
@@ -1519,136 +1507,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     </div>
                   )}
 
-                  {/* MASTER ADMIN ONE-CLICK DIRECT LOGIN BUTTON */}
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleDirectMasterAdminLogin()}
-                      disabled={isLoggingIn}
-                      className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-xl flex items-center justify-center gap-2.5 transition-all transform active:scale-98 cursor-pointer border border-yellow-400/60 ring-2 ring-yellow-400/20"
-                    >
-                      {isLoggingIn ? (
-                        <Loader2 className="w-4 h-4 text-white animate-spin shrink-0" />
-                      ) : (
-                        <Crown className="w-4 h-4 text-yellow-300 shrink-0" />
-                      )}
-                      <span>👑 मुख्य संपादक • मास्टर एडमिन 1-क्लिक लॉगिन (breakingnewswala.com@gmail.com)</span>
-                    </button>
-                    <p className="text-[10px] text-amber-400/80 text-center mt-1">
-                      बिना Google Popup के सीधा मास्टर एडमिन डैशबोर्ड एक्सेस
-                    </p>
                   </div>
-
-                  {/* SUPER ADMIN ONE-CLICK DIRECT LOGIN BUTTON */}
-                  <div className="pt-0.5">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setIsLoggingIn(true);
-                        setLoginErrorMsg('');
-                        try {
-                          localStorage.setItem('user_channel_rules_agreed', 'true');
-                          setChannelRulesAgreed(true);
-                          await handleGoogleUserSuccess('admin.ainewsmaker@gmail.com', 'सुपर एडमिन (AI News Maker)');
-                        } catch (err: any) {
-                          setIsLoggingIn(false);
-                          setLoginErrorMsg('सुपर एडमिन लॉगिन में त्रुटि। कृपया पुनः प्रयास करें।');
-                        }
-                      }}
-                      disabled={isLoggingIn}
-                      className="w-full py-2.5 px-4 bg-slate-850 hover:bg-slate-800 text-blue-200 font-bold text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer border border-blue-500/40"
-                    >
-                      {isLoggingIn ? (
-                        <Loader2 className="w-3.5 h-3.5 text-blue-300 animate-spin shrink-0" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      )}
-                      <span>🌟 सुपर एडमिन 1-क्लिक लॉगिन (admin.ainewsmaker@gmail.com)</span>
-                    </button>
-                  </div>
-
-                  {/* Alternate: Direct Email Sign-In (No Popup / No Origin Mismatch) */}
-                  <div className="pt-1 border-t border-slate-800/80">
-                    {!showEmailLoginForm ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowEmailLoginForm(true)}
-                        className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-850 text-slate-300 font-bold text-xs rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                      >
-                        <Mail className="w-3.5 h-3.5 text-blue-400" />
-                        <span>ईमेल आईडी से सीधा लॉगिन (No Popup Required)</span>
-                      </button>
-                    ) : (
-                      <form onSubmit={handleDirectEmailLogin} className="space-y-2 p-3 bg-slate-950 rounded-xl border border-slate-800 text-left animate-in fade-in">
-                        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-amber-400" />
-                          <span>पंजीकृत / गूगल ईमेल आईडी दर्ज करें:</span>
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="email"
-                            required
-                            placeholder="उदा. breakingnewswala.com@gmail.com"
-                            value={customLoginEmail}
-                            onChange={(e) => setCustomLoginEmail(e.target.value)}
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                          />
-                          <button
-                            type="submit"
-                            disabled={isLoggingIn}
-                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg shadow cursor-pointer transition-colors shrink-0"
-                          >
-                            लॉगिन
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-slate-500">
-                          पॉपअप ब्लॉक या ऑरिजन एरर के बिना तुरंत प्रवेश करें।
-                        </p>
-                      </form>
-                    )}
-                  </div>
-
-                  {isPopupBlocked && (
-                    <div className="p-3.5 bg-amber-500/15 border-2 border-amber-500/60 rounded-xl space-y-2 text-left animate-in fade-in">
-                      <div className="flex items-center gap-2 text-amber-300 font-bold text-xs sm:text-sm">
-                        <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Google लॉगिन पॉप-अप अवरुद्ध या Origin Mismatch</span>
-                      </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed">
-                        यदि Google पॉपअप में <strong>Error 400: origin_mismatch</strong> आ रहा है, तो ऊपर दिए गए <strong>"👑 मास्टर एडमिन डायरेक्ट लॉगिन"</strong> बटन पर क्लिक करें। Google Cloud Console में <code>https://ainewsmaker.online</code> को Authorized JavaScript origins में रजिस्टर करने पर Google पॉपअप भी सक्रिय हो जाएगा।
-                      </p>
-                    </div>
-                  )}
-
-                  {/* DIRECT HOME SCREEN BUTTON */}
-                  {onSkipToHome && (
-                    <div className="pt-2 border-t border-slate-800">
-                      <button
-                        type="button"
-                        onClick={onSkipToHome}
-                        className="w-full py-3 px-4 bg-slate-850 hover:bg-slate-800 text-amber-300 hover:text-amber-200 font-black text-xs sm:text-sm rounded-xl border border-amber-400/40 shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer"
-                      >
-                        <Globe className="w-4 h-4 text-amber-400" />
-                        <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन न्यूज़ देखें) →</span>
-                      </button>
-                      <p className="text-[10px] text-slate-400 text-center mt-1">
-                        अनलॉग-इन रहकर भी ताज़ा लाइव खबरें और टेम्पलेट्स देखें
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Back to Features link */}
-                <div className="pt-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setHomeStep(3)}
-                    className="text-xs text-slate-400 hover:text-amber-300 transition-colors inline-flex items-center gap-1 font-bold cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>← 12 मुख्य फीचर्स दोबारा देखें</span>
-                  </button>
-                </div>
               </div>
             )}
           </div>

@@ -374,3 +374,7 @@ export function triggerBreakingNewsAlert(story: { id: string; title: string; sum
   return true;
 }
 
+
+export function getUnreadNotificationCount(): number {
+  return loadNotifications().filter((n) => n.unread).length;
+}

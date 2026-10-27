@@ -66,6 +66,29 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   onLogout,
 }) => {
   const { language, setLanguage, isHindi } = useLanguage();
+  const [geminiStatus, setGeminiStatus] = useState<{ status: string; statusText: string; activeModel?: string }>({
+    status: 'checking',
+    statusText: 'Gemini AI कनेक्शन की जाँच हो रही है...',
+  });
+
+  const checkGeminiStatus = async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/gemini/diagnostic-status'));
+      if (res.ok) {
+        const data = await res.json();
+        setGeminiStatus(data);
+      } else {
+        setGeminiStatus({ status: 'error', statusText: 'Gemini AI सर्वर अनुपलब्ध' });
+      }
+    } catch {
+      setGeminiStatus({ status: 'error', statusText: 'Gemini AI कनेक्शन त्रुटि' });
+    }
+  };
+
+  useEffect(() => {
+    checkGeminiStatus();
+  }, []);
+
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [soundSettings, setSoundSettings] = useState<AppSoundSettings>(() => getSoundSettings());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);

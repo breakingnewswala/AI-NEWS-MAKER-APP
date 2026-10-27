@@ -54,6 +54,7 @@ export interface ReporterUser {
   avatarUrl?: string;
   token?: string;
   package?: any;
+  isSuperAdmin?: boolean;
 }
 
 interface LoginModalProps {

@@ -583,6 +583,42 @@ let dynamicOpenAiKey: string = (process.env.OPENAI_API_KEY && process.env.OPENAI
   ? process.env.OPENAI_API_KEY
   : "";
 let dynamicCustomDomain: string = "";
+
+const AI_KEYS_CONFIG_FILE = path.join(process.cwd(), "ai_keys_config.json");
+function loadAiKeysConfig() {
+  try {
+    if (fs.existsSync(AI_KEYS_CONFIG_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8"));
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.geminiKey && (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY")) {
+          process.env.GEMINI_API_KEY = parsed.geminiKey.trim();
+        }
+        if (parsed.openaiKey && !dynamicOpenAiKey) {
+          dynamicOpenAiKey = parsed.openaiKey.trim();
+        }
+        if (parsed.customDomain && !dynamicCustomDomain) {
+          dynamicCustomDomain = parsed.customDomain.trim();
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not read ai_keys_config.json:", e);
+  }
+}
+function saveAiKeysConfig(updates: { geminiKey?: string; openaiKey?: string; customDomain?: string }) {
+  try {
+    let existing: any = {};
+    if (fs.existsSync(AI_KEYS_CONFIG_FILE)) {
+      try { existing = JSON.parse(fs.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8")); } catch {}
+    }
+    const merged = { ...existing, ...updates };
+    fs.writeFileSync(AI_KEYS_CONFIG_FILE, JSON.stringify(merged, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("Could not save ai_keys_config.json:", e);
+  }
+}
+loadAiKeysConfig();
+
 let quotaExceededInfo = {
   isExceeded: false,
   lastChecked: new Date().toISOString(),
@@ -664,14 +700,17 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     const { openaiKey, geminiKey, customDomain } = req.body;
     if (openaiKey !== undefined) {
       dynamicOpenAiKey = String(openaiKey).trim();
-      openaiClient = null; // Re-create OpenAI client with new key
+      openaiClient = null;
+      saveAiKeysConfig({ openaiKey: String(openaiKey).trim() });
     }
     if (geminiKey !== undefined && String(geminiKey).trim().length > 5) {
       process.env.GEMINI_API_KEY = String(geminiKey).trim();
       aiClient = null;
+      saveAiKeysConfig({ geminiKey: String(geminiKey).trim() });
     }
     if (customDomain !== undefined) {
       dynamicCustomDomain = String(customDomain).trim();
+      saveAiKeysConfig({ customDomain: String(customDomain).trim() });
     }
 
     const effectiveOpenaiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
@@ -4684,6 +4723,93 @@ app.post("/api/notifications/mark-read", (req, res) => {
 
 
 // 9. GET Gemini API quota and status
+
+// Diagnostic endpoint: Status of Gemini API integration
+app.get("/api/gemini/diagnostic-status", async (req, res) => {
+  const activeKey = getActiveGeminiKey(req);
+  const hasKey = Boolean(activeKey && activeKey !== "MY_GEMINI_API_KEY");
+  return res.json({
+    configured: hasKey,
+    hasKey,
+    activeModel: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash",
+    models: DEFAULT_FALLBACK_MODELS,
+    status: hasKey ? (quotaExceededInfo.isExceeded ? "quota_warning" : "connected") : "missing_key",
+    statusText: hasKey
+      ? (quotaExceededInfo.isExceeded ? "Google Gemini API कोटा सीमा सक्रिय है" : "Google Gemini API सक्रिय और कनेक्टेड है")
+      : "Gemini API Key सर्वर पर अनुपलब्ध है। कृपया एनवायरनमेंट में GEMINI_API_KEY जोड़ें।",
+    lastChecked: quotaExceededInfo.lastChecked || new Date().toISOString(),
+  });
+});
+
+// Diagnostic endpoint: Safe, lightweight validation test against active Gemini model
+app.post("/api/gemini/diagnostic-test", async (req, res) => {
+  const activeKey = getActiveGeminiKey(req);
+  if (!activeKey || activeKey === "MY_GEMINI_API_KEY") {
+    return res.status(400).json({
+      success: false,
+      configured: false,
+      errorType: "missing_key",
+      message: "सर्वर पर Gemini API Key कॉन्फ़िगर नहीं है। कृपया Firebase App Hosting में GEMINI_API_KEY जोड़ें।",
+    });
+  }
+
+  const startTime = Date.now();
+  try {
+    const ai = getGeminiClient(activeKey);
+    const testModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash";
+    const testRes = await ai.models.generateContent({
+      model: testModel,
+      contents: "Respond with the single word: OK",
+    });
+    const latencyMs = Date.now() - startTime;
+    const replyText = String(testRes?.text || "").trim();
+
+    quotaExceededInfo.isExceeded = false;
+    quotaExceededInfo.lastChecked = new Date().toISOString();
+
+    return res.json({
+      success: true,
+      configured: true,
+      model: testModel,
+      latencyMs,
+      reply: replyText || "OK",
+      status: "connected",
+      message: "Google Gemini API (" + testModel + ") से सुरक्षित कनेक्शन सफल रहा (" + latencyMs + "ms)।",
+      lastChecked: quotaExceededInfo.lastChecked,
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    const msg = String(err?.message || "").toLowerCase();
+    const status = err?.status || err?.code || 500;
+
+    let errorType = "unknown";
+    let hindiMsg = "Gemini API से कनेक्ट करने में अज्ञात त्रुटि आई।";
+
+    if (status === 401 || status === 403 || msg.includes("api key not valid") || msg.includes("invalid api key")) {
+      errorType = "auth_error";
+      hindiMsg = "Gemini API Key अमान्य (Invalid) है। कृपया सही Key दर्ज करें।";
+    } else if (status === 404 || msg.includes("not found") || msg.includes("no longer available")) {
+      errorType = "model_not_found";
+      hindiMsg = "मॉडल उपलब्ध नहीं है। सिस्टम नवीनतम gemini-3.8-flash पर स्विच कर रहा है।";
+    } else if (status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || status === 402) {
+      errorType = "quota_exhausted";
+      hindiMsg = "Gemini API की कोटा सीमा (Rate Limit) पूरी हो गई है। कृपया कुछ देर प्रतीक्षा करें।";
+    } else {
+      hindiMsg = "Gemini API त्रुटि: " + (err?.message?.slice(0, 100) || "कनेक्शन समय समाप्त");
+    }
+
+    return res.status(502).json({
+      success: false,
+      configured: true,
+      errorType,
+      latencyMs,
+      message: hindiMsg,
+      status: "error",
+      lastChecked: new Date().toISOString(),
+    });
+  }
+});
+
 app.get("/api/gemini-quota-status", (_req, res) => {
   return res.json({
     hasKey: Boolean(process.env.GEMINI_API_KEY),
@@ -4751,6 +4877,27 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
 // =========================================================================
 const RSS_SOURCES_FILE = path.join(process.cwd(), "rss_sources_database.json");
 
+const DELETED_RSS_SOURCES_FILE = path.join(process.cwd(), "deleted_rss_sources_ids.json");
+function loadDeletedRssSourceIds(): Set<string> {
+  try {
+    if (fs.existsSync(DELETED_RSS_SOURCES_FILE)) {
+      const raw = fs.readFileSync(DELETED_RSS_SOURCES_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list.map(String));
+    }
+  } catch {}
+  return new Set();
+}
+function markRssSourceAsDeleted(id: string, url?: string) {
+  try {
+    const current = loadDeletedRssSourceIds();
+    if (id) current.add(String(id));
+    if (url) current.add(String(url).trim().toLowerCase());
+    fs.writeFileSync(DELETED_RSS_SOURCES_FILE, JSON.stringify(Array.from(current), null, 2), "utf-8");
+  } catch {}
+}
+
+
 interface AdminRssSourceRecord {
   id: string;
   name: string;
@@ -4794,39 +4941,23 @@ const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
 ];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
+  const deletedIds = loadDeletedRssSourceIds();
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       if (fs.existsSync(loc)) {
         const raw = fs.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((s: any) => s && s.url);
-          if (valid.length > 0) {
-            return valid;
-          }
-        }
-      }
-    }
-    // Fallback 1: check .bak backup file
-    for (const loc of locations) {
-      const backupFile = loc + ".bak";
-      if (fs.existsSync(backupFile)) {
-        const rawBak = fs.readFileSync(backupFile, "utf-8");
-        const parsedBak = JSON.parse(rawBak);
-        if (Array.isArray(parsedBak) && parsedBak.length > 0) {
-          const validBak = parsedBak.filter((s: any) => s && s.url);
-          if (validBak.length > 0) {
-            saveRssSourcesDatabase(validBak);
-            return validBak;
-          }
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((s: any) => s && s.url && !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
+          return valid;
         }
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return DEFAULT_PRODUCTION_RSS_SOURCES;
+  return DEFAULT_PRODUCTION_RSS_SOURCES.filter(s => !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
@@ -5405,6 +5536,7 @@ app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
     if (!id) return res.status(400).json({ error: "Source ID is required" });
     let sources = loadRssSourcesDatabase();
     const targetSource = sources.find((s) => s.id === id);
+    markRssSourceAsDeleted(id, targetSource?.url);
     sources = sources.filter((s) => s.id !== id);
     saveRssSourcesDatabase(sources);
 
@@ -8118,23 +8250,30 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
 });
 
 // Server-side Gemini initialization
-let aiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY is not set in environment variables.");
-    }
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey || "",
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
+function getActiveGeminiKey(req?: express.Request): string {
+  loadAiKeysConfig();
+  const headerKey = (req?.headers?.["x-gemini-key"] || req?.headers?.["x-goog-api-key"] || "") as string;
+  if (headerKey && headerKey.trim().length > 10) return headerKey.trim();
+  const bodyKey = (req?.body?.geminiApiKey || "") as string;
+  if (bodyKey && bodyKey.trim().length > 10 && bodyKey !== "MY_GEMINI_API_KEY") return bodyKey.trim();
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    ""
+  ).trim();
+}
+
+function getGeminiClient(keyOverride?: string): GoogleGenAI {
+  const apiKey = (keyOverride || getActiveGeminiKey()).trim();
+  return new GoogleGenAI({
+    apiKey: apiKey || "",
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
       },
-    });
-  }
-  return aiClient;
+    },
+  });
 }
 
 // Server-side OpenAI initialization (lazy loading)
@@ -8437,8 +8576,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
   "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-2.5-flash",
   "gemini-3.1-flash-lite",
 ];
 
@@ -8499,9 +8639,12 @@ async function generateWithFallbackAndRetry(
           msg.includes("timeout") ||
           msg.includes("fetch failed");
 
-        if (isRateLimit || isAccessDeniedOrNotFound) {
+        if (isRateLimit) {
           quotaExceededInfo.isExceeded = true;
           quotaExceededInfo.lastChecked = new Date().toISOString();
+        }
+        if (isAccessDeniedOrNotFound) {
+          break;
         }
 
         console.log(
@@ -12461,16 +12604,28 @@ JSON Output Schema:
         });
       }
     } else {
+      let lastGeminiErr: any = null;
       try {
         aiGeneratedOptions = await tryGemini();
         actualProvider = "gemini";
       } catch (geminiErr: any) {
+        lastGeminiErr = geminiErr;
+        console.warn("[News AI] Headline regen Gemini error:", geminiErr?.message || geminiErr);
         if (aiConfig.aiModelAccess?.gemini?.allowFallback) {
           try {
             aiGeneratedOptions = await tryOpenAI();
             actualProvider = "openai";
           } catch {}
         }
+      }
+      if (!aiGeneratedOptions || aiGeneratedOptions.length === 0) {
+        const errDetail = lastGeminiErr?.message || "Gemini सेवा अस्थायी रूप से अनुपलब्ध है";
+        return res.status(502).json({
+          success: false,
+          error: `Google Gemini AI से हेडलाइन पुनर्जनन में त्रुटि: ${errDetail}। कृपया पुनः प्रयास करें।`,
+          canRetry: true,
+          provider: "gemini",
+        });
       }
     }
 

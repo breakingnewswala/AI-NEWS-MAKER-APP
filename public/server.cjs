@@ -1389,6 +1389,43 @@ app.get("/api/admin/audit-logs", (req, res) => {
 });
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
+var AI_KEYS_CONFIG_FILE = import_path.default.join(process.cwd(), "ai_keys_config.json");
+function loadAiKeysConfig() {
+  try {
+    if (import_fs.default.existsSync(AI_KEYS_CONFIG_FILE)) {
+      const parsed = JSON.parse(import_fs.default.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8"));
+      if (parsed && typeof parsed === "object") {
+        if (parsed.geminiKey && (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY")) {
+          process.env.GEMINI_API_KEY = parsed.geminiKey.trim();
+        }
+        if (parsed.openaiKey && !dynamicOpenAiKey) {
+          dynamicOpenAiKey = parsed.openaiKey.trim();
+        }
+        if (parsed.customDomain && !dynamicCustomDomain) {
+          dynamicCustomDomain = parsed.customDomain.trim();
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not read ai_keys_config.json:", e);
+  }
+}
+function saveAiKeysConfig(updates) {
+  try {
+    let existing = {};
+    if (import_fs.default.existsSync(AI_KEYS_CONFIG_FILE)) {
+      try {
+        existing = JSON.parse(import_fs.default.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8"));
+      } catch {
+      }
+    }
+    const merged = { ...existing, ...updates };
+    import_fs.default.writeFileSync(AI_KEYS_CONFIG_FILE, JSON.stringify(merged, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("Could not save ai_keys_config.json:", e);
+  }
+}
+loadAiKeysConfig();
 var quotaExceededInfo = {
   isExceeded: false,
   lastChecked: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1457,13 +1494,16 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     if (openaiKey !== void 0) {
       dynamicOpenAiKey = String(openaiKey).trim();
       openaiClient = null;
+      saveAiKeysConfig({ openaiKey: String(openaiKey).trim() });
     }
     if (geminiKey !== void 0 && String(geminiKey).trim().length > 5) {
       process.env.GEMINI_API_KEY = String(geminiKey).trim();
       aiClient = null;
+      saveAiKeysConfig({ geminiKey: String(geminiKey).trim() });
     }
     if (customDomain !== void 0) {
       dynamicCustomDomain = String(customDomain).trim();
+      saveAiKeysConfig({ customDomain: String(customDomain).trim() });
     }
     const effectiveOpenaiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
     const openaiValid = Boolean(
@@ -4677,6 +4717,80 @@ app.post("/api/notifications/mark-read", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/gemini/diagnostic-status", async (req, res) => {
+  const activeKey = getActiveGeminiKey(req);
+  const hasKey = Boolean(activeKey && activeKey !== "MY_GEMINI_API_KEY");
+  return res.json({
+    configured: hasKey,
+    hasKey,
+    activeModel: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash",
+    models: DEFAULT_FALLBACK_MODELS,
+    status: hasKey ? quotaExceededInfo.isExceeded ? "quota_warning" : "connected" : "missing_key",
+    statusText: hasKey ? quotaExceededInfo.isExceeded ? "Google Gemini API \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948" : "Google Gemini API \u0938\u0915\u094D\u0930\u093F\u092F \u0914\u0930 \u0915\u0928\u0947\u0915\u094D\u091F\u0947\u0921 \u0939\u0948" : "Gemini API Key \u0938\u0930\u094D\u0935\u0930 \u092A\u0930 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u090F\u0928\u0935\u093E\u092F\u0930\u0928\u092E\u0947\u0902\u091F \u092E\u0947\u0902 GEMINI_API_KEY \u091C\u094B\u0921\u093C\u0947\u0902\u0964",
+    lastChecked: quotaExceededInfo.lastChecked || (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+app.post("/api/gemini/diagnostic-test", async (req, res) => {
+  const activeKey = getActiveGeminiKey(req);
+  if (!activeKey || activeKey === "MY_GEMINI_API_KEY") {
+    return res.status(400).json({
+      success: false,
+      configured: false,
+      errorType: "missing_key",
+      message: "\u0938\u0930\u094D\u0935\u0930 \u092A\u0930 Gemini API Key \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E Firebase App Hosting \u092E\u0947\u0902 GEMINI_API_KEY \u091C\u094B\u0921\u093C\u0947\u0902\u0964"
+    });
+  }
+  const startTime = Date.now();
+  try {
+    const ai = getGeminiClient(activeKey);
+    const testModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash";
+    const testRes = await ai.models.generateContent({
+      model: testModel,
+      contents: "Respond with the single word: OK"
+    });
+    const latencyMs = Date.now() - startTime;
+    const replyText = String(testRes?.text || "").trim();
+    quotaExceededInfo.isExceeded = false;
+    quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
+    return res.json({
+      success: true,
+      configured: true,
+      model: testModel,
+      latencyMs,
+      reply: replyText || "OK",
+      status: "connected",
+      message: "Google Gemini API (" + testModel + ") \u0938\u0947 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0938\u092B\u0932 \u0930\u0939\u093E (" + latencyMs + "ms)\u0964",
+      lastChecked: quotaExceededInfo.lastChecked
+    });
+  } catch (err) {
+    const latencyMs = Date.now() - startTime;
+    const msg = String(err?.message || "").toLowerCase();
+    const status = err?.status || err?.code || 500;
+    let errorType = "unknown";
+    let hindiMsg = "Gemini API \u0938\u0947 \u0915\u0928\u0947\u0915\u094D\u091F \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0905\u091C\u094D\u091E\u093E\u0924 \u0924\u094D\u0930\u0941\u091F\u093F \u0906\u0908\u0964";
+    if (status === 401 || status === 403 || msg.includes("api key not valid") || msg.includes("invalid api key")) {
+      errorType = "auth_error";
+      hindiMsg = "Gemini API Key \u0905\u092E\u093E\u0928\u094D\u092F (Invalid) \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0938\u0939\u0940 Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964";
+    } else if (status === 404 || msg.includes("not found") || msg.includes("no longer available")) {
+      errorType = "model_not_found";
+      hindiMsg = "\u092E\u0949\u0921\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0938\u093F\u0938\u094D\u091F\u092E \u0928\u0935\u0940\u0928\u0924\u092E gemini-3.8-flash \u092A\u0930 \u0938\u094D\u0935\u093F\u091A \u0915\u0930 \u0930\u0939\u093E \u0939\u0948\u0964";
+    } else if (status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || status === 402) {
+      errorType = "quota_exhausted";
+      hindiMsg = "Gemini API \u0915\u0940 \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E (Rate Limit) \u092A\u0942\u0930\u0940 \u0939\u094B \u0917\u0908 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0926\u0947\u0930 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964";
+    } else {
+      hindiMsg = "Gemini API \u0924\u094D\u0930\u0941\u091F\u093F: " + (err?.message?.slice(0, 100) || "\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0938\u092E\u092F \u0938\u092E\u093E\u092A\u094D\u0924");
+    }
+    return res.status(502).json({
+      success: false,
+      configured: true,
+      errorType,
+      latencyMs,
+      message: hindiMsg,
+      status: "error",
+      lastChecked: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+});
 app.get("/api/gemini-quota-status", (_req, res) => {
   return res.json({
     hasKey: Boolean(process.env.GEMINI_API_KEY),
@@ -4734,6 +4848,27 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
+var DELETED_RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "deleted_rss_sources_ids.json");
+function loadDeletedRssSourceIds() {
+  try {
+    if (import_fs.default.existsSync(DELETED_RSS_SOURCES_FILE)) {
+      const raw = import_fs.default.readFileSync(DELETED_RSS_SOURCES_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list.map(String));
+    }
+  } catch {
+  }
+  return /* @__PURE__ */ new Set();
+}
+function markRssSourceAsDeleted(id, url) {
+  try {
+    const current = loadDeletedRssSourceIds();
+    if (id) current.add(String(id));
+    if (url) current.add(String(url).trim().toLowerCase());
+    import_fs.default.writeFileSync(DELETED_RSS_SOURCES_FILE, JSON.stringify(Array.from(current), null, 2), "utf-8");
+  } catch {
+  }
+}
 var DEFAULT_PRODUCTION_RSS_SOURCES = [
   {
     id: "src_aajtak_live",
@@ -4764,38 +4899,23 @@ var DEFAULT_PRODUCTION_RSS_SOURCES = [
   }
 ];
 function loadRssSourcesDatabase() {
+  const deletedIds = loadDeletedRssSourceIds();
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       if (import_fs.default.existsSync(loc)) {
         const raw = import_fs.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((s) => s && s.url);
-          if (valid.length > 0) {
-            return valid;
-          }
-        }
-      }
-    }
-    for (const loc of locations) {
-      const backupFile = loc + ".bak";
-      if (import_fs.default.existsSync(backupFile)) {
-        const rawBak = import_fs.default.readFileSync(backupFile, "utf-8");
-        const parsedBak = JSON.parse(rawBak);
-        if (Array.isArray(parsedBak) && parsedBak.length > 0) {
-          const validBak = parsedBak.filter((s) => s && s.url);
-          if (validBak.length > 0) {
-            saveRssSourcesDatabase(validBak);
-            return validBak;
-          }
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((s) => s && s.url && !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
+          return valid;
         }
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return DEFAULT_PRODUCTION_RSS_SOURCES;
+  return DEFAULT_PRODUCTION_RSS_SOURCES.filter((s) => !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
 }
 function saveRssSourcesDatabase(sources) {
   try {
@@ -5274,6 +5394,7 @@ app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
     if (!id) return res.status(400).json({ error: "Source ID is required" });
     let sources = loadRssSourcesDatabase();
     const targetSource = sources.find((s) => s.id === id);
+    markRssSourceAsDeleted(id, targetSource?.url);
     sources = sources.filter((s) => s.id !== id);
     saveRssSourcesDatabase(sources);
     if (targetSource) {
@@ -7433,23 +7554,24 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
     return res.status(500).send("Error proxying image");
   }
 });
-var aiClient = null;
-function getGeminiClient() {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY is not set in environment variables.");
-    }
-    aiClient = new import_genai.GoogleGenAI({
-      apiKey: apiKey || "",
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build"
-        }
+function getActiveGeminiKey(req) {
+  loadAiKeysConfig();
+  const headerKey = req?.headers?.["x-gemini-key"] || req?.headers?.["x-goog-api-key"] || "";
+  if (headerKey && headerKey.trim().length > 10) return headerKey.trim();
+  const bodyKey = req?.body?.geminiApiKey || "";
+  if (bodyKey && bodyKey.trim().length > 10 && bodyKey !== "MY_GEMINI_API_KEY") return bodyKey.trim();
+  return (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
+}
+function getGeminiClient(keyOverride) {
+  const apiKey = (keyOverride || getActiveGeminiKey()).trim();
+  return new import_genai.GoogleGenAI({
+    apiKey: apiKey || "",
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build"
       }
-    });
-  }
-  return aiClient;
+    }
+  });
 }
 var openaiClient = null;
 function getOpenAIClient() {
@@ -7688,8 +7810,9 @@ function resolveUserTierAndRole(req) {
   return { tier: reqTier, role: reqRole };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
   "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-2.5-flash",
   "gemini-3.1-flash-lite"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
@@ -7714,9 +7837,12 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
         const isRateLimit = isDepletedCredits || status === 429 || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("quota");
         const isAccessDeniedOrNotFound = status === 403 || status === 404 || msg.includes("403") || msg.includes("404") || msg.includes("denied access") || msg.includes("no longer available") || msg.includes("not found");
         const isTransient = is503HighDemand || isRateLimit || msg.includes("temporarily") || msg.includes("timeout") || msg.includes("fetch failed");
-        if (isRateLimit || isAccessDeniedOrNotFound) {
+        if (isRateLimit) {
           quotaExceededInfo.isExceeded = true;
           quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
+        }
+        if (isAccessDeniedOrNotFound) {
+          break;
         }
         console.log(
           `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}): ${isDepletedCredits ? "AI Studio Prepayment Credits Depleted (402)" : isRateLimit ? "Free tier rate/quota limit reached" : is503HighDemand ? "503 High Demand" : isAccessDeniedOrNotFound ? "Model tier restriction / 403" : "Transient failure"}`
@@ -10577,10 +10703,13 @@ JSON Output Schema:
         });
       }
     } else {
+      let lastGeminiErr = null;
       try {
         aiGeneratedOptions = await tryGemini();
         actualProvider = "gemini";
       } catch (geminiErr) {
+        lastGeminiErr = geminiErr;
+        console.warn("[News AI] Headline regen Gemini error:", geminiErr?.message || geminiErr);
         if (aiConfig.aiModelAccess?.gemini?.allowFallback) {
           try {
             aiGeneratedOptions = await tryOpenAI();
@@ -10588,6 +10717,15 @@ JSON Output Schema:
           } catch {
           }
         }
+      }
+      if (!aiGeneratedOptions || aiGeneratedOptions.length === 0) {
+        const errDetail = lastGeminiErr?.message || "Gemini \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948";
+        return res.status(502).json({
+          success: false,
+          error: `Google Gemini AI \u0938\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${errDetail}\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`,
+          canRetry: true,
+          provider: "gemini"
+        });
       }
     }
     if (Array.isArray(aiGeneratedOptions)) {

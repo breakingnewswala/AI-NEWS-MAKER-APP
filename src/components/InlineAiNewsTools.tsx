@@ -1,3 +1,4 @@
+import { BrandedNewsLoadingModal } from './BrandedNewsLoadingModal';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -220,6 +221,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   });
   const [showPromptBox, setShowPromptBox] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
+  const [showApprovedLoadingModal, setShowApprovedLoadingModal] = useState<boolean>(false);
+  const [pendingApprovedAction, setPendingApprovedAction] = useState<(() => void) | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Result state - automatically restored from persistent session across tab switches!
@@ -368,9 +371,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const handleStateSynced = (e: any) => {
       const d = e?.detail;
       if (!d) return;
-      setLoading(false);
-      isExecutingRef.current = false;
-      globalIsExecuting = false;
+      setShowApprovedLoadingModal(true);
+      setPendingApprovedAction(() => () => {
+        setLoading(false);
+        isExecutingRef.current = false;
+        globalIsExecuting = false;
+        setShowApprovedLoadingModal(false);
+      });
       if (d.result) setResult(d.result);
       if (d.headlineOptions) setHeadlineOptions(d.headlineOptions);
       if (typeof d.selectedHeadlineIndex === 'number') setSelectedHeadlineIndex(d.selectedHeadlineIndex);
@@ -717,11 +724,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const approvedPhotos = (extraData.approvedPhotos && extraData.approvedPhotos.length > 0)
         ? extraData.approvedPhotos
         : (extraData.imageUrl ? [extraData.imageUrl] : (card.images.main ? [card.images.main] : []));
-      const approvedLayout = extraData.approvedPhotoLayout || (approvedPhotos.length >= 2 ? 'two_vertical' : 'single');
+      const approvedLayout = (extraData.approvedPhotoLayout as any) || (approvedPhotos.length >= 2 ? 'double' : 'single');
 
       const approvedResult: AIAnalysisResult = {
         headline: primaryHeadline,
         headlineOptions: approvedHeadlines.slice(0, 5),
+        formattedHeadline: primaryHeadline,
         captionDetailed: extraData.approvedCaptionDetailed || extraData.summary || '',
         captionBullets: extraData.approvedCaptionBullets || '',
         captionShort: extraData.approvedCaptionShort || '',
