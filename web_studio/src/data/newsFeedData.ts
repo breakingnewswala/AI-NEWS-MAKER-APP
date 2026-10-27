@@ -24,6 +24,16 @@ export interface NewsFeedPost {
   coinValue?: number;
   coinCost?: number;
   restrictedPlans?: string[];
+  editorialApproved?: boolean;
+  approvedHeadlines?: string[];
+  approvedHeadline?: string;
+  approvedCaptionDetailed?: string;
+  approvedCaptionBullets?: string;
+  approvedCaptionShort?: string;
+  approvedPhotos?: string[];
+  approvedPhotoLayout?: 'single' | 'two' | 'three';
+  approvedBy?: string;
+  approvedAt?: number;
 }
 
 export interface VideoFeedItem {

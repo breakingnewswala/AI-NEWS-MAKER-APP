@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Sparkles,
   Link as LinkIcon,
@@ -39,6 +40,16 @@ export interface AutoFillNewsData {
   autoTrigger?: boolean;
   timestamp?: number;
   additionalPhotos?: string[];
+  editorialApproved?: boolean;
+  approvedHeadline?: string;
+  approvedHeadlines?: string[];
+  approvedCaptionDetailed?: string;
+  approvedCaptionBullets?: string;
+  approvedCaptionShort?: string;
+  approvedPhotos?: string[];
+  approvedPhotoLayout?: 'single' | 'two_vertical' | 'three_grid';
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 interface InlineAiNewsToolsProps {
@@ -692,6 +703,93 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     const tplConfig = getTemplateHeadlineConfig(card.frameDesign);
     const targetMaxLines = tplConfig.headline_max_lines;
+
+    // Fast path: Pre-approved editorial data from Admin workflow
+    if (extraData?.editorialApproved) {
+      const rawApprovedList = (extraData.approvedHeadlines && extraData.approvedHeadlines.length > 0)
+        ? extraData.approvedHeadlines.map(cleanHeadlineText)
+        : [cleanHeadlineText(extraData.approvedHeadline || extraData.title || '')];
+      const approvedHeadlines = rawApprovedList.filter(Boolean);
+      while (approvedHeadlines.length < 5) {
+        approvedHeadlines.push(`अपडेट ${approvedHeadlines.length + 1}: ${approvedHeadlines[0] || 'ताज़ा समाचार'}`);
+      }
+      const primaryHeadline = cleanHeadlineText(extraData.approvedHeadline || approvedHeadlines[0]);
+      const approvedPhotos = (extraData.approvedPhotos && extraData.approvedPhotos.length > 0)
+        ? extraData.approvedPhotos
+        : (extraData.imageUrl ? [extraData.imageUrl] : (card.images.main ? [card.images.main] : []));
+      const approvedLayout = extraData.approvedPhotoLayout || (approvedPhotos.length >= 2 ? 'two_vertical' : 'single');
+
+      const approvedResult: AIAnalysisResult = {
+        headline: primaryHeadline,
+        headlineOptions: approvedHeadlines.slice(0, 5),
+        captionDetailed: extraData.approvedCaptionDetailed || extraData.summary || '',
+        captionBullets: extraData.approvedCaptionBullets || '',
+        captionShort: extraData.approvedCaptionShort || '',
+        summary: extraData.approvedCaptionDetailed || extraData.summary || '',
+        location: cleanLocationField(extraData.location || card.location || ''),
+        category: cleanCategoryField(extraData.category || card.category || ''),
+        pickedImages: {
+          main: approvedPhotos[0] || card.images.main || '',
+          second: approvedPhotos[1] || '',
+          third: approvedPhotos[2] || '',
+        },
+        extractedArticlePhotos: approvedPhotos,
+        highlightWords: [],
+      };
+
+      setResult(approvedResult);
+      setHeadlineOptions(approvedHeadlines.slice(0, 5));
+      setSelectedHeadlineIndex(0);
+
+      const effectiveCaption = formatCaptionByStyle(
+        captionStyle,
+        primaryHeadline,
+        cleanLocationField(extraData.location || card.location || ''),
+        extraData.approvedCaptionDetailed || extraData.summary || '',
+        approvedResult,
+        effectiveLink || url
+      );
+
+      onChange({
+        headline: primaryHeadline,
+        formattedHeadline: primaryHeadline,
+        highlightWords: [],
+        location: cleanLocationField(extraData.location || card.location || ''),
+        summary: effectiveCaption,
+        layout: approvedLayout,
+        images: {
+          ...card.images,
+          main: approvedPhotos[0] || card.images.main || '',
+          second: approvedPhotos[1] || card.images.second || '',
+          third: approvedPhotos[2] || card.images.third || '',
+          fourth: approvedPhotos[3] || card.images.fourth || '',
+        },
+        extractedArticlePhotos: approvedPhotos,
+      });
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(effectiveCaption).catch(() => {});
+      }
+
+      setLoading(false);
+      isExecutingRef.current = false;
+      globalIsExecuting = false;
+
+      window.dispatchEvent(
+        new CustomEvent('ai_tools_state_synced', {
+          detail: {
+            result: approvedResult,
+            headlineOptions: approvedHeadlines.slice(0, 5),
+            selectedHeadlineIndex: 0,
+            linkUrl: effectiveLink || url,
+            inputText: effectiveText,
+            activeGeneratedProvider: aiProvider,
+            error: null,
+          },
+        })
+      );
+      return;
+    }
 
     try {
 
@@ -1760,25 +1858,62 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       </div>
 
-      {/* 1. Automated Home-to-AI Workflow Loading Screen: Hides Box 1, Box 2, pasted URL, generation buttons, and stale headlines */}
+      {/* 1. Automated Home-to-AI Workflow Loading Screen: Renders fixed Portal overlay & inline placeholder */}
       {isAutomatedEntry && (loading || (Boolean(autoFillNews?.autoTrigger) && !result)) && (
-        <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl animate-in fade-in my-2">
-          <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
-              <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+        <>
+          <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl animate-in fade-in my-2">
+            <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
+                <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+              </div>
+            </div>
+            <div className="space-y-2 max-w-lg mx-auto">
+              <p className="text-sm sm:text-base font-bold text-amber-200 leading-relaxed font-['Noto_Sans_Devanagari']">
+                {autoFillNews?.editorialApproved
+                  ? 'स्वीकृत हेडलाइन और कैप्शन लोड किए जा रहे हैं तथा ग्राफिक लेआउट तैयार किया जा रहा है। कृपया प्रतीक्षा करें।'
+                  : 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।'}
+              </p>
+            </div>
+            <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>
+                {autoFillNews?.editorialApproved
+                  ? 'संपादकीय स्वीकृत सामग्री • AI न्यूज़ मेकर स्टूडियो'
+                  : 'AI न्यूज़ मेकर संपादकीय विश्लेषण • 5 संतुलित हेडलाइन विकल्प'}
+              </span>
             </div>
           </div>
-          <div className="space-y-2 max-w-lg mx-auto">
-            <p className="text-sm sm:text-base font-bold text-amber-200 leading-relaxed font-['Noto_Sans_Devanagari']">
-              कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।
-            </p>
-          </div>
-          <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>AI न्यूज़ मेकर संपादकीय विश्लेषण • 5 संतुलित हेडलाइन विकल्प</span>
-          </div>
-        </div>
+
+          {typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/50 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl max-w-lg w-full animate-in zoom-in-95">
+                <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
+                    <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+                  </div>
+                </div>
+                <div className="space-y-2 max-w-lg mx-auto">
+                  <p className="text-sm sm:text-base font-bold text-amber-200 leading-relaxed font-['Noto_Sans_Devanagari']">
+                    {autoFillNews?.editorialApproved
+                      ? 'स्वीकृत हेडलाइन और कैप्शन लोड किए जा रहे हैं तथा ग्राफिक लेआउट तैयार किया जा रहा है। कृपया प्रतीक्षा करें।'
+                      : 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।'}
+                  </p>
+                </div>
+                <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>
+                    {autoFillNews?.editorialApproved
+                      ? 'संपादकीय स्वीकृत सामग्री • AI न्यूज़ मेकर स्टूडियो'
+                      : 'AI न्यूज़ मेकर संपादकीय विश्लेषण • 5 संतुलित हेडलाइन विकल्प'}
+                  </span>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+        </>
       )}
 
       {/* 2. Automated Workflow Error Screen (if fetch fails before result) */}

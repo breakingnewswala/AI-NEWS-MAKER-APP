@@ -684,6 +684,16 @@ interface StoredNewsPost {
   coinValue?: number;
   coinCost?: number;
   restrictedPlans?: string[];
+  editorialApproved?: boolean;
+  approvedHeadlines?: string[];
+  approvedHeadline?: string;
+  approvedCaptionDetailed?: string;
+  approvedCaptionBullets?: string;
+  approvedCaptionShort?: string;
+  approvedPhotos?: string[];
+  approvedPhotoLayout?: "single" | "two" | "three";
+  approvedBy?: string;
+  approvedAt?: number;
 }
 
 const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
@@ -1314,9 +1324,33 @@ app.post("/api/news-posts", (req, res) => {
     let existing = loadNewsDatabase();
 
     if (Array.isArray(payload)) {
-      // Bulk sync or replace
-      existing = payload;
+      // Bulk sync: preserve existing approved editorial content if incoming item lacks it
+      const existingMap = new Map<string, StoredNewsPost>();
+      existing.forEach((p) => {
+        if (p && p.id) existingMap.set(p.id, p);
+      });
+      existing = payload.map((post: any) => {
+        if (!post || !post.id) return post;
+        const prev = existingMap.get(post.id);
+        if (prev && prev.editorialApproved && post.editorialApproved === undefined) {
+          return {
+            ...post,
+            editorialApproved: prev.editorialApproved,
+            approvedHeadlines: prev.approvedHeadlines,
+            approvedHeadline: prev.approvedHeadline,
+            approvedCaptionDetailed: prev.approvedCaptionDetailed,
+            approvedCaptionBullets: prev.approvedCaptionBullets,
+            approvedCaptionShort: prev.approvedCaptionShort,
+            approvedPhotos: prev.approvedPhotos,
+            approvedPhotoLayout: prev.approvedPhotoLayout,
+            approvedBy: prev.approvedBy,
+            approvedAt: prev.approvedAt,
+          };
+        }
+        return post;
+      });
     } else if (payload && payload.title) {
+      const prev = existing.find((p) => p.id === payload.id);
       const newPost: StoredNewsPost = {
         id: payload.id || `post-${Date.now()}`,
         title: payload.title,
@@ -1333,6 +1367,18 @@ app.post("/api/news-posts", (req, res) => {
         district: payload.district || "",
         location: payload.location || "",
         timestamp: payload.timestamp || Date.now(),
+        isBonus: payload.isBonus !== undefined ? Boolean(payload.isBonus) : prev?.isBonus,
+        rewardCoins: payload.rewardCoins || prev?.rewardCoins,
+        editorialApproved: payload.editorialApproved !== undefined ? Boolean(payload.editorialApproved) : prev?.editorialApproved,
+        approvedHeadlines: payload.approvedHeadlines || prev?.approvedHeadlines,
+        approvedHeadline: payload.approvedHeadline || prev?.approvedHeadline,
+        approvedCaptionDetailed: payload.approvedCaptionDetailed || prev?.approvedCaptionDetailed,
+        approvedCaptionBullets: payload.approvedCaptionBullets || prev?.approvedCaptionBullets,
+        approvedCaptionShort: payload.approvedCaptionShort || prev?.approvedCaptionShort,
+        approvedPhotos: payload.approvedPhotos || prev?.approvedPhotos,
+        approvedPhotoLayout: payload.approvedPhotoLayout || prev?.approvedPhotoLayout,
+        approvedBy: payload.approvedBy || prev?.approvedBy,
+        approvedAt: payload.approvedAt || prev?.approvedAt,
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
@@ -3250,6 +3296,24 @@ function enforceUserAccessMiddleware(req: express.Request, res: express.Response
       trialExpired: access.trialExpired,
     });
   }
+  next();
+}
+
+function enforceNewsProcessingAccessMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const identifier = extractUserIdentifier(req);
+  if (!identifier) return next();
+  const access = checkUserAccess(identifier);
+  // Strictly block accounts banned or blocked by admin
+  if (access.blocked) {
+    return res.status(access.status || 403).json({
+      success: false,
+      error: access.error,
+      blocked: true,
+      isBlocked: true,
+    });
+  }
+  // Graphic Studio initial news generation via Gemini is permitted for all users (trial-expired / basic)
+  // so normal users receive the exact same high-quality Gemini editorial processing as Admin.
   next();
 }
 
@@ -10998,6 +11062,36 @@ function ensureWordCount(text: string, minWords: number, maxWords: number, fille
 }
 
 /**
+ * Strips publisher ellipses, trailing dangling single Devanagari consonants (e.g. cut "क", "ख"),
+ * and trailing hanging postpositions/connectors that result from abrupt sentence truncations.
+ */
+export function stripDanglingIncompleteWords(text: string): string {
+  if (!text) return '';
+  let s = String(text).trim();
+  // Remove multi-dots, unicode ellipses, and trailing dashes
+  s = s.replace(/(?:\.{2,}|…|--+|—+)+/g, ' ').trim();
+
+  let prev = '';
+  let iters = 0;
+  while (s && s !== prev && iters < 6) {
+    prev = s;
+    iters++;
+    // Strip trailing punctuation & spaces
+    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+
+    // Strip trailing standalone single Devanagari consonant / incomplete letter (e.g. cut "क", "ख")
+    s = s.replace(/\s+[\u0915-\u0939]$/u, '').trim();
+
+    // Strip trailing dangling postpositions / conjunctions that make a headline incomplete
+    s = s.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले|किए|गए|हुए|रहा|रही|रहे|था|थी|थे))$/u, '').trim();
+
+    // Strip trailing punctuation again if connector removal exposed punctuation
+    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+  }
+  return s;
+}
+
+/**
  * Helper: Generate 5 distinct, balanced headline options across the 5 editorial angles
  * Strictly anchored to the SAME verified primary news event (BREAKING NEWS WALA standard)
  * 1. The core event — direct, hard news, who did what where
@@ -11011,13 +11105,13 @@ export function generate5BalancedHeadlineOptions(
   factSentences: string[] = [],
   location: string = ""
 ): string[] {
-  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
-    .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
-    .trim();
+  const cleanBase = stripDanglingIncompleteWords(
+    sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
+  );
 
   const validFacts = (factSentences || [])
-    .map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim())
-    .filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
+    .map((s) => stripDanglingIncompleteWords(sanitizePressNoteFlattery(cleanHeadlineText(s), true)))
+    .filter((s) => s.length >= 20 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
 
   const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "मुख्य समाचार अपडेट");
   const locPrefix = location && location !== "विशेष कवरेज" ? `${location}: ` : "";
@@ -11057,7 +11151,7 @@ export function generate5BalancedHeadlineOptions(
   for (const d of clauseDelims) {
     if (uniqueOptions.length >= 5) break;
     if (base.includes(d)) {
-      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
+      const parts = base.split(d).map((p) => stripDanglingIncompleteWords(p)).filter((p) => p.length >= 10);
       if (parts.length >= 2) {
         addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
         addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
@@ -11077,12 +11171,14 @@ export function generate5BalancedHeadlineOptions(
     addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`, true);
   }
 
-  // Action / Announcement restructuring using words from base
+  // Action / Announcement restructuring using complete meaningful clauses from base
   if (base.includes(" ने ") || base.includes(" को ") || base.includes(" में ")) {
-    const words = base.split(/\s+/);
-    if (words.length >= 10) {
-      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
-      addOptionIfClean(naturalCut);
+    const clauseMatch = base.match(/^(.+?(?:ने|को|में)\s+[^\s,।]+(?:\s+[^\s,।]+){2,8})/u);
+    if (clauseMatch && clauseMatch[1]) {
+      const naturalClause = stripDanglingIncompleteWords(clauseMatch[1]);
+      if (naturalClause.length >= 20 && naturalClause !== base) {
+        addOptionIfClean(naturalClause);
+      }
     }
   }
 
@@ -11140,7 +11236,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  cleaned = stripDanglingIncompleteWords(cleaned);
 
   // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
@@ -11169,8 +11265,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
   }
-  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
-  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  return stripDanglingIncompleteWords(result);
 }
 
 /**
@@ -11488,7 +11583,7 @@ Content: ${extracted.content ? extracted.content.slice(0, 2000) : ""}
 }
 
 // Process News Link or Natural Language Command / Text into News Graphic structure
-app.post(["/api/process-news-command", "/api/process-news"], enforceUserAccessMiddleware, async (req, res) => {
+app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessingAccessMiddleware, async (req, res) => {
   const {
     input,
     command,
@@ -12563,6 +12658,9 @@ export function cleanHeadlineText(text: string): string {
 
   // 15. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+
+  // 16. Strip publisher ellipses and dangling incomplete words/letters
+  cleaned = stripDanglingIncompleteWords(cleaned);
 
   return cleaned;
 }

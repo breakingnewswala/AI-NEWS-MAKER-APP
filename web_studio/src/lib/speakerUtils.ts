@@ -160,7 +160,40 @@ export function cleanHeadlineText(text: any): string {
   // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
 
+  // 17. Strip publisher ellipses and dangling incomplete words/letters
+  cleaned = stripDanglingIncompleteWords(cleaned);
+
   return cleaned;
+}
+
+/**
+ * Strips publisher ellipses, trailing dangling single Devanagari consonants (e.g. cut "क", "ख"),
+ * and trailing hanging postpositions/connectors that result from abrupt sentence truncations.
+ */
+export function stripDanglingIncompleteWords(text: string): string {
+  if (!text) return '';
+  let s = String(text).trim();
+  // Remove multi-dots, unicode ellipses, and trailing dashes
+  s = s.replace(/(?:\.{2,}|…|--+|—+)+/g, ' ').trim();
+
+  let prev = '';
+  let iters = 0;
+  while (s && s !== prev && iters < 6) {
+    prev = s;
+    iters++;
+    // Strip trailing punctuation & spaces
+    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+
+    // Strip trailing standalone single Devanagari consonant / incomplete letter (e.g. cut "क", "ख")
+    s = s.replace(/\s+[\u0915-\u0939]$/u, '').trim();
+
+    // Strip trailing dangling postpositions / conjunctions that make a headline incomplete
+    s = s.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले|किए|गए|हुए|रहा|रही|रहे|था|थी|थे))$/u, '').trim();
+
+    // Strip trailing punctuation again if connector removal exposed punctuation
+    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+  }
+  return s;
 }
 
 const CATEGORY_KEYWORDS = [
@@ -906,7 +939,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  cleaned = stripDanglingIncompleteWords(cleaned);
 
   // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
@@ -935,8 +968,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
   }
-  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
-  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  return stripDanglingIncompleteWords(result);
 }
 
 /**
@@ -1002,7 +1034,7 @@ export function fitHeadlineNaturally(
   factSentence?: string | string[]
 ): string {
   if (!text) return "";
-  return cleanHeadlineText(text).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  return stripDanglingIncompleteWords(cleanHeadlineText(text));
 }
 
 /**
@@ -1015,13 +1047,13 @@ export function generate5BalancedHeadlineOptions(
   factSentences: string[] = [],
   location: string = ""
 ): string[] {
-  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
-    .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
-    .trim();
+  const cleanBase = stripDanglingIncompleteWords(
+    sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
+  );
 
   const validFacts = (factSentences || [])
-    .map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim())
-    .filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
+    .map((s) => stripDanglingIncompleteWords(sanitizePressNoteFlattery(cleanHeadlineText(s), true)))
+    .filter((s) => s.length >= 20 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
 
   const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "मुख्य समाचार अपडेट");
   const locPrefix = location && location !== "विशेष कवरेज" ? `${location}: ` : "";
@@ -1060,7 +1092,7 @@ export function generate5BalancedHeadlineOptions(
   for (const d of clauseDelims) {
     if (uniqueOptions.length >= 5) break;
     if (base.includes(d)) {
-      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
+      const parts = base.split(d).map((p) => stripDanglingIncompleteWords(p)).filter((p) => p.length >= 10);
       if (parts.length >= 2) {
         addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`);
         addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`);
@@ -1080,12 +1112,14 @@ export function generate5BalancedHeadlineOptions(
     addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`);
   }
 
-  // Action / Announcement restructuring using words from base
+  // Action / Announcement restructuring using complete meaningful clauses from base
   if (base.includes(" ने ") || base.includes(" को ") || base.includes(" में ")) {
-    const words = base.split(/\s+/);
-    if (words.length >= 10) {
-      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
-      addOptionIfClean(naturalCut);
+    const clauseMatch = base.match(/^(.+?(?:ने|को|में)\s+[^\s,।]+(?:\s+[^\s,।]+){2,8})/u);
+    if (clauseMatch && clauseMatch[1]) {
+      const naturalClause = stripDanglingIncompleteWords(clauseMatch[1]);
+      if (naturalClause.length >= 20 && naturalClause !== base) {
+        addOptionIfClean(naturalClause);
+      }
     }
   }
 

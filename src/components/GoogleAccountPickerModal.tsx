@@ -13,7 +13,7 @@ import {
   Globe,
   CheckCircle2,
 } from 'lucide-react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 
 export interface GoogleAccountPickerModalProps {
@@ -101,13 +101,28 @@ export const GoogleAccountPickerModal: React.FC<GoogleAccountPickerModalProps> =
         popupErr?.code === 'auth/unauthorized-domain'
       ) {
         setErrorMsg(
-          'Google Cloud Console में Authorized JavaScript Origin (https://ainewsmaker.online) अभी सक्रिय नहीं है। कृपया ऊपर दिए गए 1-क्लिक खाते से सीधे लॉगिन करें।'
+          'Google Cloud Console में Authorized JavaScript Origin (https://ainewsmaker.online) अभी सक्रिय नहीं है। आप नीचे दिए गए रीडायरेक्ट लॉगिन या 1-क्लिक खाते से सीधे लॉगिन कर सकते हैं।'
         );
         setShowGcpGuide(true);
       } else {
-        setErrorMsg('ब्राउज़र पॉपअप अवरुद्ध या त्रुटि। कृपया ऊपर दिए गए 1-क्लिक विकल्प से लॉगिन करें।');
+        setErrorMsg('ब्राउज़र पॉपअप अवरुद्ध या त्रुटि। कृपया नीचे दिए गए "गूगल रीडायरेक्ट लॉगिन" या 1-क्लिक विकल्प से लॉगिन करें।');
       }
     } finally {
+      setIsPopupAttempting(false);
+    }
+  };
+
+  // Official browser redirect login (immune to popup blocking)
+  const handleTryRedirectLogin = async () => {
+    setIsPopupAttempting(true);
+    setErrorMsg('');
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithRedirect(auth, provider);
+    } catch (redirectErr: any) {
+      console.warn('Google redirect login attempt error:', redirectErr);
+      setErrorMsg('रीडायरेक्ट लॉगिन शुरू करने में त्रुटि: ' + (redirectErr?.message || 'कृपया 1-क्लिक खाते से लॉगिन करें।'));
       setIsPopupAttempting(false);
     }
   };
@@ -167,9 +182,20 @@ export const GoogleAccountPickerModal: React.FC<GoogleAccountPickerModalProps> =
         {/* Modal Body */}
         <div className="p-4 sm:p-5 space-y-4 max-h-[80vh] overflow-y-auto">
           {errorMsg && (
-            <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-start gap-2 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex flex-col gap-2 animate-in fade-in">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleTryRedirectLogin}
+                disabled={isLoading || isPopupAttempting}
+                className="self-start px-3 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-lg transition active:scale-95 cursor-pointer shadow flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>गूगल रीडायरेक्ट लॉगिन करें (बिना पॉपअप)</span>
+              </button>
             </div>
           )}
 
@@ -317,21 +343,33 @@ export const GoogleAccountPickerModal: React.FC<GoogleAccountPickerModalProps> =
             )}
           </div>
 
-          {/* Fallback Option: Browser Popup Attempt */}
+          {/* Fallback Option: Browser Popup & Redirect Options */}
           <div className="pt-2 border-t border-slate-800/80 space-y-2">
-            <button
-              type="button"
-              onClick={handleTryOfficialPopup}
-              disabled={isLoading || isPopupAttempting}
-              className="w-full py-2.5 px-3 bg-slate-950/40 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 text-[11px] font-semibold rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              {isPopupAttempting ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-              ) : (
-                <Globe className="w-3.5 h-3.5 text-slate-500" />
-              )}
-              <span>आधिकारिक Google ब्राउज़र पॉपअप आज़माएं</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={handleTryOfficialPopup}
+                disabled={isLoading || isPopupAttempting}
+                className="flex-1 py-2 px-2.5 bg-slate-950/40 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200 text-[11px] font-semibold rounded-xl border border-slate-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {isPopupAttempting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                ) : (
+                  <Globe className="w-3.5 h-3.5 text-slate-500" />
+                )}
+                <span>Google पॉपअप</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTryRedirectLogin}
+                disabled={isLoading || isPopupAttempting}
+                className="flex-1 py-2 px-2.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 text-[11px] font-bold rounded-xl border border-amber-500/40 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>गूगल रीडायरेक्ट लॉगिन करें</span>
+              </button>
+            </div>
 
             {/* Expandable GCP Origin Helper */}
             <div className="text-center">

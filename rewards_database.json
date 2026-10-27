@@ -99,6 +99,70 @@
   ],
   "transactions": [
     {
+      "id": "tx-frame-1793082925894-whad",
+      "transactionId": "tx-frame-1793082925894-whad",
+      "userId": "coin_test_1793082925870@example.com",
+      "userEmail": "coin_test_1793082925870@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1793082925894,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1793082925872-oz4s",
+      "transactionId": "tx-credit-1793082925872-oz4s",
+      "userId": "coin_test_1793082925870@example.com",
+      "userEmail": "coin_test_1793082925870@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1793082925872,
+      "createdBy": "admin"
+    },
+    {
+      "id": "tx-frame-1793080369515-ost9",
+      "transactionId": "tx-frame-1793080369515-ost9",
+      "userId": "coin_test_1793080369490@example.com",
+      "userEmail": "coin_test_1793080369490@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1793080369515,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1793080369493-es0x",
+      "transactionId": "tx-credit-1793080369493-es0x",
+      "userId": "coin_test_1793080369490@example.com",
+      "userEmail": "coin_test_1793080369490@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1793080369493,
+      "createdBy": "admin"
+    },
+    {
       "id": "tx-frame-1793070765632-yv4m",
       "transactionId": "tx-frame-1793070765632-yv4m",
       "userId": "coin_test_1793070765607@example.com",
@@ -2554,6 +2618,16 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
+    },
+    "coin_test_1793080369490@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
+    },
+    "coin_test_1793082925870@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
     }
   },
   "welcomeRewards": {
@@ -3003,6 +3077,20 @@
     "coin_test_1793070765607@example.com": {
       "graphic_002": {
         "unlockedAt": 1793070765632,
+        "expiresAt": 1793125799999,
+        "dateStr": "2026-10-27"
+      }
+    },
+    "coin_test_1793080369490@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1793080369515,
+        "expiresAt": 1793125799999,
+        "dateStr": "2026-10-27"
+      }
+    },
+    "coin_test_1793082925870@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1793082925894,
         "expiresAt": 1793125799999,
         "dateStr": "2026-10-27"
       }

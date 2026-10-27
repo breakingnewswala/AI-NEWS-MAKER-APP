@@ -997,6 +997,7 @@ __export(server_exports, {
   saveAiFeaturesConfig: () => saveAiFeaturesConfig,
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks: () => stripAllUrlsAndHyperlinks,
+  stripDanglingIncompleteWords: () => stripDanglingIncompleteWords,
   validateHeadlineOption: () => validateHeadlineOption
 });
 module.exports = __toCommonJS(server_exports);
@@ -1891,8 +1892,32 @@ app.post("/api/news-posts", (req, res) => {
     const payload = req.body;
     let existing = loadNewsDatabase();
     if (Array.isArray(payload)) {
-      existing = payload;
+      const existingMap = /* @__PURE__ */ new Map();
+      existing.forEach((p) => {
+        if (p && p.id) existingMap.set(p.id, p);
+      });
+      existing = payload.map((post) => {
+        if (!post || !post.id) return post;
+        const prev = existingMap.get(post.id);
+        if (prev && prev.editorialApproved && post.editorialApproved === void 0) {
+          return {
+            ...post,
+            editorialApproved: prev.editorialApproved,
+            approvedHeadlines: prev.approvedHeadlines,
+            approvedHeadline: prev.approvedHeadline,
+            approvedCaptionDetailed: prev.approvedCaptionDetailed,
+            approvedCaptionBullets: prev.approvedCaptionBullets,
+            approvedCaptionShort: prev.approvedCaptionShort,
+            approvedPhotos: prev.approvedPhotos,
+            approvedPhotoLayout: prev.approvedPhotoLayout,
+            approvedBy: prev.approvedBy,
+            approvedAt: prev.approvedAt
+          };
+        }
+        return post;
+      });
     } else if (payload && payload.title) {
+      const prev = existing.find((p) => p.id === payload.id);
       const newPost = {
         id: payload.id || `post-${Date.now()}`,
         title: payload.title,
@@ -1908,7 +1933,19 @@ app.post("/api/news-posts", (req, res) => {
         fullContent: payload.fullContent || payload.summary || "",
         district: payload.district || "",
         location: payload.location || "",
-        timestamp: payload.timestamp || Date.now()
+        timestamp: payload.timestamp || Date.now(),
+        isBonus: payload.isBonus !== void 0 ? Boolean(payload.isBonus) : prev?.isBonus,
+        rewardCoins: payload.rewardCoins || prev?.rewardCoins,
+        editorialApproved: payload.editorialApproved !== void 0 ? Boolean(payload.editorialApproved) : prev?.editorialApproved,
+        approvedHeadlines: payload.approvedHeadlines || prev?.approvedHeadlines,
+        approvedHeadline: payload.approvedHeadline || prev?.approvedHeadline,
+        approvedCaptionDetailed: payload.approvedCaptionDetailed || prev?.approvedCaptionDetailed,
+        approvedCaptionBullets: payload.approvedCaptionBullets || prev?.approvedCaptionBullets,
+        approvedCaptionShort: payload.approvedCaptionShort || prev?.approvedCaptionShort,
+        approvedPhotos: payload.approvedPhotos || prev?.approvedPhotos,
+        approvedPhotoLayout: payload.approvedPhotoLayout || prev?.approvedPhotoLayout,
+        approvedBy: payload.approvedBy || prev?.approvedBy,
+        approvedAt: payload.approvedAt || prev?.approvedAt
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
@@ -3469,6 +3506,20 @@ function enforceUserAccessMiddleware(req, res, next) {
       blocked: access.blocked,
       isBlocked: access.blocked,
       trialExpired: access.trialExpired
+    });
+  }
+  next();
+}
+function enforceNewsProcessingAccessMiddleware(req, res, next) {
+  const identifier = extractUserIdentifier(req);
+  if (!identifier) return next();
+  const access = checkUserAccess(identifier);
+  if (access.blocked) {
+    return res.status(access.status || 403).json({
+      success: false,
+      error: access.error,
+      blocked: true,
+      isBlocked: true
     });
   }
   next();
@@ -8711,11 +8762,33 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "", mode 
   }
   let finalBodyText = "";
   if (mode === "bullet") {
-    const bulletLines = rawBody.split(/\n+/).map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim()).filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
-    if (bulletLines.length >= 3) {
-      finalBodyText = bulletLines.slice(0, 5).map((b) => `\u2022 ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
+    const rawLines = rawBody.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    let introSentence = "";
+    const bulletCandidates = [];
+    if (rawLines.length > 0 && !rawLines[0].startsWith("\u2022") && !rawLines[0].startsWith("-") && !rawLines[0].startsWith("*")) {
+      introSentence = stripAllUrlsAndHyperlinks(rawLines[0]).replace(/[।\.\s]+$/, "") + "\u0964";
+      for (let i = 1; i < rawLines.length; i++) {
+        const cleaned = rawLines[i].replace(/^[•\-\*\d\.\s]+/, "").trim();
+        if (cleaned.length > 8 && /[\u0900-\u097F]/.test(cleaned)) {
+          bulletCandidates.push(cleaned);
+        }
+      }
     } else {
-      const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => stripAllUrlsAndHyperlinks(s).trim()).filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+      for (const line of rawLines) {
+        const cleaned = line.replace(/^[•\-\*\d\.\s]+/, "").trim();
+        if (cleaned.length > 8 && /[\u0900-\u097F]/.test(cleaned)) {
+          bulletCandidates.push(cleaned);
+        }
+      }
+    }
+    if (bulletCandidates.length > 0) {
+      const distinct = Array.from(new Set(bulletCandidates)).slice(0, 5);
+      const bulletBlock = distinct.map((b) => `\u2022 ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
+      finalBodyText = introSentence ? `${introSentence}
+
+${bulletBlock}` : bulletBlock;
+    } else {
+      const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => stripAllUrlsAndHyperlinks(s).trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
       if (sentences.length > 1) {
         const intro = `${sentences[0].replace(/[।\.\s]+$/, "")}\u0964`;
         const bullets = sentences.slice(1, 5).map((s) => `\u2022 ${s.replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
@@ -9386,9 +9459,27 @@ function fitHeadlineNaturally(text, minChars = 50, maxChars = 100, factSentence)
   }
   return formatAsJournalisticHeadline(cleaned).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
 }
+function stripDanglingIncompleteWords(text) {
+  if (!text) return "";
+  let s = String(text).trim();
+  s = s.replace(/(?:\.{2,}|…|--+|—+)+/g, " ").trim();
+  let prev = "";
+  let iters = 0;
+  while (s && s !== prev && iters < 6) {
+    prev = s;
+    iters++;
+    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+    s = s.replace(/\s+[\u0915-\u0939]$/u, "").trim();
+    s = s.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले|किए|गए|हुए|रहा|रही|रहे|था|थी|थे))$/u, "").trim();
+    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  }
+  return s;
+}
 function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], location = "") {
-  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-  const validFacts = (factSentences || []).map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim()).filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
+  const cleanBase = stripDanglingIncompleteWords(
+    sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
+  );
+  const validFacts = (factSentences || []).map((s) => stripDanglingIncompleteWords(sanitizePressNoteFlattery(cleanHeadlineText(s), true))).filter((s) => s.length >= 20 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
   const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F");
   const locPrefix = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${location}: ` : "";
   const uniqueOptions = [];
@@ -9417,7 +9508,7 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
   for (const d of clauseDelims) {
     if (uniqueOptions.length >= 5) break;
     if (base.includes(d)) {
-      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
+      const parts = base.split(d).map((p) => stripDanglingIncompleteWords(p)).filter((p) => p.length >= 10);
       if (parts.length >= 2) {
         addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
         addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
@@ -9435,10 +9526,12 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
     addOptionIfClean(`${actor} \u0915\u0940 \u090F\u0902\u091F\u094D\u0930\u0940 \u0938\u0947 \u091A\u0930\u094D\u091A\u093E \u092E\u0947\u0902 ${action}`, true);
   }
   if (base.includes(" \u0928\u0947 ") || base.includes(" \u0915\u094B ") || base.includes(" \u092E\u0947\u0902 ")) {
-    const words = base.split(/\s+/);
-    if (words.length >= 10) {
-      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
-      addOptionIfClean(naturalCut);
+    const clauseMatch = base.match(/^(.+?(?:ने|को|में)\s+[^\s,।]+(?:\s+[^\s,।]+){2,8})/u);
+    if (clauseMatch && clauseMatch[1]) {
+      const naturalClause = stripDanglingIncompleteWords(clauseMatch[1]);
+      if (naturalClause.length >= 20 && naturalClause !== base) {
+        addOptionIfClean(naturalClause);
+      }
     }
   }
   const connectorMatches = base.match(/^(.+?)\s+(?:करने\s+पर|होने\s+पर|के\s+बाद|के\s+दौरान)\s*,?\s*(.+)$/u);
@@ -9477,7 +9570,7 @@ function fitSingleHeadlineToTier(text, maxLimit = HEADLINE_MAX_CHARACTER_LIMIT) 
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  cleaned = stripDanglingIncompleteWords(cleaned);
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
   if (visibleLength <= maxLimit) {
     return cleaned;
@@ -9500,8 +9593,7 @@ function fitSingleHeadlineToTier(text, maxLimit = HEADLINE_MAX_CHARACTER_LIMIT) 
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
   }
-  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
-  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  return stripDanglingIncompleteWords(result);
 }
 function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext = "", location = "") {
   const safeHeadlines = Array.isArray(headlines) ? [...headlines] : [];
@@ -9752,7 +9844,7 @@ Content: ${extracted.content ? extracted.content.slice(0, 2e3) : ""}
     inaccessibleReason: extracted.inaccessibleReason
   };
 }
-app.post(["/api/process-news-command", "/api/process-news"], enforceUserAccessMiddleware, async (req, res) => {
+app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessingAccessMiddleware, async (req, res) => {
   const {
     input,
     command,
@@ -10625,6 +10717,7 @@ function cleanHeadlineText(text) {
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/मध्यप्रदेश/g, "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936").replace(/उत्तरप्रदेश/g, "\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936").replace(/हिमाचलप्रदेश/g, "\u0939\u093F\u092E\u093E\u091A\u0932 \u092A\u094D\u0930\u0926\u0947\u0936").replace(/आंध्रप्रदेश/g, "\u0906\u0902\u0927\u094D\u0930 \u092A\u094D\u0930\u0926\u0947\u0936");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  cleaned = stripDanglingIncompleteWords(cleaned);
   return cleaned;
 }
 function cleanLocationField(loc) {
@@ -12625,5 +12718,6 @@ startServer().catch((err) => {
   saveAiFeaturesConfig,
   scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks,
+  stripDanglingIncompleteWords,
   validateHeadlineOption
 });

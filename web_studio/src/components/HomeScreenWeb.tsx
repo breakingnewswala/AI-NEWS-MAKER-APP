@@ -42,6 +42,7 @@ import {
   Gift,
   Film,
   Unlock,
+  Loader2,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { ReporterUser } from '../types';
@@ -88,7 +89,7 @@ export const WhatsAppIcon = () => (
     <path d="M256.1 92C165.5 92 92 165.5 92 256.1c0 31.6 8.9 61.1 24.5 86.3L92 420l80.2-24.1c24.2 14.2 52.4 22.4 83.9 22.4 90.6 0 164.1-73.5 164.1-164.1S346.7 92 256.1 92zm95.4 233.1c-4 11.2-23.2 21.6-32.3 22.9-8.4 1.2-19.1 1.7-61.9-15.6-51.5-20.9-84.6-73.4-87.2-76.9-2.5-3.5-20.8-27.7-20.8-52.8 0-25.1 13.1-37.4 17.7-42.5 4.6-5.1 10-6.4 13.4-6.4s6.7.3 9.6.5c3.1.2 7.3-.8 11.4 9.1 4.2 10.2 14.4 35.1 15.6 37.6 1.3 2.5 2.1 5.5.5 8.7-1.7 3.3-2.5 5.3-5 8.3-2.5 2.9-5.3 6.6-7.6 8.8-2.5 2.5-5.1 5.3-2.2 10.3 2.9 5 13 21.4 27.9 34.6 19.2 17.1 35.4 22.4 40.4 24.9 5.1 2.5 8 2.1 11-1.3 2.9-3.4 12.6-14.7 16-19.8 3.4-5.1 6.7-4.2 11.3-2.5 4.6 1.7 29.1 13.7 34.1 16.2 5 2.5 8.4 3.8 9.6 5.9 1.3 2 1.3 11.8-2.7 23z" fill="#FFFFFF"/>
   </svg>
 );
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import {
   getActiveRssNewsPosts,
   getSavedNewsChannels,
@@ -283,6 +284,99 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const canModerate = isEffectiveAdmin(currentUser);
   const [selectedNewsIds, setSelectedNewsIds] = useState<string[]>([]);
   const [editingPost, setEditingPost] = useState<NewsFeedPost | null>(null);
+  const [isGeneratingEditorial, setIsGeneratingEditorial] = useState<boolean>(false);
+  const [editorialError, setEditorialError] = useState<string | null>(null);
+  const [editorialSuccess, setEditorialSuccess] = useState<string | null>(null);
+
+  const handleGenerateEditorialData = async () => {
+    if (!editingPost) return;
+    setIsGeneratingEditorial(true);
+    setEditorialError(null);
+    setEditorialSuccess(null);
+    try {
+      const res = await fetch(getApiUrl('/api/process-news-command'), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          input: editingPost.sourceUrl || editingPost.summary || editingPost.title,
+          linkUrl: editingPost.sourceUrl || undefined,
+          customPrompt: undefined,
+          aiProvider: 'gemini',
+          userTier: 'ultra',
+          email: currentUser?.email,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !data.success) {
+        throw new Error(data?.error || 'AI से हेडलाइन व कैप्शन तैयार करने में त्रुटि');
+      }
+      const aiData = data.data || {};
+      const generatedHeadlines: string[] = Array.isArray(aiData.headlineOptions) && aiData.headlineOptions.length >= 5
+        ? aiData.headlineOptions.slice(0, 5)
+        : (aiData.headline ? [aiData.headline] : [editingPost.title]);
+      while (generatedHeadlines.length < 5) {
+        generatedHeadlines.push(`अपडेट ${generatedHeadlines.length + 1}: ${aiData.headline || editingPost.title}`);
+      }
+      const primaryH = aiData.headline || generatedHeadlines[0] || editingPost.title;
+      const detailedCap = aiData.captionDetailed || aiData.summary || editingPost.summary || '';
+      const bulletsCap = aiData.captionBullets || '';
+      const shortCap = aiData.captionShort || '';
+      const photos: string[] = [];
+      if (aiData.pickedImages?.main) photos.push(aiData.pickedImages.main);
+      if (aiData.pickedImages?.second) photos.push(aiData.pickedImages.second);
+      if (aiData.pickedImages?.third) photos.push(aiData.pickedImages.third);
+      if (photos.length === 0 && editingPost.imageUrl) photos.push(editingPost.imageUrl);
+      if (Array.isArray(editingPost.additionalPhotos)) {
+        editingPost.additionalPhotos.forEach((p) => {
+          if (!photos.includes(p) && photos.length < 3) photos.push(p);
+        });
+      }
+
+      setEditingPost({
+        ...editingPost,
+        approvedHeadlines: generatedHeadlines,
+        approvedHeadline: primaryH,
+        approvedCaptionDetailed: detailedCap,
+        approvedCaptionBullets: bulletsCap,
+        approvedCaptionShort: shortCap,
+        approvedPhotos: photos,
+        approvedPhotoLayout: photos.length >= 2 ? 'two_vertical' : 'single',
+      });
+      setEditorialSuccess('AI हेडलाइन (5 विकल्प), 3 कैप्शन और फ़ोटो तैयार हो गए! समीक्षा कर स्वीकृति दें।');
+    } catch (err: any) {
+      setEditorialError(err?.message || 'हेडलाइन व कैप्शन जनरेट करने में त्रुटि');
+    } finally {
+      setIsGeneratingEditorial(false);
+    }
+  };
+
+  const handleApproveEditorialData = () => {
+    if (!editingPost) return;
+    const finalHeadlines = (editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0)
+      ? editingPost.approvedHeadlines
+      : [editingPost.approvedHeadline || editingPost.title];
+    while (finalHeadlines.length < 5) {
+      finalHeadlines.push(`अपडेट ${finalHeadlines.length + 1}: ${editingPost.approvedHeadline || editingPost.title}`);
+    }
+    const approvedPost: NewsFeedPost = {
+      ...editingPost,
+      editorialApproved: true,
+      approvedHeadline: editingPost.approvedHeadline || finalHeadlines[0] || editingPost.title,
+      approvedHeadlines: finalHeadlines,
+      approvedCaptionDetailed: editingPost.approvedCaptionDetailed || editingPost.summary || '',
+      approvedCaptionBullets: editingPost.approvedCaptionBullets || '',
+      approvedCaptionShort: editingPost.approvedCaptionShort || '',
+      approvedPhotos: editingPost.approvedPhotos || (editingPost.imageUrl ? [editingPost.imageUrl] : []),
+      approvedPhotoLayout: editingPost.approvedPhotoLayout || 'single',
+      approvedBy: currentUser?.name || currentUser?.email || 'Master Admin',
+      approvedAt: new Date().toISOString(),
+    };
+    setEditingPost(approvedPost);
+    if (onEditNews) {
+      onEditNews(approvedPost);
+    }
+    setEditorialSuccess('✅ संपादकीय हेडलाइन व कैप्शन स्वीकृत हो गए और सुरक्षित कर दिए गए!');
+  };
 
   // Bonus News Intro Popup state (Part P - persisted dismissal)
   const [bonusIntroPost, setBonusIntroPost] = useState<NewsFeedPost | null>(null);
@@ -1983,6 +2077,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             </span>
                           )
                         )}
+                        {post.editorialApproved && (
+                          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5 shadow-sm" title="संपादक द्वारा प्री-स्वीकृत खबर">
+                            <Check className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>संपादकीय स्वीकृत</span>
+                          </span>
+                        )}
                       </div>
 
                       {/* Summary - In-place expansion per Part F */}
@@ -2325,8 +2425,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
       {/* Admin Edit News Modal */}
       {editingPost && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-4 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Edit className="w-5 h-5 text-blue-400" />
@@ -2647,6 +2747,196 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       className="w-28 px-2.5 py-1.5 bg-slate-950 border border-amber-500/50 rounded-lg text-amber-300 font-black text-xs focus:border-amber-400 focus:outline-hidden"
                     />
                     <span className="text-[10px] text-slate-400">Coins प्रति स्वीकृत क्लेम</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Editorial Pre-Approval & AI Generation Section */}
+              <div className="p-4 bg-slate-950/80 border border-amber-500/40 rounded-xl space-y-3.5 shadow-inner">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-black text-amber-300">
+                      संपादकीय प्री-अप्रूवल (Pre-Approved News Workflow)
+                    </span>
+                  </div>
+                  {editingPost.editorialApproved ? (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-extrabold flex items-center gap-1 shadow-sm">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>स्वीकृत ({editingPost.approvedBy || 'Admin'})</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingPost({ ...editingPost, editorialApproved: false })}
+                        className="text-[10px] text-red-400 hover:text-red-300 underline font-bold cursor-pointer"
+                        title="संपादकीय स्वीकृति हटाएं"
+                      >
+                        स्वीकृति हटाएं
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      अस्वीकृत / नया (AI से तैयार करें)
+                    </span>
+                  )}
+                </div>
+
+                {editorialError && (
+                  <div className="p-2.5 rounded-lg bg-red-950/70 border border-red-700 text-red-200 text-xs">
+                    {editorialError}
+                  </div>
+                )}
+                {editorialSuccess && (
+                  <div className="p-2.5 rounded-lg bg-emerald-950/70 border border-emerald-700 text-emerald-200 text-xs">
+                    {editorialSuccess}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isGeneratingEditorial}
+                    onClick={handleGenerateEditorialData}
+                    className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isGeneratingEditorial ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                        <span>AI से विश्लेषण हो रहा है...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                        <span>AI हेडलाइन व कैप्शन तैयार करें</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleApproveEditorialData}
+                    className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5 text-white" />
+                    <span>हेडलाइन व कैप्शन स्वीकृत करें</span>
+                  </button>
+                </div>
+
+                {/* 5 Headline Options Inputs */}
+                {editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-xs font-black text-yellow-300">
+                      5 संतुलित हेडलाइन विकल्प (प्राथमिक हेडलाइन चुनने के लिए रेडियो बटन दबाएं):
+                    </label>
+                    <div className="space-y-1.5">
+                      {editingPost.approvedHeadlines.map((h, hIdx) => {
+                        const isSelected = (editingPost.approvedHeadline || editingPost.approvedHeadlines?.[0]) === h;
+                        return (
+                          <div key={hIdx} className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="admin_approved_headline_radio"
+                              checked={isSelected}
+                              onChange={() => setEditingPost({ ...editingPost, approvedHeadline: h })}
+                              className="w-4 h-4 accent-amber-400 cursor-pointer shrink-0"
+                              title="इस हेडलाइन को प्राथमिक चुनें"
+                            />
+                            <span className="text-[11px] font-bold text-amber-400 shrink-0 w-14">
+                              विकल्प {hIdx + 1}:
+                            </span>
+                            <input
+                              type="text"
+                              value={h}
+                              onChange={(e) => {
+                                const updated = [...(editingPost.approvedHeadlines || [])];
+                                updated[hIdx] = e.target.value;
+                                setEditingPost({
+                                  ...editingPost,
+                                  approvedHeadlines: updated,
+                                  approvedHeadline: isSelected ? e.target.value : editingPost.approvedHeadline,
+                                });
+                              }}
+                              className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-bold focus:border-amber-400 focus:outline-hidden"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3 Caption Textareas (Detailed, Bullets, Short) */}
+                {(editingPost.approvedCaptionDetailed || editingPost.approvedCaptionBullets || editingPost.approvedCaptionShort) && (
+                  <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        1. विस्तृत कैप्शन (Detailed Social Media Caption):
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={editingPost.approvedCaptionDetailed || ''}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionDetailed: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        2. बुलेट पॉइंट्स कैप्शन (Key Bullet Highlights):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editingPost.approvedCaptionBullets || ''}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionBullets: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        3. संक्षिप्त कैप्शन (Short 2-Sentence Caption):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editingPost.approvedCaptionShort || ''}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionShort: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Photos & Layout Selection */}
+                {editingPost.approvedPhotos && editingPost.approvedPhotos.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-slate-300">
+                        स्वीकृत फोटो ({editingPost.approvedPhotos.length}):
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] text-slate-400">लेआउट:</label>
+                        <select
+                          value={editingPost.approvedPhotoLayout || 'single'}
+                          onChange={(e) => setEditingPost({ ...editingPost, approvedPhotoLayout: e.target.value as any })}
+                          className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-amber-300 text-[11px] font-bold focus:outline-hidden"
+                        >
+                          <option value="single">सिंगल फोटो (1)</option>
+                          <option value="two_vertical">2 फोटो (वर्टिकल)</option>
+                          <option value="three_grid">3 फोटो (ग्रिड)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {editingPost.approvedPhotos.map((pUrl, pIdx) => (
+                        <div key={pIdx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-700 shrink-0">
+                          <img src={pUrl} alt={`Photo ${pIdx + 1}`} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-0 right-0 px-1 bg-black/70 text-[9px] text-amber-400 font-bold">
+                            #{pIdx + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

@@ -22,6 +22,8 @@ import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModa
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
+import { getRedirectResult } from 'firebase/auth';
+import { auth } from './lib/firebaseConfig';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
@@ -1250,6 +1252,38 @@ export default function App() {
     }
   }, []);
 
+  // Google Redirect Result Handler for seamless login after signInWithRedirect
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && result.user && result.user.email) {
+          const u = result.user;
+          const cleanEmail = u.email.toLowerCase().trim();
+          const isMasterAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'admin.ainewsmaker@gmail.com';
+          const reporterUser: ReporterUser = {
+            id: u.uid || `user_${Date.now()}`,
+            name: u.displayName || cleanEmail.split('@')[0],
+            email: cleanEmail,
+            role: isMasterAdmin ? 'admin' : 'reporter',
+            isSuperAdmin: isMasterAdmin,
+            avatarUrl: u.photoURL || undefined,
+          };
+          setCurrentUser(reporterUser);
+          localStorage.removeItem('user_explicitly_logged_out');
+          localStorage.setItem('reporter_auth_session', JSON.stringify(reporterUser));
+          localStorage.setItem('is_onboarding_completed', 'true');
+          setShowAuthWelcomeScreen(false);
+          setIsLoginModalOpen(false);
+          showToast(`👋 गूगल लॉगिन सफल, स्वागत है ${reporterUser.name}!`);
+        }
+      })
+      .catch((err) => {
+        if (err && err.code !== 'auth/credential-already-in-use') {
+          console.warn('getRedirectResult notice:', err);
+        }
+      });
+  }, []);
+
   // Expose bridge functions for Android Native communication
   useEffect(() => {
     (window as any).showAppToast = (msg: string) => {
@@ -2005,47 +2039,61 @@ export default function App() {
     const thirdPhoto = articlePhotos[2] || primaryPhoto;
     const fourthPhoto = articlePhotos[3] || secondPhoto || primaryPhoto;
 
+    const approvedMain = (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[0]) ? post.approvedPhotos[0] : primaryPhoto;
+    const approvedSecond = (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[1]) ? post.approvedPhotos[1] : secondPhoto;
+    const approvedThird = (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[2]) ? post.approvedPhotos[2] : thirdPhoto;
+
     setCard((prev) => ({
       ...prev,
       sourceNewsId: post.id,
       isBonus: Boolean(post.isBonus),
       originalHeadline: post.title,
       frameDesign: 'graphic_001',
-      layout: 'single',
+      layout: (post.editorialApproved && post.approvedPhotoLayout) ? post.approvedPhotoLayout : 'single',
       showDate: false,
       showWatermark: false,
       showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-      headline: '',
+      headline: post.editorialApproved && post.approvedHeadline ? post.approvedHeadline : '',
       location: effectiveLoc,
       category: post.categoryName,
-      summary: '',
+      summary: post.editorialApproved && post.approvedCaptionDetailed ? post.approvedCaptionDetailed : '',
       images: {
         ...prev.images,
-        main: primaryPhoto,
-        second: secondPhoto,
-        third: thirdPhoto,
+        main: approvedMain,
+        second: approvedSecond,
+        third: approvedThird,
         fourth: fourthPhoto,
       },
-      extractedArticlePhotos: articlePhotos,
+      extractedArticlePhotos: (post.editorialApproved && post.approvedPhotos && post.approvedPhotos.length > 0) ? post.approvedPhotos : articlePhotos,
     }));
 
     setAutoFillNews({
       newsId: post.id,
       url: effectiveLink,
-      title: post.title,
-      summary: post.summary,
+      title: post.editorialApproved && post.approvedHeadline ? post.approvedHeadline : post.title,
+      summary: post.editorialApproved && post.approvedCaptionDetailed ? post.approvedCaptionDetailed : post.summary,
       fullNews: (post as any).fullContent || (post as any).fullNews || post.summary || post.title,
-      imageUrl: targetImageForStudio,
+      imageUrl: (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[0]) ? post.approvedPhotos[0] : targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,
       autoTrigger: true,
       timestamp: Date.now(),
-      additionalPhotos: articlePhotos,
+      additionalPhotos: (post.editorialApproved && post.approvedPhotos && post.approvedPhotos.length > 0) ? post.approvedPhotos : articlePhotos,
+      editorialApproved: post.editorialApproved,
+      approvedHeadline: post.approvedHeadline,
+      approvedHeadlines: post.approvedHeadlines,
+      approvedCaptionDetailed: post.approvedCaptionDetailed,
+      approvedCaptionBullets: post.approvedCaptionBullets,
+      approvedCaptionShort: post.approvedCaptionShort,
+      approvedPhotos: post.approvedPhotos,
+      approvedPhotoLayout: post.approvedPhotoLayout,
+      approvedBy: post.approvedBy,
+      approvedAt: post.approvedAt,
     });
 
     navigateToTab('studio');
     setActiveStep(2); // Redirect straight to Step 2 (Graphic Photo Studio AI Tools)
-    setToastMessage('✅ AI टूल्स में खबर लोड हुई — संतुलित हेडलाइन व कैप्शन तैयार हो रहे हैं!');
+    setToastMessage(post.editorialApproved ? '✅ स्वीकृत हेडलाइन व कैप्शन लोड हुए!' : '✅ AI टूल्स में खबर लोड हुई — संतुलित हेडलाइन व कैप्शन तैयार हो रहे हैं!');
     setTimeout(() => {
       scrollToStepById('step-ai');
     }, 150);
@@ -2057,7 +2105,9 @@ export default function App() {
     const cleanEffectiveLoc = effectiveLoc ? effectiveLoc.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
     const locTag = cleanEffectiveLoc ? `#${cleanEffectiveLoc}` : '';
     const allTags = [userTag, locTag, '#BreakingNews', '#HindiNews', '#AINewsMaker'].filter(Boolean).join(' ');
-    const captionText = `${post.title}${locLine}\n\n${post.summary || ''}\n\n${allTags}`.trim();
+    const displayHeadline = post.editorialApproved && post.approvedHeadline ? post.approvedHeadline : post.title;
+    const displayBody = post.editorialApproved && post.approvedCaptionDetailed ? post.approvedCaptionDetailed : (post.summary || '');
+    const captionText = `${displayHeadline}${locLine}\n\n${displayBody}\n\n${allTags}`.trim();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(captionText).catch(() => {});
     }
@@ -2770,7 +2820,7 @@ export default function App() {
                     onToggleMobileViewMode={setMobileViewMode}
                     onOpenCloudSettings={() => setIsCloudModalOpen(true)}
                     onLogout={handleLogout}
-                    autoFillNews={autoFillNews}
+                    autoFillNews={isMobile ? autoFillNews : null}
                   />
                 </div>
 
@@ -3027,7 +3077,7 @@ export default function App() {
                       onToggleMobileViewMode={setMobileViewMode}
                       onOpenCloudSettings={() => setIsCloudModalOpen(true)}
                       onLogout={handleLogout}
-                      autoFillNews={autoFillNews}
+                      autoFillNews={!isMobile ? autoFillNews : null}
                     />
                   </div>
                 </div>

@@ -11,6 +11,7 @@ import {
   fitHeadlinesTo5TierRanges,
   sanitizeFlattery,
   stripAllUrlsAndHyperlinks,
+  stripDanglingIncompleteWords,
 } from './speakerUtils';
 import { TemplateConfig, getGraphicTemplateConfig } from './graphicTemplatesRegistry';
 
@@ -237,8 +238,7 @@ export function processNewsLocally(
   const allSentences = extractSafeSentences(corpusToExtract);
 
   // 5. Build EXACTLY 5 Distinct Journalistic Headlines (Strict 5 Tiered Maximum Limits)
-  const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
-  const rawBaseTitle = cleanHeadlineText(extractedTitle) || (extractedDesc ? cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' ').slice(0, 70)) : 'महत्वपूर्ण समाचार');
+  const rawBaseTitle = stripDanglingIncompleteWords(cleanHeadlineText(extractedTitle)) || (extractedDesc ? stripDanglingIncompleteWords(cleanHeadlineText(extractedDesc.replace(cleanBylineRegex, ' '))) : 'महत्वपूर्ण समाचार');
 
   const rawOptions = generate5JournalisticHeadlines(rawBaseTitle, allSentences, detectedLocation);
   const headlineOptions = fitHeadlinesTo5TierRanges(rawOptions, allSentences, rawBaseTitle, detectedLocation);
