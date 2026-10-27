@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Sparkles, Loader2 } from 'lucide-react';
 
 export interface BrandedNewsLoadingModalProps {
@@ -10,18 +11,20 @@ export interface BrandedNewsLoadingModalProps {
   onCancel?: () => void;
 }
 
+// 5 exact rotating supporting taglines (rotating every 2 seconds during the 10-second minimum duration)
 const DEFAULT_SUBTITLES: string[] = [
   'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
   'समाचार के मुख्य तथ्य और संदर्भ व्यवस्थित किए जा रहे हैं...',
-  'संतुलित हेडलाइन और उपयोगी कैप्शन तैयार किए जा रहे हैं...',
+  '5 संतुलित और प्रभावी हेडलाइन विकल्प तैयार हो रहे हैं...',
+  'सोशल मीडिया के लिए विस्तृत और संक्षिप्त कैप्शन बनाए जा रहे हैं...',
   'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
 ];
 
 export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = ({
   isOpen,
-  mode = 'headline',
+  mode = 'graphic',
   title,
-  durationSeconds,
+  durationSeconds = 10,
   onComplete,
   onCancel,
 }) => {
@@ -31,7 +34,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   const countdownRef = useRef<any>(null);
   const completeFiredRef = useRef<boolean>(false);
 
-  // Subtitle rotation every 5 seconds
+  // Subtitle rotation every 2 seconds across 10-second duration
   useEffect(() => {
     if (!isOpen) {
       setSubtitleIndex(0);
@@ -46,32 +49,33 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
 
     timerRef.current = setInterval(() => {
       setSubtitleIndex((prev) => (prev + 1) % DEFAULT_SUBTITLES.length);
-    }, 5000);
+    }, 2000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isOpen]);
 
-  // Duration countdown (e.g. 10-second presentation for approved news)
+  // Duration countdown (10-second minimum requirement)
   useEffect(() => {
     if (!isOpen || !durationSeconds || durationSeconds <= 0) return;
 
     countdownRef.current = setInterval(() => {
       setElapsedSeconds((prev) => {
-        const next = prev + 0.5;
+        const next = +(prev + 0.2).toFixed(2);
         if (next >= durationSeconds && !completeFiredRef.current) {
           completeFiredRef.current = true;
           if (countdownRef.current) clearInterval(countdownRef.current);
           if (onComplete) {
             setTimeout(() => {
               onComplete();
-            }, 100);
+            }, 50);
           }
+          return durationSeconds;
         }
-        return next;
+        return Math.min(durationSeconds, next);
       });
-    }, 500);
+    }, 200);
 
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
@@ -82,23 +86,23 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
 
   const defaultTitle =
     mode === 'graphic' || mode === 'approved_loading'
-      ? 'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...'
+      ? 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर ग्राफिक और हेडलाइन तैयार की जा रही हैं...'
       : 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...';
 
   const displayTitle = title || defaultTitle;
   const currentSubtitle = DEFAULT_SUBTITLES[subtitleIndex] || DEFAULT_SUBTITLES[0];
   const progressPercent = durationSeconds && durationSeconds > 0
     ? Math.min(100, Math.round((elapsedSeconds / durationSeconds) * 100))
-    : null;
+    : Math.min(100, Math.round((elapsedSeconds / 10) * 100));
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="branded-loading-title"
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-amber-500/10 space-y-5 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950 border-2 border-amber-500/50 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-amber-500/20 space-y-5 animate-in zoom-in-95 duration-200">
         {/* Subtle decorative glow */}
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-amber-500/15 blur-2xl rounded-full pointer-events-none" />
 
@@ -110,7 +114,6 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               alt="AI News Maker Logo"
               className="w-full h-full object-contain"
               onError={(e) => {
-                // Graceful fallback to project logo or icon if path differs
                 (e.target as HTMLImageElement).src = '/logo.png';
               }}
             />
@@ -138,30 +141,28 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
             {displayTitle}
           </h2>
 
-          {/* Rotating yellow subtitle changing every 5 seconds with smooth transition */}
+          {/* Rotating yellow subtitle changing every 2 seconds with smooth transition */}
           <p
             key={subtitleIndex}
-            className="text-xs sm:text-sm font-semibold text-amber-300 leading-relaxed font-['Noto_Sans_Devanagari'] min-h-[36px] flex items-center justify-center transition-all duration-300 animate-in fade-in"
+            className="text-xs sm:text-sm font-semibold text-amber-300 leading-relaxed font-['Noto_Sans_Devanagari'] min-h-[40px] flex items-center justify-center transition-all duration-300 animate-in fade-in"
           >
             {currentSubtitle}
           </p>
         </div>
 
-        {/* Progress bar if duration specified */}
-        {progressPercent !== null && (
-          <div className="space-y-1.5 px-4">
-            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-              <div
-                className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-300 rounded-full"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-              <span>तैयारी जारी है...</span>
-              <span>{Math.round(elapsedSeconds)}s / {durationSeconds}s</span>
-            </div>
+        {/* Progress bar showing 10-second countdown */}
+        <div className="space-y-1.5 px-4">
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-200 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
-        )}
+          <div className="flex justify-between text-[11px] text-slate-300 font-bold">
+            <span className="text-amber-300">तैयारी जारी है...</span>
+            <span className="text-amber-400 font-mono">{Math.floor(elapsedSeconds)}s / {durationSeconds}s</span>
+          </div>
+        </div>
 
         {/* Brand supporting line near bottom */}
         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium">
@@ -184,4 +185,9 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };

@@ -674,6 +674,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   // Automated execution for Step 2A (when user clicks 'खबर से ग्राफिक बनाएं' in feed)
   const triggerProcessDirectly = async (url: string, rawText: string, extraData?: AutoFillNewsData) => {
+    const triggerStartTime = Date.now();
+    const MIN_GRAPHIC_LOAD_TIME = 10000; // Minimum 10 seconds requirement for graphic preparation
     let effectiveLink = normalizeInputUrl(url);
     let effectiveText = rawText.trim();
 
@@ -777,6 +779,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
+      }
+
+      // Enforce 10-second minimum loader time before revealing approved graphic
+      const elapsedApproved = Date.now() - triggerStartTime;
+      if (elapsedApproved < MIN_GRAPHIC_LOAD_TIME) {
+        await new Promise((r) => setTimeout(r, MIN_GRAPHIC_LOAD_TIME - elapsedApproved));
       }
 
       setLoading(false);
@@ -1147,6 +1155,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         })
       );
     } finally {
+      // Enforce 10-second minimum loader duration before revealing news/graphic
+      const elapsedTrigger = Date.now() - triggerStartTime;
+      if (elapsedTrigger < MIN_GRAPHIC_LOAD_TIME) {
+        await new Promise((r) => setTimeout(r, MIN_GRAPHIC_LOAD_TIME - elapsedTrigger));
+      }
       setLoading(false);
       isExecutingRef.current = false;
       globalIsExecuting = false;
@@ -1155,6 +1168,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   // Main AI Process with optional provider override
   const handleProcess = async (providerOverride?: 'gemini' | 'openai') => {
+    const handleProcessStartTime = Date.now();
+    const MIN_PROCESS_LOAD_TIME = 10000; // Minimum 10 seconds
     if (isExecutingRef.current) return;
     const effectiveProvider = providerOverride || aiProvider;
     if (effectiveProvider === 'openai' && !canUseOpenAi) {
@@ -1428,6 +1443,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         setError('खबर की जानकारी प्राप्त नहीं हो सकी। कृपया लिंक जाँचें या खबर का टेक्स्ट पेस्ट करें।');
       }
     } finally {
+      const elapsedProcess = Date.now() - handleProcessStartTime;
+      if (elapsedProcess < MIN_PROCESS_LOAD_TIME) {
+        await new Promise((r) => setTimeout(r, MIN_PROCESS_LOAD_TIME - elapsedProcess));
+      }
       setLoading(false);
       isExecutingRef.current = false;
     }
@@ -1694,42 +1713,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   return (
     <div className="space-y-3 relative">
-      {/* Dedicated Viewport-Centered Loading Modal ("खबर जनरेट हो रही है, वेट करें") */}
-      {loading && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-neutral-900 border-2 border-amber-500/60 rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in zoom-in-95">
-            {/* Spinning glowing circular indicator */}
-            <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-amber-500/20 animate-ping" />
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-500/60 flex items-center justify-center shadow-lg">
-                <Loader2 className="w-9 h-9 text-yellow-400 animate-spin" />
-              </div>
-              <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-bounce" />
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-lg sm:text-xl font-black text-white font-['Baloo_2'] tracking-wide">
-                कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।
-              </h3>
-              <p className="text-xs sm:text-sm text-amber-300 font-semibold min-h-[36px] flex items-center justify-center transition-all px-2">
-                {loadingStages[loadingStageIndex]}
-              </p>
-            </div>
-
-            {/* Smooth progress bar */}
-            <div className="w-full bg-neutral-800 rounded-full h-2 overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-amber-500 to-yellow-400 h-2 rounded-full animate-pulse transition-all duration-700"
-                style={{ width: `${Math.min(100, (loadingStageIndex + 1) * 25)}%` }}
-              />
-            </div>
-
-            <p className="text-[11px] text-neutral-400">
-              ⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Branded News Loading Screen (10-second minimum duration with 5 rotating taglines) */}
+      <BrandedNewsLoadingModal
+        isOpen={loading || Boolean(autoFillNews?.autoTrigger && !result)}
+        title={
+          autoFillNews?.editorialApproved
+            ? 'स्वीकृत हेडलाइन और कैप्शन लोड किए जा रहे हैं तथा ग्राफिक लेआउट तैयार किया जा रहा है...'
+            : 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।'
+        }
+        durationSeconds={10}
+      />
 
       {/* AI Card Official Information Banner */}
       <div className="bg-blue-950/40 border border-blue-800/60 rounded-xl p-3 flex items-start gap-2.5 text-blue-200">
@@ -1865,64 +1858,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           </button>
         </div>
       </div>
-
-      {/* 1. Automated Home-to-AI Workflow Loading Screen: Renders fixed Portal overlay & inline placeholder */}
-      {isAutomatedEntry && (loading || (Boolean(autoFillNews?.autoTrigger) && !result)) && (
-        <>
-          <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl animate-in fade-in my-2">
-            <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
-                <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
-              </div>
-            </div>
-            <div className="space-y-2 max-w-lg mx-auto">
-              <p className="text-sm sm:text-base font-bold text-amber-200 leading-relaxed font-['Noto_Sans_Devanagari']">
-                {autoFillNews?.editorialApproved
-                  ? 'स्वीकृत हेडलाइन और कैप्शन लोड किए जा रहे हैं तथा ग्राफिक लेआउट तैयार किया जा रहा है। कृपया प्रतीक्षा करें।'
-                  : 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।'}
-              </p>
-            </div>
-            <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>
-                {autoFillNews?.editorialApproved
-                  ? 'संपादकीय स्वीकृत सामग्री • AI न्यूज़ मेकर स्टूडियो'
-                  : 'AI न्यूज़ मेकर संपादकीय विश्लेषण • 5 संतुलित हेडलाइन विकल्प'}
-              </span>
-            </div>
-          </div>
-
-          {typeof document !== 'undefined' && createPortal(
-            <div className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/50 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl max-w-lg w-full animate-in zoom-in-95">
-                <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
-                    <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
-                  </div>
-                </div>
-                <div className="space-y-2 max-w-lg mx-auto">
-                  <p className="text-sm sm:text-base font-bold text-amber-200 leading-relaxed font-['Noto_Sans_Devanagari']">
-                    {autoFillNews?.editorialApproved
-                      ? 'स्वीकृत हेडलाइन और कैप्शन लोड किए जा रहे हैं तथा ग्राफिक लेआउट तैयार किया जा रहा है। कृपया प्रतीक्षा करें।'
-                      : 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।'}
-                  </p>
-                </div>
-                <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>
-                    {autoFillNews?.editorialApproved
-                      ? 'संपादकीय स्वीकृत सामग्री • AI न्यूज़ मेकर स्टूडियो'
-                      : 'AI न्यूज़ मेकर संपादकीय विश्लेषण • 5 संतुलित हेडलाइन विकल्प'}
-                  </span>
-                </div>
-              </div>
-            </div>,
-            document.body
-          )}
-        </>
-      )}
 
       {/* 2. Automated Workflow Error Screen (if fetch fails before result) */}
       {isAutomatedEntry && !loading && error && !result && !isManualInputMode && (
