@@ -190,6 +190,7 @@ if (fs.existsSync(dbPath)) {
   syncDatabaseFile('sub_users_db.json');
   syncDatabaseFile('categories_database.json');
   syncDatabaseFile('news_template_configs.json');
+  syncDatabaseFile('promo_codes_database.json');
 
   // 6. Ensure persistent uploads directory is synced
   const rootUploads = path.resolve(rootDir, 'uploads');

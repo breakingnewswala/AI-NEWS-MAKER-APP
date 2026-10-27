@@ -2909,8 +2909,8 @@ export default function App() {
                   />
                 </div>
 
-                {/* Persistent Mobile Bottom Navigation Bar (Fixed directly above AppBottomBarWeb h-16 -> bottom-16) */}
-                <div className="fixed bottom-16 left-0 right-0 z-30 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shadow-2xl px-3 py-2 md:hidden">
+                {/* Persistent Mobile Bottom Navigation Bar (Fixed directly above AppBottomBarWeb h-16 -> bottom-[72px]) */}
+                <div className="fixed bottom-[72px] left-0 right-0 z-30 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shadow-2xl px-3 py-2 md:hidden">
                   <div className="max-w-md mx-auto flex items-center justify-between gap-2">
                     <button
                       type="button"
@@ -2934,15 +2934,12 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        const el = document.getElementById('mobile-canvas-preview') || document.getElementById('mobile-studio-workspace');
-                        if (el) {
-                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        } else {
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        if (typeof window !== 'undefined') {
+                          window.dispatchEvent(new CustomEvent('ai_news_open_graphic_preview'));
                         }
                       }}
                       className="py-2 px-3 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/40 text-xs font-black flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0"
-                      title="ऊपर लाइव ग्राफिक प्रीव्यू देखें"
+                      title="लाइव 4:5 ग्राफिक प्रीव्यू पॉपअप खोलें"
                     >
                       <Eye className="w-4 h-4 text-amber-400" />
                       <span>ग्राफिक प्रीव्यू देखें</span>

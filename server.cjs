@@ -3665,6 +3665,15 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
     const safeUsername = rawReqUser || existing.username || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username));
+    const resolvedTier = isSuper ? "ultra" : userPayload.tier || existing.tier || "basic";
+    const tierPlanMap = {
+      ultra: "VIP DESK",
+      professional: "PRO",
+      advanced: "ADVANCE",
+      basic: "BASIC"
+    };
+    const resolvedPlanName = isSuper ? "VIP DESK" : userPayload.planName || tierPlanMap[resolvedTier] || existing.planName || "BASIC";
+    const resolvedExpiresAt = userPayload.expiresAt || existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds);
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -3675,8 +3684,8 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || "",
       channelNameEn: userPayload.channelNameEn || existing.channelNameEn || "",
       channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: userPayload.channelLogoPngUrl || existing.channelLogoPngUrl,
-      channelLogoGifUrl: userPayload.channelLogoGifUrl || existing.channelLogoGifUrl,
+      channelLogoPngUrl: userPayload.channelLogoPngUrl,
+      channelLogoGifUrl: userPayload.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
@@ -3688,19 +3697,19 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons !== void 0 ? userPayload.socialIcons : existing.socialIcons,
       role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
-      tier: isSuper ? "ultra" : existing.tier || userPayload.tier || "basic",
-      planName: isSuper ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
+      tier: resolvedTier,
+      planName: resolvedPlanName,
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
       createdAt: existing.createdAt || now,
       trialStartedAt: preservedTrialStart,
       trialEndsAt: preservedTrialEnds,
-      isTrialExpired: Date.now() >= preservedTrialEnds,
+      isTrialExpired: resolvedExpiresAt ? now >= resolvedExpiresAt : now >= preservedTrialEnds,
       lastLoginAt: now,
-      activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
-      expiresAt: existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds),
-      activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
+      activatedAt: userPayload.activatedAt || existing.activatedAt || (isSuper ? now : preservedTrialStart),
+      expiresAt: resolvedExpiresAt,
+      activatedVia: userPayload.activatedVia || existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
     };
     users[idx] = updatedRecord;
   } else {
@@ -3708,6 +3717,15 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const newTrialEnds = now + SEVEN_DAYS_MS;
     const safeUsername = rawReqUser || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name));
     const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString("hex").slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    const initialTier = isSuper ? "ultra" : userPayload.tier || "basic";
+    const tierPlanMap = {
+      ultra: "VIP DESK",
+      professional: "PRO",
+      advanced: "ADVANCE",
+      basic: "BASIC"
+    };
+    const initialPlanName = isSuper ? "VIP DESK" : userPayload.planName || tierPlanMap[initialTier] || "BASIC";
+    const initialExpiresAt = userPayload.expiresAt || (isSuper ? 2107057518060 : newTrialEnds);
     updatedRecord = {
       userId: deterministicUserId,
       email: emailRaw,
@@ -3731,19 +3749,19 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       websiteUrl: userPayload.websiteUrl || "",
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? "superadmin" : userPayload.role || "user",
-      tier: isSuper ? "ultra" : userPayload.tier || "basic",
-      planName: isSuper ? "VIP DESK" : userPayload.planName || "BASIC",
+      tier: initialTier,
+      planName: initialPlanName,
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
       createdAt: now,
       trialStartedAt: newTrialStart,
       trialEndsAt: newTrialEnds,
-      isTrialExpired: false,
+      isTrialExpired: initialExpiresAt ? now >= initialExpiresAt : false,
       lastLoginAt: now,
-      activatedAt: isSuper ? now : newTrialStart,
-      expiresAt: isSuper ? 2107057518060 : newTrialEnds,
-      activatedVia: isSuper ? "Super Admin Preset" : "Google Registration"
+      activatedAt: userPayload.activatedAt || (isSuper ? now : newTrialStart),
+      expiresAt: initialExpiresAt,
+      activatedVia: userPayload.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
     };
     users.unshift(updatedRecord);
   }
@@ -7068,10 +7086,21 @@ app.post("/api/admin/update-user", (req, res) => {
     const idx = users.findIndex(
       (u) => u.userId && u.userId.toLowerCase().trim() === key || u.email && u.email.toLowerCase().trim() === key || u.username && u.username.toLowerCase().trim() === key
     );
+    const tierPlanMap = {
+      ultra: "VIP DESK",
+      professional: "PRO",
+      advanced: "ADVANCE",
+      basic: "BASIC"
+    };
     if (idx >= 0) {
+      const newTier2 = updates.tier || users[idx].tier || "basic";
+      const resolvedPlanName2 = updates.planName || (updates.tier ? tierPlanMap[newTier2] : users[idx].planName) || "BASIC";
       users[idx] = {
         ...users[idx],
-        ...updates
+        ...updates,
+        tier: newTier2,
+        planName: resolvedPlanName2,
+        updatedAt: Date.now()
       };
       saveUsersMasterDatabase(users);
       syncUserToProfiles(users[idx]);
@@ -7080,13 +7109,251 @@ app.post("/api/admin/update-user", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const existing = allProfiles[key] || Object.values(allProfiles).find((p) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
     const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
+    const newTier = updates.tier || existing.tier || "basic";
+    const resolvedPlanName = updates.planName || (updates.tier ? tierPlanMap[newTier] : existing.planName) || "BASIC";
     allProfiles[effectiveKey] = {
       ...existing,
       ...updates,
+      tier: newTier,
+      planName: resolvedPlanName,
       updatedAt: Date.now()
     };
     saveProfilesDatabase(allProfiles);
     return res.json({ success: true, user: allProfiles[effectiveKey] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var INITIAL_SERVER_PROMO_CODES = [
+  {
+    id: "promo-basic-sample",
+    code: "NEWSBASIC2026",
+    planId: "basic",
+    planName: "BASIC",
+    usageType: "one_time",
+    status: "unused",
+    createdAt: Date.now() - 36e5,
+    durationDays: 30,
+    isActive: true,
+    notes: "\u092C\u0947\u0938\u093F\u0915 \u0938\u0948\u0902\u092A\u0932 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 (30 \u0926\u093F\u0928)"
+  },
+  {
+    id: "promo-adv-sample",
+    code: "ADVANCE2026",
+    planId: "advanced",
+    planName: "ADVANCE",
+    usageType: "one_time",
+    status: "unused",
+    createdAt: Date.now() - 36e5,
+    durationDays: 30,
+    isActive: true,
+    notes: "\u090F\u0921\u0935\u093E\u0902\u0938 \u0938\u0948\u0902\u092A\u0932 \u0915\u094B\u0921"
+  },
+  {
+    id: "promo-pro-sample",
+    code: "PRO2026",
+    planId: "professional",
+    planName: "PRO",
+    usageType: "one_time",
+    status: "unused",
+    createdAt: Date.now() - 36e5,
+    durationDays: 30,
+    isActive: true,
+    notes: "\u092A\u094D\u0930\u094B \u0938\u0948\u0902\u092A\u0932 \u0915\u094B\u0921"
+  },
+  {
+    id: "promo-vip-sample",
+    code: "VIP2026",
+    planId: "ultra",
+    planName: "VIP DESK",
+    usageType: "one_time",
+    status: "unused",
+    createdAt: Date.now() - 36e5,
+    durationDays: 30,
+    isActive: true,
+    notes: "\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u0938\u0948\u0902\u092A\u0932 \u0915\u094B\u0921"
+  }
+];
+function loadPromoCodesDatabase() {
+  try {
+    const locations = resolveAllDatabaseLocations("promo_codes_database.json");
+    for (const loc of locations) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8").replace(/^\uFEFF/, "").trim();
+        if (raw && raw.length >= 2) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading promo_codes_database.json:", err);
+  }
+  return [...INITIAL_SERVER_PROMO_CODES];
+}
+function savePromoCodesDatabase(codes) {
+  try {
+    const locations = resolveAllDatabaseLocations("promo_codes_database.json");
+    const jsonStr = JSON.stringify(codes, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("Error saving promo_codes_database.json:", err);
+    return false;
+  }
+}
+app.get("/api/promo-codes", (_req, res) => {
+  try {
+    const codes = loadPromoCodesDatabase();
+    return res.json({ success: true, promoCodes: codes });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/promo-codes", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u092C\u0928\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const { code, planId, durationDays = 30, usageType = "one_time", maxUses = 1, notes = "" } = req.body;
+    const cleanCode = (code || "").toString().trim().toUpperCase().replace(/\s+/g, "");
+    if (!cleanCode || cleanCode.length < 3) {
+      return res.status(400).json({ error: "\u092E\u093E\u0928\u094D\u092F \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948 (\u0928\u094D\u092F\u0942\u0928\u0924\u092E 3 \u0905\u0915\u094D\u0937\u0930)\u0964" });
+    }
+    const validPlanId = ["basic", "advanced", "professional", "ultra"].includes(planId) ? planId : "basic";
+    const tierPlanMap = {
+      basic: "BASIC",
+      advanced: "ADVANCE",
+      professional: "PRO",
+      ultra: "VIP DESK"
+    };
+    const resolvedPlanName = tierPlanMap[validPlanId];
+    const codes = loadPromoCodesDatabase();
+    if (codes.some((c) => c.code === cleanCode)) {
+      return res.status(400).json({ error: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 "${cleanCode}" \u092A\u0939\u0932\u0947 \u0938\u0947 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948!` });
+    }
+    const newPromo = {
+      id: `promo-${Date.now()}-${import_crypto.default.randomBytes(3).toString("hex")}`,
+      code: cleanCode,
+      planId: validPlanId,
+      planName: resolvedPlanName,
+      usageType: usageType === "multi_use" ? "multi_use" : "one_time",
+      maxUses: Number(maxUses) || 1,
+      usedCount: 0,
+      status: "unused",
+      createdAt: Date.now(),
+      durationDays: Math.max(1, Number(durationDays) || 30),
+      isActive: true,
+      notes: notes || `${resolvedPlanName} \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 (${durationDays} \u0926\u093F\u0928)`
+    };
+    const updated = [newPromo, ...codes];
+    savePromoCodesDatabase(updated);
+    return res.json({
+      success: true,
+      message: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 "${cleanCode}" \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092C\u0928\u093E\u092F\u093E \u0917\u092F\u093E!`,
+      promoCode: newPromo
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/promo-codes/redeem", (req, res) => {
+  try {
+    const { code, userEmail, userId, username } = req.body;
+    const cleanCode = (code || "").toString().trim().toUpperCase().replace(/\s+/g, "");
+    if (!cleanCode) {
+      return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
+    }
+    const codes = loadPromoCodesDatabase();
+    const targetIdx = codes.findIndex((c) => c.code === cleanCode);
+    if (targetIdx === -1) {
+      return res.status(404).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921! \u092F\u0939 \u0915\u094B\u0921 \u0938\u093F\u0938\u094D\u091F\u092E \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+    }
+    const targetCode = codes[targetIdx];
+    if (!targetCode.isActive || targetCode.status === "disabled") {
+      return res.status(400).json({ error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F (Disabled) \u0939\u0948\u0964" });
+    }
+    if (targetCode.status === "used" || targetCode.usageType === "one_time" && targetCode.usedAt) {
+      return res.status(400).json({ error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948!" });
+    }
+    if (targetCode.expiresAt && targetCode.expiresAt < Date.now()) {
+      return res.status(400).json({ error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0938\u092E\u093E\u092A\u094D\u0924 (Expired) \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
+    }
+    const now = Date.now();
+    const durationDays = targetCode.durationDays || 30;
+    const newExpiresAt = now + durationDays * 24 * 60 * 60 * 1e3;
+    const identifier = (userEmail || userId || username || "").toString().toLowerCase().trim();
+    targetCode.usedCount = (targetCode.usedCount || 0) + 1;
+    if (targetCode.usageType === "one_time" || targetCode.maxUses && targetCode.usedCount >= targetCode.maxUses) {
+      targetCode.status = "used";
+    }
+    targetCode.usedByEmail = identifier;
+    targetCode.usedAt = now;
+    codes[targetIdx] = targetCode;
+    savePromoCodesDatabase(codes);
+    let updatedUser = null;
+    if (identifier) {
+      const users = loadUsersMasterDatabase();
+      const userIdx = users.findIndex(
+        (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier || u.username && u.username.toLowerCase().trim() === identifier
+      );
+      if (userIdx >= 0) {
+        users[userIdx] = {
+          ...users[userIdx],
+          tier: targetCode.planId,
+          planName: targetCode.planName,
+          activatedAt: now,
+          expiresAt: newExpiresAt,
+          trialEndsAt: newExpiresAt,
+          isTrialExpired: false,
+          activatedVia: `Promo:${cleanCode}`,
+          updatedAt: now
+        };
+        updatedUser = users[userIdx];
+        saveUsersMasterDatabase(users);
+        syncUserToProfiles(users[userIdx]);
+      } else {
+        updatedUser = registerOrUpdateUserAuthoritative({
+          email: userEmail || identifier,
+          userId: userId || `usr_${Date.now()}`,
+          tier: targetCode.planId,
+          planName: targetCode.planName,
+          activatedAt: now,
+          expiresAt: newExpiresAt,
+          activatedVia: `Promo:${cleanCode}`
+        });
+      }
+    }
+    return res.json({
+      success: true,
+      message: `\u{1F389} \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0932\u093E\u0917\u0942 \u0939\u0941\u0906! \u0906\u092A\u0915\u093E "${targetCode.planName}" \u092A\u094D\u0932\u093E\u0928 ${durationDays} \u0926\u093F\u0928\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964`,
+      planId: targetCode.planId,
+      planName: targetCode.planName,
+      durationDays,
+      expiresAt: newExpiresAt,
+      user: updatedUser
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/admin/promo-codes/:id", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const { id } = req.params;
+    let codes = loadPromoCodesDatabase();
+    codes = codes.filter((c) => c.id !== id);
+    savePromoCodesDatabase(codes);
+    return res.json({ success: true, message: "\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -7864,9 +8131,10 @@ function resolveUserTierAndRole(req) {
   return { tier: reqTier, role: reqRole };
 }
 var DEFAULT_FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
   "gemini-flash-latest",
   "gemini-3.8-flash",
-  "gemini-2.5-flash",
   "gemini-3.1-flash-lite"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
@@ -10221,9 +10489,9 @@ ${rawLink}` : rawLink;
       return result;
     };
     const runGemini = async () => {
-      const activeGeminiKey = (req.body.geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
+      const activeGeminiKey = (req.body?.geminiApiKey || getActiveGeminiKey(req) || "").trim();
       if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY is not configured");
+        throw new Error("GEMINI_API_KEY \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u094D\u0932\u093E\u0909\u0921 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u092E\u0947\u0902 API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 \u0905\u0925\u0935\u093E .env \u092E\u0947\u0902 GEMINI_API_KEY \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964");
       }
       const ai = new import_genai.GoogleGenAI({
         apiKey: activeGeminiKey,
@@ -10722,9 +10990,9 @@ JSON Output Schema:
       return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
     };
     const tryGemini = async () => {
-      const activeGeminiKey = (geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
+      const activeGeminiKey = (geminiApiKey || getActiveGeminiKey(req) || "").trim();
       if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY not configured");
+        throw new Error("GEMINI_API_KEY \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u094D\u0932\u093E\u0909\u0921 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u092E\u0947\u0902 API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 \u0905\u0925\u0935\u093E .env \u092E\u0947\u0902 GEMINI_API_KEY \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964");
       }
       const ai = new import_genai.GoogleGenAI({
         apiKey: activeGeminiKey,

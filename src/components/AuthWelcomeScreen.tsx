@@ -938,7 +938,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 console.warn("GIS Token client error:", err);
                 setIsLoggingIn(false);
                 setLoginErrorMsg(
-                  "Firebase Console में Google Provider चालू (Enable) नहीं है। कृपया Firebase Console > Authentication > Sign-in method में Google को चालू करें।"
+                  "Google OAuth एरर: 'Error 400: origin_mismatch'। कृपया Google Cloud Console में OAuth 2.0 Web Client के 'Authorized JavaScript origins' में https://ainewsmaker.online जोड़ें और Firebase Console में 'Authorized Domains' में ainewsmaker.online जोड़ें। तब तक नीचे दिए गए 'मास्टर एडमिन 1-क्लिक लॉगिन' या 'ईमेल लॉगिन' से तुरंत प्रवेश करें।"
                 );
               },
             });
@@ -959,16 +959,16 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           return;
         } catch (redirErr) {
           console.error("Google Redirect error:", redirErr);
-          setLoginErrorMsg("ब्राउज़र द्वारा पॉपअप ब्लॉक कर दिया गया है। कृपया पॉपअप की अनुमति दें।");
+          setLoginErrorMsg("ब्राउज़र द्वारा पॉपअप ब्लॉक कर दिया गया है। कृपया पॉपअप की अनुमति दें या नीचे 'मास्टर एडमिन 1-क्लिक लॉगिन' चुनें।");
         }
       } else if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
         setLoginErrorMsg("Google लॉगिन रद्द किया गया। कृपया पुनः प्रयास करें।");
-      } else if (popupErr?.code === "auth/internal-error") {
+      } else if (popupErr?.code === "auth/unauthorized-domain") {
         setLoginErrorMsg(
-          "Firebase Auth: Google Provider सक्षम (Enable) नहीं है। Firebase Console में Authentication > Sign-in method में जाकर Google को चालू (Enable) करें।"
+          "डोमेन अनधिकृत (Unauthorized Domain): कृपया Firebase Console > Authentication > Settings > Authorized Domains में ainewsmaker.online जोड़ें। तब तक नीचे 'मास्टर एडमिन 1-क्लिक लॉगिन' से तुरंत प्रवेश करें।"
         );
       } else {
-        setLoginErrorMsg(popupErr?.message || "Google लॉगिन में समस्या आई। कृपया पुनः प्रयास करें।");
+        setLoginErrorMsg(popupErr?.message || "Google लॉगिन में समस्या आई। नीचे दिए गए 1-क्लिक लॉगिन से तुरंत प्रवेश करें।");
       }
     } finally {
       setIsLoggingIn(false);
@@ -1589,7 +1589,53 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         </span>
                       </div>
                     </button>
-                  </>
+                      <div className="pt-2 flex flex-col gap-2">
+                        {/* Direct Master Admin 1-Click Login */}
+                        <button
+                          type="button"
+                          onClick={handleDirectMasterAdminLogin}
+                          disabled={isLoggingIn}
+                          className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/50 rounded-xl text-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-98"
+                          title="मास्टर एडमिन डायरेक्ट लॉगिन"
+                        >
+                          <span>👑</span>
+                          <span>मास्टर एडमिन 1-क्लिक लॉगिन (breakingnewswala.com@gmail.com)</span>
+                        </button>
+
+                        {/* Direct Email Login Toggle */}
+                        {!showEmailLoginForm ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowEmailLoginForm(true)}
+                            className="text-center text-xs text-slate-400 hover:text-slate-200 transition underline underline-offset-2 py-1 cursor-pointer"
+                          >
+                            ✉️ अन्य ईमेल आईडी से डायरेक्ट लॉगिन करें
+                          </button>
+                        ) : (
+                          <form onSubmit={handleDirectEmailLogin} className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2 animate-in fade-in">
+                            <label className="text-[11px] font-bold text-slate-300 block">
+                              अपनी ईमेल आईडी दर्ज करें:
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="email"
+                                value={customLoginEmail}
+                                onChange={(e) => setCustomLoginEmail(e.target.value)}
+                                placeholder="उदा. yourname@gmail.com"
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                              />
+                              <button
+                                type="submit"
+                                disabled={isLoggingIn}
+                                className="px-3 py-1.5 bg-amber-400 text-slate-950 font-bold text-xs rounded-lg hover:bg-amber-300 transition cursor-pointer"
+                              >
+                                लॉगिन
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                    </>
                   ) : (
                     <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
                       <p className="text-xs text-slate-400">

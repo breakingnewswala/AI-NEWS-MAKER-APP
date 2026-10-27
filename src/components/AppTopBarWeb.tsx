@@ -255,7 +255,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </div>
 
               <div>
-                {/* Header line: AI News Maker + LIVE Badge */}
+                {/* Header line: AI News Maker + LIVE Badge + Quick Guide */}
                 <div className="flex items-center gap-2">
                   <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
                     AI News Maker
@@ -263,6 +263,19 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
                     LIVE
                   </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('ai_news_open_guide_modal'));
+                      }
+                    }}
+                    className="w-5 h-5 rounded-full bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-400 border border-slate-700/70 flex items-center justify-center text-xs font-black transition-colors shadow-xs cursor-pointer"
+                    title="ऐप गाइड और संपूर्ण ट्यूटोरियल देखें"
+                  >
+                    ?
+                  </button>
                 </div>
 
                 <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
@@ -330,8 +343,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-            {/* Wallet Coin Balance Button */}
-            {(!isAdminUser || adminSystemMode === 'test') && (
+            {/* Wallet Coin Balance Button - Only for normal users */}
+            {!isAdminUser && (
               <button
                 type="button"
                 onClick={() => {
