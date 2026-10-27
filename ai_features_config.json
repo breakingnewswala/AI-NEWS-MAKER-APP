@@ -18,6 +18,7 @@
     "gemini": {
       "name": "Gemini AI",
       "enabled": true,
+      "allowFallback": true,
       "allowedTiers": [
         "basic",
         "advanced",
