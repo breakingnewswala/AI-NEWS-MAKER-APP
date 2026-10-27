@@ -867,7 +867,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   };
 
-  // Real Google Sign-In Trigger (Direct Official Google Popup & Account Selector)
+  // Real Google Sign-In Trigger (Firebase Popup + GIS Fallback + Clear Hindi Guide)
   const handleGoogleSignIn = async () => {
     if (!channelRulesAgreed) {
       setLoginErrorMsg("कृपया पहले चैनल व प्रसारण नियमों की सहमति के चेकबॉक्स को टिक करें।");
@@ -886,7 +886,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 2. Direct Official Google Popup & Account Selector
+    // 2. Direct Official Google Popup
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
@@ -901,6 +901,55 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     } catch (popupErr: any) {
       console.warn("Google Popup sign-in error:", popupErr);
+
+      // Auto-fallback: If Firebase throws auth/internal-error or domain issue, try Google Identity Services OAuth directly
+      if (
+        popupErr?.code === "auth/internal-error" ||
+        popupErr?.code === "auth/unauthorized-domain" ||
+        popupErr?.code === "auth/network-request-failed" ||
+        popupErr?.code === "auth/configuration-not-found"
+      ) {
+        const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com";
+        if (typeof window !== "undefined" && (window as any).google?.accounts?.oauth2) {
+          try {
+            const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+              client_id: oAuthClientId,
+              scope: "email profile openid",
+              callback: async (tokenResp: any) => {
+                if (tokenResp?.access_token) {
+                  try {
+                    const uRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                      headers: { Authorization: `Bearer ${tokenResp.access_token}` },
+                    });
+                    if (uRes.ok) {
+                      const userInfo = await uRes.json();
+                      if (userInfo?.email) {
+                        await handleGoogleUserSuccess(userInfo.email, userInfo.name, userInfo.picture);
+                        return;
+                      }
+                    }
+                  } catch (uErr) {
+                    console.warn("GIS Userinfo fetch error:", uErr);
+                  }
+                }
+                setIsLoggingIn(false);
+              },
+              error_callback: (err: any) => {
+                console.warn("GIS Token client error:", err);
+                setIsLoggingIn(false);
+                setLoginErrorMsg(
+                  "Firebase Console में Google Provider चालू (Enable) नहीं है। कृपया Firebase Console > Authentication > Sign-in method में Google को चालू करें।"
+                );
+              },
+            });
+            tokenClient.requestAccessToken({ prompt: "select_account" });
+            return;
+          } catch (gisErr) {
+            console.warn("GIS initTokenClient error:", gisErr);
+          }
+        }
+      }
+
       if (popupErr?.code === "auth/popup-blocked") {
         try {
           const provider = new GoogleAuthProvider();
@@ -914,6 +963,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         }
       } else if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
         setLoginErrorMsg("Google लॉगिन रद्द किया गया। कृपया पुनः प्रयास करें।");
+      } else if (popupErr?.code === "auth/internal-error") {
+        setLoginErrorMsg(
+          "Firebase Auth: Google Provider सक्षम (Enable) नहीं है। Firebase Console में Authentication > Sign-in method में जाकर Google को चालू (Enable) करें।"
+        );
       } else {
         setLoginErrorMsg(popupErr?.message || "Google लॉगिन में समस्या आई। कृपया पुनः प्रयास करें।");
       }
@@ -1414,11 +1467,32 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
 
                 {loginErrorMsg && (
-                  <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-red-200 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                    <span>{loginErrorMsg}</span>
-                  </div>
-                )}
+                    <div className="p-3.5 bg-red-500/10 border border-red-500/40 rounded-xl space-y-2 text-left animate-in fade-in">
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <span className="text-xs text-red-300 font-bold leading-relaxed">{loginErrorMsg}</span>
+                      </div>
+                      {loginErrorMsg.includes("Firebase Console") && (
+                        <div className="pt-2 border-t border-red-500/20 text-[11px] text-slate-300 space-y-1.5">
+                          <p className="font-bold text-amber-300">💡 समाधान (सिर्फ 1 मिनट में):</p>
+                          <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px]">
+                            <li>
+                              <a
+                                href="https://console.firebase.google.com/project/ai-news-maker-app/authentication/providers"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-amber-400 underline font-bold"
+                              >
+                                Firebase Console खोलें (यहाँ क्लिक करें) ↗
+                              </a>
+                            </li>
+                            <li><strong>Sign-in method</strong> में <strong>Google</strong> पर क्लिक करें और <strong>Enable</strong> टॉगल चालू करें।</li>
+                            <li>प्रोजेक्ट सपोर्ट ईमेल चुनकर <strong>Save</strong> करें।</li>
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                 {/* Mandatory Guidelines Notice */}
                 <div className="p-3.5 sm:p-4 bg-amber-500/10 border-2 border-amber-500/50 rounded-2xl text-amber-200 text-left flex items-start gap-3 shadow-lg">

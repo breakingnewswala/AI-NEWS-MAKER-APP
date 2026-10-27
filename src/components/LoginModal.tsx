@@ -274,7 +274,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }, 400);
   };
 
-  // Handle Direct Real Google Login (Native Popup & Account Selector)
+  // Handle Direct Real Google Login (Firebase Popup + GIS Fallback)
   const handleGoogleLogin = async () => {
     if (loading) return;
     setErrorMessage(null);
@@ -290,7 +290,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     }
 
-    // 2. Direct Official Google Popup & Account Selector
+    // 2. Direct Official Google Popup
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
@@ -305,6 +305,51 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     } catch (popupErr: any) {
       console.warn("Google Popup error in LoginModal:", popupErr);
+
+      if (
+        popupErr?.code === "auth/internal-error" ||
+        popupErr?.code === "auth/unauthorized-domain" ||
+        popupErr?.code === "auth/network-request-failed" ||
+        popupErr?.code === "auth/configuration-not-found"
+      ) {
+        const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com";
+        if (typeof window !== "undefined" && (window as any).google?.accounts?.oauth2) {
+          try {
+            const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+              client_id: oAuthClientId,
+              scope: "email profile openid",
+              callback: async (tokenResp: any) => {
+                if (tokenResp?.access_token) {
+                  try {
+                    const uRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                      headers: { Authorization: `Bearer ${tokenResp.access_token}` },
+                    });
+                    if (uRes.ok) {
+                      const userInfo = await uRes.json();
+                      if (userInfo?.email) {
+                        await processGoogleUser(userInfo.email, userInfo.name, userInfo.picture);
+                        return;
+                      }
+                    }
+                  } catch (uErr) {
+                    console.warn("GIS Userinfo fetch error:", uErr);
+                  }
+                }
+                setLoading(false);
+              },
+              error_callback: () => {
+                setLoading(false);
+                setErrorMessage("Firebase Console में Google Provider चालू (Enable) करें।");
+              },
+            });
+            tokenClient.requestAccessToken({ prompt: "select_account" });
+            return;
+          } catch (gisErr) {
+            console.warn("GIS error in LoginModal:", gisErr);
+          }
+        }
+      }
+
       if (popupErr?.code === "auth/popup-blocked") {
         try {
           const provider = new GoogleAuthProvider();
@@ -318,6 +363,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         }
       } else if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
         setErrorMessage("Google लॉगिन रद्द किया गया।");
+      } else if (popupErr?.code === "auth/internal-error") {
+        setErrorMessage("Firebase Auth: Google Provider सक्षम नहीं है। Firebase Console में Google चालू करें।");
       } else {
         setErrorMessage(popupErr?.message || "Google लॉगिन में समस्या आई।");
       }

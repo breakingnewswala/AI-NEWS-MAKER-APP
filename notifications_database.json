@@ -1,27 +1,5 @@
 [
   {
-    "id": "notif_video_vid-test-45-1793111737847",
-    "title": "🎬 नया वीडियो व रील्स जारी",
-    "message": "विशेष 4:5 ग्राउंड रिपोर्ट",
-    "time": "अभी",
-    "timestamp": 1793111737860,
-    "unread": true,
-    "type": "video",
-    "targetUserEmail": "all",
-    "linkTab": "videos"
-  },
-  {
-    "id": "notif_video_vid-test-1793111737814",
-    "title": "🎬 नया वीडियो व रील्स जारी",
-    "message": "संसद में ऐतिहासिक डिजिटल मीडिया बिल पास",
-    "time": "अभी",
-    "timestamp": 1793111737830,
-    "unread": true,
-    "type": "video",
-    "targetUserEmail": "all",
-    "linkTab": "videos"
-  },
-  {
     "id": "notif_news_rss-src_aajtak_live-1793092936544",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
