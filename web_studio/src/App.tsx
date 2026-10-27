@@ -120,12 +120,12 @@ const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
   { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स (Automated News & Photo)' },
+  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
-  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
+  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
+  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
   { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'लोगो, हेडर व फुटर PNG' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
 ];
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
@@ -2641,7 +2641,10 @@ export default function App() {
                   className="w-full bg-slate-950/95 p-2 shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
                 >
                   {/* 2. Preview canvas (4:5 or selected ratio) near top */}
-                  <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
+                  <div
+                    id="mobile-canvas-preview"
+                    className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1"
+                  >
                     <CardPreview
                       card={card}
                       className="w-full h-full"
@@ -2677,64 +2680,61 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                </div>
 
-                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
-                  <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1">
-                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
-                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>स्टेप {activeStep}/7</span>
-                      </span>
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
-                        <span>👉</span>
-                        <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
-                      {STUDIO_STEPS.map((s) => {
-                        const isActive = activeStep === s.step;
-                        return (
-                          <button
-                            key={s.step}
-                            type="button"
-                            onClick={() => {
-                              setActiveStep(s.step);
-                              const el = document.getElementById('mobile-active-step-commands');
-                              if (el) {
-                                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              }
-                            }}
-                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                {/* 4. Horizontal left-to-right editor steps with sticky positioning directly under header */}
+                <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border-y border-slate-800 p-2 sm:p-2.5 shadow-xl max-w-lg mx-auto">
+                  <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
+                    <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>स्टेप {activeStep}/7</span>
+                    </span>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
+                      <span>👉</span>
+                      <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
+                    {STUDIO_STEPS.map((s) => {
+                      const isActive = activeStep === s.step;
+                      return (
+                        <button
+                          key={s.step}
+                          type="button"
+                          onClick={() => {
+                            setActiveStep(s.step);
+                            const el = document.getElementById('mobile-active-step-commands');
+                            if (el) {
+                              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                          }}
+                          className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                            isActive
+                              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                              : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
+                          }`}
+                        >
+                          <span
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
                               isActive
-                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
+                                ? 'bg-slate-950 text-amber-300'
+                                : 'bg-amber-400 text-slate-950'
                             }`}
                           >
-                            <span
-                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                                isActive
-                                  ? 'bg-slate-950 text-amber-300'
-                                  : 'bg-amber-400 text-slate-950'
-                              }`}
-                            >
-                              {s.step}
-                            </span>
-                            <span className="text-sm shrink-0">{s.icon}</span>
-                            <span className="whitespace-nowrap font-bold">{s.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                            {s.step}
+                          </span>
+                          <span className="text-sm shrink-0">{s.icon}</span>
+                          <span className="whitespace-nowrap font-bold">{s.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-
-                  {/* Distinct Horizontal Partition / Divider Line */}
-                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
                 </div>
 
                 {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 pb-36 max-w-lg mx-auto"
                 >
                   {/* Step Title Header */}
                   <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
@@ -2772,6 +2772,65 @@ export default function App() {
                     onLogout={handleLogout}
                     autoFillNews={autoFillNews}
                   />
+                </div>
+
+                {/* Persistent Mobile Bottom Navigation Bar (Fixed directly above AppBottomBarWeb h-16 -> bottom-16) */}
+                <div className="fixed bottom-16 left-0 right-0 z-30 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shadow-2xl px-3 py-2 md:hidden">
+                  <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={activeStep <= 1}
+                      onClick={() => {
+                        const prev = Math.max(1, activeStep - 1);
+                        setActiveStep(prev);
+                        const el = document.getElementById('mobile-active-step-commands');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        activeStep <= 1
+                          ? 'opacity-40 bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
+                          : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 active:scale-95'
+                      }`}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>पिछला चरण</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('mobile-canvas-preview') || document.getElementById('mobile-studio-workspace');
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else {
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                      }}
+                      className="py-2 px-3 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/40 text-xs font-black flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0"
+                      title="ऊपर लाइव ग्राफिक प्रीव्यू देखें"
+                    >
+                      <Eye className="w-4 h-4 text-amber-400" />
+                      <span>ग्राफिक प्रीव्यू देखें</span>
+                    </button>
+
+                    {activeStep < 7 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = Math.min(7, activeStep + 1);
+                          setActiveStep(next);
+                          const el = document.getElementById('mobile-active-step-commands');
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className="flex-1 py-2 px-2 rounded-xl text-xs font-black bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 flex items-center justify-center gap-1 shadow-md hover:from-yellow-300 hover:to-amber-400 active:scale-95 cursor-pointer transition-all"
+                      >
+                        <span>अगला चरण</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <div className="flex-1" />
+                    )}
+                  </div>
                 </div>
               </div>
 

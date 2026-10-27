@@ -541,14 +541,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <ChevronRight className="w-3.5 h-3.5 text-neutral-950" />
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => handleGoToStep(1)}
-            className="flex-1 py-2 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
-          >
-            <span>स्टेप 1 पर जाएं</span>
-            <ChevronRight className="w-3.5 h-3.5 text-white" />
-          </button>
+          <div className="flex-1" />
         )}
       </div>
     );
@@ -592,7 +585,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           ? 'फोटो 1 (ऊपर बाईं)'
           : card.layout === 'grid-3-bottom'
           ? 'फोटो 1 (ऊपर चौड़ी)'
-          : 'मुख्य फोटो (Photo 1)',
+          : 'मुख्य फोटो',
     },
   ];
 
@@ -1203,7 +1196,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-yellow-400" />
-            स्टेप 1: टेम्पलेट्स (Templates)
+            स्टेप 1: टेम्पलेट्स
           </span>
           <span className="text-xs text-neutral-400 font-medium">
             {currentFrameOptions.find((f) => (card.frameDesign || 'graphic_001') === f.id)?.name || 'फ्रेम स्टाइल'}
@@ -1347,7 +1340,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         <div className="flex items-center gap-1">
                           {canUseCustomHF && (activeHeaderPng || activeFooterPng) && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                              Custom H/F
+                              कस्टम हेडर-फुटर
                             </span>
                           )}
                           <span
@@ -1410,7 +1403,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xs font-black tracking-wide truncate text-white flex items-center gap-1.5">
                       <span>✨</span>
-                      <span>CUSTOM FRAMES (कस्टम फ्रेम PNG)</span>
+                      <span>कस्टम फ्रेम PNG</span>
                     </span>
                     <span className="text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 bg-purple-500/20 text-purple-300 border-purple-500/40">
                       PRO / VIP DESK
@@ -1898,45 +1891,49 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
-            {allHeadlineFontChoices.map((f) => {
-              const isAllowed = isFontAllowedForTier(f.id, effectiveTier, effectiveAdmin);
-              const isSel = currentActiveFont === f.id;
-              const tierBadge = (f as any).isCustom ? 'VIP Desk' : f.badge;
+          <div className="relative">
+            <div className="grid grid-rows-2 grid-flow-col auto-cols-[135px] sm:auto-cols-auto sm:grid-rows-none sm:grid-flow-row sm:grid-cols-3 lg:grid-cols-4 gap-1.5 overflow-x-auto sm:overflow-x-visible sm:max-h-48 sm:overflow-y-auto pb-1 scrollbar-thin">
+              {allHeadlineFontChoices.map((f) => {
+                const isAllowed = isFontAllowedForTier(f.id, effectiveTier, effectiveAdmin);
+                const isSel = currentActiveFont === f.id;
+                const tierBadge = (f as any).isCustom ? 'VIP Desk' : f.badge;
 
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  disabled={!isAllowed}
-                  onClick={() => {
-                    if (isAllowed) {
-                      onChange({ headlineFontFamily: f.id });
-                    }
-                  }}
-                  className={`px-2 py-1.5 rounded-lg border text-left text-xs transition-all relative truncate flex items-center justify-between ${
-                    isSel
-                      ? 'border-yellow-400 bg-yellow-400/20 text-yellow-300 font-black ring-1 ring-yellow-400/50'
-                      : isAllowed
-                      ? 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-700 text-neutral-300 cursor-pointer'
-                      : 'border-neutral-900 bg-neutral-950/60 text-neutral-600 opacity-60 cursor-not-allowed select-none pointer-events-none'
-                  }`}
-                  style={{ fontFamily: `'${f.id}', sans-serif` }}
-                  title={isAllowed ? f.label : `${f.label} (${tierBadge} पैकेज आवश्यक)`}
-                >
-                  <span className="text-[11px] truncate">{f.label}</span>
-                  {!isAllowed && (
-                    <span className="ml-1 flex items-center text-[9px] font-sans font-bold text-amber-500/80 bg-neutral-900 px-1 py-0.5 rounded border border-neutral-800 shrink-0">
-                      <Lock className="w-2.5 h-2.5 mr-0.5 inline" />
-                      {tierBadge}
-                    </span>
-                  )}
-                  {isAllowed && isSel && (
-                    <Check className="w-3 h-3 text-yellow-400 shrink-0 ml-1" />
-                  )}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    disabled={!isAllowed}
+                    onClick={() => {
+                      if (isAllowed) {
+                        onChange({ headlineFontFamily: f.id });
+                      }
+                    }}
+                    className={`px-2 py-1.5 rounded-lg border text-left text-xs transition-all relative truncate flex items-center justify-between ${
+                      isSel
+                        ? 'border-yellow-400 bg-yellow-400/20 text-yellow-300 font-black ring-1 ring-yellow-400/50'
+                        : isAllowed
+                        ? 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-700 text-neutral-300 cursor-pointer'
+                        : 'border-neutral-900 bg-neutral-950/60 text-neutral-600 opacity-60 cursor-not-allowed select-none pointer-events-none'
+                    }`}
+                    style={{ fontFamily: `'${f.id}', sans-serif` }}
+                    title={isAllowed ? f.label : `${f.label} (${tierBadge} पैकेज आवश्यक)`}
+                  >
+                    <span className="text-[11px] truncate">{f.label}</span>
+                    {!isAllowed && (
+                      <span className="ml-1 flex items-center text-[9px] font-sans font-bold text-amber-500/80 bg-neutral-900 px-1 py-0.5 rounded border border-neutral-800 shrink-0">
+                        <Lock className="w-2.5 h-2.5 mr-0.5 inline" />
+                        {tierBadge}
+                      </span>
+                    )}
+                    {isAllowed && isSel && (
+                      <Check className="w-3 h-3 text-yellow-400 shrink-0 ml-1" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Visual indication that more font options are available to the right on mobile */}
+            <div className="pointer-events-none absolute top-0 right-0 bottom-1 w-6 bg-gradient-to-l from-neutral-900 to-transparent sm:hidden" />
           </div>
         </div>
 
@@ -1947,7 +1944,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold">
               <span className="flex items-center gap-1.5">
                 <Type className="w-3.5 h-3.5 text-yellow-400" />
-                <span>फ़ॉन्ट साइज (Size):</span>
+                <span>फ़ॉन्ट साइज:</span>
               </span>
               <div className="flex items-center gap-1">
                 <button
@@ -2506,9 +2503,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
             <div className="flex items-center gap-2">
               <div className="px-4 py-2.5 rounded-lg text-xs font-bold border border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm flex items-center gap-2">
-                <span>📷 1 इमेज (सिंगल फोटो मोड)</span>
+                <span>📷 1 इमेज</span>
                 <span className="text-[10px] bg-yellow-400 text-neutral-950 font-black px-1.5 py-0.5 rounded">
-                  सक्रिय (Active)
+                  सक्रिय
                 </span>
               </div>
             </div>
@@ -2528,7 +2525,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               >
                 <div className="flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-yellow-400" />
-                  <span>1 इमेज (Single)</span>
+                  <span>1 इमेज</span>
                 </div>
                 <span className="text-[10px] font-normal opacity-80">सिंगल फुल स्क्रीन</span>
               </button>
@@ -2537,7 +2534,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="py-2.5 px-3 rounded-xl text-xs font-bold border border-neutral-800 bg-neutral-950/60 text-neutral-500 flex flex-col items-center justify-center gap-1 cursor-not-allowed select-none">
                   <div className="flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-500/80" />
-                    <span>2 इमेज (Locked)</span>
+                    <span>2 इमेज (लॉक)</span>
                   </div>
                   <span className="text-[9px] text-amber-500/80">एडवांस/प्रो में उपलब्ध</span>
                 </div>
@@ -2566,7 +2563,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <LayoutGrid className="w-4 h-4 text-yellow-400" />
-                    <span>2 इमेज (Two Photos)</span>
+                    <span>2 इमेज</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">2 फोटो अलग स्लॉट</span>
                 </button>
@@ -2576,7 +2573,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="py-2.5 px-3 rounded-xl text-xs font-bold border border-neutral-800 bg-neutral-950/60 text-neutral-500 flex flex-col items-center justify-center gap-1 cursor-not-allowed select-none col-span-2 sm:col-span-1">
                   <div className="flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-500/80" />
-                    <span>मल्टी ग्रिड (Locked)</span>
+                    <span>मल्टी ग्रिड (लॉक)</span>
                   </div>
                   <span className="text-[9px] text-amber-500/80">प्रो/वीआईपी में उपलब्ध</span>
                 </div>
@@ -2610,7 +2607,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-yellow-400" />
-                    <span>मल्टी ग्रिड (3-4)</span>
+                    <span>मल्टी ग्रिड</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">3 या 4 तस्वीरें</span>
                 </button>
@@ -2628,7 +2625,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   {[
                     { id: 'split-v' as CardLayout, label: '35-65 अप-डाउन', desc: '35% ऊपर, 65% नीचे' },
                     { id: 'double' as CardLayout, label: '50-50 अप-डाउन', desc: '50% ऊपर, 50% नीचे' },
-                    { id: 'double-h' as CardLayout, label: '50-50 L-R', desc: 'लेफ्ट-राइट' },
+                    { id: 'double-h' as CardLayout, label: '50-50 दाएँ-बाएँ', desc: 'लेफ्ट-राइट' },
                   ].map((l) => {
                     const isSelected = card.layout === l.id || (l.id === 'double-h' && card.layout === 'split-h');
                     return (
@@ -3144,59 +3141,84 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span>🔒 वॉटरमार्क विकल्प केवल एडवांस, प्रो और वीआईपी डेस्क में उपलब्ध हैं।</span>
               </div>
             ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                {
-                  id: 'none',
-                  label: '1. ऑफ',
-                  desc: 'ऑफ (No Tag)',
-                  icon: '✕',
-                },
-                {
-                  id: 'representative',
-                  label: '2. प्रतीकात्मक फोटो',
-                  desc: 'सांकेतिक तस्वीर',
-                  icon: '📷',
-                },
-                {
-                  id: 'ai',
-                  label: '3. AI जनरेटेड',
-                  desc: 'AI जनरेटेड इमेज',
-                  icon: '✨',
-                },
-              ].map((opt) => {
-                const currentType = card.photoDisclaimerType || (card.showAiGenerated ? 'ai' : 'none');
-                const isSelected = currentType === opt.id;
-                return (
+            <div className="space-y-2">
+              {/* Note Tag on top with red treatment (Module 9.1 & 9.3) */}
+              <div className="flex items-center justify-between gap-2 pb-0.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black bg-red-600/20 text-red-400 border border-red-500/40">
+                  <span>📌</span>
+                  <span>नोट: फोटो डिस्क्लेमर टैग</span>
+                </span>
+                {(card.photoDisclaimerType === 'representative' || card.photoDisclaimerType === 'ai' || card.showAiGenerated) && (
                   <button
-                    key={opt.id}
                     type="button"
                     onClick={() => {
-                      const selId = opt.id as 'none' | 'representative' | 'ai';
                       onChange({
-                        photoDisclaimerType: selId,
-                        showAiGenerated: selId === 'ai',
-                        photoWatermarkTag: selId === 'ai' ? 'AI जनरेटेड' : selId === 'representative' ? 'प्रतीकात्मक फोटो' : undefined,
-                        representativePhotoText: selId === 'representative' ? (card.representativePhotoText || 'प्रतीकात्मक फोटो') : card.representativePhotoText,
-                        aiGeneratedText: selId === 'ai' ? (card.aiGeneratedText || 'AI जनरेटेड') : card.aiGeneratedText,
+                        photoDisclaimerType: 'none',
+                        showAiGenerated: false,
+                        photoWatermarkTag: undefined,
                       });
                     }}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all cursor-pointer active:scale-95 ${
-                      isSelected
-                        ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
-                        : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
-                    }`}
+                    className="text-[10px] text-neutral-400 hover:text-white underline cursor-pointer"
                   >
-                    <span className="text-xs font-black flex items-center gap-1">
-                      <span>{opt.icon}</span>
-                      <span>{opt.label}</span>
-                    </span>
-                    <span className={`text-[10px] ${isSelected ? 'text-neutral-900/80 font-bold' : 'text-neutral-400'}`}>
-                      {opt.desc}
-                    </span>
+                    टैग हटाएं (ऑफ)
                   </button>
-                );
-              })}
+                )}
+              </div>
+
+              {/* Two balanced 50% columns beneath (Module 9.2, 9.4, 9.6) */}
+              <div className="grid grid-cols-2 gap-2">
+                {(() => {
+                  const currentType = card.photoDisclaimerType || (card.showAiGenerated ? 'ai' : 'none');
+                  const isRepSel = currentType === 'representative';
+                  const isAiSel = currentType === 'ai';
+
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const selId = isRepSel ? 'none' : 'representative';
+                          onChange({
+                            photoDisclaimerType: selId,
+                            showAiGenerated: false,
+                            photoWatermarkTag: selId === 'representative' ? 'प्रतीकात्मक फोटो' : undefined,
+                            representativePhotoText: card.representativePhotoText || 'प्रतीकात्मक फोटो',
+                          });
+                        }}
+                        className={`py-2 px-2.5 rounded-lg border text-center flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                          isRepSel
+                            ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
+                            : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
+                        }`}
+                      >
+                        <span className="text-xs shrink-0">📷</span>
+                        <span className="text-xs font-black truncate">प्रतीकात्मक फोटो</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const selId = isAiSel ? 'none' : 'ai';
+                          onChange({
+                            photoDisclaimerType: selId,
+                            showAiGenerated: selId === 'ai',
+                            photoWatermarkTag: selId === 'ai' ? 'AI GENERATED' : undefined,
+                            aiGeneratedText: card.aiGeneratedText || 'AI GENERATED',
+                          });
+                        }}
+                        className={`py-2 px-2.5 rounded-lg border text-center flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                          isAiSel
+                            ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
+                            : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
+                        }`}
+                      >
+                        <span className="text-xs shrink-0">✨</span>
+                        <span className="text-xs font-black truncate">AI GENERATED</span>
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
             )}
 
@@ -3352,7 +3374,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-red-500" />
-              <span>स्थान / जिला (Location / District):</span>
+              <span>स्थान / जिला:</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3438,7 +3460,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <span>📅</span>
-              <span>दिनांक (Date Stamp - कॉम्पैक्ट पोज़ीशन):</span>
+              <span>दिनांक (कॉम्पैक्ट पोज़ीशन):</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3665,7 +3687,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-blue-300 font-bold">
             <span className="flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-blue-400" />
-              <span>मास्टर ब्रांडिंग (Master Branding)</span>
+              <span>मास्टर ब्रांडिंग</span>
             </span>
             {canToggleMasterBranding ? (
               <button
@@ -4098,7 +4120,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>🎨</span>
-                    <span>फुटर बैकग्राउंड रंग (Footer Background):</span>
+                    <span>फुटर बैकग्राउंड रंग:</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerBgColor || '#FFFFFF'}
@@ -4173,7 +4195,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <div className="flex items-center justify-between p-2 bg-neutral-900 rounded-lg border border-neutral-800">
                         <span className="text-[11px] text-neutral-300 font-semibold flex items-center gap-1.5">
                           <span>🖌️</span>
-                          <span>कस्टम बैकग्राउंड रंग (VIP Desk):</span>
+                          <span>कस्टम बैकग्राउंड रंग (वीआईपी डेस्क):</span>
                         </span>
                         <div className="flex items-center gap-2">
                           <input
@@ -4207,7 +4229,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>✏️</span>
-                    <span>फुटर टेक्स्ट रंग (Footer Text Color - डिफ़ॉल्ट काला):</span>
+                    <span>फुटर टेक्स्ट रंग (डिफ़ॉल्ट काला):</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerTextColor || '#000000'}
@@ -4310,7 +4332,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="space-y-0.5">
                     <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Footer में WhatsApp नंबर दिखाएँ</span>
+                      <span>फुटर में WhatsApp नंबर दिखाएँ</span>
                     </span>
                     <span className="text-[10.5px] text-neutral-400 block">
                       नंबर सीधे आपकी प्रोफ़ाइल के वाट्सएप सेक्शन से प्राप्त होता है।
@@ -4366,7 +4388,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="space-y-0.5">
                     <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
                       <Globe className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Footer में वेबसाइट (Website) दिखाएँ</span>
+                      <span>फुटर में वेबसाइट दिखाएँ</span>
                     </span>
                     <span className="text-[10.5px] text-neutral-400 block">
                       वेबसाइट लिंक सीधे आपकी प्रोफ़ाइल से प्राप्त होती है।

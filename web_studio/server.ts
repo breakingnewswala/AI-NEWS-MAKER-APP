@@ -10046,42 +10046,38 @@ export function ensureHashtagHierarchy(
       .map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim())
       .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
 
-    if (bulletLines.length > 0) {
+    if (bulletLines.length >= 3) {
       finalBodyText = bulletLines
-        .slice(0, 6)
+        .slice(0, 5)
         .map((b) => `• ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}।`)
         .join("\n");
     } else {
       const sentences = rawBody
         .split(/[।\n]+|\.\s+/)
         .map((s) => stripAllUrlsAndHyperlinks(s).trim())
-        .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
-      finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["मुख्य घटनाक्रम का संक्षिप्त विवरण।"])
-        .map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`)
-        .join("\n");
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+
+      if (sentences.length > 1) {
+        const intro = `${sentences[0].replace(/[।\.\s]+$/, "")}।`;
+        const bullets = sentences.slice(1, 5).map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`).join("\n");
+        finalBodyText = `${intro}\n\n${bullets}`;
+      } else {
+        finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["मुख्य घटनाक्रम का विवरण"])
+          .map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`)
+          .join("\n");
+      }
     }
   } else if (mode === "short") {
-    // Exactly 2 substantive paragraphs (Section 8C)
-    const rawParagraphs = rawBody
-      .split(/\n{2,}/)
-      .map((p) => p.replace(/[ \t]{2,}/g, " ").trim())
-      .filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
+    // Short caption: 1 to 3 short complete sentences (Module 2.3)
+    const sentences = rawBody
+      .split(/[।\n]+|\.\s+/)
+      .map((s) => stripAllUrlsAndHyperlinks(s).trim())
+      .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
 
-    if (rawParagraphs.length >= 2) {
-      finalBodyText = rawParagraphs.slice(0, 2).join("\n\n");
+    if (sentences.length >= 1) {
+      finalBodyText = sentences.slice(0, 3).map((s) => `${s.replace(/[।\.\s]+$/, "")}।`).join(" ");
     } else {
-      const sentences = rawBody
-        .split(/[।\n]+|\.\s+/)
-        .map((s) => stripAllUrlsAndHyperlinks(s).trim())
-        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
-      if (sentences.length >= 2) {
-        const mid = Math.ceil(sentences.length / 2);
-        const p1 = sentences.slice(0, mid).join("। ") + "।";
-        const p2 = sentences.slice(mid).join("। ") + "।";
-        finalBodyText = `${p1}\n\n${p2}`;
-      } else {
-        finalBodyText = rawParagraphs[0] || rawBody;
-      }
+      finalBodyText = rawBody;
     }
   } else {
     // Mode 'detailed': Exactly 3 substantive paragraphs (Section 8A)
@@ -11343,12 +11339,14 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - सभी 5 हेडलाइन विकल्प स्रोत की उसी एक मुख्य समाचार घटना (Primary Event) पर आधारित होने चाहिए।
    - आलेख के बॉडी वाक्यों को ज्यों-का-त्यों कॉपी-पेस्ट करके हेडलाइन कभी न बनाएं।
    - कड़ा नियम (NO UNRELATED FILLER PHRASES): मनगढ़ंत या असंबद्ध प्रशासनिक जुमले (जैसे 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'स्थिति पर अधिकारियों की लगातार निगरानी', 'पूरे घटनाक्रम पर शासन की सख्त नजर') कभी भी न जोड़ें जब तक कि मूल खबर में वास्तव में ऐसा न लिखा हो! मनोरंजन, खेल, कारोबार या संस्कृति की खबरों में प्रशासनिक शब्द कभी न जोड़ें। केवल आलेख के मूल विषय से जुड़े शब्दों का ही प्रयोग करें।
-2. 5 संतुलित हेडलाइन दृष्टिकोण (5 EDITORIAL ANGLES OF THE SAME EVENT):
-   - विकल्प 1: मुख्य घटना (Core Event) — किसने क्या किया, कहाँ हुआ, सीधा, तथ्यपरक और पूरा विवरण।
-   - विकल्प 2: व्यक्ति या मुख्य पात्र कोण (Actor/Person Focus) — मुख्य व्यक्ति, भूमिका या आधिकारिक निर्णय।
-   - विकल्प 3: कार्रवाई या परिणाम (Action/Consequence) — घटना से जुड़ी कार्रवाई, असर या विकास।
-   - विकल्प 4: मुख्य बिंदु या दावा (Key Development/Quote) — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान।
-   - विकल्प 5: सारगर्भित व प्रभावशाली (High-Impact Angle) — उसी मुख्य घटना का संतुलित, धारदार रूप।
+2. 5 संतुलित हेडलाइन लेखन शैलियाँ (5 WRITING STYLES OF THE SAME CENTRAL EVENT):
+   - सभी 5 विकल्प एक ही मुख्य घटना, एक ही मुख्य विषय और एक ही मूल तथ्यात्मक अर्थ को व्यक्त करें (कहानी का कोण न बदलें)।
+   - पाँचों विकल्प केवल वाक्य रचना, शब्दावली, शुरुआती वाक्यांश और प्रस्तुति शैली में भिन्न हों—विषय या कोण बदलकर नहीं:
+     * शैली 1: मुख्य घटना का सीधा, स्पष्ट और तथ्यात्मक विवरण।
+     * शैली 2: उसी मुख्य घटना को उसके सबसे महत्वपूर्ण सत्यापित तथ्य के साथ प्रस्तुत करना।
+     * शैली 3: उसी मुख्य घटना को उसके सीधे रिपोर्ट किए गए परिणाम या प्रभाव के साथ प्रस्तुत करना।
+     * शैली 4: उसी मुख्य घटना को अधिक स्पष्ट शब्दावली और प्रासंगिक सत्यापित विवरण के साथ प्रस्तुत करना।
+     * शैली 5: उसी मुख्य घटना को सशक्त, स्वाभाविक और प्रकाशन-योग्य पत्रकारीय भाषा में प्रस्तुत करना।
 3. एकल हेडलाइन लंबाई नियम — 100 से 150 वर्ण (SINGLE HEADLINE LENGTH RULE — 100 TO 150 CHARACTERS):
    - प्रत्येक हेडलाइन विकल्प के लिए लक्ष्य लंबाई: 100 से 150 दृश्यमान वर्ण (visible characters), अंतिम सीमा: अधिकतम 150 वर्ण।
    - टीवी न्यूज कार्ड, ब्रेकिंग रिबन और 4:5 ग्राफिक कार्ड पर सीधे प्रदर्शित होने योग्य चुस्त, स्पष्ट, तथ्यपरक और असरदार हेडलाइन लिखें।
@@ -11367,9 +11365,12 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" कभी न जोड़ें।
    - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
    - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं। सीधे घटना के पुष्ट तथ्यों, मुख्य व्यक्तियों, स्थान और घटनाक्रम से शुरुआत करें।
-   - summary व captionDetailed: पूर्ण विवरण सहित ठीक 3 विस्तृत पैराग्राफ (substantive paragraphs) लिखें। इसमें समाचार के सभी महत्वपूर्ण तथ्य, नाम, स्थान, दिनांक, संदर्भ, और आगे की कार्रवाई शामिल होनी चाहिए। छोटा या अधूरा कैप्शन कभी न लिखें।
-   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो।
-   - captionShort: ठीक 2 संतुलित पैराग्राफ, सीधे मुख्य घटनाक्रम व तथ्यों से शुरू।
+   - summary व captionDetailed: पूर्ण विवरण सहित ठीक 3 अर्थपूर्ण पैराग्राफ (substantive paragraphs) लिखें:
+     * पैराग्राफ 1: मुख्य घटना और संदर्भ (क्या हुआ, कहाँ हुआ, अनिवार्य संदर्भ)।
+     * पैराग्राफ 2: सत्यापित विवरण (महत्वपूर्ण नाम, आंकड़े, तारीखें, बयान व घटनाक्रम)।
+     * पैराग्राफ 3: रिपोर्ट की गई प्रतिक्रिया, अगला कदम या महत्व (पुष्ट प्रतिक्रिया या प्रासंगिक ज्ञात तथ्य)।
+   - captionBullets: एक संक्षिप्त परिचयात्मक वाक्य से शुरू करें, जिसके बाद स्रोत पर आधारित 3 से 5 अलग-अलग सत्यापित बुलेट बिंदु (• बिंदु।) हों।
+   - captionShort: 1 से 3 छोटे, पूर्ण हिंदी वाक्य जो मुख्य घटना व सबसे महत्वपूर्ण सत्यापित विवरण को व्यक्त करें।
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
@@ -11382,11 +11383,11 @@ Strictly return a valid JSON object matching these exact keys:
 {
   "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम, लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
   "headlineOptions": [
-    "विकल्प 1: मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
+    "सीधा व स्पष्ट मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "मुख्य सत्यापित तथ्य के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "रिपोर्ट किए गए परिणाम के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "अधिक स्पष्ट विवरण के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "सशक्त पत्रकारीय शैली में घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
   ],
   "highlightWords": ["मुख्य शब्द 1", "मुख्य शब्द 2"],
   "formattedHeadline": "हेडलाइन जिसमें मुख्य शब्द [yellow]शब्द[/yellow] से चिह्नित हों",
@@ -12216,20 +12217,19 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     };
 
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
-Generate exactly 5 distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
-- All 5 options must be based strictly on the same central event (no secondary stories or unrelated paragraphs).
-- STRICT RULE: Do NOT append generic administrative or police filler words (such as 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story. For entertainment, sports, business, or lifestyle news, keep the phrasing strictly relevant to the subject.
+Generate exactly 5 distinct, publication-ready headline options representing 5 writing styles of the SAME central news event in pure Hindi Devanagari script:
+- All 5 options must be based strictly on the same central event, same main subject, and same factual meaning. Differ ONLY in wording, sentence structure, opening phrase, and presentation style—do NOT switch angles.
+- STRICT RULE: Do NOT append generic administrative or police filler words (such as 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story.
 - Single headline length policy: Target 100 to 150 visible characters per headline, with an absolute maximum of 150 visible characters.
-- Aim for the 100-150 character range when supported by verified facts, with no artificial filler, padding, or fabricated administrative phrases.
-- Option 1: Core event (direct, hard news)
-- Option 2: Key person/actor angle
-- Option 3: Action/Development angle
-- Option 4: Crucial fact/Quote angle
-- Option 5: Crisp, punchy journalistic angle
-- No ending punctuation (. or ।). No tier labels or bracketed counts like '[58/100]'.
+- Style 1: Direct and clear statement of the main event.
+- Style 2: The same event expressed with its most important verified fact.
+- Style 3: The same event expressed with a directly reported result/impact, where supported.
+- Style 4: The same event expressed with clearer wording and a relevant verified detail.
+- Style 5: The same event expressed in strong, natural, publication-ready journalistic language.
+- No ending punctuation (. or ।). No labels like 'विकल्प 1' or bracketed counts like '[58/100]'.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
-    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित हों, लक्ष्य 100-150 वर्ण, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
+    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित 5 लेखन शैलियाँ हों, लक्ष्य 100-150 वर्ण, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 2500)}
 ${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
@@ -12237,11 +12237,11 @@ ${excludeTitles.length > 0 ? `पिछले विकल्प जिन्ह
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1: मुख्य घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
+    "सीधा व स्पष्ट मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "मुख्य सत्यापित तथ्य के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "रिपोर्ट किए गए परिणाम के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "अधिक स्पष्ट विवरण के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "सशक्त पत्रकारीय भाषा में घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
   ]
 }`;
 

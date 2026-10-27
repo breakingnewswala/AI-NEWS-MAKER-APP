@@ -1584,7 +1584,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     };
 
     onChange(updates);
-    onNextStep();
   };
 
   return (
@@ -1604,7 +1603,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
             <div className="space-y-2">
               <h3 className="text-lg sm:text-xl font-black text-white font-['Baloo_2'] tracking-wide">
-                अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...
+                कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।
               </h3>
               <p className="text-xs sm:text-sm text-amber-300 font-semibold min-h-[36px] flex items-center justify-center transition-all px-2">
                 {loadingStages[loadingStageIndex]}
@@ -1804,13 +1803,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <RefreshCw className="w-3.5 h-3.5" />
               <span>पुनः प्रयास करें</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setIsManualInputMode(true)}
-              className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs cursor-pointer"
-            >
-              मैन्युअल इनपुट खोलें
-            </button>
+            {isAdminOrSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsManualInputMode(true)}
+                className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs cursor-pointer"
+              >
+                मैन्युअल इनपुट खोलें
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1822,13 +1823,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>होम फ़ीड से लोड की गई खबर</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsManualInputMode(true)}
-            className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
-          >
-            <span>✏️ मैन्युअल इनपुट बॉक्स दिखाएँ</span>
-          </button>
+          {isAdminOrSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsManualInputMode(true)}
+              className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+            >
+              <span>✏️ मैन्युअल इनपुट बॉक्स दिखाएँ</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -2081,7 +2084,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           <h4 className="text-sm font-black text-white">
             {aiProvider === 'openai' ? 'ChatGPT द्वारा 5 संतुलित AI हेडलाइन तैयार हो रही हैं...' : 'खबर से 5 संतुलित AI हेडलाइन तैयार हो रही हैं...'}
           </h4>
-          <p className="text-xs text-slate-400">कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर 5 संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।</p>
+          <p className="text-xs text-slate-400">कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।</p>
         </div>
       )}
 
@@ -2166,14 +2169,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                   const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
                   const charCount = cleanDisplay.length;
-                  const angleNames = [
-                    'मुख्य घटना (Core Event)',
-                    'पात्र/व्यक्ति कोण (Actor/Authority)',
-                    'कार्रवाई/परिणाम (Action/Consequence)',
-                    'मुख्य बिंदु/तथ्य (Key Detail/Quote)',
-                    'सारगर्भित (High-Impact)',
-                  ];
-
                   return (
                     <label
                       key={idx}
@@ -2195,9 +2190,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
                             विकल्प {idx + 1}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-400 border border-neutral-800">
-                            {angleNames[idx] || `कोण ${idx + 1}`}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -2228,7 +2220,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           <div className="space-y-1 bg-neutral-900/90 p-2.5 rounded-lg border border-neutral-800">
             <div className="flex items-center justify-between text-[11px] text-neutral-400 font-bold">
               <div className="flex items-center gap-1.5">
-                <span>हेडलाइन संपादित करें (Edit text):</span>
+                <span>हेडलाइन संपादित करें:</span>
                 <span className="text-[10px] text-yellow-400 font-mono bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                   <span className="text-amber-300 font-bold">
                     {(result.headline || '')
@@ -2420,7 +2412,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>AI फोटो जनरेटर (AI Generated Photo):</span>
+                <span>AI फोटो जनरेटर:</span>
               </span>
               {generatedAiImageUrl && (
                 <button
@@ -2489,7 +2481,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             )}
           </div>
 
-          {/* Primary Action Button: Apply and Go to Step 3 */}
+          {/* Primary Action Button: Apply Headline and Details to Graphic */}
           <div className="pt-2 space-y-2">
             <button
               type="button"
@@ -2497,7 +2489,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               className="w-full py-3 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950 font-black text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.99] transition-all"
             >
               <Check className="w-4 h-4" />
-              <span>कार्ड में लागू करें और अगले स्टेप (फोटो) पर जाएं ➔</span>
+              <span>ग्राफिक में सेट करें</span>
             </button>
 
             <button

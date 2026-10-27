@@ -652,7 +652,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
             <div className="p-4 rounded-xl bg-neutral-950 border border-yellow-500/40 space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-yellow-400 flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> 5 संतुलित हेडलाइन विकल्प (5 Balanced Headline Options):
+                  <Check className="w-3.5 h-3.5" /> 5 संतुलित हेडलाइन विकल्प:
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800">
                   {result.location}
@@ -733,7 +733,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
               <div className="space-y-1 bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
                 <div className="flex items-center justify-between text-[11px] text-neutral-400 font-semibold">
                   <div className="flex items-center gap-1.5">
-                    <span>चयनित हेडलाइन संपादित करें (Edit text):</span>
+                    <span>चयनित हेडलाइन संपादित करें:</span>
                     <span className="text-[10px] text-yellow-400 font-mono bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                       <span className="text-amber-300 font-bold">
                         {(result.headline || '')
@@ -1098,7 +1098,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                 className="w-full py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-neutral-950 font-black text-sm flex items-center justify-center gap-2 cursor-pointer shadow"
               >
                 <Check className="w-4 h-4" />
-                <span>कार्ड में लागू करें</span>
+                <span>ग्राफिक में सेट करें</span>
               </button>
             </div>
           )}

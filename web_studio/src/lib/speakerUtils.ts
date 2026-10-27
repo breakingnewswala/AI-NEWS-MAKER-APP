@@ -1204,48 +1204,43 @@ export function ensureHashtagHierarchy(
   let finalBodyText = '';
 
   if (mode === 'bullet') {
+    // Bullet caption: 1 short intro sentence + 3-5 distinct meaningful bullets (Module 2.2)
     const rawLines = rawBody
       .split(/\n+/)
       .map((l) => l.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
       .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
 
-    let bulletLines = rawLines;
-    if (bulletLines.length < 3) {
-      const sents = rawBody
-        .split(/[।\n]+/)
-        .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
-        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
-      bulletLines = sents.slice(0, 5);
-    }
-    if (bulletLines.length === 0) {
-      bulletLines = [rawBody || 'ताज़ा घटनाक्रम की मुख्य जानकारी'];
-    }
-    finalBodyText = bulletLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
-  } else if (mode === 'short') {
-    // Concise Caption: ~2 concise sentences (approx 1-2 short paragraphs)
-    const rawParagraphs = rawBody
-      .split(/\n{2,}|\n(?=[^\s•])/g)
-      .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
-      .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
+    const sentences = rawBody
+      .split(/[।\n]+|\.\s+/)
+      .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
+      .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
 
-    let cleanParas: string[] = [];
-    if (rawParagraphs.length >= 2) {
-      cleanParas = [rawParagraphs[0], rawParagraphs.slice(1).join(' ')];
+    if (rawLines.length >= 3 && sentences.length > rawLines.length) {
+      const intro = `${sentences[0].replace(/[।\.\s]+$/, '')}।`;
+      const bullets = rawLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
+      finalBodyText = `${intro}\n\n${bullets}`;
+    } else if (sentences.length > 1) {
+      const intro = `${sentences[0].replace(/[।\.\s]+$/, '')}।`;
+      const bullets = sentences.slice(1, 5).map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`).join('\n');
+      finalBodyText = `${intro}\n\n${bullets}`;
     } else {
-      const sentences = rawBody
-        .split(/[।\n]+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 5);
-      if (sentences.length >= 2) {
-        cleanParas = [
-          sentences.slice(0, Math.ceil(sentences.length / 2)).join('। ') + '।',
-          sentences.slice(Math.ceil(sentences.length / 2)).join('। ') + '।',
-        ];
-      } else {
-        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
-      }
+      const bullets = (sentences.length > 0 ? sentences.slice(0, 4) : ['मुख्य घटनाक्रम का विवरण'])
+        .map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`)
+        .join('\n');
+      finalBodyText = bullets;
     }
-    finalBodyText = cleanParas.slice(0, 2).join('\n\n').trim();
+  } else if (mode === 'short') {
+    // Short caption: 1 to 3 short complete sentences (Module 2.3)
+    const sentences = rawBody
+      .split(/[।\n]+|\.\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+
+    if (sentences.length >= 1) {
+      finalBodyText = sentences.slice(0, 3).map((s) => `${s.replace(/[।\.\s]+$/, '')}।`).join(' ');
+    } else {
+      finalBodyText = rawBody;
+    }
   } else {
     // Mode 'detailed': Exactly 3 substantive paragraphs
     const rawParagraphs = rawBody
