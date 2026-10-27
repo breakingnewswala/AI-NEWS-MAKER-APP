@@ -1,5 +1,16 @@
 [
   {
+    "id": "notif_news_rss-src_aajtak_live-1793068429764",
+    "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
+    "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
+    "time": "अभी",
+    "timestamp": 1793068429777,
+    "unread": true,
+    "type": "news",
+    "targetUserEmail": "all",
+    "linkTab": "home"
+  },
+  {
     "id": "notif_news_rss-src_aajtak_live-1793068171727",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",

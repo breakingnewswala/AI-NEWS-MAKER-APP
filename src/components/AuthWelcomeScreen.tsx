@@ -419,6 +419,67 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
 
 
+  // Auto-mount official Google Sign-In button on Step 4
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
+
+    const initGsi = () => {
+      if ((window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: oAuthClientId,
+            use_fedcm_for_prompt: false,
+            auto_select: false,
+            callback: async (response: any) => {
+              if (response?.credential) {
+                try {
+                  setIsLoggingIn(true);
+                  try {
+                    const cred = GoogleAuthProvider.credential(response.credential);
+                    await signInWithCredential(auth, cred);
+                  } catch (fErr) {
+                    console.warn('Firebase credential link err:', fErr);
+                  }
+
+                  const decoded = decodeGoogleJwt(response.credential);
+                  if (decoded?.email) {
+                    await handleGoogleUserSuccess(decoded.email, decoded.name, decoded.picture);
+                    return;
+                  }
+                } catch (err) {
+                  console.warn('GIS JWT decode err:', err);
+                } finally {
+                  setIsLoggingIn(false);
+                }
+              }
+            },
+          });
+
+          const btnContainer = document.getElementById('google-official-welcome-btn');
+          if (btnContainer && (window as any).google.accounts.id.renderButton) {
+            btnContainer.innerHTML = '';
+            (window as any).google.accounts.id.renderButton(btnContainer, {
+              theme: 'outline',
+              size: 'large',
+              width: Math.min(window.innerWidth - 60, 360),
+              text: 'continue_with',
+              shape: 'rectangular',
+            });
+          }
+        } catch (e) {
+          console.warn('Error initializing GSI renderButton:', e);
+        }
+      }
+    };
+
+    initGsi();
+    const timer = setTimeout(initGsi, 800);
+    return () => clearTimeout(timer);
+  }, [homeStep]);
+
+
+
   const handleToggleRulesAgreement = () => {
     const nextVal = !channelRulesAgreed;
     setChannelRulesAgreed(nextVal);
