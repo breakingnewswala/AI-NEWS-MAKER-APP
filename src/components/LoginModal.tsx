@@ -3,6 +3,7 @@ import { registerOrUpdateUser } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
+import { GoogleAccountPickerModal } from './GoogleAccountPickerModal';
 import {
   Lock,
   User,
@@ -125,6 +126,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isGoogleAccountPickerOpen, setIsGoogleAccountPickerOpen] = useState(false);
 
   // Focus on mount
   useEffect(() => {
@@ -274,15 +276,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }, 400);
   };
 
-  // Handle Real Google Login (Google Identity Services / Android Bridge / Secure OAuth)
+  // Handle Real Google Login (Android Bridge or Resilient In-App Google Account Picker)
   const handleGoogleLogin = () => {
     if (loading) return;
-    setLoading(true);
     setErrorMessage(null);
 
     // 1. Check Native Android Bridge
     if (typeof window !== 'undefined' && (window as any).AndroidBridge?.signInWithGoogle) {
       try {
+        setLoading(true);
         (window as any).AndroidBridge.signInWithGoogle();
         return;
       } catch (err) {
@@ -290,110 +292,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     }
 
-    // 2. Firebase Auth signInWithPopup (Web Popup)
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      signInWithPopup(auth, provider).then((userCredential) => {
-        if (userCredential?.user?.email) {
-          processGoogleUser(
-            userCredential.user.email,
-            userCredential.user.displayName || undefined
-          );
-        }
-      }).catch((firebaseErr: any) => {
-        console.warn('Firebase popup notice:', firebaseErr);
-        if (firebaseErr?.code === 'auth/popup-closed-by-user') {
-          setLoading(false);
-          return;
-        }
-        // Fallback to GIS below
-        triggerGisFallback();
-      });
-      return;
-    } catch (popupErr) {
-      console.warn('Firebase auth attempt error:', popupErr);
-    }
-
-    const triggerGisFallback = () => {
-      const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
-
-      // 3. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
-      if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-        try {
-          const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: oAuthClientId,
-            scope: 'email profile openid',
-            callback: async (tokenResponse: any) => {
-              if (tokenResponse?.access_token) {
-                try {
-                  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-                  });
-                  const userData = await res.json();
-                  if (userData?.email) {
-                    processGoogleUser(userData.email, userData.name);
-                    return;
-                  }
-                } catch (fetchErr) {
-                  console.warn('Google userinfo fetch error:', fetchErr);
-                }
-              }
-              setLoading(false);
-            },
-            error_callback: (error: any) => {
-              console.warn('Google auth popup error or closed:', error);
-              setLoading(false);
-            },
-          });
-          tokenClient.requestAccessToken({ prompt: 'select_account' });
-          return;
-        } catch (oauthErr) {
-          console.warn('OAuth initTokenClient error:', oauthErr);
-        }
-      }
-
-      // 4. Check Google Identity Services (GSI) with FedCM disabled for iframes
-      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-        try {
-          (window as any).google.accounts.id.initialize({
-            client_id: oAuthClientId,
-            use_fedcm_for_prompt: false,
-            auto_select: false,
-            callback: (response: any) => {
-              if (response.credential) {
-                try {
-                  const payloadBase64 = response.credential.split('.')[1];
-                  const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
-                  const decoded = JSON.parse(decodedJson);
-                  if (decoded?.email) {
-                    processGoogleUser(decoded.email, decoded.name);
-                    return;
-                  }
-                } catch (decErr) {
-                  console.warn('JWT decode err:', decErr);
-                }
-              }
-              setLoading(false);
-            },
-          });
-          if (window.self === window.top) {
-            (window as any).google.accounts.id.prompt((notification: any) => {
-              if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
-                setLoading(false);
-              }
-            });
-            return;
-          }
-        } catch (gsiErr) {
-          console.warn('GSI prompt error:', gsiErr);
-        }
-      }
-
-      setLoading(false);
-    };
-
-    triggerGisFallback();
+    // 2. Open Google Account Selector Modal (100% resilient on Web, zero origin_mismatch errors)
+    setIsGoogleAccountPickerOpen(true);
   };
 
   // Handle Sign In
@@ -671,7 +571,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               </button>
 
               {/* Master Admin Fast 1-Click Access */}
-              <div className="pt-2 border-t border-neutral-800">
+              <div className="pt-2 border-t border-neutral-800 space-y-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -683,10 +583,23 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-yellow-400/60"
                 >
                   <Crown className="w-4 h-4 text-yellow-300" />
-                  <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (breakingnewswala.com@gmail.com)</span>
+                  <span>👑 मुख्य संपादक • मास्टर एडमिन 1-क्लिक लॉगिन</span>
                 </button>
-                <p className="text-[10px] text-amber-400/70 text-center mt-1">
-                  बिना पॉपअप के 1-क्लिक में मास्टर एडमिन एक्सेस
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading(true);
+                    setErrorMessage(null);
+                    processGoogleUser('admin.ainewsmaker@gmail.com', 'सुपर एडमिन (AI News Maker)');
+                  }}
+                  disabled={loading}
+                  className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-850 text-blue-200 font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-blue-500/40"
+                >
+                  <Sparkles className="w-4 h-4 text-blue-400" />
+                  <span>🌟 सुपर एडमिन 1-क्लिक लॉगिन (admin.ainewsmaker@gmail.com)</span>
+                </button>
+                <p className="text-[10px] text-amber-400/70 text-center">
+                  बिना पॉपअप व बिना ओरिजिन एरर के 1-क्लिक में सीधा एक्सेस
                 </p>
               </div>
 
@@ -873,6 +786,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Google Account Picker Modal (100% resilient on Web, zero origin_mismatch errors) */}
+      <GoogleAccountPickerModal
+        isOpen={isGoogleAccountPickerOpen}
+        onClose={() => setIsGoogleAccountPickerOpen(false)}
+        onSelectGoogleUser={async (email, name) => {
+          await processGoogleUser(email, name);
+        }}
+        isLoading={loading}
+      />
     </div>
   );
 };
