@@ -2,7 +2,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.secrets)
 }
+
 
 android {
     namespace = "com.example"
@@ -36,6 +38,12 @@ android {
         buildConfig = true
     }
 }
+
+secrets {
+    propertiesFileName = ".env"
+    defaultPropertiesFileName = ".env.example"
+}
+
 
 dependencies {
     implementation(libs.androidx.core.ktx)

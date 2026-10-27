@@ -3,7 +3,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const TEST_PORT = 5178;
+const TEST_PORT = process.env.TEST_PORT || (5200 + Math.floor(Math.random() * 400));
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 function sleep(ms) {
@@ -464,7 +464,7 @@ async function runTests() {
     const testAdminConfig = {
       permissions: {
         regenerateHeadlines: {
-          allowedTiers: ['advanced', 'advance', 'pro', 'professional', 'vip', 'vip-dash', 'vip_dash', 'vip_desk'],
+          allowedTiers: ['ultra', 'vip', 'vip-dash', 'vip_dash', 'vip_desk', 'vip desk'],
           allowAllTiers: false,
         },
       },
@@ -479,7 +479,7 @@ async function runTests() {
     const getAiConfigBasicRes = await request('GET', '/api/ai-features-config?tier=basic');
     assert(
       getAiConfigBasicRes.body.canRegenerateHeadlines === false,
-      'Basic tier is correctly identified as not permitted when restricted to Pro/VIP'
+      'Basic tier is correctly identified as not permitted when restricted to VIP Desk'
     );
 
     const regenBlockedRes = await request('POST', '/api/regenerate-headlines', {
@@ -494,19 +494,20 @@ async function runTests() {
       'POST /api/regenerate-headlines returns 403 Forbidden for disallowed tier'
     );
 
-    // Verify Pro, Advanced, and VIP-Dash tiers are permitted
+    // Verify Pro and Advanced tiers are NOT permitted (User requirement: only VIP Desk permitted)
     const getAiConfigProRes = await request('GET', '/api/ai-features-config?tier=pro');
     assert(
-      getAiConfigProRes.body.canRegenerateHeadlines === true,
-      'Pro tier is permitted to regenerate headlines'
+      getAiConfigProRes.body.canRegenerateHeadlines === false,
+      'Pro tier is NOT permitted to regenerate headlines'
     );
 
     const getAiConfigAdvRes = await request('GET', '/api/ai-features-config?tier=advanced');
     assert(
-      getAiConfigAdvRes.body.canRegenerateHeadlines === true,
-      'Advanced tier is permitted to regenerate headlines'
+      getAiConfigAdvRes.body.canRegenerateHeadlines === false,
+      'Advanced tier is NOT permitted to regenerate headlines'
     );
 
+    // Verify VIP-Dash tier is permitted
     const getAiConfigVipRes = await request('GET', '/api/ai-features-config?tier=vip-dash');
     assert(
       getAiConfigVipRes.body.canRegenerateHeadlines === true,
@@ -523,7 +524,7 @@ async function runTests() {
     const initialHeadline = 'कानपुर में कालिंदी एक्सप्रेस को उड़ाने की साजिश नाकाम, ट्रैक पर मिला गैस सिलेंडर';
 
     const regenSuccessRes = await request('POST', '/api/regenerate-headlines', {
-      userTier: 'pro',
+      userTier: 'vip-dash',
       canonicalContext: testCanonicalContext,
       previousHeadlines: [initialHeadline],
     });
@@ -651,7 +652,7 @@ async function runTests() {
     assert(case2Res.status === 200 && case2Res.body.success === true, 'Real News Case 2 (Govt Decision) processed successfully');
     const c2Data = case2Res.body.data;
     assert(Array.isArray(c2Data.headlineOptions) && c2Data.headlineOptions.length >= 3, 'Case 2 returns clean headline options');
-    assert(!c2Data.headline.includes('माननीय') && !c2Data.headline.includes('जी'), 'Case 2 Anti-Flattery stripped honorifics');
+    assert(!c2Data.headline.includes('माननीय') && !/(?:^|\s)जी(?:\s|[।,.]|$)/.test(c2Data.headline), 'Case 2 Anti-Flattery stripped honorifics');
     assert(typeof c2Data.summary === 'string' && c2Data.summary.length > 0, 'Case 2 returns clean summary');
     assert(!c2Data.summary.includes('#breakingnewswala') && !c2Data.summary.includes('#BNWTV'), 'Case 2 does not include legacy hashtags');
 

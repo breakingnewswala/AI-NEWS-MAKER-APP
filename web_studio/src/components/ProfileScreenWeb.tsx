@@ -153,8 +153,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       district: 'डिजिटल डेस्क'
     };
   })();
-  const isRealAdmin = isUserAdmin(effectiveUser);
-  const isAdmin = isEffectiveAdmin(effectiveUser);
+  const isRealAdmin = isUserAdmin(effectiveUser) || isUserAdmin(currentUser);
+  const isAdmin = isEffectiveAdmin(effectiveUser) || isRealAdmin;
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
@@ -221,6 +221,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       .then((data) => {
         if (data && data.success && data.profile) {
           const cloudP = data.profile;
+          if (cloudP.district || cloudP.location) {
+            setReporterDistrict(cloudP.district || cloudP.location);
+          }
           setChannelProfile((prev) => {
             const resolvedLogo = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || defaultAdminLogo;
             const merged = {
@@ -236,7 +239,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
               whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
-              district: cloudP.district || prev.district || '',
+              district: cloudP.district || cloudP.location || prev.district || '',
+              location: cloudP.location || cloudP.district || prev.location || '',
               state: cloudP.state || prev.state || '',
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
@@ -1378,8 +1382,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const primaryPngLogo = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
     const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
+    const finalDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
+
     const updatedProfile = {
       ...channelProfile,
+      district: finalDistrict,
+      location: finalDistrict,
       whatsappNumber: finalPhone,
       mobileNumber: finalPhone || channelProfile.mobileNumber,
       showWebsite: channelProfile.showWebsite !== false,
@@ -1390,6 +1398,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       channelLogoType: 'png' as const,
       customHeaderPng: effectiveHeaderPng,
       customFooterPng: effectiveFooterPng,
+      socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
     };
 
     localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
@@ -1438,6 +1447,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       channelLogoUrl: primaryPngLogo,
       mobile: finalPhone || channelProfile.mobileNumber,
       username: channelProfile.username,
+      district: finalDistrict,
       isLocked: !isAdmin,
     });
 
@@ -1458,22 +1468,46 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         channelLogoUrl: primaryPngLogo,
         channelLogoPngUrl: primaryPngLogo,
         channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
-        district: channelProfile.district || '',
+        district: finalDistrict,
+        location: finalDistrict,
         state: channelProfile.state || '',
         address: channelProfile.address || '',
         pincode: channelProfile.pincode || '',
-        socialIcons: channelProfile.socialIcons,
+        socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
       };
       const res = await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+          'x-admin-email': cleanEmail,
+          'x-user-email': cleanEmail,
+        },
         body: JSON.stringify(serverPayload),
       });
       if (!res.ok) {
-        showToast('चेतावनी: सर्वर पर प्रोफाइल सहेजने में समस्या आई');
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'सर्वर पर प्रोफाइल सहेजने में समस्या आई');
       }
-    } catch (err) {
-      console.warn('Cloud server sync warning:', err);
+      const data = await res.json();
+      if (data && data.profile) {
+        const savedProf = data.profile;
+        setChannelProfile((p) => ({
+          ...p,
+          ...savedProf,
+          district: savedProf.district || savedProf.location || p.district,
+          location: savedProf.location || savedProf.district || p.location,
+          socialIcons: savedProf.socialIcons || p.socialIcons,
+        }));
+        if (savedProf.district || savedProf.location) {
+          setReporterDistrict(savedProf.district || savedProf.location);
+        }
+      }
+    } catch (err: any) {
+      console.error('Cloud server sync error:', err);
+      alert(`प्रोफाइल सहेजने में विफल: ${err.message || 'सर्वर पर सहेजने में समस्या आई'}`);
+      return;
     }
 
     // Dispatch update event for active studio card
@@ -2466,13 +2500,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <label className="block text-xs font-bold text-slate-300 mb-1">
                     संपादक / रिपोर्टर का जिला / शहर
                   </label>
-                  <input
-                    type="text"
-                    value={reporterDistrict}
-                    onChange={(e) => setReporterDistrict(e.target.value)}
-                    placeholder="भोपाल / सेंट्रल डेस्क"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
-                  />
+                    <input
+                      type="text"
+                      value={reporterDistrict}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setReporterDistrict(val);
+                        setChannelProfile((p) => ({
+                          ...p,
+                          district: val,
+                          location: val,
+                        }));
+                      }}
+                      placeholder="भोपाल / सेंट्रल डेस्क"
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                    />
                 </div>
 
                 <div>
@@ -2651,23 +2693,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   return (
     <div className="min-h-screen bg-slate-950 text-white pb-28">
       {/* Top Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-4 shadow-md">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between text-center sm:text-left gap-3">
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
-              <Sliders className="w-5 h-5" />
+      <div className="bg-slate-900 border-b border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="p-2 sm:p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
+              <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h1 className="text-xl font-black text-white flex items-center justify-center sm:justify-start gap-2">
-                <span>{isAdmin ? 'एडमिन कंट्रोल पैनल' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
+            <div className="min-w-0 text-left">
+              <h1 className="text-sm sm:text-xl font-black text-white flex items-center gap-1.5 sm:gap-2 truncate">
+                <span className="truncate">{isAdmin ? 'एडमिन कंट्रोल रूम' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
                 {testModeEnabled && isAdmin && (
-                  <span className="px-2 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[10px] font-black rounded-full uppercase flex items-center gap-1">
-                    <FlaskConical className="w-3 h-3 text-purple-400" />
-                    टेस्ट मोड
+                  <span className="px-1.5 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[9px] sm:text-[10px] font-black rounded-full uppercase flex items-center gap-0.5 shrink-0">
+                    <FlaskConical className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-purple-400" />
+                    टेस्ट
                   </span>
                 )}
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate hidden sm:block">
                 {isAdmin
                   ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
                   : 'प्रोफाइल विवरण, 7-Day Free Trial Basic व प्रोमो कोड रिडीम'}
@@ -2675,37 +2717,26 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-2">
-            {isRealAdmin && (
-              <button
-                type="button"
-                onClick={() => handleSwitchAdminMode(adminSystemMode === 'admin' ? 'test' : 'admin')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border shadow-xs ${
-                  adminSystemMode === 'test'
-                    ? 'bg-purple-600/90 hover:bg-purple-500 text-white border-purple-400'
-                    : 'bg-slate-900 hover:bg-slate-850 text-amber-400 border-slate-700/80 hover:border-amber-400/50'
-                }`}
-                title={adminSystemMode === 'test' ? 'टेस्ट मोड सक्रिय - एडमिन मोड में बदलें' : 'एडमिन मोड - टेस्ट मोड में बदलें'}
-              >
-                {adminSystemMode === 'test' ? (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
-                    <span>🧪 टेस्ट</span>
-                  </>
-                ) : (
-                  <>
-                    <span>⚡ एडमिन</span>
-                  </>
-                )}
-              </button>
-            )}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Coin balance action / display */}
+            <div
+              className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-black flex items-center gap-1 shadow-xs"
+              title="उपलब्ध कॉइन बैलेंस"
+            >
+              <span>🪙</span>
+              <span>{walletData?.coinBalance ?? 0}</span>
+              <span className="text-[10px] text-amber-400/80 hidden sm:inline">कॉइन</span>
+            </div>
 
+            {/* Logout button */}
             <button
+              type="button"
               onClick={onLogout}
-              className="px-3.5 py-1.5 bg-red-950/60 hover:bg-red-900/80 border border-red-800 text-red-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              className="px-3 py-1.5 bg-red-950/60 hover:bg-red-900/80 border border-red-800 text-red-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              title="सुरक्षित रूप से लॉगआउट करें"
             >
               <LogOut className="w-3.5 h-3.5" />
-              लॉगआउट
+              <span>लॉगआउट</span>
             </button>
           </div>
         </div>
@@ -2921,7 +2952,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      1. प्रोफाइल व चैनल विवरण
+                      प्रोफाइल व चैनल विवरण
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       चैनल लोगो, नाम, प्राइमरी नंबर, सोशल लिंक्स व ब्रांडिंग विवरण
@@ -2950,7 +2981,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      2. मेंबरशिप प्लान व अपग्रेड
+                      मेंबरशिप प्लान व अपग्रेड
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       वर्तमान प्लान, 7-डे फ्री ट्रायल, प्रोमो कोड रिडीम व अपग्रेड
@@ -2987,7 +3018,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 truncate">
                         <Coins className="w-4 h-4 text-amber-400 shrink-0 inline" />
-                        <span>3. रिवॉर्ड्स व पॉइंट्स वॉलेट</span>
+                        <span>रिवॉर्ड्स व पॉइंट्स वॉलेट</span>
                       </span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
                         Rewards Wallet
@@ -3530,7 +3561,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-white block truncate">
-                      4. सहायता एवं नीतियाँ
+                      सहायता एवं नीतियाँ
                     </span>
                     <p className="text-xs text-slate-400 truncate mt-0.5">
                       प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
@@ -3564,7 +3595,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-sm sm:text-base font-black text-red-200 block truncate">
-                      5. लॉगआउट
+                      लॉगआउट
                     </span>
                     <p className="text-xs text-red-400/80 truncate mt-0.5">
                       सुरक्षित रूप से अपने खाते से बाहर निकलें

@@ -43,7 +43,18 @@
         "channelLogoGifUrl": { "type": "string", "maxLength": 2000 },
         "channelLogoType": { "type": "string", "maxLength": 50 },
         "mobileNumber": { "type": "string", "maxLength": 50 },
+        "whatsappNumber": { "type": "string", "maxLength": 50 },
         "district": { "type": "string", "maxLength": 200 },
+        "location": { "type": "string", "maxLength": 200 },
+        "state": { "type": "string", "maxLength": 200 },
+        "address": { "type": "string", "maxLength": 500 },
+        "pincode": { "type": "string", "maxLength": 50 },
+        "websiteUrl": { "type": "string", "maxLength": 500 },
+        "socialIcons": { "type": "object" },
+        "showMobileNumber": { "type": "boolean" },
+        "showWebsite": { "type": "boolean" },
+        "customHeaderPng": { "type": "string", "maxLength": 2000 },
+        "customFooterPng": { "type": "string", "maxLength": 2000 },
         "avatarUrl": { "type": "string", "maxLength": 2000 },
         "photoUrl": { "type": "string", "maxLength": 2000 },
         "isLocked": { "type": "boolean" },
@@ -53,6 +64,43 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["uid", "email"]
+    },
+    "VideoItem": {
+      "title": "VideoItem",
+      "description": "Published news videos and reels",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 500 },
+        "caption": { "type": "string", "maxLength": 5000 },
+        "aspectRatio": { "type": "string", "maxLength": 50 },
+        "videoUrl": { "type": "string", "maxLength": 2000 },
+        "thumbnailUrl": { "type": "string", "maxLength": 2000 },
+        "duration": { "type": "string", "maxLength": 50 },
+        "channel": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "views": { "type": "string", "maxLength": 50 },
+        "isBonus": { "type": "boolean" },
+        "rewardCoins": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "title", "videoUrl"]
+    },
+    "RssSourceItem": {
+      "title": "RssSourceItem",
+      "description": "Configured RSS feeds and web article sources",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "url": { "type": "string", "maxLength": 1000 },
+        "type": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 100 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "url", "type"]
     },
     "DraftRecord": {
       "title": "DraftRecord",
@@ -94,6 +142,14 @@
     "/news_posts/{postId}": {
       "schema": { "$ref": "#/entities/NewsPost" },
       "description": "Collection of all news posts across channels"
+    },
+    "/videos/{videoId}": {
+      "schema": { "$ref": "#/entities/VideoItem" },
+      "description": "Collection of published news videos and reels"
+    },
+    "/rss_sources/{sourceId}": {
+      "schema": { "$ref": "#/entities/RssSourceItem" },
+      "description": "Collection of configured admin RSS feeds and web article sources"
     },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },

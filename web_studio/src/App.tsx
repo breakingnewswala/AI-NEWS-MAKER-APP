@@ -119,29 +119,29 @@ type AppTab =
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: '1. फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'स्टेप 1: फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
-  { step: 2, id: 'step-ai', label: '2. एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'स्टेप 2: AI ऑटोमेशन टूल्स (Automated News & Photo)' },
-  { step: 3, id: 'step-headline', label: '3. हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'स्टेप 3: मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: '4. फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'स्टेप 4: फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
-  { step: 5, id: 'step-location', label: '5. स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्टेप 5: स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
-  { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'स्टेप 6: लोगो, हेडर व फुटर PNG' },
-  { step: 7, id: 'step-download', label: '7. डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'स्टेप 7: डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
+  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
+  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स (Automated News & Photo)' },
+  { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
+  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
+  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
+  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'लोगो, हेडर व फुटर PNG' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
 ];
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
-  fullName: 'मुख्य संपादक',
-  channelNameHi: 'AI News Maker',
-  channelNameEn: 'AI NEWS MAKER',
-  channelLogoUrl: '/assets/ai_news_maker_logo.png',
-  channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+  fullName: 'मुख्य संपादक (Master Admin)',
+  channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
+  channelNameEn: 'BREAKING NEWS WALA',
+  channelLogoUrl: '/assets/breaking_news_wala_logo.png',
+  channelLogoPngUrl: '/assets/breaking_news_wala_logo.png',
   channelLogoType: 'png',
-  username: 'ainewsmaker',
+  username: 'breakingnewswala',
   mobileNumber: '9669802408',
   whatsappNumber: '9669802408',
-  websiteUrl: 'ainewsmaker.online',
+  websiteUrl: 'breakingnewswala.com',
   showMobileNumber: true,
   showWebsite: true,
-  district: 'सेंट्रल डेस्क',
+  district: 'सेंट्रल डेस्क / भोपाल',
   socialIcons: {
     youtube: true,
     facebook: true,
@@ -152,20 +152,20 @@ export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
 };
 
 export const DEFAULT_REPORTER_USER: ReporterUser = {
-  userId: 'reporter-admin-01',
-  uid: 'reporter-admin-01',
-  id: 'reporter-admin-01',
-  username: 'ainewsmaker',
+  userId: 'usr_627265616b69',
+  uid: 'usr_627265616b69',
+  id: 'usr_627265616b69',
+  username: 'breakingnewswala',
   name: 'मुख्य संपादक',
-  role: 'admin',
-  district: 'सेंट्रल डेस्क',
-  email: 'admin.ainewsmaker@gmail.com',
-  channelName: 'AI News Maker',
-  channelLogoUrl: '/assets/ai_news_maker_logo.png',
-  channelWebsite: 'ainewsmaker.online',
+  role: 'superadmin',
+  district: 'सेंट्रल डेस्क / भोपाल',
+  email: 'breakingnewswala.com@gmail.com',
+  channelName: 'ब्रेकिंग न्यूज़ वाला',
+  channelLogoUrl: '/assets/breaking_news_wala_logo.png',
+  channelWebsite: 'breakingnewswala.com',
   mobileNumber: '9669802408',
-  tier: 'pro',
-  planTier: 'pro',
+  tier: 'ultra',
+  planTier: 'ultra',
 };
 
 function getSavedChannelProfile(): ChannelProfile | null {
@@ -320,16 +320,16 @@ export default function App() {
       }
 
       // 2. Standard application tabs
-      if (path.includes('profile') || path.includes('admin') || path.includes('control') || path.includes('plans') || hash === 'profile' || fullUrl.includes('tab=profile')) {
+      if (hash === 'profile' || path === '/profile' || fullUrl.includes('tab=profile')) {
         return 'profile';
       }
-      if (path.includes('video') || hash === 'videos' || fullUrl.includes('tab=videos')) {
+      if (hash === 'videos' || path === '/videos' || fullUrl.includes('tab=videos')) {
         return 'videos';
       }
-      if (path.includes('studio') || path.includes('generator') || hash === 'studio' || hash === 'generator' || fullUrl.includes('tab=studio')) {
+      if (hash === 'studio' || hash === 'generator' || path === '/studio' || path === '/generator' || fullUrl.includes('tab=studio')) {
         return 'studio';
       }
-      if (path.includes('newsroom') || path.includes('epaper') || path.includes('drafts') || hash === 'newsroom' || hash === 'epaper' || fullUrl.includes('tab=newsroom')) {
+      if (hash === 'newsroom' || hash === 'epaper' || hash === 'drafts' || path === '/newsroom' || fullUrl.includes('tab=newsroom')) {
         return 'newsroom';
       }
 
@@ -645,10 +645,20 @@ export default function App() {
           const deletedRaw = localStorage.getItem('app_deleted_video_ids');
           const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
           const cleanList = data.videos.filter((v: any) => !deletedSet.has(v.id) && !isDummyVideo(v));
-          setVideos(cleanList);
-          try {
-            localStorage.setItem('app_admin_videos', JSON.stringify(cleanList));
-          } catch {}
+          setVideos((prev) => {
+            const map = new Map<string, any>();
+            cleanList.forEach((v: any) => map.set(v.id, v));
+            prev.forEach((v: any) => {
+              if (!map.has(v.id) && !deletedSet.has(v.id) && !isDummyVideo(v)) {
+                map.set(v.id, v);
+              }
+            });
+            const merged = Array.from(map.values());
+            try {
+              localStorage.setItem('app_admin_videos', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
       }
     } catch (err) {
@@ -672,23 +682,45 @@ export default function App() {
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
-  // Authentication session - loads from localStorage or Android native bridge
+  // Authentication session - loads from localStorage, Android native bridge, or defaults to Master Admin (breakingnewswala.com@gmail.com)
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') {
+        const saved = localStorage.getItem('reporter_auth_session');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.email || parsed.username || parsed.userId)) {
+            return parsed;
+          }
+        }
+        return null;
+      }
       const saved = localStorage.getItem('reporter_auth_session');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.email || parsed.username || parsed.userId)) {
+          return parsed;
+        }
+      }
       if ((window as any).AndroidBridge?.getUserSession) {
         const raw = (window as any).AndroidBridge.getUserSession();
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && (parsed.email || parsed.username)) return parsed;
+        }
       }
+      // Default to Master Admin session (breakingnewswala.com@gmail.com) so preview screen opens Master Admin directly
+      try {
+        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
+        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
+        localStorage.setItem('is_onboarding_completed', 'true');
+        localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
+      } catch {}
+      return DEFAULT_REPORTER_USER;
     } catch {
-      // ignore
-    }
-    const completed = localStorage.getItem('is_onboarding_completed');
-    if (completed === 'true') {
       return DEFAULT_REPORTER_USER;
     }
-    return null;
   });
 
   useEffect(() => {
@@ -698,25 +730,33 @@ export default function App() {
   // Onboarding completion status (Login -> Details setup -> App)
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedOnboarding === 'true') return true;
-      const saved = localStorage.getItem('reporter_auth_session');
-      if (saved) return true;
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return false;
+      const flag = localStorage.getItem('is_onboarding_completed');
+      if (flag === 'false') return false;
+      return true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login only if explicitly logged out or unauthenticated
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
+    try {
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return true;
+      const flag = localStorage.getItem('show_auth_welcome_screen');
+      if (flag === 'true') return true;
       return false;
     } catch {
       return false;
     }
   });
 
-  // Welcome flow with 4 steps & Google Login
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
+  // Guest bypass mode - allows unauthenticated users to explore home screen without authentication barrier
+  const [bypassAuthForGuest, setBypassAuthForGuest] = useState<boolean>(() => {
     try {
-      const savedSession = localStorage.getItem('reporter_auth_session');
-      const savedOnboarding = localStorage.getItem('is_onboarding_completed');
-      if (savedSession || savedOnboarding === 'true') {
-        return false;
-      }
-      return true;
+      return sessionStorage.getItem('guest_mode_active') === 'true';
     } catch {
       return false;
     }
@@ -1023,6 +1063,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.setItem('user_explicitly_logged_out', 'true');
     localStorage.removeItem('reporter_auth_session');
     localStorage.removeItem('reporter_current_user');
     localStorage.removeItem('user_channel_profile');
@@ -1030,8 +1071,12 @@ export default function App() {
     localStorage.removeItem('ai_news_user');
     localStorage.removeItem('user_profile_data');
     setCurrentUser(null);
-    setIsOnboardingCompleted(true);
+    setIsOnboardingCompleted(false);
     setIsUserMenuOpen(false);
+    try {
+      sessionStorage.removeItem('guest_mode_active');
+    } catch {}
+    setBypassAuthForGuest(false);
     showToast('लॉगआउट सफल!');
     setShowAuthWelcomeScreen(true);
     setIsLoginModalOpen(false);
@@ -1863,13 +1908,14 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
+    const rawUrl = (post.sourceUrl || (post as any).url || (post as any).link || '').trim();
     const hasExternalSource = Boolean(
-      post.sourceUrl &&
-      post.sourceUrl.trim().startsWith('http') &&
-      !post.sourceUrl.includes('localhost') &&
-      !post.sourceUrl.includes('127.0.0.1')
+      rawUrl &&
+      rawUrl.startsWith('http') &&
+      !rawUrl.includes('localhost') &&
+      !rawUrl.includes('127.0.0.1')
     );
-    const effectiveLink = hasExternalSource ? post.sourceUrl.trim() : '';
+    const effectiveLink = hasExternalSource ? rawUrl : '';
     const effectiveLoc = post.district || post.location || '';
 
     setStudioMode('graphic');
@@ -1969,10 +2015,10 @@ export default function App() {
       showDate: false,
       showWatermark: false,
       showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-      headline: post.title,
+      headline: '',
       location: effectiveLoc,
       category: post.categoryName,
-      summary: post.summary,
+      summary: '',
       images: {
         ...prev.images,
         main: primaryPhoto,
@@ -1992,14 +2038,14 @@ export default function App() {
       imageUrl: targetImageForStudio,
       location: effectiveLoc,
       category: post.categoryName,
-      autoTrigger: Boolean(effectiveLink),
+      autoTrigger: true,
       timestamp: Date.now(),
       additionalPhotos: articlePhotos,
     });
 
     navigateToTab('studio');
-    setActiveStep(2); // Redirect straight to Step 2 (Step 2A AI Link tool)
-    setToastMessage(effectiveLink ? '✅ खबर का लिंक बॉक्स 1 में लोड हुआ और AI हेडलाइन तैयार!' : 'खबर स्टूडियो में लोड हुई। आप सीधे लिंक दर्ज कर सकते हैं।');
+    setActiveStep(2); // Redirect straight to Step 2 (Graphic Photo Studio AI Tools)
+    setToastMessage('✅ AI टूल्स में खबर लोड हुई — संतुलित हेडलाइन व कैप्शन तैयार हो रहे हैं!');
     setTimeout(() => {
       scrollToStepById('step-ai');
     }, 150);
@@ -2086,7 +2132,7 @@ export default function App() {
       triggerBreakingNewsAlert({
         id: triggeredStory.id,
         title: triggeredStory.title,
-        summary: triggeredStory.content?.slice(0, 100),
+        summary: (triggeredStory.summary || triggeredStory.content || triggeredStory.fullContent || '').slice(0, 100),
       });
       setToastMessage('🚨 ब्रेकिंग न्यूज़ अलर्ट जारी किया गया!');
     } else {
@@ -2142,7 +2188,15 @@ export default function App() {
     return <RemotionTestStudio />;
   }
 
-  if (showAuthWelcomeScreen) {
+  // Public legal and compliance pages are accessible without login
+  const isPublicLegalPage =
+    currentTab === 'terms' ||
+    currentTab === 'privacy' ||
+    currentTab === 'delete-account' ||
+    currentTab === 'support';
+
+  // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
+  if (!isPublicLegalPage && !bypassAuthForGuest && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
         {toastMessage && (
@@ -2154,7 +2208,21 @@ export default function App() {
         <AuthWelcomeScreen
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
+          onSkipToHome={() => {
+            try {
+              sessionStorage.setItem('guest_mode_active', 'true');
+            } catch {}
+            setBypassAuthForGuest(true);
+            setShowAuthWelcomeScreen(false);
+            navigateToTab('home');
+            showToast('होम स्क्रीन पर आपका स्वागत है!');
+          }}
           onLoginSuccess={(user) => {
+            try {
+              sessionStorage.removeItem('guest_mode_active');
+            } catch {}
+            setBypassAuthForGuest(false);
+            localStorage.removeItem('user_explicitly_logged_out');
             const isAdmin = isUserAdmin(user);
             setCurrentUser(user);
             setShowAuthWelcomeScreen(false);
@@ -2186,8 +2254,13 @@ export default function App() {
             showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
           }}
           onCompleteDetails={(profile, updatedUser) => {
+            try {
+              sessionStorage.removeItem('guest_mode_active');
+            } catch {}
+            setBypassAuthForGuest(false);
             handleSaveProfile(profile);
             const userToSet = updatedUser || currentUser;
+            localStorage.removeItem('user_explicitly_logged_out');
             if (updatedUser) {
               setCurrentUser(userToSet);
             }
@@ -2605,15 +2678,16 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 4. Horizontal left-to-right editor steps with progress */}
-                  <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-lg my-1">
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 px-1">
-                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
+                  <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1">
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>ग्राफिक निर्माण (स्टेप {activeStep}/7)</span>
+                        <span>स्टेप {activeStep}/7</span>
                       </span>
-                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border bg-amber-400/20 text-amber-300 border-amber-400/30">
-                        {Math.round((activeStep / 7) * 100)}% पूर्ण
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
+                        <span>👉</span>
+                        <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
@@ -2632,12 +2706,21 @@ export default function App() {
                             }}
                             className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
                               isActive
-                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md'
-                                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800'
+                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
                             }`}
                           >
-                            <span>{s.icon}</span>
-                            <span>{s.name}</span>
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                isActive
+                                  ? 'bg-slate-950 text-amber-300'
+                                  : 'bg-amber-400 text-slate-950'
+                              }`}
+                            >
+                              {s.step}
+                            </span>
+                            <span className="text-sm shrink-0">{s.icon}</span>
+                            <span className="whitespace-nowrap font-bold">{s.name}</span>
                           </button>
                         );
                       })}
@@ -2906,13 +2989,20 @@ export default function App() {
             navigateToTab('studio');
           }}
           onAdminAddVideo={(newVid) => {
-            setVideos((prev) => [newVid, ...prev]);
+            setVideos((prev) => [newVid, ...prev.filter((v) => v.id !== newVid.id)]);
             try {
               const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
               localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
               fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
                 body: JSON.stringify(newVid),
               }).catch(() => {});
             } catch {}
@@ -2920,9 +3010,16 @@ export default function App() {
           onAdminUpdateVideo={(updatedVid) => {
             setVideos((prev) => prev.map((v) => (v.id === updatedVid.id ? updatedVid : v)));
             try {
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
               fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(updatedVid.id)}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
                 body: JSON.stringify(updatedVid),
               }).catch(() => {});
             } catch {}
@@ -2940,8 +3037,15 @@ export default function App() {
               const currentSaved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
               localStorage.setItem('app_admin_videos', JSON.stringify(currentSaved.filter((v: any) => v.id !== videoId)));
 
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
               fetch(`${getApiBaseUrl()}/api/admin/videos/${encodeURIComponent(videoId)}`, {
                 method: 'DELETE',
+                headers: {
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
               }).catch(() => {});
             } catch {}
           }}

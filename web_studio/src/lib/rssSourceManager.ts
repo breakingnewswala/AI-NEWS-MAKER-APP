@@ -168,14 +168,14 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
   }
 
   // Persist permanently to backend database with auto-retry
-  fetch(getApiUrl('/api/admin/rss-sources'), {
+  fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-user-role': 'admin',
       ...getAdminAuthHeaders(),
     },
-    body: JSON.stringify({ sources: cleaned, userRole: 'admin' }),
+    body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
   })
     .then((res) => res.json())
     .then((data) => {

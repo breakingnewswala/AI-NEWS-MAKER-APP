@@ -165,12 +165,27 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       setResult(data.data);
       const opts: string[] =
         data.data.headlineOptions && data.data.headlineOptions.length > 0
-          ? data.data.headlineOptions
+          ? [...data.data.headlineOptions]
           : [data.data.headline];
-      if (!opts.includes(data.data.headline)) {
+      if (data.data.headline && !opts.includes(data.data.headline)) {
         opts.unshift(data.data.headline);
       }
-      setHeadlineOptions(opts);
+      if (opts.length < 5) {
+        const baseTitle = cleanHeadlineText(opts[0] || data.data.headline || 'ताज़ा समाचार');
+        const sourceText = data.data.summary || inputPayload || '';
+        const sourceLoc = cleanLocationField(data.data.location || '');
+        const factSentences = (sourceText || baseTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+        const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+        fitted.forEach((h) => {
+          if (opts.length < 5 && !opts.includes(h)) opts.push(h);
+        });
+      }
+      setHeadlineOptions(opts.slice(0, 5));
       setSelectedHeadlineIndex(0);
       setAiPhotoVariation(0);
 
@@ -203,7 +218,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           return;
         }
 
-        const fallbackResult = processNewsLocally(fallbackText || urlPayload, urlPayload || undefined);
+        const fallbackResult = processNewsLocally(fallbackText || urlPayload || '', urlPayload || undefined);
         setResult(fallbackResult);
         const opts = fallbackResult.headlineOptions && fallbackResult.headlineOptions.length > 0
           ? fallbackResult.headlineOptions

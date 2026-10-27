@@ -22,7 +22,7 @@ import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
-import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
+import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges, fitSingleHeadlineToTier } from '../lib/speakerUtils';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
 import { scrapeNewsUrlClient } from '../lib/clientScraper';
@@ -158,8 +158,13 @@ export function cleanAiToolsMemory(): void {
     try {
       sessionStorage.removeItem('ai_news_auto_triggered_keys');
     } catch {}
+    globalIsExecuting = false;
+    globalActiveTriggerKey = '';
   } catch {}
 }
+
+let globalIsExecuting = false;
+let globalActiveTriggerKey = '';
 
 export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   card,
@@ -173,6 +178,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 }) => {
   const isAdminOrSuperAdmin = isUserAdmin(currentUser) || isUserSuperAdmin(currentUser);
   const userPlan = (currentUser?.package || currentUser?.role || currentUser?.tier || 'basic').toLowerCase().trim();
+  const isVipDeskUser = Boolean(
+    isAdminOrSuperAdmin ||
+    ['ultra', 'vip_dash', 'vip-dash', 'vip', 'vip_desk', 'vip desk'].includes(userPlan) ||
+    ((currentUser as any)?.planName && String((currentUser as any).planName).toUpperCase().includes('VIP'))
+  );
   const canUseOpenAi = ['pro', 'professional', 'vip_dash', 'vip-dash', 'ultra', 'vip desk', 'admin', 'superadmin'].includes(userPlan) || isAdminOrSuperAdmin;
 
   // Restore previous session from localStorage so headlines are preserved across view/tab changes
@@ -256,12 +266,33 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     card.sourceNewsId ||
     (autoFillNews && (autoFillNews.newsId || autoFillNews.autoTrigger))
   );
+  const [isManualInputMode, setIsManualInputMode] = useState<boolean>(false);
   const isExecutingRef = React.useRef<boolean>(false);
   const activeRequestIdRef = React.useRef<number>(0);
   const activeNewsIdRef = React.useRef<string>('');
   const lastTriggerPayloadRef = React.useRef<string>('');
   const currentAbortControllerRef = React.useRef<AbortController | null>(null);
   const isResetRef = React.useRef<boolean>(false);
+
+  // Progressive Loading Stages for News Processing
+  const [loadingStageIndex, setLoadingStageIndex] = useState<number>(0);
+  const loadingStages = [
+    'मूल समाचार स्रोत और तथ्यों का विश्लेषण किया जा रहा है...',
+    'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
+    '5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन तैयार हो रहे हैं...',
+    'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+  ];
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStageIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setLoadingStageIndex((prev) => (prev + 1) % 4);
+    }, 850);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   // Synchronize state changes to localStorage so navigation across tabs preserves generated headlines
   useEffect(() => {
@@ -314,9 +345,32 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setError(null);
       setAiPhotoPrompt('');
       lastTriggerPayloadRef.current = '';
+      globalIsExecuting = false;
+      globalActiveTriggerKey = '';
     };
     window.addEventListener('ai_news_studio_reset', handleStudioReset);
     return () => window.removeEventListener('ai_news_studio_reset', handleStudioReset);
+  }, []);
+
+  // Synchronize state across desktop and mobile component instances
+  useEffect(() => {
+    const handleStateSynced = (e: any) => {
+      const d = e?.detail;
+      if (!d) return;
+      setLoading(false);
+      isExecutingRef.current = false;
+      globalIsExecuting = false;
+      if (d.result) setResult(d.result);
+      if (d.headlineOptions) setHeadlineOptions(d.headlineOptions);
+      if (typeof d.selectedHeadlineIndex === 'number') setSelectedHeadlineIndex(d.selectedHeadlineIndex);
+      if (d.linkUrl !== undefined) setLinkUrl(d.linkUrl);
+      if (d.inputText !== undefined) setInputText(d.inputText);
+      if (d.activeGeneratedProvider) setActiveGeneratedProvider(d.activeGeneratedProvider);
+      if (d.error) setError(d.error);
+      else setError(null);
+    };
+    window.addEventListener('ai_tools_state_synced', handleStateSynced);
+    return () => window.removeEventListener('ai_tools_state_synced', handleStateSynced);
   }, []);
 
   // Auto-detect available AI providers on mount (seamless failover to OpenAI if available)
@@ -344,9 +398,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const buildFiveStoryOptions = (
     existing: string[],
     baseH: string = '',
-    _summaryText: string = '',
-    _locationText: string = '',
-    _sourceTitle: string = ''
+    summaryText: string = '',
+    locationText: string = '',
+    sourceTitle: string = ''
   ): string[] => {
     const combined: string[] = [];
     if (existing && Array.isArray(existing)) {
@@ -357,8 +411,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
       }
     }
-    if (combined.length === 0 && baseH) {
-      combined.push(cleanHeadlineText(baseH).replace(/[।\.\,\!\?\:\-]+$/g, '').trim());
+    const prime = cleanHeadlineText(combined[0] || baseH || sourceTitle || 'ताज़ा समाचार').replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+    if (combined.length === 0 && prime) {
+      combined.push(prime);
+    }
+    if (combined.length < 5) {
+      const factSentences = (summaryText || prime)
+        .split(/[।\n]+|\.\s+/)
+        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      const supp = generate5BalancedHeadlineOptions(prime, factSentences, locationText);
+      const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, prime, locationText);
+      for (const f of fitted) {
+        if (combined.length >= 5) break;
+        if (!combined.includes(f)) combined.push(f);
+      }
+    }
+    let seedIdx = 1;
+    while (combined.length < 5) {
+      const backup = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${prime}`, 150);
+      if (!combined.includes(backup)) {
+        combined.push(backup);
+      }
+      seedIdx++;
     }
     return combined.slice(0, 5);
   };
@@ -468,6 +543,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setError(null);
       setCaptionCopied(false);
       lastTriggerPayloadRef.current = '';
+      setResult(null);
+      setHeadlineOptions([]);
+      setSelectedHeadlineIndex(0);
+      setGeneratedAiImageUrl(null);
     }
     activeNewsIdRef.current = currentNewsId;
 
@@ -488,6 +567,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setActiveTab('command');
       setLinkUrl('');
     }
+    setIsManualInputMode(false);
     
     setInputText(rawContent);
     setError(null);
@@ -514,11 +594,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     // Only auto-trigger once per triggerKey. If already triggered or if headlines already exist for this session, DO NOT re-trigger!
     if (autoFillNews.autoTrigger && !isAlreadyTriggered) {
+      if (globalActiveTriggerKey === triggerKey && globalIsExecuting) {
+        return;
+      }
+      globalActiveTriggerKey = triggerKey;
+      globalIsExecuting = true;
       try {
         processedKeys.push(triggerKey);
         sessionStorage.setItem('ai_news_auto_triggered_keys', JSON.stringify(processedKeys.slice(-20)));
       } catch {}
       autoFillNews.autoTrigger = false;
+      setLoading(true);
+      setResult(null);
+      setHeadlineOptions([]);
+      setSelectedHeadlineIndex(0);
       triggerProcessDirectly(effectiveTargetUrl, rawContent, autoFillNews);
     }
   }, [autoFillNews]);
@@ -576,7 +665,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
 
     const payloadKey = `${effectiveLink}|${effectiveText}|${extraData?.timestamp || ''}`;
-    if (lastTriggerPayloadRef.current === payloadKey && isExecutingRef.current) {
+    if ((lastTriggerPayloadRef.current === payloadKey && isExecutingRef.current) || (globalActiveTriggerKey === payloadKey && globalIsExecuting && lastTriggerPayloadRef.current === payloadKey)) {
       return;
     }
     const requestId = ++activeRequestIdRef.current;
@@ -587,6 +676,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       currentAbortControllerRef.current = null;
     }
     isExecutingRef.current = true;
+    globalIsExecuting = true;
+    globalActiveTriggerKey = payloadKey;
     lastTriggerPayloadRef.current = payloadKey;
     if (extraData?.timestamp) {
       lastProcessedTimeRef.current = extraData.timestamp;
@@ -677,7 +768,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         } catch {}
       }
 
-      const opts: string[] = [];
+      let opts: string[] = [];
       if (Array.isArray(res.headlineOptions) && res.headlineOptions.length > 0) {
         res.headlineOptions.forEach((h: string) => {
           const cleanH = cleanHeadlineText(h);
@@ -688,13 +779,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(res.headline);
         if (cleanMain && !opts.includes(cleanMain)) {
           if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
-            opts.push(cleanMain);
+            opts.unshift(cleanMain);
           }
         }
       }
 
       if (opts.length === 0 && res.headline) {
         opts.push(cleanHeadlineText(res.headline));
+      }
+
+      if (opts.length < 5) {
+        const baseTitle = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
+        const sourceText = extraData?.fullNews || extraData?.summary || res.summary || '';
+        const sourceLoc = cleanLocationField(res.location || extraData?.location || '');
+        const factSentences = (sourceText || baseTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+        const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+        fitted.forEach((h) => {
+          if (opts.length < 5 && !opts.includes(h)) opts.push(h);
+        });
       }
       setHeadlineOptions(opts.slice(0, 5));
       setSelectedHeadlineIndex(0);
@@ -748,7 +855,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        extraData?.summary || res.summary || '',
+        res.captionDetailed || res.summary || extraData?.summary || '',
         res,
         effectiveLink || url
       );
@@ -774,6 +881,22 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
       setLoading(false);
       isExecutingRef.current = false;
+      globalIsExecuting = false;
+
+      // Broadcast state to keep mobile and desktop editor instances in 100% lockstep
+      window.dispatchEvent(
+        new CustomEvent('ai_tools_state_synced', {
+          detail: {
+            result: res,
+            headlineOptions: opts.slice(0, 5),
+            selectedHeadlineIndex: 0,
+            linkUrl: effectiveLink || url,
+            inputText: effectiveText,
+            activeGeneratedProvider: (data.data?.actualProvider as ('gemini' | 'openai')) || aiProvider,
+            error: null,
+          },
+        })
+      );
     } catch (err: any) {
       if (
         isResetRef.current ||
@@ -782,12 +905,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       ) {
         setLoading(false);
         isExecutingRef.current = false;
+        globalIsExecuting = false;
         return;
       }
       if (aiProvider === 'openai') {
-        setError(err.message || 'चैट जीपीटी (OpenAI) से विश्लेषण विफल रहा। कृपया API कुंजी या नेटवर्क की जाँच करें।');
+        const errorMsg = err.message || 'चैट जीपीटी (OpenAI) से विश्लेषण विफल रहा। कृपया API कुंजी या नेटवर्क की जाँच करें।';
+        setError(errorMsg);
         setLoading(false);
         isExecutingRef.current = false;
+        globalIsExecuting = false;
+        window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
         return;
       }
       console.warn('API error, executing client AI fallback:', err);
@@ -810,9 +937,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
 
       if (effectiveLink && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
-        setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।');
+        const errorMsg = 'इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।';
+        setError(errorMsg);
         setLoading(false);
         isExecutingRef.current = false;
+        globalIsExecuting = false;
+        window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
         return;
       }
 
@@ -834,7 +964,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         const cleanMain = cleanHeadlineText(fallbackResult.headline);
         if (cleanMain && !opts.includes(cleanMain)) {
           if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
-            opts.push(cleanMain);
+            opts.unshift(cleanMain);
           }
         }
       }
@@ -868,7 +998,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionStyle,
         finalHeadline,
         finalLoc,
-        extraData?.summary || fallbackResult.summary || '',
+        fallbackResult.captionDetailed || fallbackResult.summary || extraData?.summary || '',
         fallbackResult,
         effectiveLink || url
       );
@@ -896,9 +1026,24 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
       }
+
+      window.dispatchEvent(
+        new CustomEvent('ai_tools_state_synced', {
+          detail: {
+            result: fallbackResult,
+            headlineOptions: finalOpts.slice(0, 5),
+            selectedHeadlineIndex: 0,
+            linkUrl: effectiveLink || url,
+            inputText: effectiveText,
+            activeGeneratedProvider: 'gemini',
+            error: null,
+          },
+        })
+      );
     } finally {
       setLoading(false);
       isExecutingRef.current = false;
+      globalIsExecuting = false;
     }
   };
 
@@ -998,15 +1143,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setResult(res);
       setActiveGeneratedProvider((data.data?.actualProvider as ('gemini' | 'openai')) || effectiveProvider);
 
-      const rawOpts: string[] = [];
+      let rawOpts: string[] = [];
       if (Array.isArray(res.headlineOptions) && res.headlineOptions.length > 0) {
         res.headlineOptions.forEach((h: string) => {
           const cleanH = cleanHeadlineText(h);
           if (cleanH && !rawOpts.includes(cleanH)) rawOpts.push(cleanH);
         });
       }
+      if (res.headline) {
+        const cleanMain = cleanHeadlineText(res.headline);
+        if (cleanMain && !rawOpts.includes(cleanMain)) {
+          if (!rawOpts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
+            rawOpts.unshift(cleanMain);
+          }
+        }
+      }
       if (rawOpts.length === 0 && res.headline) {
         rawOpts.push(cleanHeadlineText(res.headline));
+      }
+
+      if (rawOpts.length < 5) {
+        const baseTitle = cleanHeadlineText(rawOpts[0] || res.headline || 'ताज़ा समाचार');
+        const sourceText = res.summary || inputText || '';
+        const sourceLoc = cleanLocationField(res.location || '');
+        const factSentences = (sourceText || baseTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+        const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+        fitted.forEach((h) => {
+          if (rawOpts.length < 5 && !rawOpts.includes(h)) rawOpts.push(h);
+        });
       }
       setHeadlineOptions(rawOpts.slice(0, 5));
       setSelectedHeadlineIndex(0);
@@ -1182,22 +1351,39 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
       }
     }
+    const updatedCaption = formatCaptionByStyle(
+      captionStyle,
+      cleanOpt,
+      result?.location || card.location || '',
+      result?.summary || card.summary || '',
+      result || undefined,
+      linkUrl
+    );
     if (result) {
       setResult({
         ...result,
         headline: cleanOpt,
         formattedHeadline: formatted,
+        summary: updatedCaption,
       });
     }
     onChange({
       headline: cleanOpt,
       formattedHeadline: formatted,
+      summary: updatedCaption,
     });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(updatedCaption).catch(() => {});
+    }
   };
 
   // Regenerate 5 brand new headline options from the same canonical news context
   const handleRegenerateHeadlines = async () => {
     if (isRegenerating || loading) return;
+    if (!isVipDeskUser) {
+      setError('अतिरिक्त हेडलाइन रीजेनरेशन केवल VIP DESK व अधिकृत एडमिन के लिए उपलब्ध है।');
+      return;
+    }
     if (aiProvider === 'openai' && !canUseOpenAi) {
       setError('यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।');
       return;
@@ -1403,19 +1589,38 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   return (
     <div className="space-y-3 relative">
-      {/* Full Blocking Loading Overlay */}
+      {/* Dedicated Viewport-Centered Loading Modal ("खबर जनरेट हो रही है, वेट करें") */}
       {loading && (
-        <div className="absolute inset-0 z-50 bg-neutral-950/90 backdrop-blur-sm rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in">
-          <div className="relative">
-            <Loader2 className="w-12 h-12 text-yellow-400 animate-spin" />
-            <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-pulse" />
-          </div>
-          <div className="space-y-1.5 max-w-md">
-            <h4 className="text-base font-black text-white">
-              मूल समाचार पढ़ा और सत्यापित किया जा रहा है... कृपया प्रतीक्षा करें
-            </h4>
-            <p className="text-xs text-neutral-300">
-              स्रोत आलेख का विश्लेषण कर 5 संतुलित हेडलाइन्स व सोशल मीडिया कैप्शन तैयार किए जा रहे हैं
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-neutral-900 border-2 border-amber-500/60 rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in zoom-in-95">
+            {/* Spinning glowing circular indicator */}
+            <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-amber-500/20 animate-ping" />
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-500/60 flex items-center justify-center shadow-lg">
+                <Loader2 className="w-9 h-9 text-yellow-400 animate-spin" />
+              </div>
+              <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-bounce" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-xl font-black text-white font-['Baloo_2'] tracking-wide">
+                अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...
+              </h3>
+              <p className="text-xs sm:text-sm text-amber-300 font-semibold min-h-[36px] flex items-center justify-center transition-all px-2">
+                {loadingStages[loadingStageIndex]}
+              </p>
+            </div>
+
+            {/* Smooth progress bar */}
+            <div className="w-full bg-neutral-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-amber-500 to-yellow-400 h-2 rounded-full animate-pulse transition-all duration-700"
+                style={{ width: `${Math.min(100, (loadingStageIndex + 1) * 25)}%` }}
+              />
+            </div>
+
+            <p className="text-[11px] text-neutral-400">
+              ⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा
             </p>
           </div>
         </div>
@@ -1542,6 +1747,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               setGeneratedAiImageUrl(null);
               setError(null);
               setAiPhotoPrompt('');
+              setIsManualInputMode(false);
               if ((window as any).showAppToast) {
                 (window as any).showAppToast('AI टूल्स की मेमोरी और डेटा पूरी तरह साफ़ कर दिया गया है।');
               }
@@ -1555,8 +1761,321 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       </div>
 
-      {/* Loading state indicator */}
-      {loading && !result && (
+      {/* 1. Automated Home-to-AI Workflow Loading Screen: Hides Box 1, Box 2, pasted URL, generation buttons, and stale headlines */}
+      {isAutomatedEntry && (loading || (Boolean(autoFillNews?.autoTrigger) && !result)) && (
+        <div className="bg-gradient-to-b from-slate-900 to-neutral-950 border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-2xl animate-in fade-in my-2">
+          <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping" />
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
+              <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+            </div>
+          </div>
+          <div className="space-y-2 max-w-lg mx-auto">
+            <p className="text-sm sm:text-base font-bold text-amber-200 leading-relaxed font-['Noto_Sans_Devanagari']">
+              कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर पाँच संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।
+            </p>
+          </div>
+          <div className="pt-2 flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>AI न्यूज़ मेकर संपादकीय विश्लेषण • 5 संतुलित हेडलाइन विकल्प</span>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Automated Workflow Error Screen (if fetch fails before result) */}
+      {isAutomatedEntry && !loading && error && !result && !isManualInputMode && (
+        <div className="p-4 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-xs sm:text-sm flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
+            <span>{error}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (autoFillNews) {
+                  triggerProcessDirectly(autoFillNews.url || linkUrl, autoFillNews.fullNews || autoFillNews.summary || inputText, autoFillNews);
+                } else {
+                  handleProcess();
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>पुनः प्रयास करें</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsManualInputMode(true)}
+              className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs cursor-pointer"
+            >
+              मैन्युअल इनपुट खोलें
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Automated Entry Top Bar (when result is present and manual inputs are collapsed) */}
+      {isAutomatedEntry && !loading && result && !isManualInputMode && (
+        <div className="flex items-center justify-between text-xs px-3 py-2 bg-neutral-900/80 rounded-xl border border-neutral-800">
+          <div className="flex items-center gap-1.5 text-amber-300 font-medium text-xs">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>होम फ़ीड से लोड की गई खबर</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsManualInputMode(true)}
+            className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+          >
+            <span>✏️ मैन्युअल इनपुट बॉक्स दिखाएँ</span>
+          </button>
+        </div>
+      )}
+
+      {/* 4. Normal / Manual Input Workflow (Visible when NOT automated or when manually toggled) */}
+      {(!isAutomatedEntry || isManualInputMode) && !loading && (
+        <div className="space-y-3">
+          {isAutomatedEntry && isManualInputMode && (
+            <div className="flex items-center justify-between text-xs pb-1">
+              <span className="text-[11px] text-neutral-400">मैन्युअल इनपुट मोड सक्रिय</span>
+              <button
+                type="button"
+                onClick={() => setIsManualInputMode(false)}
+                className="text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer underline"
+              >
+                ▲ इनपुट बॉक्स छिपाएँ
+              </button>
+            </div>
+          )}
+
+          {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
+          <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
+            <button
+              type="button"
+              disabled={loading || isRegenerating}
+              onClick={() => {
+                setActiveTab('link');
+                setError(null);
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                activeTab === 'link'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+              }`}
+            >
+              <LinkIcon className="w-3.5 h-3.5" />
+              <span>बॉक्स 1: 'लिंक से खबर बनाएं'</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={loading || isRegenerating}
+              onClick={() => {
+                setActiveTab('command');
+                setError(null);
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                activeTab === 'command'
+                  ? 'bg-yellow-400 text-neutral-950 shadow-md'
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>बॉक्स 2: 'कच्ची खबर या वॉइस कमांड से खबर बनाएं'</span>
+            </button>
+          </div>
+
+          {/* Input Section */}
+          <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 sm:p-4 space-y-3">
+            {activeTab === 'link' ? (
+              /* बॉक्स 1: Link Input with Automatic Photo Extraction */
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-blue-400" />
+                    <span>बॉक्स 1: वेबसाइट का न्यूज़ लिंक (URL) डालें (ऑटोमैटिक फोटो एक्सट्रैक्शन):</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={loading || isRegenerating}
+                      onClick={handlePasteClipboardToLink}
+                      className="text-[11px] font-bold text-blue-300 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="क्लिपबोर्ड से लिंक पेस्ट करें"
+                    >
+                      <Clipboard className="w-3 h-3" />
+                      <span>पेस्ट करें</span>
+                    </button>
+                    {linkUrl && (
+                      <button
+                        type="button"
+                        disabled={loading || isRegenerating}
+                        onClick={() => setLinkUrl('')}
+                        className="text-neutral-500 hover:text-red-400 p-0.5 rounded disabled:opacity-50"
+                        title="साफ़ करें"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <input
+                  type="url"
+                  disabled={loading || isRegenerating}
+                  value={linkUrl}
+                  onChange={(e) => {
+                    setLinkUrl(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="https://... कोई भी न्यूज़ वेबसाइट लिंक पेस्ट करें"
+                  className="w-full bg-neutral-900 border border-neutral-700 focus:border-blue-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <p className="text-[11px] text-neutral-400 leading-snug">
+                  💡 AI लिंक से सीधे ताज़ा समाचार, मुख्य शीर्षक व प्रेस फोटो पढ़कर कार्ड में सेट करेगा।
+                </p>
+              </div>
+            ) : (
+              /* बॉक्स 2: Raw Script & Voice Command Input */
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-yellow-300 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-yellow-400" />
+                    <span>बॉक्स 2: कच्चा समाचार / व्हाट्सएप प्रेस नोट / वॉइस कमांड से खबर बनाएं:</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <VoiceInputButton
+                      onTranscript={(transcript) => {
+                        setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                        setError(null);
+                      }}
+                      title="बोलकर समाचार विवरण दर्ज करें"
+                    />
+                    <button
+                      type="button"
+                      disabled={loading || isRegenerating}
+                      onClick={handlePasteClipboardToInput}
+                      className="text-[11px] font-bold text-yellow-300 bg-yellow-400/20 hover:bg-yellow-400/30 border border-yellow-400/40 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="क्लिपबोर्ड से टेक्स्ट पेस्ट करें"
+                    >
+                      <Clipboard className="w-3 h-3" />
+                      <span>पेस्ट करें</span>
+                    </button>
+                    {inputText && (
+                      <button
+                        type="button"
+                        disabled={loading || isRegenerating}
+                        onClick={() => setInputText('')}
+                        className="text-neutral-500 hover:text-red-400 p-0.5 rounded disabled:opacity-50"
+                        title="साफ़ करें"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <textarea
+                  rows={4}
+                  disabled={loading || isRegenerating}
+                  value={inputText}
+                  onChange={(e) => {
+                    setInputText(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="व्हाट्सएप मैसेज, प्रेस नोट, या अपनी कच्ची खबर यहाँ पेस्ट करें... उदा: शहडोल में छात्राओं ने कॉलेज सुविधाओं को लेकर पैदल मार्च निकाला।"
+                  className="w-full bg-neutral-900 border border-neutral-700 focus:border-yellow-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <p className="text-[11px] text-neutral-400 leading-snug">
+                  💡 व्हाट्सएप मैसेज या प्रेस नोट डालने पर AI स्वतः 2-3 लाइन की आकर्षक हेडलाइन तैयार करेगा।
+                </p>
+              </div>
+            )}
+
+            {/* Optional Custom Instructions / Prompt Box Toggle */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPromptBox(!showPromptBox)}
+                className="text-[11px] font-bold text-neutral-400 hover:text-yellow-400 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span>{showPromptBox ? '▼' : '▶'} निर्देश / प्रॉम्प्ट बॉक्स (वैकल्पिक)</span>
+              </button>
+
+              {showPromptBox && (
+                <div className="mt-2 p-2.5 bg-neutral-900 rounded-lg border border-neutral-800 space-y-1 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-neutral-400">AI को विशेष निर्देश दें:</span>
+                    <VoiceInputButton
+                      onTranscript={(transcript) => {
+                        setCustomPrompt((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                      }}
+                      title="बोलकर निर्देश दर्ज करें"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder="उदा. मुख्य नेता पर फोकस करें, हेडलाइन शॉर्ट रखें..."
+                    className="w-full bg-neutral-950 border border-neutral-700/80 rounded px-2.5 py-1.5 text-xs text-white placeholder:text-neutral-500 focus:border-yellow-400 focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Action Button: Generate */}
+            <button
+              type="button"
+              onClick={() => handleProcess()}
+              disabled={loading}
+              className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 ${
+                activeTab === 'link'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
+                  : 'bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950'
+              }`}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>AI खबर का विश्लेषण कर रहा है...</span>
+                </>
+              ) : activeTab === 'link' ? (
+                <>
+                  <LinkIcon className="w-4 h-4" />
+                  <span>🔗 {aiProvider === 'openai' ? 'ChatGPT से लिंक द्वारा AI हेडलाइन बनाएं' : 'लिंक से AI हेडलाइन बनाएं'}</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>✨ {aiProvider === 'openai' ? 'ChatGPT से रॉ न्यूज़ द्वारा AI हेडलाइन बनाएं' : 'रॉ न्यूज़ से AI हेडलाइन बनाएं'}</span>
+                </>
+              )}
+            </button>
+
+            {/* Error message in manual mode */}
+            {error && (
+              <div className="p-3 rounded-lg bg-red-900/40 border border-red-800 text-red-200 text-xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleProcess()}
+                  className="px-2 py-0.5 rounded bg-red-800 text-white font-bold text-[10px] shrink-0 flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                  <span>पुनः प्रयास</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Manual Workflow Loading Indicator */}
+      {!isAutomatedEntry && loading && (
         <div className="bg-neutral-950 border border-blue-500/50 rounded-xl p-5 text-center space-y-3 animate-in fade-in">
           <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
           <h4 className="text-sm font-black text-white">
@@ -1565,239 +2084,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           <p className="text-xs text-slate-400">कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर 5 संतुलित और प्रकाशित करने योग्य हेडलाइन तैयार की जा रही हैं।</p>
         </div>
       )}
-
-      {loading && result && (
-        <div className="bg-blue-950/40 border border-blue-500/40 rounded-xl p-2.5 flex items-center justify-between text-xs text-blue-200 animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
-            <span>AI द्वारा 5 मुख्य हेडलाइंस तैयार — गहरा संपादकीय विश्लेषण जारी...</span>
-          </div>
-        </div>
-      )}
-
-      {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
-      <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
-        <button
-          type="button"
-          disabled={loading || isRegenerating}
-          onClick={() => {
-            setActiveTab('link');
-            setError(null);
-          }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-            activeTab === 'link'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
-          }`}
-        >
-          <LinkIcon className="w-3.5 h-3.5" />
-          <span>बॉक्स 1: 'लिंक से खबर बनाएं'</span>
-        </button>
-
-        <button
-          type="button"
-          disabled={loading || isRegenerating}
-          onClick={() => {
-            setActiveTab('command');
-            setError(null);
-          }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-            activeTab === 'command'
-              ? 'bg-yellow-400 text-neutral-950 shadow-md'
-              : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
-          }`}
-        >
-          <FileText className="w-3.5 h-3.5" />
-          <span>बॉक्स 2: 'कच्ची खबर या वॉइस कमांड से खबर बनाएं'</span>
-        </button>
-      </div>
-
-      {/* Input Section */}
-      <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 sm:p-4 space-y-3">
-        {activeTab === 'link' ? (
-          /* बॉक्स 1: Link Input with Automatic Photo Extraction */
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
-                <LinkIcon className="w-3.5 h-3.5 text-blue-400" />
-                <span>बॉक्स 1: वेबसाइट का न्यूज़ लिंक (URL) डालें (ऑटोमैटिक फोटो एक्सट्रैक्शन):</span>
-              </label>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={loading || isRegenerating}
-                  onClick={handlePasteClipboardToLink}
-                  className="text-[11px] font-bold text-blue-300 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="क्लिपबोर्ड से लिंक पेस्ट करें"
-                >
-                  <Clipboard className="w-3 h-3" />
-                  <span>पेस्ट करें</span>
-                </button>
-                {linkUrl && (
-                  <button
-                    type="button"
-                    disabled={loading || isRegenerating}
-                    onClick={() => setLinkUrl('')}
-                    className="text-neutral-500 hover:text-red-400 p-0.5 rounded disabled:opacity-50"
-                    title="साफ़ करें"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <input
-              type="url"
-              disabled={loading || isRegenerating}
-              value={linkUrl}
-              onChange={(e) => {
-                setLinkUrl(e.target.value);
-                setError(null);
-              }}
-              placeholder="https://... कोई भी न्यूज़ वेबसाइट लिंक पेस्ट करें"
-              className="w-full bg-neutral-900 border border-neutral-700 focus:border-blue-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            <p className="text-[11px] text-neutral-400 leading-snug">
-              💡 AI लिंक से सीधे ताज़ा समाचार, मुख्य शीर्षक व प्रेस फोटो पढ़कर कार्ड में सेट करेगा।
-            </p>
-          </div>
-        ) : (
-          /* बॉक्स 2: Raw Script & Voice Command Input */
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-yellow-300 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-yellow-400" />
-                <span>बॉक्स 2: कच्चा समाचार / व्हाट्सएप प्रेस नोट / वॉइस कमांड से खबर बनाएं:</span>
-              </label>
-              <div className="flex items-center gap-1.5">
-                <VoiceInputButton
-                  onTranscript={(transcript) => {
-                    setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-                    setError(null);
-                  }}
-                  title="बोलकर समाचार विवरण दर्ज करें"
-                />
-                <button
-                  type="button"
-                  disabled={loading || isRegenerating}
-                  onClick={handlePasteClipboardToInput}
-                  className="text-[11px] font-bold text-yellow-300 bg-yellow-400/20 hover:bg-yellow-400/30 border border-yellow-400/40 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="क्लिपबोर्ड से टेक्स्ट पेस्ट करें"
-                >
-                  <Clipboard className="w-3 h-3" />
-                  <span>पेस्ट करें</span>
-                </button>
-                {inputText && (
-                  <button
-                    type="button"
-                    disabled={loading || isRegenerating}
-                    onClick={() => setInputText('')}
-                    className="text-neutral-500 hover:text-red-400 p-0.5 rounded disabled:opacity-50"
-                    title="साफ़ करें"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <textarea
-              rows={4}
-              disabled={loading || isRegenerating}
-              value={inputText}
-              onChange={(e) => {
-                setInputText(e.target.value);
-                setError(null);
-              }}
-              placeholder="व्हाट्सएप मैसेज, प्रेस नोट, या अपनी कच्ची खबर यहाँ पेस्ट करें... उदा: शहडोल में छात्राओं ने कॉलेज सुविधाओं को लेकर पैदल मार्च निकाला।"
-              className="w-full bg-neutral-900 border border-neutral-700 focus:border-yellow-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            <p className="text-[11px] text-neutral-400 leading-snug">
-              💡 व्हाट्सएप मैसेज या प्रेस नोट डालने पर AI स्वतः 2-3 लाइन की आकर्षक हेडलाइन तैयार करेगा।
-            </p>
-          </div>
-        )}
-
-        {/* Optional Custom Instructions / Prompt Box Toggle */}
-        <div className="pt-1">
-          <button
-            type="button"
-            onClick={() => setShowPromptBox(!showPromptBox)}
-            className="text-[11px] font-bold text-neutral-400 hover:text-yellow-400 flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <span>{showPromptBox ? '▼' : '▶'} निर्देश / प्रॉम्प्ट बॉक्स (वैकल्पिक)</span>
-          </button>
-
-          {showPromptBox && (
-            <div className="mt-2 p-2.5 bg-neutral-900 rounded-lg border border-neutral-800 space-y-1 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-neutral-400">AI को विशेष निर्देश दें:</span>
-                <VoiceInputButton
-                  onTranscript={(transcript) => {
-                    setCustomPrompt((prev) => (prev ? `${prev} ${transcript}` : transcript));
-                  }}
-                  title="बोलकर निर्देश दर्ज करें"
-                />
-              </div>
-              <input
-                type="text"
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="उदा. मुख्य नेता पर फोकस करें, हेडलाइन शॉर्ट रखें..."
-                className="w-full bg-neutral-950 border border-neutral-700/80 rounded px-2.5 py-1.5 text-xs text-white placeholder:text-neutral-500 focus:border-yellow-400 focus:outline-none"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Action Button: Generate */}
-        <button
-          type="button"
-          onClick={() => handleProcess()}
-          disabled={loading}
-          className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 ${
-            activeTab === 'link'
-              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
-              : 'bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950'
-          }`}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>AI खबर का विश्लेषण कर रहा है...</span>
-            </>
-          ) : activeTab === 'link' ? (
-            <>
-              <LinkIcon className="w-4 h-4" />
-              <span>🔗 {aiProvider === 'openai' ? 'ChatGPT से लिंक द्वारा AI हेडलाइन बनाएं' : 'लिंक से AI हेडलाइन बनाएं'}</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              <span>✨ {aiProvider === 'openai' ? 'ChatGPT से रॉ न्यूज़ द्वारा AI हेडलाइन बनाएं' : 'रॉ न्यूज़ से AI हेडलाइन बनाएं'}</span>
-            </>
-          )}
-        </button>
-
-        {/* Error message */}
-        {error && (
-          <div className="p-3 rounded-lg bg-red-900/40 border border-red-800 text-red-200 text-xs flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-              <span>{error}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => handleProcess()}
-              className="px-2 py-0.5 rounded bg-red-800 text-white font-bold text-[10px] shrink-0 flex items-center gap-1"
-            >
-              <RefreshCw className="w-2.5 h-2.5" />
-              <span>पुनः प्रयास</span>
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* Result Section (Inline) */}
       {result && (
@@ -1824,19 +2110,31 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
             <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
               <Check className="w-4 h-4 text-green-400" />
-              <span>तैयार AI हेडलाइन ({headlineOptions.length || 5} विकल्प उपलब्ध)</span>
+              <span>
+                तैयार AI हेडलाइन ({headlineOptions.length || 5} विकल्प उपलब्ध)
+              </span>
             </span>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleRegenerateHeadlines}
-                disabled={isRegenerating || loading}
-                className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-                <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 5 नई हेडलाइन्स बनाएं (Regenerate)'}</span>
-              </button>
+              {isVipDeskUser ? (
+                <button
+                  type="button"
+                  onClick={handleRegenerateHeadlines}
+                  disabled={isRegenerating || loading}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+                  <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 पाँच नई हेडलाइन बनाएँ'}</span>
+                </button>
+              ) : (
+                <div
+                  className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center gap-1 cursor-not-allowed select-none"
+                  title="अतिरिक्त हेडलाइन रीजेनरेशन केवल VIP DESK व एडमिन के लिए उपलब्ध है"
+                >
+                  <span>👑</span>
+                  <span>पाँच नई हेडलाइन बनाएँ (VIP DESK)</span>
+                </div>
+              )}
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
                 📍 {result.location || card.location || 'मध्य प्रदेश'}
               </span>
@@ -1850,53 +2148,79 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts */}
+          {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts (Available to All Plans on Initial Generation) */}
+          {/* Headline Options: Exactly 5 Simple Numbered Options with Radio Buttons and Character Counts */}
           {headlineOptions.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="text-[11px] text-neutral-400 font-bold">
-                तैयार 5 संतुलित AI हेडलाइन विकल्प (पसंदीदा पर एक क्लिक करें):
-              </span>
-              {headlineOptions.slice(0, 5).map((opt, idx) => {
-                const isSelected = selectedHeadlineIndex === idx;
-                const displayText = isSelected && result?.headline ? result.headline : opt;
-                const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
-                const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
-                const charCount = cleanDisplay.length;
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-neutral-300 font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span>तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):</span>
+                </span>
+                <span className="text-[10px] text-amber-300/80 font-mono">100-150 वर्ण सीमा</span>
+              </div>
+              <div className="space-y-1.5" role="radiogroup" aria-label="हेडलाइन विकल्प">
+                {headlineOptions.slice(0, 5).map((opt, idx) => {
+                  const isSelected = selectedHeadlineIndex === idx;
+                  const displayText = isSelected && result?.headline ? result.headline : opt;
+                  const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+                  const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
+                  const charCount = cleanDisplay.length;
+                  const angleNames = [
+                    'मुख्य घटना (Core Event)',
+                    'पात्र/व्यक्ति कोण (Actor/Authority)',
+                    'कार्रवाई/परिणाम (Action/Consequence)',
+                    'मुख्य बिंदु/तथ्य (Key Detail/Quote)',
+                    'सारगर्भित (High-Impact)',
+                  ];
 
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => handleSelectHeadline(opt, idx)}
-                    className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1 ${
-                      isSelected
-                        ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
-                        : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                          विकल्प {idx + 1}
-                        </span>
-                        <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
-                          <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
-                          <span className="text-neutral-600">•</span>
-                          <span>{charCount} अक्षर</span>
-                        </span>
-                      </div>
-                      {isSelected && (
-                        <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold">
-                          <Check className="w-3.5 h-3.5 text-yellow-400" />
-                          <span>चयनित</span>
+                  return (
+                    <label
+                      key={idx}
+                      onClick={() => handleSelectHeadline(opt, idx)}
+                      className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
+                        isSelected
+                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="headline_selection_radio"
+                            checked={isSelected}
+                            onChange={() => handleSelectHeadline(opt, idx)}
+                            className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
+                          />
+                          <span className="text-[11px] font-black text-yellow-400 tracking-wide">
+                            विकल्प {idx + 1}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-400 border border-neutral-800">
+                            {angleNames[idx] || `कोण ${idx + 1}`}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                    <div className="leading-snug text-neutral-200">
-                      {displayText}
-                    </div>
-                  </div>
-                );
-              })}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
+                            <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
+                            <span className="text-neutral-600">•</span>
+                            <span className={charCount > 150 ? 'text-red-400' : 'text-neutral-300'}>{charCount} अक्षर</span>
+                          </span>
+                          {isSelected && (
+                            <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold shrink-0">
+                              <Check className="w-3.5 h-3.5 text-yellow-400" />
+                              <span className="hidden sm:inline">सक्रिय</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="leading-snug text-neutral-200 pl-6">
+                        {displayText}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
 

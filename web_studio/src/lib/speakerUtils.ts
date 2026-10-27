@@ -979,6 +979,18 @@ export function fitHeadlinesTo5TierRanges(
     }
   }
 
+  let seedIdx = 1;
+  while (result.length < 5) {
+    const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
+      ? baseOrContext.trim()
+      : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (result[0] || 'मुख्य समाचार'));
+    const backup = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${baseText}`, 150);
+    if (!result.includes(backup)) {
+      result.push(backup);
+    }
+    seedIdx++;
+  }
+
   // Ensure all 5 slots conform strictly to 150 max ceiling
   return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
 }
@@ -1152,9 +1164,8 @@ export function ensureHashtagHierarchy(
 ): string {
   if (!summaryText || typeof summaryText !== 'string') return summaryText || '';
 
-  // 1. Separate body text from any existing hashtag line
-  const parts = summaryText.split(/\n\s*#/);
-  let rawBody = parts[0].trim();
+  // 1. Separate body text from any existing trailing hashtag block
+  let rawBody = summaryText.replace(/(?:\n\s*(?:#[a-zA-Z0-9_\u0900-\u097F]+[\s,]*)+)+$/gu, '').trim();
 
   // Strip all URLs, web domains, and links (Zero URL policy)
   rawBody = stripAllUrlsAndHyperlinks(rawBody);
@@ -1172,8 +1183,8 @@ export function ensureHashtagHierarchy(
   // Strip press note flattery
   rawBody = sanitizePressNoteFlattery(rawBody, false);
 
-  // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
-  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, '').trim();
+  // a. Strip all lingering inline or trailing hashtags from body text so they never pollute paragraphs
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, '').trim();
 
   // Strip leading headline duplicate if caption accidentally starts with the headline
   if (headlineToStrip && headlineToStrip.trim()) {
@@ -1264,10 +1275,20 @@ export function ensureHashtagHierarchy(
         .split(/[।\n]+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 5);
-      if (sentences.length >= 3) {
-        const p1 = sentences.slice(0, 1).join('। ') + '।';
-        const p2 = sentences.slice(1, 3).join('। ') + '।';
+      if (sentences.length >= 6) {
+        const p1 = sentences.slice(0, 2).join('। ') + '।';
+        const p2 = sentences.slice(2, 4).join('। ') + '।';
+        const p3 = sentences.slice(4).join('। ') + '।';
+        cleanParas = [p1, p2, p3];
+      } else if (sentences.length >= 4) {
+        const p1 = sentences.slice(0, 2).join('। ') + '।';
+        const p2 = sentences.slice(2, 3).join('। ') + '।';
         const p3 = sentences.slice(3).join('। ') + '।';
+        cleanParas = [p1, p2, p3];
+      } else if (sentences.length >= 3) {
+        const p1 = sentences[0] + '।';
+        const p2 = sentences[1] + '।';
+        const p3 = sentences.slice(2).join('। ') + '।';
         cleanParas = [p1, p2, p3];
       } else if (sentences.length === 2) {
         cleanParas = [sentences[0] + '।', sentences[1] + '।'];
@@ -1278,22 +1299,27 @@ export function ensureHashtagHierarchy(
     finalBodyText = cleanParas.join('\n\n').trim();
   }
 
-  // 3. Extract and construct hashtags
-  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
+  // Final cleanup of body text to guarantee zero URLs and zero stray inline hashtags
+  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText).replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, '').trim();
+
+  // 3. Extract and construct hashtags (Permanent Hashtag Hierarchy Rule)
+  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/gu) || [])
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
-  const cleanUser = (username || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
-  const isGeneric = ['user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined'].includes(cleanUser.toLowerCase());
+  // b. 1st tag: Configured username (#[username]), omit if absent or generic
+  const cleanUser = (username || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, '').trim();
+  const isGeneric = ['user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined', 'ainewsmaker', 'ai_news_maker', 'breakingnewswala', 'bnwtv'].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : '';
 
   let locTag = '';
   if (location && location !== 'विशेष कवरेज') {
-    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, '');
     if (primaryCity && primaryCity.toLowerCase() !== 'location' && primaryCity !== 'स्थान') {
       locTag = `#${primaryCity}News`;
     }
   }
 
+  // c. Middle 4 to 6 hashtags: news location/topic related, STRICTLY excluding #ainewsmaker
   const filteredMiddleTags: string[] = [];
   for (const t of rawTags) {
     const lower = t.toLowerCase();
@@ -1303,6 +1329,7 @@ export function ensureHashtagHierarchy(
       lower === '#ai_news_maker' ||
       lower === '#breakingnewswala' ||
       lower === '#bnwtv' ||
+      lower === '#ब्रेकिंगन्यूजवाला' ||
       lower.startsWith('#http') ||
       lower.startsWith('#www') ||
       lower.startsWith('#url') ||
@@ -1315,14 +1342,17 @@ export function ensureHashtagHierarchy(
     filteredMiddleTags.push(t);
   }
 
-  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
+  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase()) && (!userTag || userTag.toLowerCase() !== locTag.toLowerCase())) {
     filteredMiddleTags.unshift(locTag);
   }
 
-  const defaultSeeds = ['#BreakingNews', '#HindiNews', '#LatestUpdate', '#NewsUpdate'];
+  const defaultSeeds = ['#BreakingNews', '#HindiNews', '#LatestUpdate', '#NewsUpdate', '#CityNews'];
   for (const seed of defaultSeeds) {
-    if (filteredMiddleTags.length >= 5) break;
-    if (!filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
+    if (filteredMiddleTags.length >= 6) break;
+    if (
+      (!userTag || userTag.toLowerCase() !== seed.toLowerCase()) &&
+      !filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())
+    ) {
       filteredMiddleTags.push(seed);
     }
   }
@@ -1349,9 +1379,10 @@ export function ensureHashtagHierarchy(
     }
   }
 
-  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
+  // d. Final hashtag: MANDATORY and strictly only #AINewsMaker as the very last tag
   orderedTags.push('#AINewsMaker');
 
+  // e. Exactly ONE blank line between body text and hashtag block
   return `${finalBodyText}\n\n${orderedTags.join(' ')}`.trim();
 }
 

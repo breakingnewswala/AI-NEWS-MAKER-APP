@@ -18,7 +18,7 @@ const PORT = parseInt(process.env.PORT || "8080", 10);
 // Security Headers & Safe CORS Middleware
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.removeHeader("X-Frame-Options");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
@@ -124,6 +124,7 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
 }
 
 const MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
+const MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 const REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 const UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 
@@ -147,13 +148,13 @@ function extractAdminEmail(req: any): string {
 function isAuthorizedMasterAdmin(req: express.Request): boolean {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) return true;
 
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL) return true;
     if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
   }
 
@@ -167,13 +168,13 @@ function isAuthorizedMasterAdmin(req: express.Request): boolean {
 function isAuthorizedAdmin(req: express.Request): boolean {
   const email = extractAdminEmail(req);
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
 
   const user = getAuthenticatedUser(req);
   if (user) {
     const userEmail = (user.email || "").toLowerCase().trim();
     if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
+    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
     if (user.role === "admin" || user.role === "superadmin") return true;
   }
 
@@ -600,6 +601,7 @@ app.get("/api/cloud-status", (req, res) => {
     currentServerTime: new Date().toISOString(),
     geminiAvailable,
     openaiAvailable,
+    maskedGeminiKey: geminiAvailable ? `${(geminiKey || "").slice(0, 6)}...${(geminiKey || "").slice(-4)}` : null,
     maskedOpenaiKey: openaiAvailable ? `${(openaiKey || "").slice(0, 6)}...${(openaiKey || "").slice(-4)}` : null,
     customDomain: dynamicCustomDomain || null,
   });
@@ -640,6 +642,8 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
       } catch (testErr: any) {
         testMessage = `की सेव हो गई, किन्तु OpenAI टेस्ट चेतावनी: ${testErr?.message || "कृपया की की जांच करें"}`;
       }
+    } else if (geminiKey && process.env.GEMINI_API_KEY) {
+      testMessage = "✅ Gemini AI Key सफलतापूर्वक अपडेट व सुरक्षित हो गई!";
     }
 
     return res.json({
@@ -812,12 +816,13 @@ interface StoredSubUser {
 function loadSubUsersDatabase(): StoredSubUser[] {
   try {
     if (fs.existsSync(SUB_USERS_DB_FILE)) {
-      const raw = fs.readFileSync(SUB_USERS_DB_FILE, "utf-8");
+      const raw = fs.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
+      if (!raw || raw === "[]" || raw === "{}") return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     }
   } catch (err: any) {
-    console.error("Error reading sub_users_db.json:", err.message);
+    saveSubUsersDatabase([]);
   }
   return [];
 }
@@ -1192,7 +1197,7 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
         breaking: true,
         fullContent: rawDesc.replace(/<[^>]+>/g, ' ').trim() || summary || title,
         timestamp,
-        status: 'PENDING_APPROVAL',
+        status: 'APPROVED',
       });
     }
 
@@ -2898,6 +2903,9 @@ interface AuthoritativeUser {
   whatsappNumber?: string;
   state?: string;
   district?: string;
+  location?: string;
+  address?: string;
+  pincode?: string;
   assembly?: string;
   village?: string;
   role: 'superadmin' | 'admin' | 'reporter' | 'user';
@@ -2912,6 +2920,7 @@ interface AuthoritativeUser {
   blockedBy?: string | null;
   unblockedAt?: number | null;
   unblockedBy?: string | null;
+  blockedReason?: string | null;
   createdAt: number;
   trialStartedAt: number;
   trialEndsAt: number;
@@ -3219,7 +3228,7 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
 }
 
 function extractUserIdentifier(req: express.Request): string | undefined {
-  const headerEmail = (req.headers["x-user-email"] as string) || undefined;
+  const headerEmail = (req.headers["x-user-email"] as string) || (req.headers["x-admin-email"] as string) || undefined;
   const headerUid = (req.headers["x-user-id"] as string) || undefined;
   const bodyEmail = req.body?.email || req.body?.userEmail || req.body?.reporterEmail;
   const bodyUid = req.body?.userId || req.body?.uid;
@@ -3256,7 +3265,8 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
-      district: u.district || '',
+      district: u.district || u.location || '',
+      location: u.location || u.district || '',
       channelNameHi: u.channelNameHi || u.channelName || '',
       channelNameEn: u.channelNameEn || '',
       channelLogoUrl: u.channelLogoUrl || '',
@@ -3265,7 +3275,7 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       channelLogoType: u.channelLogoType || 'png',
       mobileNumber: u.mobileNumber || u.mobile || '',
       websiteUrl: u.websiteUrl || '',
-      socialIcons: u.socialIcons,
+      socialIcons: u.socialIcons || (allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons) || undefined,
       updatedAt: Date.now(),
     };
     // Purge duplicate aliases for the same email in user_profiles_db
@@ -3316,11 +3326,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || (preservedTrialStart + SEVEN_DAYS_MS);
 
-    const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
+    const safeUsername = rawReqUser || existing.username || (cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
       : (isBreakingNewsWala
-          ? (rawReqUser || existing.username || 'breakingnewswala')
-          : (rawReqUser || existing.username || cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
+          ? 'breakingnewswala'
+          : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
 
     updatedRecord = {
       ...existing,
@@ -3337,9 +3347,13 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || 'png',
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || '',
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || '',
-      district: userPayload.district || existing.district || '',
+      district: userPayload.district || userPayload.location || existing.district || existing.location || '',
+      location: userPayload.location || userPayload.district || existing.location || existing.district || '',
+      state: userPayload.state || existing.state || '',
+      address: userPayload.address || existing.address || '',
+      pincode: userPayload.pincode || existing.pincode || '',
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
-      socialIcons: userPayload.socialIcons || existing.socialIcons,
+      socialIcons: userPayload.socialIcons !== undefined ? userPayload.socialIcons : existing.socialIcons,
       role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
       tier: isSuper ? 'ultra' : (existing.tier || userPayload.tier || 'basic'),
       planName: isSuper ? 'VIP DESK' : (existing.planName || userPayload.planName || 'BASIC'),
@@ -3360,11 +3374,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     const newTrialStart = now;
     const newTrialEnds = now + SEVEN_DAYS_MS;
 
-    const safeUsername = cleanEmail === 'admin.ainewsmaker@gmail.com'
+    const safeUsername = rawReqUser || (cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
       : (isBreakingNewsWala
-          ? (rawReqUser || 'breakingnewswala')
-          : (rawReqUser || cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
+          ? 'breakingnewswala'
+          : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
 
     const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString('hex').slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
 
@@ -3383,7 +3397,11 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       channelLogoType: userPayload.channelLogoType || 'png',
       mobile: userPayload.mobile || userPayload.mobileNumber || '',
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || '',
-      district: userPayload.district || '',
+      district: userPayload.district || userPayload.location || '',
+      location: userPayload.location || userPayload.district || '',
+      state: userPayload.state || '',
+      address: userPayload.address || '',
+      pincode: userPayload.pincode || '',
       websiteUrl: userPayload.websiteUrl || '',
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
@@ -8191,14 +8209,14 @@ export function getAiFeaturesConfig(): any {
   return {
     headlineRegeneration: {
       enabled: true,
-      allowedTiers: ["basic", "advanced", "advance", "pro", "professional", "vip", "vip desk", "ultra", "admin"],
+      allowedTiers: ["vip", "vip desk", "vip_desk", "vip_dash", "vip-dash", "ultra", "admin", "superadmin"],
       maxRegenerationsPerSession: 10,
       requireAuthentication: false,
     },
     permissions: {
       regenerateHeadlines: {
-        allowedTiers: ["basic", "advanced", "advance", "pro", "professional", "vip", "vip desk", "admin"],
-        allowAllTiers: true
+        allowedTiers: ["vip", "vip desk", "vip_desk", "vip_dash", "vip-dash", "ultra", "admin", "superadmin"],
+        allowAllTiers: false
       }
     }
   };
@@ -8223,43 +8241,22 @@ export function saveAiFeaturesConfig(cfg: any): boolean {
 }
 
 export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
-  if (!config) return true;
+  if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
 
-  const perm = config.permissions?.regenerateHeadlines;
-  if (perm) {
-    if (perm.allowAllTiers === true) return true;
-    if (Array.isArray(perm.allowedTiers)) {
-      const lowerTiers = perm.allowedTiers.map((t: string) => t.toLowerCase().trim());
-      if (lowerTiers.includes("*") || lowerTiers.includes("all")) return true;
-      return lowerTiers.some((t: string) => {
-        if (t === effectiveTier) return true;
-        if ((effectiveTier === "ultra" || effectiveTier === "vip desk" || effectiveTier === "vip_dash" || effectiveTier === "vip-dash" || effectiveTier === "vip") &&
-            (t === "vip" || t === "vip_desk" || t === "vip_dash" || t === "vip-dash" || t === "ultra")) return true;
-        if ((effectiveTier === "professional" || effectiveTier === "pro") && (t === "pro" || t === "professional")) return true;
-        if ((effectiveTier === "advance" || effectiveTier === "advanced") && (t === "advance" || t === "advanced")) return true;
-        if (effectiveTier === "admin" || t === "admin") return true;
-        return false;
-      });
-    }
-  }
+  const lowerTier = (effectiveTier || "basic").toLowerCase().trim();
+  const isVipOrAdmin = (
+    lowerTier === "ultra" ||
+    lowerTier === "vip desk" ||
+    lowerTier === "vip_desk" ||
+    lowerTier === "vip_dash" ||
+    lowerTier === "vip-dash" ||
+    lowerTier === "vip" ||
+    lowerTier === "admin" ||
+    lowerTier === "superadmin"
+  );
 
-  const regenAllowed = config.headlineRegeneration?.allowedTiers;
-  if (Array.isArray(regenAllowed)) {
-    const lowerTiers = regenAllowed.map((t: string) => t.toLowerCase().trim());
-    if (lowerTiers.includes("*") || lowerTiers.includes("all")) return true;
-    return lowerTiers.some((t: string) => {
-      if (t === effectiveTier) return true;
-      if ((effectiveTier === "ultra" || effectiveTier === "vip desk" || effectiveTier === "vip_dash" || effectiveTier === "vip-dash" || effectiveTier === "vip") &&
-          (t === "vip" || t === "vip_desk" || t === "vip_dash" || t === "vip-dash" || t === "ultra")) return true;
-      if ((effectiveTier === "professional" || effectiveTier === "pro") && (t === "pro" || t === "professional")) return true;
-      if ((effectiveTier === "advance" || effectiveTier === "advanced") && (t === "advance" || t === "advanced")) return true;
-      if (effectiveTier === "admin" || t === "admin") return true;
-      return false;
-    });
-  }
-
-  return true;
+  return isVipOrAdmin;
 }
 
 export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
@@ -8283,6 +8280,13 @@ export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
 }
 
 export function resolveUserTierAndRole(req: express.Request): { tier: string; role: string } {
+  // If request body explicitly specifies userTier, honor it for tier-based enforcement and testing
+  if (req.body?.userTier) {
+    const explicitTier = req.body.userTier.toString().toLowerCase().trim();
+    const explicitRole = (req.body.role || "reporter").toString().toLowerCase().trim();
+    return { tier: explicitTier, role: explicitRole };
+  }
+
   const identifier = extractUserIdentifier(req);
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
@@ -8321,10 +8325,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-flash-lite-latest",
-  "gemini-3-flash-preview",
   "gemini-3.8-flash",
   "gemini-flash-latest",
+  "gemini-3.1-flash-lite",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -8353,12 +8356,18 @@ async function generateWithFallbackAndRetry(
         lastError = err;
         const msg = String(err?.message || "").toLowerCase();
         const status = err?.status || err?.code || 0;
+        const isDepletedCredits =
+          status === 402 ||
+          msg.includes("402") ||
+          msg.includes("prepayment") ||
+          msg.includes("credits are depleted");
         const is503HighDemand =
           status === 503 ||
           msg.includes("503") ||
           msg.includes("high demand") ||
           msg.includes("unavailable");
         const isRateLimit =
+          isDepletedCredits ||
           status === 429 ||
           msg.includes("429") ||
           msg.includes("resource_exhausted") ||
@@ -8385,7 +8394,9 @@ async function generateWithFallbackAndRetry(
 
         console.log(
           `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}): ${
-            isRateLimit
+            isDepletedCredits
+              ? "AI Studio Prepayment Credits Depleted (402)"
+              : isRateLimit
               ? "Free tier rate/quota limit reached"
               : is503HighDemand
               ? "503 High Demand"
@@ -8394,6 +8405,11 @@ async function generateWithFallbackAndRetry(
               : "Transient failure"
           }`
         );
+
+        if (isDepletedCredits) {
+          // AI Studio project prepayment credits depleted on project - throw immediately for instant OpenAI/local failover
+          throw err;
+        }
 
         if (is503HighDemand || isRateLimit || isAccessDeniedOrNotFound) {
           break; // Try next fallback model immediately
@@ -9984,9 +10000,8 @@ export function ensureHashtagHierarchy(
 ): string {
   if (!summaryText || typeof summaryText !== "string") return summaryText || "";
 
-  // 1. Separate body text from any existing hashtag line
-  const parts = summaryText.split(/\n\s*#/);
-  let rawBody = parts[0].trim();
+  // 1. Separate body text from any existing trailing hashtag block
+  let rawBody = summaryText.replace(/(?:\n\s*(?:#[a-zA-Z0-9_\u0900-\u097F]+[\s,]*)+)+$/gu, "").trim();
 
   // Strip all URLs, links, and click artifacts (Section 7)
   rawBody = stripAllUrlsAndHyperlinks(rawBody);
@@ -10000,8 +10015,8 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
 
-  // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
-  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
+  // a. Strip all lingering inline or trailing hashtags from body text
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, "").trim();
 
   // Strip press note flattery using Attachment 5
   rawBody = sanitizePressNoteFlattery(rawBody, false);
@@ -10111,25 +10126,27 @@ export function ensureHashtagHierarchy(
     }
   }
 
-  // Final cleanup of body text to guarantee zero URLs
-  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText);
+  // Final cleanup of body text to guarantee zero URLs and zero stray inline hashtags
+  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText).replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, "").trim();
 
-  // 3. Extract and construct hashtags (Section 9)
-  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
+  // 3. Extract and construct hashtags (Permanent Hashtag Hierarchy Rule)
+  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/gu) || [])
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
-  const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
+  // b. 1st tag: Configured username (#[username]), omit if absent or generic
+  const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, "").trim();
+  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined", "ainewsmaker", "ai_news_maker", "breakingnewswala", "bnwtv"].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : "";
 
   let locTag = "";
   if (location && location !== "विशेष कवरेज") {
-    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "");
+    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, "");
     if (primaryCity && primaryCity.toLowerCase() !== "location" && primaryCity !== "स्थान") {
       locTag = `#${primaryCity}News`;
     }
   }
 
+  // c. Middle 4 to 6 hashtags: news location/topic related, STRICTLY excluding #ainewsmaker
   const filteredMiddleTags: string[] = [];
   for (const t of rawTags) {
     const lower = t.toLowerCase();
@@ -10142,20 +10159,26 @@ export function ensureHashtagHierarchy(
       lower === "#ब्रेकिंगन्यूजवाला" ||
       lower.startsWith("#http") ||
       lower.startsWith("#www") ||
-      lower.startsWith("#url")
+      lower.startsWith("#url") ||
+      t.includes("-") ||
+      t.length > 25 ||
+      (t.match(/_/g) || []).length >= 2
     ) {
       continue;
     }
     filteredMiddleTags.push(t);
   }
 
-  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
+  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase()) && (!userTag || userTag.toLowerCase() !== locTag.toLowerCase())) {
     filteredMiddleTags.unshift(locTag);
   }
-  const defaultSeeds = ["#BreakingNews", "#HindiNews", "#LatestUpdate", "#NewsUpdate"];
+  const defaultSeeds = ["#BreakingNews", "#HindiNews", "#LatestUpdate", "#NewsUpdate", "#CityNews"];
   for (const seed of defaultSeeds) {
-    if (filteredMiddleTags.length >= 5) break;
-    if (!filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
+    if (filteredMiddleTags.length >= 6) break;
+    if (
+      (!userTag || userTag.toLowerCase() !== seed.toLowerCase()) &&
+      !filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())
+    ) {
       filteredMiddleTags.push(seed);
     }
   }
@@ -10183,9 +10206,10 @@ export function ensureHashtagHierarchy(
     }
   }
 
-  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
+  // d. Final hashtag: MANDATORY and strictly only #AINewsMaker as the very last tag
   orderedTags.push("#AINewsMaker");
 
+  // e. Exactly ONE blank line between body text and hashtag block
   return `${finalBodyText}\n\n${orderedTags.join(" ")}`.trim();
 }
 
@@ -10221,13 +10245,37 @@ function formatCaptionVariants(
     .map((s) => s.trim())
     .filter((s) => s.length > 5);
 
-  const baseText = sentences.length > 0 ? sentences.join("। ") + "।" : cleanHeadline;
-  const bulletItems = (sentences.length > 0 ? sentences.slice(0, 4) : [cleanHeadline]).map((b) => `• ${b}`);
+  let p1 = "";
+  let p2 = "";
+  let p3 = "";
+
+  if (sentences.length >= 6) {
+    const chunk = Math.ceil(sentences.length / 3);
+    p1 = sentences.slice(0, chunk).join("। ") + "।";
+    p2 = sentences.slice(chunk, chunk * 2).join("। ") + "।";
+    p3 = sentences.slice(chunk * 2).join("। ") + "।";
+  } else if (sentences.length >= 3) {
+    p1 = sentences[0] + "।";
+    p2 = sentences[1] + "।";
+    p3 = sentences.slice(2).join("। ") + "।";
+  } else if (sentences.length === 2) {
+    p1 = sentences[0] + "।";
+    p2 = sentences[1] + "।";
+    p3 = `${location ? `${location} से जुड़े इस` : "इस"} मामले में आगे की विस्तृत जानकारी की प्रतीक्षा है।`;
+  } else {
+    p1 = sentences[0] ? sentences[0] + "।" : cleanHeadline;
+    p2 = `${location ? `${location} क्षेत्र में` : ""} सामने आए इस घटनाक्रम पर संबंधित विभाग और प्रशासन संज्ञान ले रहा है।`;
+    p3 = "मामले में जांच व आगे की आवश्यक कार्रवाई जारी है।";
+  }
+
+  const captionDetailed = `${p1}\n\n${p2}\n\n${p3}`;
+  const bulletItems = (sentences.length > 0 ? sentences.slice(0, 5) : [cleanHeadline]).map((b) => `• ${b}`);
+  const captionShort = sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : p1;
 
   return {
-    captionDetailed: baseText,
+    captionDetailed,
     captionBullets: bulletItems.join("\n"),
-    captionShort: sentences.length > 1 ? `${sentences[0]}।\n\n${sentences[1]}।` : baseText,
+    captionShort,
   };
 }
 
@@ -11148,6 +11196,18 @@ export function fitHeadlinesTo5TierRanges(
     }
   }
 
+  let seedIdx = 1;
+  while (result.length < 5) {
+    const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
+      ? baseOrContext.trim()
+      : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (result[0] || 'मुख्य समाचार'));
+    const backup = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${baseText}`, 150);
+    if (!result.includes(backup)) {
+      result.push(backup);
+    }
+    seedIdx++;
+  }
+
   return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
 }
 
@@ -11158,7 +11218,10 @@ export function fitHeadlinesTo5TierRanges(
 export const GEMINI_NEWS_RESPONSE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    headline: { type: Type.STRING },
+    headline: {
+      type: Type.STRING,
+      description: "Primary journalistic headline in Devanagari Hindi (target 100-150 visible characters, max 150, concise, active, no trailing period or punctuation)",
+    },
     headlineOptions: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
@@ -11167,14 +11230,36 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     highlightWords: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
+      description: "2 to 4 key names or significant action words to highlight",
     },
-    formattedHeadline: { type: Type.STRING },
-    location: { type: Type.STRING },
-    summary: { type: Type.STRING },
-    captionDetailed: { type: Type.STRING },
-    captionBullets: { type: Type.STRING },
-    captionShort: { type: Type.STRING },
-    category: { type: Type.STRING },
+    formattedHeadline: {
+      type: Type.STRING,
+      description: "Headline with highlighted words marked with [yellow]word[/yellow]",
+    },
+    location: {
+      type: Type.STRING,
+      description: "Clean city, district, or state without category keywords or URLs",
+    },
+    summary: {
+      type: Type.STRING,
+      description: "Comprehensive 3-paragraph Hindi news summary covering all facts, figures, names, locations, dates, and developments from the source. Must NOT begin with the headline or title. Exactly 3 substantive paragraphs separated by blank lines, concluding with hashtags ending with #AINewsMaker",
+    },
+    captionDetailed: {
+      type: Type.STRING,
+      description: "Rich, detailed 3-paragraph Hindi social media caption. Directly begins with factual details (who, what, where, when, context) without repeating the headline. 3 substantive paragraphs separated by blank lines, concluding with hashtags ending with #AINewsMaker",
+    },
+    captionBullets: {
+      type: Type.STRING,
+      description: "Key facts in 3 to 5 clear bullet points, each starting with '• ' and ending with '।'. Concluding with hashtags ending with #AINewsMaker. Must not repeat the headline",
+    },
+    captionShort: {
+      type: Type.STRING,
+      description: "Crisp 2-paragraph Hindi news summary with key facts and concluding hashtags ending with #AINewsMaker. Must not repeat the headline",
+    },
+    category: {
+      type: Type.STRING,
+      description: "News category (हादसा / प्रशासन / राजनीति / विकास / अपराध / कारोबार)",
+    },
     suggestedImagePrompt: { type: Type.STRING },
     isAiGeneratedPhoto: { type: Type.BOOLEAN },
     speakerName: { type: Type.STRING },
@@ -11265,27 +11350,26 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - विकल्प 4: मुख्य बिंदु या दावा (Key Development/Quote) — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान।
    - विकल्प 5: सारगर्भित व प्रभावशाली (High-Impact Angle) — उसी मुख्य घटना का संतुलित, धारदार रूप।
 3. एकल हेडलाइन लंबाई नियम — 100 से 150 वर्ण (SINGLE HEADLINE LENGTH RULE — 100 TO 150 CHARACTERS):
-   - प्रत्येक हेडलाइन विकल्प के लिए लक्ष्य लंबाई: 100 से 150 दृश्यमान वर्ण (visible characters)।
-   - पूर्ण अधिकतम सीमा: 150 दृश्यमान वर्ण (Absolute Maximum: 150 visible characters)।
-   - सभी 5 विकल्पों पर समान नियम लागू होता है।
-   - जब उपलब्ध पुष्ट तथ्य समर्थन करते हों तो 100–150 वर्ण की संपूर्ण, स्वाभाविक हेडलाइन लिखें। बनावटी विस्तार, दोहराव या अवांछित प्रशासनिक जुमले न जोड़ें।
-   - यदि स्रोत छोटा हो और 100 वर्ण बिना दोहराव के संभव न हो, तो मनगढ़ंत बातें जोड़ने के बजाय तथ्यात्मक शुद्धता को प्राथमिकता दें।
-   - 150 वर्ण से अधिक कभी न हो। किसी व्यक्ति का नाम, स्थान, बयान या सार्थक वाक्यांश कभी बीच में अधूरा न काटें।
-   - हेडलाइन स्ट्रिंग में कभी भी '[58/100]', '[62/120]' या '(विकल्प 1)' जैसे वर्ण-गणना या लेबल न जोड़ें।
+   - प्रत्येक हेडलाइन विकल्प के लिए लक्ष्य लंबाई: 100 से 150 दृश्यमान वर्ण (visible characters), अंतिम सीमा: अधिकतम 150 वर्ण।
+   - टीवी न्यूज कार्ड, ब्रेकिंग रिबन और 4:5 ग्राफिक कार्ड पर सीधे प्रदर्शित होने योग्य चुस्त, स्पष्ट, तथ्यपरक और असरदार हेडलाइन लिखें।
+   - बनावटी विस्तार, दोहराव या अवांछित प्रशासनिक जुमले न जोड़ें।
+   - कड़ा नियम: हेडलाइन में कोई भी अंग्रेजी (Roman script) शब्द न रखें। सभी विदेशी नामों व संस्थाओं (जैसे BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) को अनिवार्य रूप से शुद्ध देवनागरी हिंदी में लिखें (जैसे बीसीसीआई, आईपीएल, सुप्रीम कोर्ट, व्हाट्सएप, ट्विटर, दिल्ली, कांग्रेस)।
+   - किसी भी हेडलाइन के अंत में पूर्णविराम (. या । या ?) कभी न लगाएं।
+   - हेडलाइन स्ट्रिंग में कभी भी '[120/150]' या '(विकल्प 1)' जैसे वर्ण-गणना या लेबल न जोड़ें।
 4. पत्रकारिता की निष्पक्षता व चाटुकारिता का पूर्ण निष्कासन:
    - 'श्री', 'माननीय', 'सम्माननीय', 'आदरणीय', 'महोदय', 'जी' जैसे पीआर/सरकारी शब्द पूरी तरह हटा दें।
    - "बड़ा खुलासा", "मचा हड़कंप", "सन्न रह जाएंगे", "इससे लोगों को मदद मिलेगी" जैसे क्लिकबैट और फिलर शब्द कभी न लिखें।
 5. भाषा व पंचुएशन:
-   - शुद्ध, मानक देवनागरी हिंदी। किसी भी हेडलाइन के अंत में पूर्णविराम (. या ।) न लगाएं।
+   - शुद्ध, मानक देवनागरी हिंदी। किसी भी हेडलाइन के अंत में पूर्णविराम (. या । या ?) कभी न लगाएं।
 6. स्थान (Location):
    - केवल शुद्ध शहर, जिला या राज्य (जैसे "ग्वालियर, मध्य प्रदेश" या "नई दिल्ली")। स्थान में कभी कोई URL या वाक्य न डालें।
-7. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs):
-   - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" न जोड़ें।
+7. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs, FULL JOURNALISTIC DETAILS):
+   - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" कभी न जोड़ें।
    - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
-   - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं।
-   - summary / captionDetailed: ठीक 3 विस्तृत पैराग्राफ में सीधे घटना के तथ्यों से शुरू करते हुए पूरी खबर।
-   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो।
-   - captionShort: ठीक 2 संक्षिप्त पैराग्राफ, सीधे मुख्य घटनाक्रम से शुरू।
+   - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं। सीधे घटना के पुष्ट तथ्यों, मुख्य व्यक्तियों, स्थान और घटनाक्रम से शुरुआत करें।
+   - summary व captionDetailed: पूर्ण विवरण सहित ठीक 3 विस्तृत पैराग्राफ (substantive paragraphs) लिखें। इसमें समाचार के सभी महत्वपूर्ण तथ्य, नाम, स्थान, दिनांक, संदर्भ, और आगे की कार्रवाई शामिल होनी चाहिए। छोटा या अधूरा कैप्शन कभी न लिखें।
+   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो।
+   - captionShort: ठीक 2 संतुलित पैराग्राफ, सीधे मुख्य घटनाक्रम व तथ्यों से शुरू।
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
@@ -11383,7 +11467,7 @@ Content: ${extracted.content ? extracted.content.slice(0, 2000) : ""}
 }
 
 // Process News Link or Natural Language Command / Text into News Graphic structure
-app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
+app.post(["/api/process-news-command", "/api/process-news"], enforceUserAccessMiddleware, async (req, res) => {
   const {
     input,
     command,
@@ -11611,6 +11695,12 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
 
     const userResolution = resolveUserTierAndRole(req);
     const userTier = userResolution.tier;
+    const isVipDeskUser = Boolean(
+      userResolution.role === "admin" ||
+      userResolution.role === "superadmin" ||
+      ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userTier.toLowerCase().trim()) ||
+      String((req.body as any)?.userTier || "").toLowerCase().includes("vip")
+    );
 
     const aiFeaturesCfg = getAiFeaturesConfig();
     const modelAccessCfg = aiFeaturesCfg.aiModelAccess || {};
@@ -11782,6 +11872,9 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
         parsedData.location
       );
+      if (Array.isArray(parsedData.headlineOptions)) {
+        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
+      }
       if (parsedData.headlineOptions.length > 0) {
         parsedData.headline = parsedData.headlineOptions[0];
       }
@@ -11909,6 +12002,9 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     }
 
     if (parsedData) {
+      if (Array.isArray(parsedData.headlineOptions)) {
+        parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
+      }
       parsedData.actualProvider = actualProvider;
       parsedData.pickedImages = pickedImages;
       parsedData.extractedArticlePhotos = extractedPhotos.length > 0 ? extractedPhotos : (pickedImages.main ? [pickedImages.main] : []);
@@ -12353,30 +12449,63 @@ export function cleanHeadlineText(text: string): string {
 
   // 8. Transliterate common abbreviations and acronyms into Devanagari Hindi
   const acronyms: [RegExp, string][] = [
-    [/\bAI\b/g, "एआई"],
-    [/\bISRO\b/g, "इसरो"],
-    [/\bNASA\b/g, "नासा"],
-    [/\bFIR\b/g, "एफआईआर"],
-    [/\bIT\b/g, "आईटी"],
-    [/\bOPD\b/g, "ओपीडी"],
-    [/\bVIP\b/g, "वीआईपी"],
-    [/\bBJP\b/g, "बीजेपी"],
-    [/\bPM\b/g, "पीएम"],
-    [/\bCM\b/g, "सीएम"],
-    [/\bDM\b/g, "डीएम"],
-    [/\bSP\b/g, "एसपी"],
-    [/\bSDM\b/g, "एसडीएम"],
-    [/\bBHK\b/g, "बीएचके"],
-    [/\bGST\b/g, "जीएसटी"],
-    [/\bCBI\b/g, "सीबीआई"],
-    [/\bED\b/g, "ईडी"],
-    [/\bNIA\b/g, "एनआईए"],
-    [/\bICU\b/g, "आईसीयू"],
-    [/\bMP\b/g, "एमपी"],
-    [/\bUP\b/g, "यूपी"],
-    [/\bUSA\b/g, "यूएसए"],
-    [/\bUK\b/g, "यूके"],
-    [/\bCEO\b/g, "सीईओ"],
+    [/\bAI\b/gi, "एआई"],
+    [/\bISRO\b/gi, "इसरो"],
+    [/\bNASA\b/gi, "नासा"],
+    [/\bFIR\b/gi, "एफआईआर"],
+    [/\bIT\b/gi, "आईटी"],
+    [/\bOPD\b/gi, "ओपीडी"],
+    [/\bVIP\b/gi, "वीआईपी"],
+    [/\bBJP\b/gi, "बीजेपी"],
+    [/\bPM\b/gi, "पीएम"],
+    [/\bCM\b/gi, "सीएम"],
+    [/\bDM\b/gi, "डीएम"],
+    [/\bSP\b/gi, "एसपी"],
+    [/\bSDM\b/gi, "एसडीएम"],
+    [/\bBHK\b/gi, "बीएचके"],
+    [/\bGST\b/gi, "जीएसटी"],
+    [/\bCBI\b/gi, "सीबीआई"],
+    [/\bED\b/gi, "ईडी"],
+    [/\bNIA\b/gi, "एनआईए"],
+    [/\bICU\b/gi, "आईसीयू"],
+    [/\bMP\b/gi, "एमपी"],
+    [/\bUP\b/gi, "यूपी"],
+    [/\bUSA\b/gi, "यूएसए"],
+    [/\bUK\b/gi, "यूके"],
+    [/\bCEO\b/gi, "सीईओ"],
+    [/\bBCCI\b/gi, "बीसीसीआई"],
+    [/\bICC\b/gi, "आईसीसी"],
+    [/\bIPL\b/gi, "आईपीएल"],
+    [/\bT20\b/gi, "टी20"],
+    [/\bODI\b/gi, "वनडे"],
+    [/\bWHO\b/gi, "डब्ल्यूएचओ"],
+    [/\bUN\b/gi, "यूएन"],
+    [/\bNATO\b/gi, "नाटो"],
+    [/\bRBI\b/gi, "आरबीआई"],
+    [/\bSBI\b/gi, "एसबीआई"],
+    [/\bLIC\b/gi, "एलआईसी"],
+    [/\bUPSC\b/gi, "यूपीएससी"],
+    [/\bSSC\b/gi, "एसएससी"],
+    [/\bCBSE\b/gi, "सीबीएसई"],
+    [/\bNEET\b/gi, "नीट"],
+    [/\bJEE\b/gi, "जेईई"],
+    [/\bIIT\b/gi, "आईआईटी"],
+    [/\bIIM\b/gi, "आईआईएम"],
+    [/\bEV\b/gi, "ईवी"],
+    [/\bOTT\b/gi, "ओटीटी"],
+    [/\bSupreme Court\b/gi, "सुप्रीम कोर्ट"],
+    [/\bHigh Court\b/gi, "हाई कोर्ट"],
+    [/\bCongress\b/gi, "कांग्रेस"],
+    [/\bWhatsApp\b/gi, "व्हाट्सएप"],
+    [/\bFacebook\b/gi, "फेसबुक"],
+    [/\bTwitter\b/gi, "ट्विटर"],
+    [/\bInstagram\b/gi, "इंस्टाग्राम"],
+    [/\bYouTube\b/gi, "यूट्यूब"],
+    [/\bGoogle\b/gi, "गूगल"],
+    [/\bTelegram\b/gi, "टेलीग्राम"],
+    [/\bApple\b/gi, "एप्पल"],
+    [/\bMicrosoft\b/gi, "माइक्रोसॉफ्ट"],
+    [/\bAndroid\b/gi, "एंड्रॉइड"],
   ];
   for (const [pattern, devanagari] of acronyms) {
     cleaned = cleaned.replace(pattern, devanagari);

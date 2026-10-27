@@ -432,6 +432,11 @@ export interface ChannelProfile {
   fullName?: string;
   district?: string;
   location?: string;
+  state?: string;
+  address?: string;
+  pincode?: string;
+  customHeaderPng?: string;
+  customFooterPng?: string;
   isLocked?: boolean;
   tier?: string;
   email?: string;
@@ -505,3 +510,6 @@ export interface UserWallet {
   pendingBalance: number; // Coins in pending claims
   updatedAt: number;
 }
+
+export type { ReporterUser } from './components/LoginModal';
+

@@ -13,13 +13,13 @@ import org.json.JSONObject
 import java.io.File
 
 data class AuthUser(
-    val id: String = "user_default",
-    val name: String = "मुख्य संपादक (Chief Editor)",
-    val email: String = "editor@ainewsmaker.online",
+    val id: String = "usr_627265616b69",
+    val name: String = "मुख्य संपादक",
+    val email: String = "breakingnewswala.com@gmail.com",
     val role: UserRole = UserRole.ADMIN,
-    val district: String = "सेंट्रल डेस्क",
-    val channelName: String = "AI NEWS MAKER",
-    val mobileNumber: String = ""
+    val district: String = "सेंट्रल डेस्क / भोपाल",
+    val channelName: String = "ब्रेकिंग न्यूज़ वाला",
+    val mobileNumber: String = "9669802408"
 )
 
 object AuthManager {
@@ -32,7 +32,7 @@ object AuthManager {
     const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val FALLBACK_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
-    const val DEFAULT_OPENAI_API_KEY = "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"
+    val DEFAULT_OPENAI_API_KEY: String = com.example.BuildConfig.OPENAI_API_KEY
 
     const val ACCOUNT_DELETION_WEB_URL = "https://ainewsmaker.online/delete-account"
     const val TEST_REVIEWER_EMAIL = "google-reviewer@ainewsmaker.online"
@@ -70,20 +70,20 @@ object AuthManager {
     private val _appMode = MutableStateFlow(AppMode.ADMIN_MODE)
     val appMode: StateFlow<AppMode> = _appMode.asStateFlow()
 
-    private val _isLoggedIn = MutableStateFlow(false)
+    private val _isLoggedIn = MutableStateFlow(true)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
-    private val _isOnboardingCompleted = MutableStateFlow(false)
+    private val _isOnboardingCompleted = MutableStateFlow(true)
     val isOnboardingCompleted: StateFlow<Boolean> = _isOnboardingCompleted.asStateFlow()
 
-    private val _currentUser = MutableStateFlow<AuthUser?>(null)
+    private val _currentUser = MutableStateFlow<AuthUser?>(AuthUser())
     val currentUser: StateFlow<AuthUser?> = _currentUser.asStateFlow()
 
     // Test Mode / View As Mode for Admin ("admin" | "user")
     private val _adminViewAsMode = MutableStateFlow("admin")
     val adminViewAsMode: StateFlow<String> = _adminViewAsMode.asStateFlow()
 
-    private val _userPlanTier = MutableStateFlow("pro")
+    private val _userPlanTier = MutableStateFlow("ultra")
     val userPlanTier: StateFlow<String> = _userPlanTier.asStateFlow()
 
     private val _channelLogoPng = MutableStateFlow("")
@@ -95,13 +95,13 @@ object AuthManager {
     private val _isLogoLocked = MutableStateFlow(false)
     val isLogoLocked: StateFlow<Boolean> = _isLogoLocked.asStateFlow()
 
-    private val _channelNameHi = MutableStateFlow("एआई न्यूज़ मेकर")
+    private val _channelNameHi = MutableStateFlow("ब्रेकिंग न्यूज़ वाला")
     val channelNameHi: StateFlow<String> = _channelNameHi.asStateFlow()
 
-    private val _channelNameEn = MutableStateFlow("AI News Maker")
+    private val _channelNameEn = MutableStateFlow("BREAKING NEWS WALA")
     val channelNameEn: StateFlow<String> = _channelNameEn.asStateFlow()
 
-    private val _channelLogoUrl = MutableStateFlow("")
+    private val _channelLogoUrl = MutableStateFlow("/assets/breaking_news_wala_logo.png")
     val channelLogoUrl: StateFlow<String> = _channelLogoUrl.asStateFlow()
 
     private val _channelLogoType = MutableStateFlow("png")
@@ -122,10 +122,10 @@ object AuthManager {
     private val _socialWhatsapp = MutableStateFlow("")
     val socialWhatsapp: StateFlow<String> = _socialWhatsapp.asStateFlow()
 
-    private val _whatsappNumber = MutableStateFlow("9876543210")
+    private val _whatsappNumber = MutableStateFlow("9669802408")
     val whatsappNumber: StateFlow<String> = _whatsappNumber.asStateFlow()
 
-    private val _websiteUrl = MutableStateFlow("ainewsmaker.online")
+    private val _websiteUrl = MutableStateFlow("breakingnewswala.com")
     val websiteUrl: StateFlow<String> = _websiteUrl.asStateFlow()
 
     private val _googleClientId = MutableStateFlow(DEFAULT_GOOGLE_CLIENT_ID)
@@ -136,6 +136,7 @@ object AuthManager {
 
     private val _openaiApiKey = MutableStateFlow(DEFAULT_OPENAI_API_KEY)
     val openaiApiKey: StateFlow<String> = _openaiApiKey.asStateFlow()
+
 
     fun isEffectiveAdmin(): Boolean {
         val user = _currentUser.value
@@ -167,23 +168,23 @@ object AuthManager {
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        _isLoggedIn.value = prefs.getBoolean(KEY_IS_LOGGED_IN, false)
-        _isOnboardingCompleted.value = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
-        _channelNameHi.value = prefs.getString(KEY_CHANNEL_NAME_HI, "एआई न्यूज़ मेकर") ?: "एआई न्यूज़ मेकर"
-        _channelNameEn.value = prefs.getString(KEY_CHANNEL_NAME_EN, "AI News Maker") ?: "AI News Maker"
-        _channelLogoUrl.value = prefs.getString(KEY_CHANNEL_LOGO_URL, "") ?: ""
-        _whatsappNumber.value = prefs.getString(KEY_WHATSAPP_NUMBER, "9876543210") ?: "9876543210"
-        _websiteUrl.value = prefs.getString(KEY_WEBSITE_URL, "ainewsmaker.online") ?: "ainewsmaker.online"
-        _userPlanTier.value = prefs.getString(KEY_USER_PLAN_TIER, "pro") ?: "pro"
+        _isLoggedIn.value = prefs.getBoolean(KEY_IS_LOGGED_IN, true)
+        _isOnboardingCompleted.value = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, true)
+        _channelNameHi.value = prefs.getString(KEY_CHANNEL_NAME_HI, "ब्रेकिंग न्यूज़ वाला") ?: "ब्रेकिंग न्यूज़ वाला"
+        _channelNameEn.value = prefs.getString(KEY_CHANNEL_NAME_EN, "BREAKING NEWS WALA") ?: "BREAKING NEWS WALA"
+        _channelLogoUrl.value = prefs.getString(KEY_CHANNEL_LOGO_URL, "/assets/breaking_news_wala_logo.png") ?: "/assets/breaking_news_wala_logo.png"
+        _whatsappNumber.value = prefs.getString(KEY_WHATSAPP_NUMBER, "9669802408") ?: "9669802408"
+        _websiteUrl.value = prefs.getString(KEY_WEBSITE_URL, "breakingnewswala.com") ?: "breakingnewswala.com"
+        _userPlanTier.value = prefs.getString(KEY_USER_PLAN_TIER, "ultra") ?: "ultra"
         _adminViewAsMode.value = prefs.getString(KEY_ADMIN_VIEW_AS_MODE, "admin") ?: "admin"
 
         if (_isLoggedIn.value) {
-            val userName = prefs.getString(KEY_USER_NAME, "मुख्य संपादक (Chief Editor)") ?: "मुख्य संपादक (Chief Editor)"
-            val userEmail = prefs.getString(KEY_USER_EMAIL, "editor@ainewsmaker.online") ?: "editor@ainewsmaker.online"
+            val userName = prefs.getString(KEY_USER_NAME, "मुख्य संपादक") ?: "मुख्य संपादक"
+            val userEmail = prefs.getString(KEY_USER_EMAIL, "breakingnewswala.com@gmail.com") ?: "breakingnewswala.com@gmail.com"
             val userRoleStr = prefs.getString(KEY_USER_ROLE, UserRole.ADMIN.name) ?: UserRole.ADMIN.name
             val userRole = try { UserRole.valueOf(userRoleStr) } catch (_: Exception) { UserRole.ADMIN }
-            val district = prefs.getString(KEY_USER_DISTRICT, "सेंट्रल डेस्क") ?: "सेंट्रल डेस्क"
-            val mobile = prefs.getString(KEY_USER_MOBILE, "") ?: ""
+            val district = prefs.getString(KEY_USER_DISTRICT, "सेंट्रल डेस्क / भोपाल") ?: "सेंट्रल डेस्क / भोपाल"
+            val mobile = prefs.getString(KEY_USER_MOBILE, "9669802408") ?: "9669802408"
 
             _currentUser.value = AuthUser(
                 name = userName,
@@ -430,12 +431,20 @@ object AuthManager {
         if (!_isLoggedIn.value) return "{}"
         val user = _currentUser.value ?: return "{}"
         val obj = JSONObject().apply {
-            put("username", if (user.role == UserRole.ADMIN) "admin" else "reporter")
+            put("userId", user.id)
+            put("uid", user.id)
+            put("id", user.id)
+            put("username", if (user.role == UserRole.ADMIN) "breakingnewswala" else "reporter")
             put("name", user.name)
-            put("role", if (user.role == UserRole.ADMIN) "admin" else "reporter")
+            put("role", if (user.role == UserRole.ADMIN) "superadmin" else "reporter")
             put("district", user.district)
             put("email", user.email)
             put("mobileNumber", user.mobileNumber)
+            put("tier", _userPlanTier.value)
+            put("planTier", _userPlanTier.value)
+            put("channelName", user.channelName)
+            put("channelLogoUrl", _channelLogoUrl.value)
+            put("channelWebsite", _websiteUrl.value)
             put("googleClientId", _googleClientId.value)
             put("cloudServerUrl", _cloudServerUrl.value)
             put("openaiApiKey", _openaiApiKey.value)

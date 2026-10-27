@@ -1142,7 +1142,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  1. प्रोफाइल व चैनल विवरण
+                  प्रोफाइल व चैनल विवरण
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   चैनल लोगो, नाम, प्राइमरी मोबाइल नंबर, व्हाट्सएप व ब्रांडिंग विवरण
@@ -1183,7 +1183,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  2. मेंबरशिप प्लान व अपग्रेड
+                  मेंबरशिप प्लान व अपग्रेड
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   वर्तमान प्लान, 4 उपलब्ध टियर्स व 1-क्लिक प्लान एक्टिवेशन
@@ -1286,7 +1286,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  3. प्लान्स मैनेजर
+                  प्लान्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   एडमिन द्वारा प्लान्स की कीमत, वैधता, सुविधाएं व सक्रिय/निष्क्रिय स्थिति नियंत्रण
@@ -1512,7 +1512,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  4. टेम्पलेट मैनेजर
+                  टेम्पलेट मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   ग्राफिक्स (8 श्रेणियां) व वीडियो टेम्पलेट्स (9:16, 1:1, 4:3, 4:5) एक्सेस टियर व Custom Header/Footer Approval
@@ -1549,7 +1549,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  5. Music Library / म्यूजिक लाइब्रेरी
+                  म्यूजिक लाइब्रेरी डैशबोर्ड
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   कॉपीराइट सेफ बैकग्राउंड म्यूज़िक, अपलोड, प्रीव्यू व वीडियो ऑडियो मिक्सिंग कंट्रोल
@@ -1587,7 +1587,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  6. प्रोमो कोड्स मैनेजर
+                  प्रोमो कोड्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   सिंगल-यूज़ प्रोमो कोड जनरेशन व एक्टिवेशन
@@ -1973,7 +1973,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  7. यूज़र्स प्रबंधन
+                  यूज़र्स प्रबंधन
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   पंजीकृत यूज़र्स, टियर व कस्टम हेडर/फुटर (यूज़र डेटा संपादन व सुरक्षा)
@@ -3230,7 +3230,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm sm:text-base font-black text-white block truncate">
-                    8. बोनस पुरस्कार व क्लेम रिव्यू प्रबंधन
+                    बोनस पुरस्कार व क्लेम रिव्यू प्रबंधन
                   </span>
                   <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
                     पुरस्कार व क्लेम्स
@@ -3577,7 +3577,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  9. RSS लिंक्स डैशबोर्ड
+                  RSS लिंक्स डैशबोर्ड
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   लाइव प्रोडक्शन RSS XML फ़ीड लिंक्स प्रबंधन व लाइव स्टेटस
@@ -3606,7 +3606,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               }`}
             >
               <Rss className="w-4 h-4" />
-              <span>1. RSS Links Dashboard</span>
+              <span>RSS लिंक्स डैशबोर्ड</span>
             </button>
             <button
               type="button"
@@ -3618,7 +3618,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               }`}
             >
               <Globe className="w-4 h-4" />
-              <span>2. Web to RSS Link Converter</span>
+              <span>Web to RSS Link Converter</span>
             </button>
           </div>
 
@@ -4227,7 +4227,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  10. वेब लिंक्स मैनेजर
+                  वेब लिंक्स मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   वेबसाइट एवं आर्टिकल वेब लिंक्स प्रबंधन व लाइव वेब स्क्रैपिंग
@@ -4527,7 +4527,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  11. प्रतिबंधित चैनल सुरक्षा सूची
+                  प्रतिबंधित चैनल सुरक्षा सूची
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति
@@ -4876,7 +4876,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  12. सहायता एवं नीतियाँ
+                  सहायता एवं नीतियाँ
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ

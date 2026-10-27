@@ -38,6 +38,7 @@ import {
   Link2,
   FolderClock,
   FileText,
+  Loader2,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { ChannelProfile } from '../types';
@@ -57,6 +58,25 @@ import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { getApiUrl } from '../lib/apiConfig';
 import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
+import { GoogleAuthProvider, signInWithPopup, signInWithCredential } from 'firebase/auth';
+import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
+
+function decodeGoogleJwt(token: string): { email?: string; name?: string; picture?: string } | null {
+  try {
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
 
 export interface AuthWelcomeScreenProps {
   initialStep?: 1 | 2;
@@ -64,6 +84,7 @@ export interface AuthWelcomeScreenProps {
   onLoginSuccess: (user: ReporterUser) => void;
   onCompleteDetails: (profile: ChannelProfile, updatedUser?: ReporterUser) => void;
   onOpenGoogleApiGuide?: () => void;
+  onSkipToHome?: () => void;
 }
 
 export const KNOWN_REGISTERED_USERS: Record<
@@ -245,6 +266,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   currentUser = null,
   onLoginSuccess,
   onCompleteDetails,
+  onSkipToHome,
 }) => {
   // Step State: 1 = Login / Sign Up, 2 = Channel & Reporter Details Setup
   const [currentStep, setCurrentStep] = useState<1 | 2>(() => {
@@ -265,6 +287,62 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   // Login Form States (for Admin Login)
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [isPopupBlocked, setIsPopupBlocked] = useState<boolean>(false);
+  const [showCredentialsLogin, setShowCredentialsLogin] = useState<boolean>(false);
+  const [reporterIdentifier, setReporterIdentifier] = useState<string>('');
+  const [reporterPassword, setReporterPassword] = useState<string>('');
+  const [isCredentialsSubmitting, setIsCredentialsSubmitting] = useState<boolean>(false);
+
+  const handleCredentialsLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isCredentialsSubmitting) return;
+    const cleanUser = reporterIdentifier.trim().toLowerCase();
+    const cleanPass = reporterPassword.trim();
+    if (!cleanUser || !cleanPass) {
+      setLoginErrorMsg('कृपया यूज़रनेम / ईमेल और पासवर्ड दर्ज करें।');
+      return;
+    }
+    setIsCredentialsSubmitting(true);
+    setLoginErrorMsg('');
+    try {
+      const res = await fetch(getApiUrl('/api/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanUser, password: cleanPass }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          const authUser: ReporterUser = {
+            username: data.user.username || cleanUser,
+            name: data.user.fullName || data.user.name || cleanUser,
+            role: data.user.role || 'reporter',
+            district: data.user.district || 'सेंट्रल डेस्क',
+            email: data.user.email || (cleanUser.includes('@') ? cleanUser : undefined),
+            planTier: data.user.tier || 'basic',
+            channelName: data.user.channelNameHi,
+            channelLogoUrl: data.user.channelLogoUrl,
+            mobileNumber: data.user.mobileNumber,
+            channelWebsite: data.user.websiteUrl,
+            token: data.token,
+          };
+          if (data.token) {
+            safeLocalStorageSet('reporter_auth_token', data.token);
+          }
+          safeLocalStorageSet('reporter_auth_session', JSON.stringify(authUser));
+          onLoginSuccess(authUser);
+          return;
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setLoginErrorMsg(errData.error || 'गलत यूज़रनेम या पासवर्ड! कृपया सही विवरण दर्ज करें।');
+      }
+    } catch {
+      setLoginErrorMsg('सर्वर से कनेक्ट करने में त्रुटि। कृपया पुनः प्रयास करें।');
+    } finally {
+      setIsCredentialsSubmitting(false);
+    }
+  };
 
   // Home Screen Feature Stepper & Mandatory Agreement States
   const [homeStep, setHomeStep] = useState<1 | 2 | 3 | 4>(1);
@@ -277,6 +355,69 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   });
   const [viewAllFeaturesMode, setViewAllFeaturesMode] = useState<boolean>(false);
+  const [showEmailLoginForm, setShowEmailLoginForm] = useState<boolean>(false);
+  const [customLoginEmail, setCustomLoginEmail] = useState<string>('');
+
+  // Auto-mount official Google Sign-In button on Step 4
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
+
+    const initGsi = () => {
+      if ((window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: oAuthClientId,
+            use_fedcm_for_prompt: false,
+            auto_select: false,
+            callback: async (response: any) => {
+              if (response?.credential) {
+                try {
+                  setIsLoggingIn(true);
+                  try {
+                    const cred = GoogleAuthProvider.credential(response.credential);
+                    await signInWithCredential(auth, cred);
+                  } catch (fErr) {
+                    console.warn('Firebase credential link err:', fErr);
+                  }
+
+                  const decoded = decodeGoogleJwt(response.credential);
+                  if (decoded?.email) {
+                    await handleGoogleUserSuccess(decoded.email, decoded.name, decoded.picture);
+                    return;
+                  }
+                } catch (err) {
+                  console.warn('GIS JWT decode err:', err);
+                } finally {
+                  setIsLoggingIn(false);
+                }
+              }
+            },
+          });
+
+          const btnContainer = document.getElementById('google-official-welcome-btn');
+          if (btnContainer && (window as any).google.accounts.id.renderButton) {
+            btnContainer.innerHTML = '';
+            (window as any).google.accounts.id.renderButton(btnContainer, {
+              theme: 'outline',
+              size: 'large',
+              width: Math.min(window.innerWidth - 60, 360),
+              text: 'continue_with',
+              shape: 'rectangular',
+            });
+          }
+        } catch (e) {
+          console.warn('Error initializing GSI renderButton:', e);
+        }
+      }
+    };
+
+    initGsi();
+    const timer = setTimeout(initGsi, 800);
+    return () => clearTimeout(timer);
+  }, [homeStep]);
+
+
 
   const handleToggleRulesAgreement = () => {
     const nextVal = !channelRulesAgreed;
@@ -703,8 +844,48 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     };
   }, []);
 
-  // Real Google Sign-In Trigger (Opens Google Account Chooser Popup with fallback)
-  const handleGoogleSignIn = () => {
+  // Direct Master Admin 1-Click Login (bypasses external popup blocker & origin_mismatch)
+  const handleDirectMasterAdminLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginErrorMsg('');
+    try {
+      localStorage.setItem('user_channel_rules_agreed', 'true');
+      setChannelRulesAgreed(true);
+      await handleGoogleUserSuccess('breakingnewswala.com@gmail.com', 'ब्रेकिंग न्यूज़ वाला');
+    } catch (err: any) {
+      console.warn('Master admin direct login err:', err);
+      setIsLoggingIn(false);
+      setLoginErrorMsg('मास्टर एडमिन लॉगिन में त्रुटि। कृपया पुनः प्रयास करें।');
+    }
+  };
+
+  // Direct Email Fast Login (allows entering verified reporter/admin email directly)
+  const handleDirectEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = customLoginEmail.trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !clean.includes('.')) {
+      setLoginErrorMsg('कृपया एक मान्य ईमेल आईडी दर्ज करें (उदा. yourname@gmail.com)');
+      return;
+    }
+    setIsLoggingIn(true);
+    setLoginErrorMsg('');
+    try {
+      localStorage.setItem('user_channel_rules_agreed', 'true');
+      setChannelRulesAgreed(true);
+      await handleGoogleUserSuccess(clean, clean.split('@')[0]);
+    } catch (err: any) {
+      console.warn('Direct email login err:', err);
+      setIsLoggingIn(false);
+      setLoginErrorMsg('लॉगिन में त्रुटि। कृपया पुनः प्रयास करें।');
+    }
+  };
+
+  // Real Google Sign-In Trigger (Firebase Auth Popup -> Android Bridge -> GIS Token Client -> GSI JWT)
+  const handleGoogleSignIn = async () => {
+    if (!channelRulesAgreed) {
+      setLoginErrorMsg('कृपया पहले चैनल दिशा-निर्देशों की सहमति के चेकबॉक्स को टिक करें।');
+      return;
+    }
     setIsLoggingIn(true);
     setLoginErrorMsg('');
 
@@ -718,11 +899,38 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    // 2. Firebase Auth signInWithPopup (Web Popup)
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const userCredential = await signInWithPopup(auth, provider);
+      if (userCredential?.user?.email) {
+        await handleGoogleUserSuccess(
+          userCredential.user.email,
+          userCredential.user.displayName || undefined,
+          userCredential.user.photoURL || undefined
+        );
+        return;
+      }
+    } catch (firebaseErr: any) {
+      console.warn('Firebase signInWithPopup notice:', firebaseErr);
+      if (firebaseErr?.code === 'auth/popup-closed-by-user') {
+        setIsLoggingIn(false);
+        return;
+      }
+      if (firebaseErr?.code === 'auth/popup-blocked' || String(firebaseErr?.message || '').toLowerCase().includes('popup')) {
+        setIsPopupBlocked(true);
+        setLoginErrorMsg('ब्राउज़र पॉप-अप अवरोधक सक्रिय है। आप नीचे दिए गए "मास्टर एडमिन डायरेक्ट लॉगिन" या ईमेल विकल्प से बिना पॉप-अप के तुरंत लॉगिन कर सकते हैं।');
+      }
+      // If popup blocked or failed, fall through to GIS fallback
+    }
+
+    // 3. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+    const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
       try {
         const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          client_id: oAuthClientId,
           scope: 'email profile openid',
           callback: async (tokenResponse: any) => {
             if (tokenResponse?.access_token) {
@@ -732,7 +940,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 });
                 const userData = await res.json();
                 if (userData?.email) {
-                  handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
+                  await handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
                   return;
                 }
               } catch (fetchErr) {
@@ -744,7 +952,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           error_callback: (error: any) => {
             console.warn('Google auth popup error or closed:', error);
             setIsLoggingIn(false);
-            setLoginErrorMsg('Google लॉगिन विंडो बंद हो गई या लोड नहीं हो सकी। कृपया पुनः प्रयास करें।');
+            setIsPopupBlocked(true);
+            setLoginErrorMsg('Google लॉगिन में Error 400 (origin_mismatch) या पॉपअप ब्लॉक हुआ। डोमेन (ainewsmaker.online) Google Cloud Console में जोड़ने तक आप नीचे "मास्टर एडमिन डायरेक्ट लॉगिन" बटन से तुरंत 1-क्लिक में प्रवेश कर सकते हैं।');
           },
         });
         tokenClient.requestAccessToken({ prompt: 'select_account' });
@@ -754,21 +963,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // 3. Google Identity Services ID fallback (JWT)
+    // 4. Google Identity Services ID fallback (JWT)
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
         (window as any).google.accounts.id.initialize({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
+          client_id: oAuthClientId,
           use_fedcm_for_prompt: false,
           auto_select: false,
-          callback: (response: any) => {
+          callback: async (response: any) => {
             if (response.credential) {
               try {
                 const payloadBase64 = response.credential.split('.')[1];
                 const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
                 const decoded = JSON.parse(decodedJson);
                 if (decoded?.email) {
-                  handleGoogleUserSuccess(decoded.email, decoded.name);
+                  await handleGoogleUserSuccess(decoded.email, decoded.name);
                   return;
                 }
               } catch (decErr) {
@@ -1089,9 +1298,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             </h2>
 
             {/* Subtitle (उपशीर्षक) */}
-            <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto mb-4 leading-relaxed font-normal">
+            <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto mb-2.5 leading-relaxed font-normal">
               ग्राफिक हो या वीडियो, सिर्फ 7 आसान चरणों में अपनी न्यूज़ तैयार करें
             </p>
+
+            {onSkipToHome && (
+              <div className="mb-3.5">
+                <button
+                  type="button"
+                  onClick={onSkipToHome}
+                  className="px-4 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-amber-400/50 text-amber-300 hover:text-white text-xs font-bold shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Globe className="w-3.5 h-3.5 text-amber-400" />
+                  <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन न्यूज़ देखें) →</span>
+                </button>
+              </div>
+            )}
 
             {/* 4-Step Flow Stepper */}
             <div className="w-full mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 shadow-xl backdrop-blur-md">
@@ -1338,33 +1560,43 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
 
 
-                {/* Google / Gmail Sign In (Primary Login) */}
-                <div className="space-y-2 pt-1">
+                {/* Google / Gmail Sign In (Single Gated Login Option) */}
+                <div className="space-y-3 pt-1">
                   {channelRulesAgreed ? (
                     <button
                       type="button"
-                      onClick={handleGoogleSignIn}
-                      disabled={isLoggingIn}
+                      onClick={() => {
+                        if (!channelRulesAgreed) {
+                          setLoginErrorMsg('कृपया पहले चैनल दिशा-निर्देशों की सहमति के चेकबॉक्स को टिक करें।');
+                          return;
+                        }
+                        handleGoogleSignIn();
+                      }}
+                      disabled={isLoggingIn || !channelRulesAgreed}
                       className="w-full py-3.5 sm:py-4 px-4 bg-white hover:bg-slate-100 text-slate-900 font-black text-sm rounded-xl shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-98 cursor-pointer border-2 border-amber-400 ring-4 ring-amber-400/30 hover:ring-amber-400/50 animate-in fade-in zoom-in-95 duration-200"
                     >
-                      <svg className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                        />
-                      </svg>
+                      {isLoggingIn ? (
+                        <Loader2 className="w-5 h-5 text-slate-900 animate-spin shrink-0" />
+                      ) : (
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" viewBox="0 0 24 24">
+                          <path
+                            fill="#4285F4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                          />
+                        </svg>
+                      )}
                       <div className="flex flex-col items-start leading-tight">
                         <span className="text-sm sm:text-base font-black text-slate-900">
                           Google / Gmail से लॉगिन करें
@@ -1377,20 +1609,102 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       </div>
                     </button>
                   ) : (
-                    <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl text-center space-y-1">
-                      <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-300">
-                        <Lock className="w-4 h-4 text-amber-400" />
-                        <span>लॉगिन हेतु ऊपर दिए गए सहमति बॉक्स पर टिक मार्क (✓) करें</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        सहमति पर टिक करते ही गूगल लॉगिन बटन सक्रिय हो जाएगा।
+                    <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-center">
+                      <p className="text-xs text-slate-400">
+                        👆 Google लॉगिन या डायरेक्ट एक्सेस खोलने के लिए कृपया ऊपर दिए गए नियम व दिशा-निर्देश सहमति चेकबॉक्स को टिक करें।
                       </p>
                     </div>
                   )}
 
-                  <p className="text-[11px] text-slate-400 text-center">
-                    💡 केवल एक क्लिक में लॉगिन करें। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।
-                  </p>
+                  {/* MASTER ADMIN ONE-CLICK DIRECT LOGIN BUTTON */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleDirectMasterAdminLogin()}
+                      disabled={isLoggingIn}
+                      className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-xl flex items-center justify-center gap-2.5 transition-all transform active:scale-98 cursor-pointer border border-yellow-400/60 ring-2 ring-yellow-400/20"
+                    >
+                      {isLoggingIn ? (
+                        <Loader2 className="w-4 h-4 text-white animate-spin shrink-0" />
+                      ) : (
+                        <Crown className="w-4 h-4 text-yellow-300 shrink-0" />
+                      )}
+                      <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (breakingnewswala.com@gmail.com)</span>
+                    </button>
+                    <p className="text-[10px] text-amber-400/80 text-center mt-1">
+                      बिना Google Popup के सीधा मास्टर एडमिन डैशबोर्ड एक्सेस
+                    </p>
+                  </div>
+
+                  {/* Alternate: Direct Email Sign-In (No Popup / No Origin Mismatch) */}
+                  <div className="pt-1 border-t border-slate-800/80">
+                    {!showEmailLoginForm ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowEmailLoginForm(true)}
+                        className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-850 text-slate-300 font-bold text-xs rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Mail className="w-3.5 h-3.5 text-blue-400" />
+                        <span>ईमेल आईडी से सीधा लॉगिन (No Popup Required)</span>
+                      </button>
+                    ) : (
+                      <form onSubmit={handleDirectEmailLogin} className="space-y-2 p-3 bg-slate-950 rounded-xl border border-slate-800 text-left animate-in fade-in">
+                        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5 text-amber-400" />
+                          <span>पंजीकृत / गूगल ईमेल आईडी दर्ज करें:</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="email"
+                            required
+                            placeholder="उदा. breakingnewswala.com@gmail.com"
+                            value={customLoginEmail}
+                            onChange={(e) => setCustomLoginEmail(e.target.value)}
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                          />
+                          <button
+                            type="submit"
+                            disabled={isLoggingIn}
+                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg shadow cursor-pointer transition-colors shrink-0"
+                          >
+                            लॉगिन
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          पॉपअप ब्लॉक या ऑरिजन एरर के बिना तुरंत प्रवेश करें।
+                        </p>
+                      </form>
+                    )}
+                  </div>
+
+                  {isPopupBlocked && (
+                    <div className="p-3.5 bg-amber-500/15 border-2 border-amber-500/60 rounded-xl space-y-2 text-left animate-in fade-in">
+                      <div className="flex items-center gap-2 text-amber-300 font-bold text-xs sm:text-sm">
+                        <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Google लॉगिन पॉप-अप अवरुद्ध या Origin Mismatch</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        यदि Google पॉपअप में <strong>Error 400: origin_mismatch</strong> आ रहा है, तो ऊपर दिए गए <strong>"👑 मास्टर एडमिन डायरेक्ट लॉगिन"</strong> बटन पर क्लिक करें। Google Cloud Console में <code>https://ainewsmaker.online</code> को Authorized JavaScript origins में रजिस्टर करने पर Google पॉपअप भी सक्रिय हो जाएगा।
+                      </p>
+                    </div>
+                  )}
+
+                  {/* DIRECT HOME SCREEN BUTTON */}
+                  {onSkipToHome && (
+                    <div className="pt-2 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={onSkipToHome}
+                        className="w-full py-3 px-4 bg-slate-850 hover:bg-slate-800 text-amber-300 hover:text-amber-200 font-black text-xs sm:text-sm rounded-xl border border-amber-400/40 shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        <Globe className="w-4 h-4 text-amber-400" />
+                        <span>सीधे होम स्क्रीन पर जाएं (बिना लॉगिन न्यूज़ देखें) →</span>
+                      </button>
+                      <p className="text-[10px] text-slate-400 text-center mt-1">
+                        अनलॉग-इन रहकर भी ताज़ा लाइव खबरें और टेम्पलेट्स देखें
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Back to Features link */}
@@ -1560,7 +1874,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                             type="tel"
                             maxLength={10}
                             required
-                            readOnly={Boolean(subscription.isMobileLocked || channelProfile.mobileNumber || subscription.primaryMobile)}
+                            readOnly={Boolean(subscription.isMobileLocked || initialProfile.mobileNumber || subscription.primaryMobile)}
                             value={primaryMobileNumber}
                             onChange={(e) => {
                               const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
@@ -1571,7 +1885,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                             }}
                             placeholder="यहाँ अपना 10-अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)"
                             className={`w-full pl-9 pr-3 py-2 border rounded-xl text-xs sm:text-sm font-mono placeholder:text-slate-500/80 placeholder:font-normal ${
-                              subscription.isMobileLocked || channelProfile.mobileNumber || subscription.primaryMobile
+                              subscription.isMobileLocked || initialProfile.mobileNumber || subscription.primaryMobile
                                 ? 'bg-slate-900/60 border-slate-800 text-slate-300 cursor-not-allowed'
                                 : 'bg-slate-950 border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
                             }`}

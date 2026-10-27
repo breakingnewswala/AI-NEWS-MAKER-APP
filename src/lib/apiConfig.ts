@@ -42,15 +42,12 @@ export function isAndroidWebView(): boolean {
 export function isStaticDeploymentHost(): boolean {
   if (typeof window === 'undefined') return false;
   const host = (window.location.hostname || '').toLowerCase();
+  // Only pure static CDN hosts without fullstack server capability
   return (
     host.endsWith('github.io') ||
     host.endsWith('.surge.sh') ||
     host.endsWith('.gitlab.io') ||
-    host.endsWith('.web.app') ||
-    host.endsWith('.firebaseapp.com') ||
-    host.endsWith('.pages.dev') ||
-    host.endsWith('.netlify.app') ||
-    host.endsWith('.vercel.app')
+    host.endsWith('.pages.dev')
   );
 }
 
@@ -62,18 +59,18 @@ export function getApiBaseUrl(): string {
       return custom;
     }
 
-    // 2. If running on known pure static host without backend
-    if (isStaticDeploymentHost()) {
+    // 2. Inside Android local asset WebView (file:// or appassets.androidplatform.net)
+    if (isAndroidWebView()) {
       return DEFAULT_CLOUD_BASE_URL;
     }
 
-    // 3. If running via HTTP or HTTPS (web browser or WebView navigating web URL), use current origin
+    // 3. If running via HTTP or HTTPS (web browser, Firebase App Hosting, Cloud Run, Preview)
     if (window.location.protocol.startsWith('http') && window.location.hostname !== 'appassets.androidplatform.net') {
       return window.location.origin;
     }
 
-    // 4. Inside Android local asset WebView (file:// or appassets.androidplatform.net)
-    if (isAndroidWebView()) {
+    // 4. Pure static hosting without backend
+    if (isStaticDeploymentHost()) {
       return DEFAULT_CLOUD_BASE_URL;
     }
   }
@@ -82,21 +79,22 @@ export function getApiBaseUrl(): string {
 }
 
 export function getApiUrl(endpoint: string): string {
-  const base = getApiBaseUrl();
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const custom = getCustomCloudUrl();
   if (custom) {
     return `${custom}${cleanEndpoint}`;
   }
-  // If running on a static host or inside Android WebView without custom cloud, use base
-  if (isStaticDeploymentHost() || isAndroidWebView()) {
-    return `${base}${cleanEndpoint}`;
+  if (isAndroidWebView()) {
+    return `${DEFAULT_CLOUD_BASE_URL}${cleanEndpoint}`;
   }
-  // If running in browser with same origin and backend available
+  // On web (HTTP/HTTPS), use same-origin relative path so it seamlessly works on Preview, App Hosting, custom domains
   if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+    if (isStaticDeploymentHost()) {
+      return `${DEFAULT_CLOUD_BASE_URL}${cleanEndpoint}`;
+    }
     return cleanEndpoint;
   }
-  return `${base}${cleanEndpoint}`;
+  return `${DEFAULT_CLOUD_BASE_URL}${cleanEndpoint}`;
 }
 
 export function getAuthToken(): string {

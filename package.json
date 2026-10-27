@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node dev.cjs",
     "start": "node dev.cjs",
-    "prebuild": "node -e \"if (!require('fs').existsSync('web_studio/node_modules')) require('child_process').execSync('npm --prefix web_studio install', {stdio: 'inherit'});\"",
+    "prebuild": "node -e \"if (!require('fs').existsSync('web_studio/node_modules')) require('child_process').execSync('npm --prefix web_studio install --legacy-peer-deps', {stdio: 'inherit'});\"",
     "build": "node web_studio/build_and_sync.js",
     "studio:dev": "npm --prefix web_studio run dev",
     "studio:build": "npm --prefix web_studio run build",

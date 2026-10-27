@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 import {
   Lock,
   User,
@@ -136,147 +138,147 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   if (!isOpen) return null;
 
+  const processGoogleUser = async (rawEmail: string, displayName?: string) => {
+    // 1. Strict whitespace cleaning
+    const cleanEmail = rawEmail.replace(/\s+/g, '').trim().toLowerCase();
+
+    // 2. Strict email regex validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setLoading(false);
+      setErrorMessage('कृपया एक वैध ईमेल पता दर्ज करें (उदा. user@gmail.com)।');
+      return;
+    }
+
+    const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com';
+    const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+
+    let safeUsername = '';
+    if (isSuper) {
+      safeUsername = 'AI News Maker';
+    } else if (isAdmin) {
+      safeUsername = 'breakingnewswala';
+    } else {
+      try {
+        const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
+        if (savedProfileStr) {
+          const parsed = JSON.parse(savedProfileStr);
+          if (parsed.username && !parsed.username.includes('@') && !parsed.username.includes('.')) {
+            safeUsername = parsed.username.replace(/^@/, '');
+          }
+        }
+      } catch {}
+
+      if (!safeUsername && displayName) {
+        const cleanName = displayName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
+        if (cleanName.length >= 3) {
+          safeUsername = cleanName.slice(0, 16);
+        }
+      }
+
+      if (!safeUsername) {
+        safeUsername = `reporter_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+    }
+
+    const defaultName = displayName || (isSuper ? 'सुपर एडमिन' : (isAdmin ? 'मुख्य संपादक' : 'User'));
+
+    let user: ReporterUser = {
+      username: safeUsername,
+      name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
+      role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+      email: cleanEmail,
+      district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
+      planTier: isSuper || isAdmin ? 'ultra' : 'basic',
+    };
+
+    // Authenticate & sync with Cloud backend /api/auth/login
+    try {
+      const res = await fetch(getApiUrl('/api/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          googleUid: `goog_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
+          identifier: cleanEmail,
+          profileData: {
+            email: cleanEmail,
+            name: user.name,
+            username: user.username,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          user.role = data.user.role || user.role;
+          user.planTier = data.user.tier || user.planTier;
+          user.channelName = data.user.channelNameHi || user.channelName;
+          user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
+          if (data.user.username && !data.user.username.includes('@')) {
+            user.username = data.user.username;
+          }
+          if (data.token) {
+            localStorage.setItem('reporter_auth_token', data.token);
+            (user as any).token = data.token;
+          }
+        }
+      }
+    } catch (authErr) {
+      console.warn('Cloud auth sync error:', authErr);
+    }
+
+    try {
+      let customAccounts: Record<string, { pass: string; user: ReporterUser }> = {};
+      const stored = localStorage.getItem('reporter_custom_accounts');
+      if (stored) customAccounts = JSON.parse(stored);
+      customAccounts[cleanEmail] = { pass: 'google_linked', user };
+      localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
+      localStorage.setItem('reporter_auth_session', JSON.stringify(user));
+
+      try {
+        registerOrUpdateUser({
+          email: cleanEmail,
+          name: user.name,
+          username: user.username,
+          role: user.role,
+          tier: isSuper || isAdmin ? 'ultra' : 'basic',
+          isLocked: !isAdmin && !isSuper,
+        });
+      } catch (gRegErr) {
+        console.warn('Error syncing Google user in LoginModal:', gRegErr);
+      }
+    } catch (e) {}
+
+    // Persist to server user-profile endpoint
+    try {
+      fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: user.username,
+          fullName: user.name,
+          email: user.email,
+          role: user.role,
+          district: user.district,
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    setSuccessMessage(`🎉 खाता सत्यापित हो गया (${user.role === 'admin' || user.role === 'superadmin' ? '👑 एडमिन' : '👤 रिपोर्टर'})!`);
+    setTimeout(() => {
+      setLoading(false);
+      onLoginSuccess(user);
+      if (onOpenProfileSetup) {
+        onOpenProfileSetup(user);
+      }
+    }, 400);
+  };
+
   // Handle Real Google Login (Google Identity Services / Android Bridge / Secure OAuth)
   const handleGoogleLogin = () => {
     if (loading) return;
     setLoading(true);
     setErrorMessage(null);
-
-    const processGoogleUser = async (rawEmail: string, displayName?: string) => {
-      // 1. Strict whitespace cleaning
-      const cleanEmail = rawEmail.replace(/\s+/g, '').trim().toLowerCase();
-
-      // 2. Strict email regex validation
-      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      if (!emailRegex.test(cleanEmail)) {
-        setLoading(false);
-        setErrorMessage('कृपया एक वैध ईमेल पता दर्ज करें (उदा. user@gmail.com)।');
-        return;
-      }
-
-      const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com';
-      const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
-
-      let safeUsername = '';
-      if (isSuper) {
-        safeUsername = 'AI News Maker';
-      } else if (isAdmin) {
-        safeUsername = 'breakingnewswala';
-      } else {
-        try {
-          const savedProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`);
-          if (savedProfileStr) {
-            const parsed = JSON.parse(savedProfileStr);
-            if (parsed.username && !parsed.username.includes('@') && !parsed.username.includes('.')) {
-              safeUsername = parsed.username.replace(/^@/, '');
-            }
-          }
-        } catch {}
-
-        if (!safeUsername && displayName) {
-          const cleanName = displayName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
-          if (cleanName.length >= 3) {
-            safeUsername = cleanName.slice(0, 16);
-          }
-        }
-
-        if (!safeUsername) {
-          safeUsername = `reporter_${Math.floor(1000 + Math.random() * 9000)}`;
-        }
-      }
-
-      const defaultName = displayName || (isSuper ? 'सुपर एडमिन' : (isAdmin ? 'मुख्य संपादक' : 'User'));
-
-      let user: ReporterUser = {
-        username: safeUsername,
-        name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
-        email: cleanEmail,
-        district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
-        planTier: isSuper || isAdmin ? 'ultra' : 'basic',
-      };
-
-      // Authenticate & sync with Cloud backend /api/auth/login
-      try {
-        const res = await fetch(getApiUrl('/api/auth/login'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            googleUid: `goog_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
-            identifier: cleanEmail,
-            profileData: {
-              email: cleanEmail,
-              name: user.name,
-              username: user.username,
-            },
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.user) {
-            user.role = data.user.role || user.role;
-            user.planTier = data.user.tier || user.planTier;
-            user.channelName = data.user.channelNameHi || user.channelName;
-            user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
-            if (data.user.username && !data.user.username.includes('@')) {
-              user.username = data.user.username;
-            }
-            if (data.token) {
-              localStorage.setItem('reporter_auth_token', data.token);
-              (user as any).token = data.token;
-            }
-          }
-        }
-      } catch (authErr) {
-        console.warn('Cloud auth sync error:', authErr);
-      }
-
-      try {
-        let customAccounts: Record<string, { pass: string; user: ReporterUser }> = {};
-        const stored = localStorage.getItem('reporter_custom_accounts');
-        if (stored) customAccounts = JSON.parse(stored);
-        customAccounts[cleanEmail] = { pass: 'google_linked', user };
-        localStorage.setItem('reporter_custom_accounts', JSON.stringify(customAccounts));
-        localStorage.setItem('reporter_auth_session', JSON.stringify(user));
-
-        try {
-          registerOrUpdateUser({
-            email: cleanEmail,
-            name: user.name,
-            username: user.username,
-            role: user.role,
-            tier: isSuper || isAdmin ? 'ultra' : 'basic',
-            isLocked: !isAdmin && !isSuper,
-          });
-        } catch (gRegErr) {
-          console.warn('Error syncing Google user in LoginModal:', gRegErr);
-        }
-      } catch (e) {}
-
-      // Persist to server user-profile endpoint
-      try {
-        fetch(getApiUrl('/api/user-profile'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: user.username,
-            fullName: user.name,
-            email: user.email,
-            role: user.role,
-            district: user.district,
-          }),
-        }).catch(() => {});
-      } catch {}
-
-      setSuccessMessage(`🎉 खाता सत्यापित हो गया (${user.role === 'admin' || user.role === 'superadmin' ? '👑 एडमिन' : '👤 रिपोर्टर'})!`);
-      setTimeout(() => {
-        setLoading(false);
-        onLoginSuccess(user);
-        if (onOpenProfileSetup) {
-          onOpenProfileSetup(user);
-        }
-      }, 400);
-    };
 
     // 1. Check Native Android Bridge
     if (typeof window !== 'undefined' && (window as any).AndroidBridge?.signInWithGoogle) {
@@ -288,96 +290,110 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     }
 
-    // 2. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
-    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-      try {
-        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
-          scope: 'email profile openid',
-          callback: async (tokenResponse: any) => {
-            if (tokenResponse?.access_token) {
-              try {
-                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-                });
-                const userData = await res.json();
-                if (userData?.email) {
-                  processGoogleUser(userData.email, userData.name);
-                  return;
-                }
-              } catch (fetchErr) {
-                console.warn('Google userinfo fetch error:', fetchErr);
-              }
-            }
-            setLoading(false);
-          },
-          error_callback: (error: any) => {
-            console.warn('Google auth popup error or closed:', error);
-            setLoading(false);
-          },
-        });
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
-        return;
-      } catch (oauthErr) {
-        console.warn('OAuth initTokenClient error:', oauthErr);
-      }
-    }
-
-    // 3. Check Google Identity Services (GSI) with FedCM disabled for iframes
-    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-      try {
-        (window as any).google.accounts.id.initialize({
-          client_id: '401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com',
-          use_fedcm_for_prompt: false,
-          auto_select: false,
-          callback: (response: any) => {
-            if (response.credential) {
-              try {
-                const payloadBase64 = response.credential.split('.')[1];
-                const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
-                const decoded = JSON.parse(decodedJson);
-                if (decoded?.email) {
-                  processGoogleUser(decoded.email, decoded.name);
-                  return;
-                }
-              } catch (decErr) {
-                console.warn('JWT decode err:', decErr);
-              }
-            }
-            setLoading(false);
-          },
-        });
-        if (window.self === window.top) {
-          (window as any).google.accounts.id.prompt((notification: any) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-              const promptEmail = prompt(
-                'Google लॉगिन: अपना Google ईमेल दर्ज करें:',
-                'breakingnewswala.com@gmail.com'
-              );
-              if (promptEmail) {
-                processGoogleUser(promptEmail);
-              } else {
-                setLoading(false);
-              }
-            }
-          });
+    // 2. Firebase Auth signInWithPopup (Web Popup)
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      signInWithPopup(auth, provider).then((userCredential) => {
+        if (userCredential?.user?.email) {
+          processGoogleUser(
+            userCredential.user.email,
+            userCredential.user.displayName || undefined
+          );
+        }
+      }).catch((firebaseErr: any) => {
+        console.warn('Firebase popup notice:', firebaseErr);
+        if (firebaseErr?.code === 'auth/popup-closed-by-user') {
+          setLoading(false);
           return;
         }
-      } catch (gsiErr) {
-        console.warn('GSI error, falling back:', gsiErr);
-      }
+        // Fallback to GIS below
+        triggerGisFallback();
+      });
+      return;
+    } catch (popupErr) {
+      console.warn('Firebase auth attempt error:', popupErr);
     }
 
-    // 3. Fallback prompt if external scripts are unreachable
-    const promptEmail = prompt(
-      'Google लॉगिन: अपना Google ईमेल दर्ज करें:',
-      'breakingnewswala.com@gmail.com'
-    );
-    if (!promptEmail) {
+    const triggerGisFallback = () => {
+      const oAuthClientId = (FIREBASE_CONFIG as any)?.oAuthClientId || '401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com';
+
+      // 3. Google OAuth 2.0 Token Client (Opens Real Google Account Selector Popup)
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+        try {
+          const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+            client_id: oAuthClientId,
+            scope: 'email profile openid',
+            callback: async (tokenResponse: any) => {
+              if (tokenResponse?.access_token) {
+                try {
+                  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                  });
+                  const userData = await res.json();
+                  if (userData?.email) {
+                    processGoogleUser(userData.email, userData.name);
+                    return;
+                  }
+                } catch (fetchErr) {
+                  console.warn('Google userinfo fetch error:', fetchErr);
+                }
+              }
+              setLoading(false);
+            },
+            error_callback: (error: any) => {
+              console.warn('Google auth popup error or closed:', error);
+              setLoading(false);
+            },
+          });
+          tokenClient.requestAccessToken({ prompt: 'select_account' });
+          return;
+        } catch (oauthErr) {
+          console.warn('OAuth initTokenClient error:', oauthErr);
+        }
+      }
+
+      // 4. Check Google Identity Services (GSI) with FedCM disabled for iframes
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: oAuthClientId,
+            use_fedcm_for_prompt: false,
+            auto_select: false,
+            callback: (response: any) => {
+              if (response.credential) {
+                try {
+                  const payloadBase64 = response.credential.split('.')[1];
+                  const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+                  const decoded = JSON.parse(decodedJson);
+                  if (decoded?.email) {
+                    processGoogleUser(decoded.email, decoded.name);
+                    return;
+                  }
+                } catch (decErr) {
+                  console.warn('JWT decode err:', decErr);
+                }
+              }
+              setLoading(false);
+            },
+          });
+          if (window.self === window.top) {
+            (window as any).google.accounts.id.prompt((notification: any) => {
+              if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
+                setLoading(false);
+              }
+            });
+            return;
+          }
+        } catch (gsiErr) {
+          console.warn('GSI prompt error:', gsiErr);
+        }
+      }
+
       setLoading(false);
-      return;
-    }
-    processGoogleUser(promptEmail);
+    };
+
+    triggerGisFallback();
   };
 
   // Handle Sign In
@@ -654,8 +670,62 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <span>Google से जारी रखें (Continue with Google)</span>
               </button>
 
+              {/* Master Admin Fast 1-Click Access */}
+              <div className="pt-2 border-t border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading(true);
+                    setErrorMessage(null);
+                    processGoogleUser('breakingnewswala.com@gmail.com', 'ब्रेकिंग न्यूज़ वाला');
+                  }}
+                  disabled={loading}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-yellow-400/60"
+                >
+                  <Crown className="w-4 h-4 text-yellow-300" />
+                  <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (breakingnewswala.com@gmail.com)</span>
+                </button>
+                <p className="text-[10px] text-amber-400/70 text-center mt-1">
+                  बिना पॉपअप के 1-क्लिक में मास्टर एडमिन एक्सेस
+                </p>
+              </div>
+
+              {/* Direct Username / Password Form Fallback */}
+              <div className="pt-2 border-t border-neutral-800">
+                <form onSubmit={handleLogin} className="space-y-2.5 text-left">
+                  <span className="text-[11px] font-bold text-neutral-400 block text-center">
+                    या यूज़रनेम / ईमेल और पासवर्ड से सीधा लॉगिन करें:
+                  </span>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="यूज़रनेम या ईमेल"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-yellow-400"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      placeholder="पासवर्ड"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-yellow-400"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                  >
+                    लॉगिन करें
+                  </button>
+                </form>
+              </div>
+
               <p className="text-[11px] text-neutral-400 text-center">
-                🔒 आपका डेटा पूरी तरह सुरक्षित है और Google Authentication द्वारा सत्यापित है।
+                🔒 आपका डेटा पूरी तरह सुरक्षित है।
               </p>
             </div>
           )}

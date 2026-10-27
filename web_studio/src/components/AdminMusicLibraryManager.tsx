@@ -256,7 +256,7 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
           </div>
           <div>
             <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-              <span>एडमिन म्यूज़िक व ऑडियो लाइब्रेरी</span>
+              <span>म्यूजिक लाइब्रेरी डैशबोर्ड</span>
               <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded-md uppercase">
                 कॉपीराइट सेफ
               </span>

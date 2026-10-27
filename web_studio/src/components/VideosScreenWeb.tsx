@@ -468,10 +468,17 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         const baseUrl = getApiBaseUrl();
         const res = await fetch(`${baseUrl}/api/admin/videos/upload-file`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-key': 'master-admin',
+            'x-user-role': 'admin',
+            'x-admin-email': currentUser?.email || 'admin.ainewsmaker@gmail.com',
+            'x-user-email': currentUser?.email || '',
+          },
           body: JSON.stringify({
             videoData: base64Data,
             filename: file.name,
+            adminEmail: currentUser?.email || 'admin.ainewsmaker@gmail.com',
           }),
         });
 
@@ -525,10 +532,17 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         const baseUrl = getApiBaseUrl();
         const res = await fetch(`${baseUrl}/api/admin/videos/upload-thumbnail`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-key': 'master-admin',
+            'x-user-role': 'admin',
+            'x-admin-email': currentUser?.email || 'admin.ainewsmaker@gmail.com',
+            'x-user-email': currentUser?.email || '',
+          },
           body: JSON.stringify({
             imageData: base64,
             filename: file.name,
+            adminEmail: currentUser?.email || 'admin.ainewsmaker@gmail.com',
           }),
         });
 
@@ -644,21 +658,45 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       sourceDimensions: adminSourceDimensions,
     };
 
-    if (onAdminAddVideo) {
-      onAdminAddVideo(newVideo);
-    }
-
     try {
       const baseUrl = getApiBaseUrl();
-      await fetch(`${baseUrl}/api/admin/videos/upload`, {
+      const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
+      const res = await fetch(`${baseUrl}/api/admin/videos/upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-role': 'admin',
+          'x-admin-email': adminEmail,
+          'x-user-email': adminEmail,
+        },
         body: JSON.stringify(newVideo),
       });
-    } catch {}
 
-    setPublishSuccess(true);
-    setIsPublishing(false);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'वीडियो डेटाबेस में सेव करने में विफल');
+      }
+
+      const data = await res.json();
+      const savedVideo = data.video || newVideo;
+
+      if (onAdminAddVideo) {
+        onAdminAddVideo(savedVideo);
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_video_uploaded', { detail: savedVideo }));
+      }
+
+      setPublishSuccess(true);
+      setIsPublishing(false);
+    } catch (err: any) {
+      console.error('Video publish error:', err);
+      alert(`वीडियो पब्लिश करने में त्रुटि: ${err.message || 'सर्वर पर वीडियो सहेजा नहीं जा सका'}`);
+      setIsPublishing(false);
+      return;
+    }
 
     setTimeout(() => {
       setAdminTitle('');
