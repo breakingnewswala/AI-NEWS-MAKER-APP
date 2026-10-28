@@ -1,0 +1,10 @@
+services:
+  reactexample:
+    image: reactexample
+    build:
+      context: web_studio
+      dockerfile: ./Dockerfile
+    environment:
+      NODE_ENV: production
+    ports:
+      - 3000:3000

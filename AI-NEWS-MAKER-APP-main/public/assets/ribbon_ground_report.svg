@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="100%" height="100%">
+  <!-- ग्राउंड रिपोर्ट (GROUND REPORT) - Rich Emerald Green & Metallic Gold -->
+  <defs>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="50%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#064E3B"/>
+    </linearGradient>
+    <linearGradient id="goldReportGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF04B"/>
+      <stop offset="50%" stop-color="#FFDD00"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <filter id="emeraldShadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@800;900&amp;display=swap');
+    .ribbon-text-upright {
+      font-family: 'Baloo 2', 'Noto Sans Devanagari', -apple-system, sans-serif;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+  </style>
+
+  <!-- Top Accent Line -->
+  <rect x="180" y="10" width="600" height="6" rx="3" fill="#10B981"/>
+  <rect x="270" y="20" width="420" height="4" rx="2" fill="#FFD000"/>
+
+  <g filter="url(#emeraldShadow)">
+    <polygon points="142,34 818,34 788,144 112,144" fill="#000000" opacity="0.25"/>
+
+    <!-- Left Plate: 'ग्राउंड' (Emerald Green) -->
+    <polygon points="148,36 430,36 400,142 118,142" fill="url(#emeraldGrad)" stroke="#FFD000" stroke-width="3.5"/>
+    
+    <!-- Right Plate: 'रिपोर्ट' (Gold Plate) -->
+    <polygon points="438,36 812,36 782,142 408,142" fill="url(#goldReportGrad)" stroke="#FFFFFF" stroke-width="3.5"/>
+
+    <!-- Left Highlight Strip -->
+    <polygon points="158,44 178,44 158,134 138,134" fill="#34D399" opacity="0.85"/>
+
+    <!-- Text: 'ग्राउंड' - Upright White -->
+    <text
+      x="285"
+      y="90"
+      fill="#FFFFFF"
+      class="ribbon-text-upright"
+      font-size="70"
+    >ग्राउंड</text>
+
+    <!-- Text: 'रिपोर्ट' - Upright Black -->
+    <text
+      x="605"
+      y="90"
+      fill="#0A0A0A"
+      class="ribbon-text-upright"
+      font-size="70"
+    >रिपोर्ट</text>
+  </g>
+
+  <!-- Bottom Accent Lines -->
+  <rect x="270" y="152" width="420" height="4" rx="2" fill="#FFD000"/>
+  <rect x="210" y="160" width="540" height="6" rx="3" fill="#10B981"/>
+</svg>

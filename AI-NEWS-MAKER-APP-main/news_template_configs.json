@@ -1,0 +1,65 @@
+{
+  "graphic_001": {
+    "customName": "Regular Clean News Frame",
+    "category": "Regular Frame",
+    "selectedTier": "BASIC",
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "coinPrice": 0,
+    "isActive": true,
+    "version": "v1.0",
+    "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
+    "locationArea": "top_left_box",
+    "logoArea": "top_right_box"
+  },
+  "graphic_002": {
+    "customName": "Package Standard Frame",
+    "category": "Package Frame",
+    "selectedTier": "ADVANCED",
+    "allowedPlans": [
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "coinPrice": 15,
+    "isActive": true,
+    "version": "v1.0",
+    "headlineArea": "2-Line Headline Area (डार्क ब्लू स्ट्रिप)",
+    "locationArea": "top_left_box",
+    "logoArea": "top_right_box",
+    "updatedAt": 1793165969994
+  },
+  "graphic_003": {
+    "customName": "Super Breaking News Frame",
+    "category": "Super Breaking Frame",
+    "selectedTier": "PRO",
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "coinPrice": 100,
+    "isActive": true,
+    "version": "v1.0",
+    "headlineArea": "3-Line Red Ribbon Headline Area",
+    "locationArea": "top_strip",
+    "logoArea": "top_right_box"
+  },
+  "graphic_004": {
+    "customName": "Special Edition Frame",
+    "category": "Special Frame",
+    "selectedTier": "VIP DESK",
+    "allowedPlans": [
+      "VIP DESK"
+    ],
+    "coinPrice": 150,
+    "isActive": true,
+    "version": "v1.0",
+    "headlineArea": "2-Line Premium Gold Headline Area",
+    "locationArea": "top_left_box",
+    "logoArea": "top_right_box"
+  }
+}

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="100%" height="100%">
+  <defs>
+    <linearGradient id="yellowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF000" />
+      <stop offset="100%" stop-color="#FFB300" />
+    </linearGradient>
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF1E1E" />
+      <stop offset="100%" stop-color="#B70000" />
+    </linearGradient>
+  </defs>
+  <!-- Top Speed lines -->
+  <rect x="180" y="10" width="620" height="7" rx="2" fill="#FFCC00" />
+  <rect x="40" y="24" width="480" height="6" rx="2" fill="#FF1E1E" />
+
+  <g transform="translate(45, 0) skewX(-15)">
+    <!-- Left Yellow Box: EXCLUSIVE -->
+    <rect x="65" y="38" width="400" height="100" rx="4" fill="url(#yellowGrad)" stroke="#FFFFFF" stroke-width="2" />
+    <!-- Right Red Box: NEWS -->
+    <rect x="465" y="36" width="385" height="104" rx="4" fill="url(#redGrad)" stroke="#FFE600" stroke-width="3" />
+
+    <text
+      x="265"
+      y="112"
+      fill="#0A0A0A"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Arial Black', Impact, sans-serif"
+      font-size="58"
+      font-weight="900"
+      letter-spacing="1"
+      text-anchor="middle"
+    >EXCLUSIVE</text>
+
+    <text
+      x="657"
+      y="114"
+      fill="#FFFFFF"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Arial Black', Impact, sans-serif"
+      font-size="72"
+      font-weight="900"
+      letter-spacing="3"
+      text-anchor="middle"
+    >NEWS</text>
+  </g>
+
+  <!-- Bottom Speed lines -->
+  <rect x="120" y="148" width="360" height="6" rx="2" fill="#FFCC00" />
+  <rect x="340" y="160" width="500" height="7" rx="2" fill="#FF1E1E" />
+</svg>

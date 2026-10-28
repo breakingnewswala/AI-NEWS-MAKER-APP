@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="100%" height="100%">
+  <defs>
+    <linearGradient id="goldPlate" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066" />
+      <stop offset="50%" stop-color="#FFC000" />
+      <stop offset="100%" stop-color="#D49B00" />
+    </linearGradient>
+    <linearGradient id="darkPlate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#262626" />
+      <stop offset="100%" stop-color="#0F0F0F" />
+    </linearGradient>
+  </defs>
+
+  <!-- Top accent -->
+  <rect x="140" y="14" width="680" height="7" rx="3" fill="#FFC000" />
+
+  <g transform="translate(40, 0) skewX(-14)">
+    <!-- Left Dark Box: BIG -->
+    <rect x="70" y="38" width="280" height="100" rx="4" fill="url(#darkPlate)" stroke="#FFC000" stroke-width="3.5" />
+    <!-- Right Gold Box: BREAKING -->
+    <rect x="350" y="36" width="500" height="104" rx="4" fill="url(#goldPlate)" stroke="#FFFFFF" stroke-width="2" />
+
+    <text
+      x="210"
+      y="112"
+      fill="#FFE066"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Arial Black', Impact, sans-serif"
+      font-size="70"
+      font-weight="900"
+      letter-spacing="2"
+      text-anchor="middle"
+    >BIG</text>
+
+    <text
+      x="600"
+      y="114"
+      fill="#0A0A0A"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Arial Black', Impact, sans-serif"
+      font-size="68"
+      font-weight="900"
+      letter-spacing="2"
+      text-anchor="middle"
+    >BREAKING</text>
+  </g>
+
+  <!-- Bottom accent -->
+  <rect x="220" y="156" width="580" height="6" rx="3" fill="#FFC000" />
+</svg>
