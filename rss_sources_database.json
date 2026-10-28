@@ -25,16 +25,5 @@
     "category": "राज्य",
     "isActive": true,
     "createdAt": 1726000004000
-  },
-  {
-    "id": "src_1793010847989_u6vr",
-    "name": "नई दुनिया",
-    "url": "http://localhost:3000/api/rss/web-feed?feedId=wf_1793010844544_91d07f",
-    "type": "rss",
-    "category": "देश",
-    "isActive": true,
-    "createdAt": 1793010847989,
-    "itemsFetchedCount": 14,
-    "lastFetchedAt": 1793010864893
   }
 ]

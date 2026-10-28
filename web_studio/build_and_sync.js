@@ -14,6 +14,15 @@ console.log('====================================================');
 // 1. Ensure web_studio dependencies exist
 const webStudioNodeModules = path.join(__dirname, 'node_modules');
 if (!fs.existsSync(webStudioNodeModules)) {
+  const rootNodeModules = path.resolve(rootDir, 'node_modules');
+  if (fs.existsSync(rootNodeModules)) {
+    try {
+      fs.symlinkSync('../node_modules', webStudioNodeModules, 'junction');
+      console.log('📦 Linked web_studio/node_modules to root node_modules.');
+    } catch (e) {}
+  }
+}
+if (!fs.existsSync(webStudioNodeModules)) {
   console.log('📦 Installing web_studio dependencies...');
   try {
     execSync('npm install --prefer-offline --no-audit --legacy-peer-deps --include=dev', {
@@ -189,8 +198,9 @@ if (fs.existsSync(dbPath)) {
   syncDatabaseFile('user_profiles_db.json');
   syncDatabaseFile('sub_users_db.json');
   syncDatabaseFile('categories_database.json');
-  syncDatabaseFile('news_template_configs.json');
-  syncDatabaseFile('promo_codes_database.json');
+  syncDatabaseFile('approved_editorial_database.json');
+  syncDatabaseFile('payments_transactions_db.json');
+  syncDatabaseFile('auth_credentials_db.json');
 
   // 6. Ensure persistent uploads directory is synced
   const rootUploads = path.resolve(rootDir, 'uploads');

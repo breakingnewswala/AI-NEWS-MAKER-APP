@@ -104,6 +104,7 @@ import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
+import { CashfreePaymentModal } from './CashfreePaymentModal';
 import { getApiUrl } from '../lib/apiConfig';
 import {
   RestrictedChannel,
@@ -483,6 +484,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   // Plans Catalog State
   const [plans, setPlans] = useState<PlanFeatureDetail[]>(() => getPlansCatalog());
+  const [cashfreeModalPlan, setCashfreeModalPlan] = useState<PlanFeatureDetail | null>(null);
   const [editingPlanId, setEditingPlanId] = useState<UserPlanTier | null>(null);
   const [editPriceNum, setEditPriceNum] = useState<number>(0);
   const [editDurationDays, setEditDurationDays] = useState<number>(30);
@@ -1243,24 +1245,36 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUserPlanTier(p.id as UserPlanTier);
-                          setUserSub(getUserSubscription());
-                          if (onPlanChanged) onPlanChanged();
-                          setPlanSaveSuccess(`🎉 ${p.planKey} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
-                          setTimeout(() => setPlanSaveSuccess(null), 4000);
-                        }}
-                        disabled={isCurrent}
-                        className={`mt-4 w-full py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                          isCurrent
-                            ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800 cursor-default'
-                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950 shadow-md active:scale-98'
-                        }`}
-                      >
-                        {isCurrent ? 'सक्रिय है' : 'अपग्रेड / एक्टिवेट करें'}
-                      </button>
+                      <div className="flex flex-col gap-2 mt-4">
+                        <button
+                          type="button"
+                          onClick={() => setCashfreeModalPlan(p)}
+                          disabled={isCurrent}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md ${
+                            isCurrent
+                              ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-default'
+                              : 'bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 text-slate-950 shadow-amber-500/20 active:scale-98'
+                          }`}
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>{isCurrent ? 'वर्तमान में सक्रिय प्लान' : `Cashfree ऑनलाइन पे (${p.priceDisplay})`}</span>
+                        </button>
+                        {!isCurrent && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserPlanTier(p.id as UserPlanTier);
+                              setUserSub(getUserSubscription());
+                              if (onPlanChanged) onPlanChanged();
+                              setPlanSaveSuccess(`🎉 ${p.planKey} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
+                              setTimeout(() => setPlanSaveSuccess(null), 4000);
+                            }}
+                            className="w-full py-1.5 rounded-lg text-[11px] font-bold text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 transition cursor-pointer"
+                          >
+                            1-क्लिक डेमो एक्टिवेशन
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -4896,6 +4910,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
+
+      {/* Cashfree Payment Gateway Checkout Modal */}
+      <CashfreePaymentModal
+        isOpen={Boolean(cashfreeModalPlan)}
+        plan={cashfreeModalPlan}
+        currentUser={currentUser}
+        onClose={() => setCashfreeModalPlan(null)}
+        onSuccess={(planId) => {
+          setCashfreeModalPlan(null);
+          setUserPlanTier(planId as any);
+          setUserSub(getUserSubscription());
+          if (onPlanChanged) onPlanChanged();
+          setPlanSaveSuccess(`🎉 ${planId.toUpperCase()} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
+          setTimeout(() => setPlanSaveSuccess(null), 4000);
+        }}
+      />
     </div>
   );
 };

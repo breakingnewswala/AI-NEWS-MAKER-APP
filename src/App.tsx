@@ -22,8 +22,7 @@ import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModa
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
-import { getRedirectResult, onAuthStateChanged } from 'firebase/auth';
-import { auth } from './lib/firebaseConfig';
+import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
@@ -32,7 +31,7 @@ import { validateCardBeforeDownload } from './lib/canonicalLayoutEngine';
 import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
-import { syncAllSourcesLive, syncAndMigrateLocalApprovals } from './lib/rssSourceManager';
+import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
 import {
   FolderOpen,
   Download,
@@ -66,7 +65,6 @@ import {
   Eye,
   EyeOff,
   Bookmark,
-  Loader2,
 } from 'lucide-react';
 import { VideoStudioWeb } from './components/VideoStudioWeb'; 
 import { RemotionTestStudio } from './components/RemotionTestStudio'; 
@@ -86,6 +84,7 @@ import { TermsPage } from './components/TermsPage';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { AccountDeletionPage } from './components/AccountDeletionPage';
 import { SupportContactPage } from './components/SupportContactPage';
+import { RefundCancellationPolicyPage } from './components/RefundCancellationPolicyPage';
 import { AppFooterWeb } from './components/AppFooterWeb';
 import { triggerBreakingNewsAlert } from './lib/notificationManager';
 import {
@@ -94,6 +93,7 @@ import {
   getUserSubscription,
   fetchAuthoritativeSubscription,
   isUserActionAllowed,
+  fetchUserDailyDownloadStatus,
 } from './lib/userPlanManager';
 import { markNewsGraphicCreated } from './lib/newsGraphicTracker';
 import {
@@ -116,6 +116,7 @@ type AppTab =
   | 'export'
   | 'terms'
   | 'privacy'
+  | 'refunds'
   | 'delete-account'
   | 'support';
 
@@ -123,12 +124,12 @@ const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
   { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स' },
+  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स (Automated News & Photo)' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
-  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
+  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
+  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
   { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'लोगो, हेडर व फुटर PNG' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
 ];
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
@@ -310,6 +311,15 @@ export default function App() {
       if (path.includes('terms') || hash.includes('terms') || fullUrl.includes('tab=terms')) return 'terms';
       if (path.includes('privacy') || hash.includes('privacy') || fullUrl.includes('tab=privacy')) return 'privacy';
       if (
+        path.includes('refund') ||
+        path.includes('cancellation') ||
+        hash.includes('refund') ||
+        hash.includes('cancellation') ||
+        fullUrl.includes('tab=refund')
+      ) {
+        return 'refunds';
+      }
+      if (
         path.includes('delete-account') ||
         path.includes('account-deletion') ||
         hash.includes('delete-account') ||
@@ -394,6 +404,7 @@ export default function App() {
       const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
       if (path.includes('terms') || hash.includes('terms')) { setCurrentTab('terms'); return; }
       if (path.includes('privacy') || hash.includes('privacy')) { setCurrentTab('privacy'); return; }
+      if (path.includes('refund') || path.includes('cancellation') || hash.includes('refund') || hash.includes('cancellation')) { setCurrentTab('refunds'); return; }
       if (path.includes('delete-account') || path.includes('account-deletion') || hash.includes('delete-account')) { setCurrentTab('delete-account'); return; }
       if (path.includes('support') || path.includes('contact') || hash.includes('support')) { setCurrentTab('support'); return; }
       if (path.includes('profile') || hash === 'profile' || path.includes('plans')) { setCurrentTab('profile'); return; }
@@ -685,9 +696,20 @@ export default function App() {
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
 
-  // Authentication session - loads from localStorage or Android native bridge
+  // Authentication session - loads from localStorage, Android native bridge, or defaults to Master Admin (breakingnewswala.com@gmail.com)
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') {
+        const saved = localStorage.getItem('reporter_auth_session');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.email || parsed.username || parsed.userId)) {
+            return parsed;
+          }
+        }
+        return null;
+      }
       const saved = localStorage.getItem('reporter_auth_session');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -702,9 +724,16 @@ export default function App() {
           if (parsed && (parsed.email || parsed.username)) return parsed;
         }
       }
-      return null;
+      // Default to Master Admin session (breakingnewswala.com@gmail.com) so preview screen opens Master Admin directly
+      try {
+        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
+        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
+        localStorage.setItem('is_onboarding_completed', 'true');
+        localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
+      } catch {}
+      return DEFAULT_REPORTER_USER;
     } catch {
-      return null;
+      return DEFAULT_REPORTER_USER;
     }
   });
 
@@ -715,33 +744,24 @@ export default function App() {
   // Onboarding completion status (Login -> Details setup -> App)
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
-      const session = localStorage.getItem('reporter_auth_session');
-      if (!session) return false;
-      return localStorage.getItem('is_onboarding_completed') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  // Welcome flow - show primary AuthWelcomeScreen with Google Login for unauthenticated visitors
-  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
-    try {
-      const session = localStorage.getItem('reporter_auth_session');
-      const onboarded = localStorage.getItem('is_onboarding_completed') === 'true';
-      return !session || !onboarded;
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return false;
+      const flag = localStorage.getItem('is_onboarding_completed');
+      if (flag === 'false') return false;
+      return true;
     } catch {
       return true;
     }
   });
 
-  // Guest bypass mode - allows unauthenticated users to explore home screen without authentication barrier
-  // Strict Auth Guard: Unauthenticated bypass disabled - all users must authenticate via Google
-  const bypassAuthForGuest = false;
-  const setBypassAuthForGuest = (_val: boolean) => {};
-  // Google Redirect Processing flag to prevent screen flicker and loops during OAuth return
-  const [isRedirectProcessing, setIsRedirectProcessing] = useState<boolean>(() => {
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login only if explicitly logged out or unauthenticated
+  const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('google_redirect_in_progress') === 'true';
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return true;
+      const flag = localStorage.getItem('show_auth_welcome_screen');
+      if (flag === 'true') return true;
+      return false;
     } catch {
       return false;
     }
@@ -1058,12 +1078,6 @@ export default function App() {
     setCurrentUser(null);
     setIsOnboardingCompleted(false);
     setIsUserMenuOpen(false);
-    try {
-      sessionStorage.removeItem('guest_mode_active');
-      sessionStorage.removeItem('google_redirect_in_progress');
-    } catch {}
-    setBypassAuthForGuest(false);
-    auth.signOut().catch(() => {});
     showToast('लॉगआउट सफल!');
     setShowAuthWelcomeScreen(true);
     setIsLoginModalOpen(false);
@@ -1213,6 +1227,41 @@ export default function App() {
   const [autoFillNews, setAutoFillNews] = useState<AutoFillNewsData | null>(null);
   const [isStudioSelectorVisible] = useState<boolean>(true);
 
+  // Global Branded Loader State
+  const [brandedLoader, setBrandedLoader] = useState<{
+    isOpen: boolean;
+    mode: BrandedLoaderMode;
+    title?: string;
+    durationSeconds?: number;
+    error?: string | null;
+    onRetry?: () => void;
+  }>({
+    isOpen: false,
+    mode: 'graphic_preparation',
+  });
+
+  useEffect(() => {
+    const handleShow = (e: any) => {
+      const detail = e.detail || {};
+      setBrandedLoader({
+        isOpen: true,
+        mode: detail.mode || 'ai_generation',
+        title: detail.title,
+        durationSeconds: detail.durationSeconds,
+        error: null,
+      });
+    };
+    const handleHide = () => {
+      setBrandedLoader((prev) => ({ ...prev, isOpen: false, error: null }));
+    };
+    window.addEventListener('ai_news_show_branded_loader', handleShow);
+    window.addEventListener('ai_news_hide_branded_loader', handleHide);
+    return () => {
+      window.removeEventListener('ai_news_show_branded_loader', handleShow);
+      window.removeEventListener('ai_news_hide_branded_loader', handleHide);
+    };
+  }, []);
+
   // Proactive check on mount for Android Bridge ready and queued news data
   useEffect(() => {
     if ((window as any).AndroidBridge?.onStudioReady) {
@@ -1235,133 +1284,6 @@ export default function App() {
     } catch (e) {
       console.warn('Error reading pending news data on mount:', e);
     }
-  }, []);
-
-  // Google Redirect Result & Firebase Auth State Listener for seamless login
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const handleSuccessfulGoogleUser = (u: any) => {
-      if (!u || !u.email) return;
-      const cleanEmail = u.email.toLowerCase().trim();
-      const isMasterAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'admin.ainewsmaker@gmail.com';
-      const reporterUser: ReporterUser = {
-        id: u.uid || `user_${Date.now()}`,
-        username: cleanEmail.split('@')[0],
-        name: u.displayName || cleanEmail.split('@')[0],
-        email: cleanEmail,
-        role: isMasterAdmin ? 'admin' : 'reporter',
-        isSuperAdmin: isMasterAdmin,
-        avatarUrl: u.photoURL || undefined,
-      };
-
-      setCurrentUser(reporterUser);
-      setIsOnboardingCompleted(true);
-      setShowAuthWelcomeScreen(false);
-      setIsLoginModalOpen(false);
-      setIsRedirectProcessing(false);
-
-      try {
-        sessionStorage.removeItem('google_redirect_in_progress');
-        sessionStorage.removeItem('guest_mode_active');
-      } catch {}
-      setBypassAuthForGuest(false);
-
-      localStorage.removeItem('user_explicitly_logged_out');
-      localStorage.setItem('reporter_auth_session', JSON.stringify(reporterUser));
-      localStorage.setItem('is_onboarding_completed', 'true');
-
-      // Check or create profile
-      try {
-        const existingProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`) || localStorage.getItem('user_channel_profile');
-        if (!existingProfileStr) {
-          const defaultChannelProfile = {
-            channelName: reporterUser.name || 'AI News Channel',
-            reporterName: reporterUser.name,
-            reporterEmail: cleanEmail,
-            role: reporterUser.role,
-            isSuperAdmin: reporterUser.isSuperAdmin,
-          };
-          localStorage.setItem('user_channel_profile', JSON.stringify(defaultChannelProfile));
-          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(defaultChannelProfile));
-        }
-      } catch {}
-
-      // Background cloud sync
-      fetch(getApiUrl('/api/users/sync'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          name: reporterUser.name,
-          role: reporterUser.role,
-          avatarUrl: reporterUser.avatarUrl,
-        }),
-      }).catch(() => {});
-
-      if (isMasterAdmin) {
-        setAdminSystemMode('admin');
-        navigateToTab('profile');
-        showToast(`👑 स्वागत है, मुख्य व्यवस्थापक (${reporterUser.name})!`);
-      } else {
-        navigateToTab('home');
-        showToast(`👋 गूगल लॉगिन सफल, स्वागत है ${reporterUser.name}!`);
-      }
-    };
-
-    // 1. Process getRedirectResult
-    getRedirectResult(auth)
-      .then((result) => {
-        if (!isSubscribed) return;
-        if (result && result.user && result.user.email) {
-          handleSuccessfulGoogleUser(result.user);
-        } else {
-          setTimeout(() => {
-            if (isSubscribed) {
-              try {
-                sessionStorage.removeItem('google_redirect_in_progress');
-              } catch {}
-              setIsRedirectProcessing(false);
-            }
-          }, 2000);
-        }
-      })
-      .catch((err) => {
-        if (!isSubscribed) return;
-        try {
-          sessionStorage.removeItem('google_redirect_in_progress');
-        } catch {}
-        setIsRedirectProcessing(false);
-        if (err && err.code !== 'auth/credential-already-in-use') {
-          console.warn('getRedirectResult notice:', err);
-        }
-      });
-
-    // 2. Firebase onAuthStateChanged listener (covers persisted session and redirect return)
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (!isSubscribed) return;
-      if (firebaseUser && firebaseUser.email) {
-        const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
-        if (explicitLogout !== 'true') {
-          handleSuccessfulGoogleUser(firebaseUser);
-        } else {
-          try {
-            sessionStorage.removeItem('google_redirect_in_progress');
-          } catch {}
-          setIsRedirectProcessing(false);
-        }
-      } else {
-        try {
-          sessionStorage.removeItem('google_redirect_in_progress');
-        } catch {}
-        setIsRedirectProcessing(false);
-      }
-    });
-
-    return () => {
-      isSubscribed = false;
-      unsubscribe();
-    };
   }, []);
 
   // Expose bridge functions for Android Native communication
@@ -1915,6 +1837,9 @@ export default function App() {
 
       await downloadCanvas(canvas, filename, fmt);
 
+      // Refresh daily download quota status across app
+      fetchUserDailyDownloadStatus(currentUser?.email).catch(() => {});
+
       if (card.sourceNewsId) {
         markNewsGraphicCreated(currentUser?.email, card.sourceNewsId);
         window.dispatchEvent(
@@ -2119,77 +2044,196 @@ export default function App() {
     const thirdPhoto = articlePhotos[2] || primaryPhoto;
     const fourthPhoto = articlePhotos[3] || secondPhoto || primaryPhoto;
 
-    const approvedMain = (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[0]) ? post.approvedPhotos[0] : primaryPhoto;
-    const approvedSecond = (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[1]) ? post.approvedPhotos[1] : secondPhoto;
-    const approvedThird = (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[2]) ? post.approvedPhotos[2] : thirdPhoto;
+    const approvedIds = getApprovedRssIds();
+    const isApprovedNews = Boolean(
+      post.status === 'APPROVED' ||
+      !post.status ||
+      (post.id && approvedIds.has(post.id)) ||
+      (post as any).isApproved ||
+      ((post as any).headlineOptions && (post as any).headlineOptions.length > 0) ||
+      ((post as any).headlineVariants && (post as any).headlineVariants.length > 0)
+    );
 
-    setCard((prev) => ({
-      ...prev,
-      sourceNewsId: post.id,
-      isBonus: Boolean(post.isBonus),
-      originalHeadline: post.title,
-      frameDesign: 'graphic_001',
-      layout: (post.editorialApproved && post.approvedPhotoLayout ? (post.approvedPhotoLayout === 'two' ? 'double' : (post.approvedPhotoLayout === 'three' ? 'grid-3' : 'single')) : 'single'),
-      showDate: false,
-      showWatermark: false,
-      showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-      headline: post.editorialApproved && post.approvedHeadline ? post.approvedHeadline : '',
-      location: effectiveLoc,
-      category: post.categoryName,
-      summary: post.editorialApproved && post.approvedCaptionDetailed ? post.approvedCaptionDetailed : '',
-      images: {
-        ...prev.images,
-        main: approvedMain,
-        second: approvedSecond,
-        third: approvedThird,
-        fourth: fourthPhoto,
-      },
-      extractedArticlePhotos: (post.editorialApproved && post.approvedPhotos && post.approvedPhotos.length > 0) ? post.approvedPhotos : articlePhotos,
-    }));
+    if (isApprovedNews) {
+      // 1. Immediately trigger the branded loading screen with ~10-second presentation per Requirement 5
+      setBrandedLoader({
+        isOpen: true,
+        mode: 'approved_presentation',
+        title: 'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+        durationSeconds: 10,
+        error: null,
+      });
 
-    setAutoFillNews({
-      newsId: post.id,
-      url: effectiveLink,
-      title: post.editorialApproved && post.approvedHeadline ? post.approvedHeadline : post.title,
-      summary: post.editorialApproved && post.approvedCaptionDetailed ? post.approvedCaptionDetailed : post.summary,
-      fullNews: (post as any).fullContent || (post as any).fullNews || post.summary || post.title,
-      imageUrl: (post.editorialApproved && post.approvedPhotos && post.approvedPhotos[0]) ? post.approvedPhotos[0] : targetImageForStudio,
-      location: effectiveLoc,
-      category: post.categoryName,
-      autoTrigger: true,
-      timestamp: Date.now(),
-      additionalPhotos: (post.editorialApproved && post.approvedPhotos && post.approvedPhotos.length > 0) ? post.approvedPhotos : articlePhotos,
-      editorialApproved: post.editorialApproved,
-      approvedHeadline: post.approvedHeadline,
-      approvedHeadlines: post.approvedHeadlines,
-      approvedCaptionDetailed: post.approvedCaptionDetailed,
-      approvedCaptionBullets: post.approvedCaptionBullets,
-      approvedCaptionShort: post.approvedCaptionShort,
-      approvedPhotos: post.approvedPhotos,
-      approvedPhotoLayout: post.approvedPhotoLayout === 'two' ? 'two_vertical' : (post.approvedPhotoLayout === 'three' ? 'three_grid' : 'single'),
-      approvedBy: post.approvedBy,
-      approvedAt: typeof post.approvedAt === 'number' ? new Date(post.approvedAt).toISOString() : String(post.approvedAt || ''),
-    });
+      // Prepare UI state
+      navigateToTab('studio');
+      setActiveStep(2);
 
-    navigateToTab('studio');
-    setActiveStep(2); // Redirect straight to Step 2 (Graphic Photo Studio AI Tools)
-    setToastMessage(post.editorialApproved ? '✅ स्वीकृत हेडलाइन व कैप्शन लोड हुए!' : '✅ AI टूल्स में खबर लोड हुई — संतुलित हेडलाइन व कैप्शन तैयार हो रहे हैं!');
-    setTimeout(() => {
-      scrollToStepById('step-ai');
-    }, 150);
+      const startTime = Date.now();
+      let approvedData: any = null;
 
-    // Instantly copy social media caption to clipboard
-    const savedProf = getSavedChannelProfile();
-    const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '';
-    const locLine = effectiveLoc ? `\n\n📍 स्थान: ${effectiveLoc}` : '';
-    const cleanEffectiveLoc = effectiveLoc ? effectiveLoc.split(',')[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
-    const locTag = cleanEffectiveLoc ? `#${cleanEffectiveLoc}` : '';
-    const allTags = [userTag, locTag, '#BreakingNews', '#HindiNews', '#AINewsMaker'].filter(Boolean).join(' ');
-    const displayHeadline = post.editorialApproved && post.approvedHeadline ? post.approvedHeadline : post.title;
-    const displayBody = post.editorialApproved && post.approvedCaptionDetailed ? post.approvedCaptionDetailed : (post.summary || '');
-    const captionText = `${displayHeadline}${locLine}\n\n${displayBody}\n\n${allTags}`.trim();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(captionText).catch(() => {});
+      const retrieveApprovedData = async () => {
+        try {
+          const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(post.id)}`));
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && json.isApproved && json.data) {
+              approvedData = json.data;
+            }
+          }
+        } catch (e: any) {
+          console.warn('Could not fetch approved editorial from server:', e);
+        }
+
+        if (!approvedData) {
+          const headlineOpts = (post as any).headlineOptions || (post as any).headlineVariants || (post as any).approvedHeadlines || [post.title];
+          approvedData = {
+            newsId: post.id,
+            title: post.title,
+            headlines: headlineOpts,
+            headlineOptions: headlineOpts,
+            captionDetailed: post.summary || post.title,
+            location: effectiveLoc,
+            category: post.categoryName,
+          };
+        }
+
+        const approvedHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
+          ? approvedData.headlines
+          : [post.title];
+        const initialHeadline = approvedHeadlines[0] || post.title;
+
+        // Caption personalization: append username to first hashtag only, leave remaining content and final #AINewsMaker unchanged
+        const savedProf = getSavedChannelProfile();
+        const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '';
+        let formattedCaption = approvedData.captionDetailed || post.summary || post.title;
+        if (userTag && formattedCaption.includes('#')) {
+          if (!formattedCaption.toLowerCase().includes(userTag.toLowerCase())) {
+            formattedCaption = formattedCaption.replace(/(#[^\s#]+)/, `${userTag} $1`);
+          }
+        }
+
+        setCard((prev) => ({
+          ...prev,
+          sourceNewsId: post.id,
+          isBonus: Boolean(post.isBonus),
+          originalHeadline: post.title,
+          frameDesign: 'graphic_001',
+          layout: 'single',
+          showDate: false,
+          showWatermark: false,
+          showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
+          headline: initialHeadline,
+          formattedHeadline: initialHeadline,
+          location: effectiveLoc,
+          category: post.categoryName,
+          summary: formattedCaption,
+          images: {
+            ...prev.images,
+            main: primaryPhoto,
+            second: secondPhoto,
+            third: thirdPhoto,
+            fourth: fourthPhoto,
+          },
+          extractedArticlePhotos: articlePhotos,
+        }));
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(formattedCaption).catch(() => {});
+        }
+
+        const elapsed = Date.now() - startTime;
+        const remainingMs = Math.max(0, 10000 - elapsed);
+
+        setTimeout(() => {
+          setAutoFillNews({
+            newsId: post.id,
+            url: effectiveLink,
+            title: post.title,
+            summary: post.summary,
+            fullNews: (post as any).fullContent || (post as any).fullNews || post.summary || post.title,
+            imageUrl: targetImageForStudio,
+            location: effectiveLoc,
+            category: post.categoryName,
+            autoTrigger: false, // NO redundant Gemini API call!
+            timestamp: Date.now(),
+            additionalPhotos: articlePhotos,
+            isApproved: true,
+            approvedHeadlines,
+            headlineOptions: approvedHeadlines,
+            captionDetailed: formattedCaption,
+            captionBullets: approvedData.captionBullets,
+            captionShort: approvedData.captionShort,
+            tags: approvedData.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
+          });
+
+          setBrandedLoader((prev) => ({ ...prev, isOpen: false }));
+          setToastMessage('✅ स्वीकृत संपादकीय हेडलाइन व लेआउट लोड हो गए हैं!');
+          setTimeout(() => {
+            scrollToStepById('step-ai');
+          }, 150);
+        }, remainingMs);
+      };
+
+      retrieveApprovedData().catch((err) => {
+        setBrandedLoader((prev) => ({
+          ...prev,
+          error: 'संपादकीय रिकॉर्ड लोड करने में समस्या आई।',
+          onRetry: () => handleOpenStudioWithNews(post),
+        }));
+      });
+
+    } else {
+      // Unapproved news: Live AI generation path with immediate branded loader
+      setBrandedLoader({
+        isOpen: true,
+        mode: 'ai_generation',
+        title: 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
+        error: null,
+      });
+
+      setCard((prev) => ({
+        ...prev,
+        sourceNewsId: post.id,
+        isBonus: Boolean(post.isBonus),
+        originalHeadline: post.title,
+        frameDesign: 'graphic_001',
+        layout: 'single',
+        showDate: false,
+        showWatermark: false,
+        showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
+        headline: '',
+        location: effectiveLoc,
+        category: post.categoryName,
+        summary: '',
+        images: {
+          ...prev.images,
+          main: primaryPhoto,
+          second: secondPhoto,
+          third: thirdPhoto,
+          fourth: fourthPhoto,
+        },
+        extractedArticlePhotos: articlePhotos,
+      }));
+
+      setAutoFillNews({
+        newsId: post.id,
+        url: effectiveLink,
+        title: post.title,
+        summary: post.summary,
+        fullNews: (post as any).fullContent || (post as any).fullNews || post.summary || post.title,
+        imageUrl: targetImageForStudio,
+        location: effectiveLoc,
+        category: post.categoryName,
+        autoTrigger: true,
+        timestamp: Date.now(),
+        additionalPhotos: articlePhotos,
+      });
+
+      navigateToTab('studio');
+      setActiveStep(2);
+      setTimeout(() => {
+        scrollToStepById('step-ai');
+      }, 150);
     }
   };
 
@@ -2322,34 +2366,12 @@ export default function App() {
   const isPublicLegalPage =
     currentTab === 'terms' ||
     currentTab === 'privacy' ||
+    currentTab === 'refunds' ||
     currentTab === 'delete-account' ||
     currentTab === 'support';
 
-  // Google Redirect in progress loading screen (prevents bounce/flicker)
-  if (isRedirectProcessing) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-full border-4 border-amber-400/20 border-t-amber-400 animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <svg className="w-7 h-7" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-            </div>
-          </div>
-          <h2 className="text-lg font-bold text-slate-100">गूगल प्रमाणीकरण सत्यापित हो रहा है...</h2>
-          <p className="text-xs text-slate-400">कृपया प्रतीक्षा करें, आपके खाते की जानकारी सुरक्षित रूप से लोड की जा रही है।</p>
-        </div>
-      </div>
-    );
-  }
-
   // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
-  if (!isPublicLegalPage && !bypassAuthForGuest && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
+  if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
         {toastMessage && (
@@ -2362,10 +2384,6 @@ export default function App() {
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
           onLoginSuccess={(user) => {
-            try {
-              sessionStorage.removeItem('guest_mode_active');
-            } catch {}
-            setBypassAuthForGuest(false);
             localStorage.removeItem('user_explicitly_logged_out');
             const isAdmin = isUserAdmin(user);
             setCurrentUser(user);
@@ -2392,17 +2410,12 @@ export default function App() {
               // proceed
             }
             // Ensure onboarding is marked completed so the user enters the homepage immediately
-            try { localStorage.removeItem('ai_news_maker_admin_system_mode'); } catch {}
             setIsOnboardingCompleted(true);
             localStorage.setItem('is_onboarding_completed', 'true');
             navigateToTab('home');
             showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
           }}
           onCompleteDetails={(profile, updatedUser) => {
-            try {
-              sessionStorage.removeItem('guest_mode_active');
-            } catch {}
-            setBypassAuthForGuest(false);
             handleSaveProfile(profile);
             const userToSet = updatedUser || currentUser;
             localStorage.removeItem('user_explicitly_logged_out');
@@ -2418,7 +2431,6 @@ export default function App() {
               setIsOnboardingCompleted(true);
               showToast('👑 मुख्य एडमिन कंट्रोल पैनल में आपका स्वागत है!');
             } else {
-              try { localStorage.removeItem('ai_news_maker_admin_system_mode'); } catch {}
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
               navigateToTab('home');
@@ -2787,10 +2799,7 @@ export default function App() {
                   className="w-full bg-slate-950/95 p-2 shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
                 >
                   {/* 2. Preview canvas (4:5 or selected ratio) near top */}
-                  <div
-                    id="mobile-canvas-preview"
-                    className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1"
-                  >
+                  <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
                     <CardPreview
                       card={card}
                       className="w-full h-full"
@@ -2826,61 +2835,64 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                </div>
 
-                {/* 4. Horizontal left-to-right editor steps with sticky positioning directly under header */}
-                <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border-y border-slate-800 p-2 sm:p-2.5 shadow-xl max-w-lg mx-auto">
-                  <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
-                    <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>स्टेप {activeStep}/7</span>
-                    </span>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
-                      <span>👉</span>
-                      <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
-                    {STUDIO_STEPS.map((s) => {
-                      const isActive = activeStep === s.step;
-                      return (
-                        <button
-                          key={s.step}
-                          type="button"
-                          onClick={() => {
-                            setActiveStep(s.step);
-                            const el = document.getElementById('mobile-active-step-commands');
-                            if (el) {
-                              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            }
-                          }}
-                          className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
-                            isActive
-                              ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                              : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
-                          }`}
-                        >
-                          <span
-                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
+                  <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1">
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>स्टेप {activeStep}/7</span>
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
+                        <span>👉</span>
+                        <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
+                      {STUDIO_STEPS.map((s) => {
+                        const isActive = activeStep === s.step;
+                        return (
+                          <button
+                            key={s.step}
+                            type="button"
+                            onClick={() => {
+                              setActiveStep(s.step);
+                              const el = document.getElementById('mobile-active-step-commands');
+                              if (el) {
+                                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }
+                            }}
+                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
                               isActive
-                                ? 'bg-slate-950 text-amber-300'
-                                : 'bg-amber-400 text-slate-950'
+                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
                             }`}
                           >
-                            {s.step}
-                          </span>
-                          <span className="text-sm shrink-0">{s.icon}</span>
-                          <span className="whitespace-nowrap font-bold">{s.name}</span>
-                        </button>
-                      );
-                    })}
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                isActive
+                                  ? 'bg-slate-950 text-amber-300'
+                                  : 'bg-amber-400 text-slate-950'
+                              }`}
+                            >
+                              {s.step}
+                            </span>
+                            <span className="text-sm shrink-0">{s.icon}</span>
+                            <span className="whitespace-nowrap font-bold">{s.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
+
+                  {/* Distinct Horizontal Partition / Divider Line */}
+                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
                 </div>
 
                 {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 pb-36 max-w-lg mx-auto"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
                 >
                   {/* Step Title Header */}
                   <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
@@ -2916,64 +2928,8 @@ export default function App() {
                     onToggleMobileViewMode={setMobileViewMode}
                     onOpenCloudSettings={() => setIsCloudModalOpen(true)}
                     onLogout={handleLogout}
-                    autoFillNews={isMobile ? autoFillNews : null}
+                    autoFillNews={autoFillNews}
                   />
-                </div>
-
-                {/* Persistent Mobile Bottom Navigation Bar (Fixed directly above AppBottomBarWeb h-16 -> bottom-[72px]) */}
-                <div className="fixed bottom-[72px] left-0 right-0 z-30 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shadow-2xl px-3 py-2 md:hidden">
-                  <div className="max-w-md mx-auto flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      disabled={activeStep <= 1}
-                      onClick={() => {
-                        const prev = Math.max(1, activeStep - 1);
-                        setActiveStep(prev);
-                        const el = document.getElementById('mobile-active-step-commands');
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }}
-                      className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                        activeStep <= 1
-                          ? 'opacity-40 bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
-                          : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 active:scale-95'
-                      }`}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      <span>पिछला चरण</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== 'undefined') {
-                          window.dispatchEvent(new CustomEvent('ai_news_open_graphic_preview'));
-                        }
-                      }}
-                      className="py-2 px-3 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/40 text-xs font-black flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-sm shrink-0"
-                      title="लाइव 4:5 ग्राफिक प्रीव्यू पॉपअप खोलें"
-                    >
-                      <Eye className="w-4 h-4 text-amber-400" />
-                      <span>ग्राफिक प्रीव्यू देखें</span>
-                    </button>
-
-                    {activeStep < 7 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = Math.min(7, activeStep + 1);
-                          setActiveStep(next);
-                          const el = document.getElementById('mobile-active-step-commands');
-                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }}
-                        className="flex-1 py-2 px-2 rounded-xl text-xs font-black bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 flex items-center justify-center gap-1 shadow-md hover:from-yellow-300 hover:to-amber-400 active:scale-95 cursor-pointer transition-all"
-                      >
-                        <span>अगला चरण</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <div className="flex-1" />
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -3170,7 +3126,7 @@ export default function App() {
                       onToggleMobileViewMode={setMobileViewMode}
                       onOpenCloudSettings={() => setIsCloudModalOpen(true)}
                       onLogout={handleLogout}
-                      autoFillNews={!isMobile ? autoFillNews : null}
+                      autoFillNews={autoFillNews}
                     />
                   </div>
                 </div>
@@ -3194,11 +3150,19 @@ export default function App() {
             setVideos((prev) => [newVid, ...prev.filter((v) => v.id !== newVid.id)]);
             try {
               const saved = JSON.parse(localStorage.getItem('app_admin_videos') || '[]');
-              const cleanVid = { ...newVid };
-              if (cleanVid.videoUrl && cleanVid.videoUrl.startsWith('data:')) {
-                cleanVid.videoUrl = '';
-              }
-              localStorage.setItem('app_admin_videos', JSON.stringify([cleanVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
+              localStorage.setItem('app_admin_videos', JSON.stringify([newVid, ...saved.filter((v: any) => v.id !== newVid.id)]));
+              const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
+              fetch(`${getApiBaseUrl()}/api/admin/videos/upload`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-admin-key': 'master-admin',
+                  'x-user-role': 'admin',
+                  'x-admin-email': adminEmail,
+                  'x-user-email': adminEmail,
+                },
+                body: JSON.stringify(newVid),
+              }).catch(() => {});
             } catch {}
           }}
           onAdminUpdateVideo={(updatedVid) => {
@@ -3301,7 +3265,16 @@ export default function App() {
         />
       )}
 
-      {/* 8. Account Deletion */}
+      {/* 8. Refunds & Cancellations Policy */}
+      {currentTab === 'refunds' && (
+        <RefundCancellationPolicyPage
+          onBack={() => navigateToTab('home')}
+          onNavigateToTab={navigateToTab}
+          onNavigateToSupport={() => navigateToTab('support')}
+        />
+      )}
+
+      {/* 9. Account Deletion */}
       {currentTab === 'delete-account' && (
         <AccountDeletionPage
           onBack={() => navigateToTab('home')}
@@ -3438,6 +3411,17 @@ export default function App() {
       <InstallPwaModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      {/* 12. SHARED BRANDED NEWS LOADING MODAL */}
+      <BrandedNewsLoadingModal
+        isOpen={brandedLoader.isOpen}
+        mode={brandedLoader.mode}
+        title={brandedLoader.title}
+        durationSeconds={brandedLoader.durationSeconds}
+        error={brandedLoader.error}
+        onRetry={brandedLoader.onRetry}
+        onCancel={() => setBrandedLoader((prev) => ({ ...prev, isOpen: false, error: null }))}
       />
     </div>
   );

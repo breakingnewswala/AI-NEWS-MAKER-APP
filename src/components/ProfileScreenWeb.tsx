@@ -75,8 +75,10 @@ import {
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
   fetchLogoChangeRequests,
-  checkAccountUniqueness,
   canAccessTemplateManager,
+  fetchUserDailyDownloadStatus,
+  getCachedUserDailyDownloadStatus,
+  UserDailyDownloadStatus,
 } from '../lib/userPlanManager';
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
@@ -667,6 +669,17 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     }
     return 'profile';
   });
+
+  const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
+
+  useEffect(() => {
+    fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
+    const handleQuota = (e: any) => {
+      if (e?.detail) setDailyQuotaStatus(e.detail);
+    };
+    window.addEventListener('ai_news_download_status_updated', handleQuota);
+    return () => window.removeEventListener('ai_news_download_status_updated', handleQuota);
+  }, [currentUser?.email]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -1819,20 +1832,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             <span>⚙️ प्लान सेटिंग्स (Admin Managed)</span>
                           </button>
                         ) : isCurrent ? (
-                          subscription.isPlanExpired || subscription.isTrialExpired ? (
-                            <button
-                              type="button"
-                              onClick={() => handleUpgradePlan(plan.id)}
-                              className="w-full py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
-                            >
-                              <Zap className="w-3.5 h-3.5" />
-                              <span>पुनः सक्रिय करें (Reactivate Plan)</span>
-                            </button>
-                          ) : (
-                            <div className="w-full py-2 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
-                              ✓ वर्तमान सक्रिय प्लान
-                            </div>
-                          )
+                          <div className="w-full py-2 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
+                            ✓ वर्तमान सक्रिय प्लान
+                          </div>
                         ) : (
                           <button
                             type="button"
@@ -2729,17 +2731,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Coin balance action / display - Only for non-admin users */}
-            {!isAdmin && (
-              <div
-                className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-black flex items-center gap-1 shadow-xs"
-                title="उपलब्ध कॉइन बैलेंस"
-              >
-                <span>🪙</span>
-                <span>{walletData?.coinBalance ?? 0}</span>
-                <span className="text-[10px] text-amber-400/80 hidden sm:inline">कॉइन</span>
-              </div>
-            )}
+            {/* Coin balance action / display */}
+            <div
+              className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-black flex items-center gap-1 shadow-xs"
+              title="उपलब्ध कॉइन बैलेंस"
+            >
+              <span>🪙</span>
+              <span>{walletData?.coinBalance ?? 0}</span>
+              <span className="text-[10px] text-amber-400/80 hidden sm:inline">कॉइन</span>
+            </div>
 
             {/* Logout button */}
             <button
@@ -2808,12 +2808,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
 
                 <div className="space-y-1.5 flex flex-col items-center sm:items-start">
-                  {/* User Name & Admin Identity Icon */}
+                  {/* User Name & Admin / Plan Badge */}
                   <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                     <h2 className="text-lg sm:text-xl font-black text-white">{displayUserName}</h2>
                     {isAdmin && (
-                      <span className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-300 border border-amber-300 flex items-center justify-center text-slate-950 font-black text-sm shadow-md" title="व्यवस्थापक">
-                        👑
+                      <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-black rounded uppercase">
+                        {isUserSuperAdmin(effectiveUser || currentUser) ? '👑 सुपर एडमिन' : '🛡️ एडमिन'}
                       </span>
                     )}
                     {/* Active Plan Tier Badge */}
@@ -2916,6 +2916,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         ? 'ट्रायल समाप्त (लॉक)'
                         : `${subscription.daysRemaining} दिन ${subscription.hoursRemaining ?? 0} घंटे ${subscription.minutesRemaining ?? 0} मिनट`}
                     </span>
+                  </div>
+
+                  {/* Daily Graphic Quota & Remaining Today */}
+                  <div className="pt-2 mt-1 border-t border-slate-800/80 space-y-1.5">
+                    <div className="text-xs flex items-center justify-between gap-2">
+                      <span className="text-slate-400">दैनिक डाउनलोड सीमा:</span>
+                      <span className="font-mono font-bold text-amber-300 text-right">
+                        {dailyQuotaStatus?.unlimited
+                          ? 'असीमित (VIP DESK)'
+                          : `${dailyQuotaStatus?.dailyQuota ?? (subscription.planKey === 'VIP DESK' ? 99999 : subscription.planKey === 'PRO' ? 50 : subscription.planKey === 'ADVANCE' ? 25 : 10)} ग्राफिक / दिन`}
+                      </span>
+                    </div>
+
+                    <div className="text-xs flex items-center justify-between gap-2">
+                      <span className="text-slate-400">आज के शेष ग्राफिक:</span>
+                      <span className="font-mono font-black text-emerald-400 text-right text-xs sm:text-sm">
+                        {dailyQuotaStatus?.unlimited
+                          ? 'असीमित डाउनलोड'
+                          : `${dailyQuotaStatus?.remainingToday ?? 10} ग्राफिक बाकी`}
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 flex items-center justify-between gap-2">
+                      <span>कोटा रीसेट समय:</span>
+                      <span className="font-mono text-slate-400">रात 12:00 AM (IST)</span>
+                    </div>
                   </div>
 
                   {/* Warning if expired without paid plan */}

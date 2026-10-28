@@ -292,7 +292,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               onClick={() => onNavigateToTab('terms')}
               className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
-              Terms
+              Terms & Conditions
             </button>
             <span className="text-slate-700">•</span>
             <button
@@ -300,15 +300,15 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               onClick={() => onNavigateToTab('privacy')}
               className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
-              Privacy
+              Privacy Policy
             </button>
             <span className="text-slate-700">•</span>
             <button
               type="button"
-              onClick={() => onNavigateToTab('delete-account')}
-              className="text-slate-400 hover:text-rose-300 transition-colors cursor-pointer"
+              onClick={() => onNavigateToTab('refunds')}
+              className="text-slate-400 hover:text-emerald-300 transition-colors cursor-pointer"
             >
-              Account Deletion
+              Refunds & Cancellations
             </button>
             <span className="text-slate-700">•</span>
             <button
@@ -316,7 +316,15 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               onClick={() => onNavigateToTab('support')}
               className="text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
             >
-              Support
+              Contact Us
+            </button>
+            <span className="text-slate-700">•</span>
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('delete-account')}
+              className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer text-[11px]"
+            >
+              Account Deletion
             </button>
           </nav>
         </section>

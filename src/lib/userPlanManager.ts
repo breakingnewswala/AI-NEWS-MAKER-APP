@@ -274,6 +274,61 @@ export async function syncPlansCatalogFromBackend(): Promise<PlanFeatureDetail[]
   return getPlansCatalog();
 }
 
+export interface UserDailyDownloadStatus {
+  success: boolean;
+  plan: string;
+  maxAllowed: number;
+  dailyQuota: number;
+  downloadsToday: number;
+  remainingToday: number;
+  remainingDownloads: number;
+  isExhausted: boolean;
+  unlimited: boolean;
+  dateStr: string;
+}
+
+let cachedDownloadStatus: UserDailyDownloadStatus | null = null;
+
+export async function fetchUserDailyDownloadStatus(email?: string): Promise<UserDailyDownloadStatus> {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  try {
+    const res = await fetch(`/api/user-download-status?email=${encodeURIComponent(cleanEmail)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success) {
+        cachedDownloadStatus = data;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: data }));
+        }
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed fetching download status:', err);
+  }
+
+  const sub = getUserSubscription();
+  const max = sub.planKey === 'VIP DESK' ? 99999 : sub.planKey === 'PRO' ? 50 : sub.planKey === 'ADVANCE' ? 25 : 10;
+  const fallbackStatus: UserDailyDownloadStatus = {
+    success: true,
+    plan: sub.tier,
+    maxAllowed: max,
+    dailyQuota: max,
+    downloadsToday: 0,
+    remainingToday: max,
+    remainingDownloads: max,
+    isExhausted: false,
+    unlimited: max >= 99999,
+    dateStr: new Date().toISOString().slice(0, 10),
+  };
+  cachedDownloadStatus = fallbackStatus;
+  return fallbackStatus;
+}
+
+export function getCachedUserDailyDownloadStatus(): UserDailyDownloadStatus | null {
+  return cachedDownloadStatus;
+}
+
 if (typeof window !== 'undefined') {
   syncPlansCatalogFromBackend().catch(() => {});
   window.addEventListener('focus', () => {
@@ -394,35 +449,10 @@ const INITIAL_PROMO_CODES: PromoCodeItem[] = [
 export function getPromoCodes(): PromoCodeItem[] {
   if (typeof window === 'undefined') return INITIAL_PROMO_CODES;
   try {
-    // Background sync with authoritative backend database
-    if (!(window as any).__promoCodesFetching) {
-      (window as any).__promoCodesFetching = true;
-      fetch(getApiUrl('/api/promo-codes'))
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          (window as any).__promoCodesFetching = false;
-          if (data && Array.isArray(data.promoCodes) && data.promoCodes.length > 0) {
-            const serverCodes = data.promoCodes;
-            const localCodes = (() => {
-              try {
-                const s = localStorage.getItem(STORAGE_KEY_PROMO_CODES);
-                return s ? JSON.parse(s) : [];
-              } catch { return []; }
-            })();
-            const map = new Map<string, PromoCodeItem>();
-            serverCodes.forEach((c: any) => map.set(c.code, c));
-            localCodes.forEach((c: any) => { if (!map.has(c.code)) map.set(c.code, c); });
-            const merged = Array.from(map.values());
-            localStorage.setItem(STORAGE_KEY_PROMO_CODES, JSON.stringify(merged));
-          }
-        })
-        .catch(() => { (window as any).__promoCodesFetching = false; });
-    }
-
     const saved = localStorage.getItem(STORAGE_KEY_PROMO_CODES);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn('Error reading promo codes:', e);
@@ -475,27 +505,6 @@ export function createPromoCode(params: {
 
   const updated = [newPromo, ...existingCodes];
   savePromoCodes(updated);
-
-  // Sync to authoritative backend
-  try {
-    fetch(getApiUrl('/api/admin/promo-codes'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': 'master-admin',
-        'x-user-role': 'admin',
-        'x-admin-email': 'breakingnewswala.com@gmail.com',
-      },
-      body: JSON.stringify({
-        code: cleanCode,
-        planId: params.planId,
-        durationDays: newPromo.durationDays,
-        usageType: newPromo.usageType,
-        notes: params.notes,
-      }),
-    }).catch(() => {});
-  } catch {}
-
   return { success: true, message: `प्रोमो कोड "${cleanCode}" सफलतापूर्वक बनाया गया!`, promoCode: newPromo };
 }
 
@@ -580,7 +589,6 @@ export function redeemPromoCode(codeStr: string, userInfo?: any): RedeemResult {
     localStorage.setItem('ai_news_maker_plan_activated_at', now.toString());
     localStorage.setItem('ai_news_maker_plan_expires_at', expiryTime.toString());
     localStorage.setItem('ai_news_maker_plan_promo_used', cleanCode);
-    localStorage.removeItem('user_trial_expired');
   }
 
   // Mark promo code as USED
@@ -606,33 +614,6 @@ export function redeemPromoCode(codeStr: string, userInfo?: any): RedeemResult {
     expiresAt: expiryTime,
     activatedVia: cleanCode,
   });
-
-  // Authoritative Backend Persistence: Permanently update database record
-  try {
-    fetch(getApiUrl('/api/promo-codes/redeem'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: cleanCode,
-        userEmail: userInfo?.email || userIdentifier,
-        userId: userInfo?.userId || userInfo?.id,
-        username: userInfo?.username,
-      }),
-    }).catch(() => {});
-
-    // Also directly update authoritative cloud user account
-    if (userIdentifier && userIdentifier !== 'User') {
-      adminUpdateCloudUser(userIdentifier, {
-        tier: targetCode.planId,
-        planName: targetCode.planName,
-        activatedAt: now,
-        expiresAt: expiryTime,
-        trialEndsAt: expiryTime,
-        isTrialExpired: false,
-        activatedVia: `Promo:${cleanCode}`,
-      }).catch(() => {});
-    }
-  } catch {}
 
   // Dispatch global event for instant UI update across all components
   if (typeof window !== 'undefined') {
@@ -942,13 +923,11 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   })();
 
   const planDetail = getPlanDetail(storedTier);
-  let expiresAt = (matchedUser?.expiresAt && matchedUser.expiresAt > 0)
-    ? matchedUser.expiresAt
-    : (matchedUser?.trialEndsAt || (() => {
-        const expiresAtStr = localStorage.getItem('ai_news_maker_plan_expires_at');
-        const parsed = expiresAtStr ? parseInt(expiresAtStr, 10) : 0;
-        return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
-      })());
+  let expiresAt = matchedUser?.trialEndsAt || (() => {
+    const expiresAtStr = localStorage.getItem('ai_news_maker_plan_expires_at');
+    const parsed = expiresAtStr ? parseInt(expiresAtStr, 10) : 0;
+    return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
+  })();
 
   const msRemaining = Math.max(0, expiresAt - now);
   const isExpired = msRemaining <= 0;
@@ -956,17 +935,16 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const hoursRemaining = isExpired ? 0 : Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
   const minutesRemaining = isExpired ? 0 : Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
 
-  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || (matchedUser as any)?.activatedViaPromoCode || undefined;
-  const hasPaidPlan = storedTier !== 'basic' || Boolean(promoUsed) || Boolean(matchedUser?.expiresAt && matchedUser.expiresAt > now);
-  const isTrialActive = !isExpired && !hasPaidPlan;
+  const hasPaidPlan = storedTier !== 'basic';
+  const isTrialActive = !isExpired && (storedTier === 'basic' || storedTier === 'ultra');
 
-  const effectiveTier: UserPlanTier = storedTier;
-  const effectivePlanName: PlanKeyName = storedTier === 'ultra'
-    ? 'VIP DESK'
-    : (PLAN_KEY_MAP[storedTier] || matchedUser?.planName || 'BASIC');
+  // Module J: Trial-period users receive the same VIP Desk feature and name tag
+  const effectiveTier: UserPlanTier = (isTrialActive && !hasPaidPlan) ? 'ultra' : storedTier;
+  const effectivePlanName: PlanKeyName = (isTrialActive && !hasPaidPlan) ? 'VIP DESK' : (matchedUser?.planName || PLAN_KEY_MAP[storedTier] || 'BASIC');
 
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
+  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || undefined;
 
   return {
     tier: effectiveTier,
@@ -974,7 +952,7 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isTrialExpired: isExpired && !hasPaidPlan,
+    isTrialExpired: isExpired && (storedTier === 'basic' || !hasPaidPlan),
     isPlanExpired: isExpired,
     daysRemaining,
     hoursRemaining,
@@ -991,35 +969,12 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   };
 }
 
-export function setUserPlanTier(newTier: UserPlanTier, durationDays?: number): void {
+export function setUserPlanTier(newTier: UserPlanTier): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY_TIER, newTier);
-    const plan = getPlanDetail(newTier);
-    const days = durationDays || plan.durationDays || (newTier === 'ultra' ? 365 : newTier === 'professional' ? 90 : newTier === 'advanced' ? 30 : 7);
-    const expiresAt = Date.now() + days * 24 * 60 * 60 * 1000;
-    localStorage.setItem('ai_news_maker_plan_expires_at', expiresAt.toString());
-
-    // Sync to backend if active user exists
-    const activeEmail = (
-      localStorage.getItem('ai_news_active_user_email') ||
-      localStorage.getItem('user_email') ||
-      ''
-    ).toLowerCase().trim();
-
-    if (activeEmail) {
-      const planName = newTier === 'ultra' ? 'VIP DESK' : (PLAN_KEY_MAP[newTier] || 'BASIC');
-      adminUpdateCloudUser(activeEmail, {
-        tier: newTier,
-        planName,
-        expiresAt,
-        trialEndsAt: expiresAt,
-      }).catch(() => {});
-    }
-
-    window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: { tier: newTier, expiresAt } }));
+    window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: { tier: newTier } }));
   }
 }
-
 
 // ==========================================
 // 5. MODES SYSTEM (SEPARATED ARCHITECTURE)

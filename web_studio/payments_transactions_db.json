@@ -1,0 +1,20 @@
+[
+  {
+    "orderId": "order_ainm_1793169731228_382",
+    "cfOrderId": "cf_order_ainm_1793169731228_382",
+    "paymentSessionId": "session_mock_order_ainm_1793169731228_382",
+    "orderAmount": 999,
+    "planId": "basic",
+    "planKey": "BASIC",
+    "planName": "बेसिक (BASIC)",
+    "customerEmail": "cashfree.reviewer@ainewsmaker.online",
+    "customerPhone": "9876543210",
+    "customerName": "Cashfree Reviewer",
+    "orderStatus": "PAID",
+    "isLiveGateway": false,
+    "environment": "SANDBOX",
+    "createdAt": 1793169731229,
+    "updatedAt": 1793169731229,
+    "paidAt": 1793169738766
+  }
+]

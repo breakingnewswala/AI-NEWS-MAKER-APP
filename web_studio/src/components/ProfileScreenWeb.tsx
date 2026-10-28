@@ -75,8 +75,10 @@ import {
   getUserLogoChangeRequestStatus,
   getLogoChangeRequests,
   fetchLogoChangeRequests,
-  checkAccountUniqueness,
   canAccessTemplateManager,
+  fetchUserDailyDownloadStatus,
+  getCachedUserDailyDownloadStatus,
+  UserDailyDownloadStatus,
 } from '../lib/userPlanManager';
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
@@ -667,6 +669,17 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     }
     return 'profile';
   });
+
+  const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
+
+  useEffect(() => {
+    fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
+    const handleQuota = (e: any) => {
+      if (e?.detail) setDailyQuotaStatus(e.detail);
+    };
+    window.addEventListener('ai_news_download_status_updated', handleQuota);
+    return () => window.removeEventListener('ai_news_download_status_updated', handleQuota);
+  }, [currentUser?.email]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -2903,6 +2916,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         ? 'ट्रायल समाप्त (लॉक)'
                         : `${subscription.daysRemaining} दिन ${subscription.hoursRemaining ?? 0} घंटे ${subscription.minutesRemaining ?? 0} मिनट`}
                     </span>
+                  </div>
+
+                  {/* Daily Graphic Quota & Remaining Today */}
+                  <div className="pt-2 mt-1 border-t border-slate-800/80 space-y-1.5">
+                    <div className="text-xs flex items-center justify-between gap-2">
+                      <span className="text-slate-400">दैनिक डाउनलोड सीमा:</span>
+                      <span className="font-mono font-bold text-amber-300 text-right">
+                        {dailyQuotaStatus?.unlimited
+                          ? 'असीमित (VIP DESK)'
+                          : `${dailyQuotaStatus?.dailyQuota ?? (subscription.planKey === 'VIP DESK' ? 99999 : subscription.planKey === 'PRO' ? 50 : subscription.planKey === 'ADVANCE' ? 25 : 10)} ग्राफिक / दिन`}
+                      </span>
+                    </div>
+
+                    <div className="text-xs flex items-center justify-between gap-2">
+                      <span className="text-slate-400">आज के शेष ग्राफिक:</span>
+                      <span className="font-mono font-black text-emerald-400 text-right text-xs sm:text-sm">
+                        {dailyQuotaStatus?.unlimited
+                          ? 'असीमित डाउनलोड'
+                          : `${dailyQuotaStatus?.remainingToday ?? 10} ग्राफिक बाकी`}
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 flex items-center justify-between gap-2">
+                      <span>कोटा रीसेट समय:</span>
+                      <span className="font-mono text-slate-400">रात 12:00 AM (IST)</span>
+                    </div>
                   </div>
 
                   {/* Warning if expired without paid plan */}

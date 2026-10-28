@@ -1293,7 +1293,7 @@ export function ensureHashtagHierarchy(
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
   const cleanUser = (username || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
-  const isGeneric = ['user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined'].includes(cleanUser.toLowerCase());
+  const isGeneric = ['user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined', 'ainewsmaker', 'ai_news_maker'].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : '';
 
   let locTag = '';

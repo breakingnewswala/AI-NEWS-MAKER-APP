@@ -3,7 +3,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const TEST_PORT = process.env.TEST_PORT || (5200 + Math.floor(Math.random() * 400));
+const TEST_PORT = 5178;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 function sleep(ms) {
@@ -652,7 +652,7 @@ async function runTests() {
     assert(case2Res.status === 200 && case2Res.body.success === true, 'Real News Case 2 (Govt Decision) processed successfully');
     const c2Data = case2Res.body.data;
     assert(Array.isArray(c2Data.headlineOptions) && c2Data.headlineOptions.length >= 3, 'Case 2 returns clean headline options');
-    assert(!c2Data.headline.includes('माननीय') && !/(?:^|\s)जी(?:\s|[।,.]|$)/.test(c2Data.headline), 'Case 2 Anti-Flattery stripped honorifics');
+    assert(!c2Data.headline.includes('माननीय') && !c2Data.headline.includes('जी'), 'Case 2 Anti-Flattery stripped honorifics');
     assert(typeof c2Data.summary === 'string' && c2Data.summary.length > 0, 'Case 2 returns clean summary');
     assert(!c2Data.summary.includes('#breakingnewswala') && !c2Data.summary.includes('#BNWTV'), 'Case 2 does not include legacy hashtags');
 
