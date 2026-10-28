@@ -789,10 +789,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     return (
       <div
         key={vid.id}
-        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all flex flex-col justify-between group ${
+        className={`bg-white dark:bg-slate-900 border rounded-2xl overflow-hidden transition-all flex flex-col justify-between group ${
           vid.isBonus
             ? 'border-amber-500/50 hover:border-amber-400 shadow-lg shadow-amber-950/20 ring-1 ring-amber-500/30'
-            : 'border-slate-800 hover:border-slate-700'
+            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm hover:shadow-xl'
         } ${isHorizontal ? 'w-64 sm:w-72 shrink-0 snap-start' : 'break-inside-avoid mb-6 w-full hover:shadow-xl'}`}
       >
         <div>
@@ -884,13 +884,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
             <h3
               onClick={() => setInlinePlayingId(vid.id)}
-              className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
+              className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
             >
               {vid.title}
             </h3>
 
             {vid.caption && (
-              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
                 {vid.caption}
               </p>
             )}
@@ -899,7 +899,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
         {/* Admin Editing Controls (Edit Info, Caption, Ratio, Coin Value, Toggle Bonus & Delete) */}
         {isAdmin && (
-          <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
+          <div className="px-4 py-2 bg-slate-50 dark:bg-slate-950/80 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
@@ -929,7 +929,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 className={`px-2 py-1 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95 border ${
                   vid.isBonus
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
                 }`}
                 title="बोनस वीडियो स्थिति बदलें"
               >
@@ -1003,9 +1003,9 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-24">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-24 transition-colors">
       {/* Top Header */}
-      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md">
+      <div className="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md text-slate-900 dark:text-white">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg shrink-0">

@@ -77,10 +77,10 @@ export const StepNavigator: React.FC<StepNavigatorProps> = ({
 
   return (
     <div
-      className={`w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl p-2 sm:p-2.5 shadow-xl flex flex-col gap-1.5 ${className}`}
+      className={`w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 rounded-xl p-2 sm:p-2.5 shadow-lg dark:shadow-xl flex flex-col gap-1.5 transition-colors ${className}`}
     >
-      <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-800/80 mb-0.5">
-        <div className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 py-0.5">
+      <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-200 dark:border-slate-800/80 mb-0.5">
+        <div className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5 py-0.5">
           <span>⚙️</span>
           <span>एडिटर नेविगेटर (7 स्टेप्स)</span>
         </div>
@@ -96,14 +96,14 @@ export const StepNavigator: React.FC<StepNavigatorProps> = ({
               onClick={() => handleStepClick(s)}
               className={`w-full text-left px-1.5 sm:px-2.5 py-1.5 sm:py-2 rounded-lg flex items-center justify-between transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-gradient-to-r from-red-600 via-red-650 to-red-700 text-white font-black border border-amber-400 shadow-md ring-1 ring-amber-400/50'
-                  : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                  ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white font-black border border-amber-400 shadow-md ring-1 ring-amber-400/50'
+                  : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-slate-700/60'
               }`}
             >
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <span
                   className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-black shrink-0 ${
-                    isActive ? 'bg-amber-400 text-neutral-950 shadow-xs ring-1 ring-white/50' : 'bg-slate-700 text-amber-300'
+                    isActive ? 'bg-amber-400 text-slate-950 shadow-xs ring-1 ring-white/50' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-amber-300'
                   }`}
                 >
                   {s.step}

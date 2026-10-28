@@ -1759,7 +1759,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       key={plan.id}
                       className={`relative rounded-2xl p-4 border flex flex-col justify-between transition-all ${
                         isCurrent
-                          ? 'bg-slate-900 border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40'
+                          ? 'bg-white dark:bg-slate-900 border-amber-500 dark:border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40 text-slate-900 dark:text-white'
                           : plan.popular
                           ? 'bg-slate-950/90 border-blue-500/50 hover:border-blue-400'
                           : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
@@ -2715,9 +2715,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-28">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-28 transition-colors">
       {/* Top Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-md sticky top-0 z-40">
+      <div className="bg-white/95 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm dark:shadow-md sticky top-0 z-40 text-slate-900 dark:text-white">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
@@ -2822,7 +2822,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : ''));
 
           return (
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="bg-gradient-to-r from-white dark:from-slate-900 via-slate-50 dark:via-slate-800 to-white dark:to-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-900 dark:text-white">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
                 {/* User Avatar / Channel Logo */}
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">

@@ -2458,7 +2458,7 @@ export default function App() {
   // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
   if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
+      <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
         {toastMessage && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-slate-950 px-4 py-2 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
             <Sparkles className="w-4 h-4 text-slate-950" />
@@ -2528,7 +2528,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-neutral-950 px-4 py-2.5 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
@@ -2538,7 +2538,7 @@ export default function App() {
       )}
 
       {/* Top Bar Navigation - Always visible in Home, Video, Newsroom, Control Room. In Studio: visible ONLY on Desktop (hidden md:block), preserving mobile & APK layout unchanged */}
-      <div className={`sticky top-0 z-50 bg-slate-950/95 backdrop-blur-md shadow-md ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
+      <div className={`sticky top-0 z-50 bg-white/95 dark:bg-[#0B132B]/95 backdrop-blur-md shadow-sm dark:shadow-md transition-colors ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
         <AppTopBarWeb
           currentTab={currentTab}
           currentUser={currentUser}
@@ -2828,12 +2828,12 @@ export default function App() {
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
         <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
-          <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900">
+          <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
           {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile only shows Graphic unless opened via 'इस वीडियो को बनाएँ' */}
           <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible && (!studioInitialItem ? 'max-h-20 opacity-100 mb-3' : 'max-h-20 opacity-100 mb-3')
           }`}>
-            <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-1 shadow-lg max-w-lg mx-auto">
+            <div className="flex items-center justify-between bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl p-1 shadow-sm dark:shadow-lg max-w-lg mx-auto">
               <button
                 type="button"
                 onClick={() => updateStudioMode('graphic')}
@@ -2881,7 +2881,7 @@ export default function App() {
               <div className="lg:hidden w-full flex flex-col min-h-screen">
                 <div
                   id="mobile-studio-workspace"
-                  className="w-full bg-slate-950/95 p-2 shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
+                  className="w-full bg-white/95 dark:bg-slate-950/95 p-2 shadow-sm dark:shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
                 >
                   {/* 2. Preview canvas (4:5 or selected ratio) near top */}
                   <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
@@ -2922,7 +2922,7 @@ export default function App() {
                   </div>
 
                   {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
-                  <div className="sticky top-0 z-30 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1">
+                  <div className="sticky top-0 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-sm dark:shadow-xl my-1">
                     <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
                       <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -3027,7 +3027,7 @@ export default function App() {
                     ================================================== */}
                 <div className="w-full lg:w-[420px] xl:w-[460px] 2xl:w-[490px] shrink-0 lg:sticky lg:top-[100px] z-20 flex flex-col gap-3 self-start">
                   {/* 1. LARGE LIVE 4:5 GRAPHIC PREVIEW CARD */}
-                  <div className="w-full bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col">
+                  <div className="w-full bg-white dark:bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-sm dark:shadow-2xl flex flex-col">
                     {/* Top Status Bar on Preview */}
                     <div className="flex items-center justify-between px-1 mb-2 shrink-0">
                       <div className="flex items-center gap-1.5 text-xs text-amber-400 font-black">
@@ -3145,7 +3145,7 @@ export default function App() {
                     ================================================== */}
                 <div className="flex-1 w-full min-w-0 flex flex-col space-y-3">
                   {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar (Sticky on Scroll) */}
-                  <div className="sticky top-[60px] z-20 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3">
+                  <div className="sticky top-[60px] z-20 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl space-y-3 text-slate-900 dark:text-white">
                     {/* Top Bar Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

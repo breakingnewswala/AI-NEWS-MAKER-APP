@@ -1266,10 +1266,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const currentTickerPost = breakingPosts[currentTickerIndex] || breakingPosts[0];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-24">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-24 transition-colors">
       {/* Admin Filter Bar (Unfreezed - Scrolls naturally with content) */}
       {canModerate && (
-        <div className="relative z-20 bg-slate-900 border-b border-amber-500/30 px-3 sm:px-6 lg:px-8 py-2.5 shadow-xl">
+        <div className="relative z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 text-slate-800 dark:text-white px-3 sm:px-6 lg:px-8 py-2.5 shadow-sm dark:shadow-xl backdrop-blur-md">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1281,12 +1281,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
 
               {/* 2. Channel Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-                <span className="text-[11px] font-bold text-slate-300">चैनल:</span>
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">चैनल:</span>
                 <select
                   value={adminFilterChannel}
                   onChange={(e) => setAdminFilterChannel(e.target.value)}
-                  className="bg-transparent text-amber-300 text-xs font-bold outline-none cursor-pointer max-w-[130px]"
+                  className="bg-transparent text-amber-700 dark:text-amber-300 text-xs font-bold outline-none cursor-pointer max-w-[130px]"
                 >
                   <option value="" className="bg-slate-900 text-white">सभी चैनल</option>
                   {savedChannels.map((c: any, idx) => {
@@ -1320,7 +1320,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                   adminPublishedOnly
                     ? 'bg-emerald-600 text-white font-black shadow-md'
-                    : 'bg-slate-950 text-emerald-300 border border-slate-800 hover:border-slate-700'
+                    : 'bg-slate-100 dark:bg-slate-950 text-emerald-700 dark:text-emerald-300 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
                 <span>✅ प्रकाशित खबरें ({publishedCount})</span>
@@ -1333,7 +1333,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                   adminBonusOnly
                     ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                    : 'bg-slate-950 text-amber-300 border border-slate-800 hover:border-slate-700'
+                    : 'bg-slate-100 dark:bg-slate-950 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
                 <Coins className="w-3.5 h-3.5 text-amber-400" />
@@ -1378,7 +1378,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           <div
             onMouseEnter={() => setIsTickerHovered(true)}
             onMouseLeave={() => setIsTickerHovered(false)}
-            className="w-full bg-slate-900 border border-red-700/50 rounded-2xl px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3 shadow-lg hover:border-red-600 transition-colors"
+            className="w-full bg-white dark:bg-slate-900 border border-red-400/40 dark:border-red-700/50 rounded-2xl px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3 shadow-sm dark:shadow-lg hover:border-red-500 dark:hover:border-red-600 transition-colors"
           >
             {/* Left: LIVE Badge with Pulsing Ping Dot */}
             <div className="flex items-center gap-2 shrink-0">
@@ -1392,7 +1392,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             <div className="flex-1 min-w-0 flex items-center justify-between gap-3 overflow-hidden">
               <div
                 key={currentTickerPost.id}
-                className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-300 truncate animate-in fade-in slide-in-from-bottom-2 duration-300 cursor-pointer hover:text-white"
+                className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-amber-300 truncate animate-in fade-in slide-in-from-bottom-2 duration-300 cursor-pointer hover:text-red-600 dark:hover:text-white"
                 onClick={() => onOpenStudioWithNews(currentTickerPost)}
                 title="क्लिक करके स्टूडियो में कार्ड बनाएं"
               >
@@ -1493,7 +1493,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           <div
             onMouseEnter={() => setIsHighlightHovered(true)}
             onMouseLeave={() => setIsHighlightHovered(false)}
-            className="w-full bg-slate-900 border-2 border-amber-500/80 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden transition-all"
+            className="w-full bg-white dark:bg-slate-900 border-2 border-amber-400/80 dark:border-amber-500/80 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden transition-all"
           >
             {/* Header: Title + Tag (Single line, full size) + Navigation (Removed 1 2 3 counter) */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 mb-4">
@@ -1567,12 +1567,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   ? 'border-2 border-amber-500/90 ring-1 ring-amber-400/50 shadow-lg shadow-amber-500/10'
                   : isBonus
                   ? 'border-2 border-emerald-500/90 ring-1 ring-emerald-400/50 shadow-lg shadow-emerald-500/10'
-                  : 'border border-slate-700/90 hover:border-slate-500/80 shadow-md';
+                  : 'border border-slate-200/90 dark:border-slate-800/90 hover:border-amber-400/80 dark:hover:border-slate-600/80 shadow-sm hover:shadow-xl';
 
                 return (
                 <div
                   key={post.id}
-                  className={`bg-slate-950/80 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group ${cardBorderClass}`}
+                  className={`bg-slate-50 dark:bg-slate-950/80 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500/60 shadow-sm hover:shadow-md ${cardBorderClass}`}
                 >
                   <div>
                     {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
@@ -1707,7 +1707,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             onOpenStudioWithNews(post);
                           }
                         }}
-                        className="text-sm sm:text-base font-bold text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
+                        className="text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
                         title="क्लिक करके स्टूडियो में कार्ड बनाएं"
                       >
                         {cleanViewerHeadline(post.title)}
@@ -1729,7 +1729,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                     {/* Summary - In-place expansion per Part F */}
                     <p
-                      className={`text-xs text-slate-300 leading-relaxed mb-2.5 transition-all ${
+                      className={`text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-2.5 transition-all ${
                         expandedCardId === `highlight-${post.id}`
                           ? 'whitespace-pre-line text-slate-200'
                           : 'line-clamp-2'
@@ -1901,8 +1901,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             onClick={() => setSelectedCategory('all')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
               selectedCategory === 'all'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
-                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-400/25 font-black scale-105'
+                : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs'
             }`}
           >
             <span>सभी</span>
@@ -1916,8 +1916,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                   active
-                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
-                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-400/25 font-black scale-105'
+                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs'
                 }`}
               >
                 <span>{cat.name}</span>
@@ -1929,7 +1929,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         {/* 5. Main News Grid */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-bold text-slate-200 flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-200 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-amber-500" />
               प्रमुख खबरें एवं अपडेट्स ({filteredPosts.length})
             </h3>
@@ -1980,7 +1980,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               return (
                 <React.Fragment key={post.id}>
                   <div
-                    className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass} ${
+                    className={`bg-white dark:bg-slate-900 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 flex flex-col justify-between group relative ${cardBorderClass} ${
                       isCardExhausted ? 'opacity-40 hover:opacity-70' : ''
                     }`}
                   >
@@ -1998,8 +1998,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   )}
                   {/* Admin Moderation Bar (Visible strictly to authenticated Admin in Admin Mode) */}
                   {canModerate && (
-                    <div className="bg-slate-950/95 border-b border-slate-800/80 px-3 py-1.5 flex items-center justify-between gap-2 z-10">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-300 hover:text-white select-none">
+                    <div className="bg-slate-50 dark:bg-slate-950/95 border-b border-slate-200 dark:border-slate-800/80 px-3 py-1.5 flex items-center justify-between gap-2 z-10">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white select-none">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -2116,7 +2116,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               handleOpenStudioSafe(post);
                             }
                           }}
-                          className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
+                          className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
                           title="क्लिक करके स्टूडियो में कार्ड बनाएं"
                         >
                           {cleanViewerHeadline(post.title)}
@@ -2138,7 +2138,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                       {/* Summary - In-place expansion per Part F */}
                       <p
-                        className={`text-xs text-slate-400 leading-relaxed transition-all ${
+                        className={`text-xs text-slate-600 dark:text-slate-400 leading-relaxed transition-all ${
                           expandedCardId === post.id
                             ? 'whitespace-pre-line text-slate-200'
                             : 'line-clamp-3'
@@ -2265,7 +2265,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             href={post.sourceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                            className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
                             title="मूल वेबसाइट पर खबर देखें"
                           >
                             <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -2287,7 +2287,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <button
                           type="button"
                           onClick={() => setReportingPost(post)}
-                          className="py-2 px-3 rounded-xl bg-slate-800/90 hover:bg-rose-950/80 text-slate-300 hover:text-rose-300 border border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                          className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-slate-800/90 dark:hover:bg-rose-950/80 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
                           title="इस खबर की रिपोर्ट करें"
                         >
                           <Flag className="w-3.5 h-3.5 text-rose-400 shrink-0" />
@@ -2297,7 +2297,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
 
                     {/* Social Media Story Section (Part H: UI Only, Full Width) */}
-                    <div className="w-full mt-1 pt-1.5 border-t border-slate-800/70 flex items-center justify-between gap-1.5 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
+                    <div className="w-full mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-slate-950/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="p-1 rounded-md bg-blue-500/10 border border-blue-500/20" title="Facebook Story">
                           <FacebookIcon />
@@ -2312,7 +2312,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       <button
                         type="button"
                         disabled
-                        className="flex-1 py-1 px-2 bg-slate-800/80 text-slate-400 border border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
+                        className="flex-1 py-1 px-2 bg-slate-200/70 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
                         title="सोशल मीडिया स्टोरी बनाएँ (शीघ्र आ रहा है)"
                       >
                         <Film className="w-3 h-3 text-slate-400 shrink-0" />
@@ -2323,7 +2323,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                     {/* Administrator-only controls: Arranged in two neat rows of three below Social Media Story action */}
                     {canModerate && (
-                      <div className="w-full mt-1.5 pt-2 border-t border-slate-800/80 space-y-1.5">
+                      <div className="w-full mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
                         {/* First Row: 3 controls (Source, Highlight, Bonus) */}
                         <div className="grid grid-cols-3 gap-1.5">
                           {/* 1. Thumbnail Source Toggle */}
@@ -2360,7 +2360,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                 ? 'bg-purple-500/30 text-purple-300 border border-purple-500/60'
                                 : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
                                 ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                             }`}
                             title="थंबनेल स्रोत बदलें (सोर्स / डिफ़ॉल्ट / मैन्युअल)"
                           >
@@ -2380,7 +2380,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
                               isHighlighted
                                 ? 'bg-amber-400 text-slate-950 shadow-sm'
-                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
+                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700'
                             }`}
                             title="खबर को हाइलाइट करें"
                           >
@@ -2403,7 +2403,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
                               post.isBonus
                                 ? 'bg-yellow-400 text-slate-950 shadow-sm'
-                                : 'bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700'
+                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-yellow-700 dark:text-yellow-300 border border-slate-200 dark:border-slate-700'
                             }`}
                             title="बोनस खबर टॉगल करें"
                           >
@@ -2445,7 +2445,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               setEditorialError(null);
                               setEditorialSuccess(null);
                             }}
-                            className="py-1.5 px-1.5 bg-blue-900/60 hover:bg-blue-800 border border-blue-600 text-blue-200 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
+                            className="py-1.5 px-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/60 dark:hover:bg-blue-800 border border-blue-200 dark:border-blue-600 text-blue-700 dark:text-blue-200 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
                             title="खबर एडिट करें"
                           >
                             <Edit className="w-3 h-3 shrink-0" />

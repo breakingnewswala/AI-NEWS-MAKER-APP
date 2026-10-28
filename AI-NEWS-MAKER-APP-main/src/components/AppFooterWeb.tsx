@@ -41,7 +41,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
   };
 
   return (
-    <footer className="w-full bg-[#080d1a] border-t border-slate-800/90 text-slate-200 mt-12 pt-8 sm:pt-12 pb-32 sm:pb-12 px-3 sm:px-6 lg:px-8 relative overflow-hidden">
+    <footer className="w-full bg-white dark:bg-[#080d1a] border-t border-slate-200 dark:border-slate-800/90 text-slate-800 dark:text-slate-200 mt-12 pt-8 sm:pt-12 pb-32 sm:pb-12 px-3 sm:px-6 lg:px-8 relative overflow-hidden transition-colors">
       {/* Background ambient lighting */}
       <div className="absolute top-0 left-1/4 -translate-x-1/2 w-96 h-96 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/3 right-10 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -52,7 +52,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
         {/* ========================================================================= */}
         <section
           aria-label="AI News Maker 12 Features Showcase"
-          className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-slate-900/90 border border-slate-700/80 p-4 sm:p-6 lg:p-8 shadow-2xl shadow-black/80 relative"
+          className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-50 dark:from-slate-900/90 via-white dark:via-slate-950/95 to-slate-50 dark:to-slate-900/90 border border-slate-200 dark:border-slate-700/80 p-4 sm:p-6 lg:p-8 shadow-sm dark:shadow-2xl relative"
         >
           {/* Tagline Header */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90">
@@ -61,14 +61,14 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                 <span className="p-1.5 rounded-lg bg-amber-400/20 text-amber-400 border border-amber-400/30">
                   <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 animate-pulse" />
                 </span>
-                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-tight">
+                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
                   खबर देखने से खबर बनाने तक,{' '}
                   <span className="text-amber-400 drop-shadow-sm font-black">
                     सिर्फ 2 मिनट में
                   </span>
                 </h2>
               </div>
-              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-300">
+              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-600 dark:text-slate-300">
                 डिजिटल न्यूज़ चैनलों का AI स्टूडियो —{' '}
                 <span className="text-amber-300/90">12 शक्तिशाली सुविधाओं के साथ</span>
               </p>
@@ -97,7 +97,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                 <div
                   key={feat.id}
                   onClick={() => handleFeatureClick(feat)}
-                  className={`group rounded-xl p-3 sm:p-4 bg-slate-950/80 hover:bg-slate-900 border ${feat.borderColor} transition-all duration-200 flex flex-col justify-between shadow-md hover:shadow-xl hover:-translate-y-0.5 cursor-pointer relative overflow-hidden`}
+                  className={`group rounded-xl p-3 sm:p-4 bg-white dark:bg-slate-950/80 hover:bg-slate-50 dark:hover:bg-slate-900 border ${feat.borderColor} transition-all duration-200 flex flex-col justify-between shadow-md hover:shadow-xl hover:-translate-y-0.5 cursor-pointer relative overflow-hidden`}
                   title={`${feat.title} - क्लिक कर फीचर खोलें`}
                 >
                   <div className="space-y-2.5">
