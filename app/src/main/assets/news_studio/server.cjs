@@ -7800,6 +7800,274 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
   }
   throw lastError;
 }
+var API_KEYS_VAULT_FILE = import_path.default.join(process.cwd(), "gemini_api_keys_vault.json");
+function maskApiKey(key) {
+  if (!key || typeof key !== "string") return "";
+  const trimmed = key.trim();
+  if (trimmed.length <= 10) return `${trimmed.slice(0, 3)}...${trimmed.slice(-2)}`;
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+}
+var freeKeyRoundRobinIndex = 0;
+function loadApiKeysVault() {
+  try {
+    if (import_fs.default.existsSync(API_KEYS_VAULT_FILE)) {
+      const raw = import_fs.default.readFileSync(API_KEYS_VAULT_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      return {
+        freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+        paidKey: parsed?.paidKey || null,
+        vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
+      };
+    }
+  } catch (err) {
+    console.error("Error loading gemini_api_keys_vault.json:", err.message);
+  }
+  return {
+    freeKeys: [],
+    paidKey: null,
+    vipRoutingEnabled: true
+  };
+}
+function saveApiKeysVault(vault) {
+  try {
+    import_fs.default.writeFileSync(API_KEYS_VAULT_FILE, JSON.stringify(vault, null, 2), "utf-8");
+    try {
+      const webPath = import_path.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json");
+      import_fs.default.writeFileSync(webPath, JSON.stringify(vault, null, 2), "utf-8");
+    } catch {
+    }
+    return true;
+  } catch (err) {
+    console.error("Error saving gemini_api_keys_vault.json:", err.message);
+    return false;
+  }
+}
+async function executeGeminiWithKeyPool(action, isVip = false) {
+  const vault = loadApiKeysVault();
+  const now = Date.now();
+  if (isVip && vault.vipRoutingEnabled && vault.paidKey?.key && vault.paidKey.status === "active") {
+    try {
+      const ai = new import_genai.GoogleGenAI({
+        apiKey: vault.paidKey.key.trim(),
+        httpOptions: { headers: { "User-Agent": "aistudio-build-vip" } }
+      });
+      return await action(ai);
+    } catch (vipErr) {
+      console.warn("[KeyPool] VIP key error, falling back to free pool:", vipErr?.message);
+    }
+  }
+  const activeFreeKeys = vault.freeKeys.filter(
+    (k) => k.status === "active" && (!k.cooldownUntil || k.cooldownUntil <= now)
+  );
+  if (activeFreeKeys.length > 0) {
+    const startIndex = freeKeyRoundRobinIndex % activeFreeKeys.length;
+    freeKeyRoundRobinIndex = (freeKeyRoundRobinIndex + 1) % activeFreeKeys.length;
+    let lastFreeErr = null;
+    for (let i = 0; i < activeFreeKeys.length; i++) {
+      const candidate = activeFreeKeys[(startIndex + i) % activeFreeKeys.length];
+      try {
+        const ai = new import_genai.GoogleGenAI({
+          apiKey: candidate.key.trim(),
+          httpOptions: { headers: { "User-Agent": "aistudio-build-free-pool" } }
+        });
+        const result = await action(ai);
+        candidate.successCount = (candidate.successCount || 0) + 1;
+        saveApiKeysVault(vault);
+        return result;
+      } catch (keyErr) {
+        lastFreeErr = keyErr;
+        const errMsg = String(keyErr?.message || keyErr || "").toLowerCase();
+        candidate.errorCount = (candidate.errorCount || 0) + 1;
+        if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
+          console.warn(`[KeyPool] Free key "${candidate.label}" (${candidate.id}) hit 429 limit; cooldown 5 mins.`);
+          candidate.cooldownUntil = Date.now() + 5 * 60 * 1e3;
+          saveApiKeysVault(vault);
+        } else {
+          console.warn(`[KeyPool] Free key "${candidate.label}" failed:`, errMsg.slice(0, 80));
+        }
+      }
+    }
+  }
+  const fallbackEnvKey = (process.env.GEMINI_API_KEY || "").trim();
+  if (fallbackEnvKey && fallbackEnvKey !== "MY_GEMINI_API_KEY") {
+    const ai = new import_genai.GoogleGenAI({
+      apiKey: fallbackEnvKey,
+      httpOptions: { headers: { "User-Agent": "aistudio-build-fallback" } }
+    });
+    return await action(ai);
+  }
+  throw new Error("No operational Gemini API keys available in pool or environment");
+}
+app.get("/api/admin/api-keys", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0915\u0940\u091C\u093C \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+  }
+  const vault = loadApiKeysVault();
+  const now = Date.now();
+  const maskedFreeKeys = vault.freeKeys.map((k) => ({
+    id: k.id,
+    label: k.label,
+    maskedKey: maskApiKey(k.key),
+    addedAt: k.addedAt,
+    status: k.status,
+    inCooldown: Boolean(k.cooldownUntil && k.cooldownUntil > now),
+    cooldownSecondsRemaining: k.cooldownUntil && k.cooldownUntil > now ? Math.ceil((k.cooldownUntil - now) / 1e3) : 0,
+    successCount: k.successCount || 0,
+    errorCount: k.errorCount || 0
+  }));
+  const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
+  const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
+  return res.json({
+    success: true,
+    freeKeys: maskedFreeKeys,
+    paidKey: {
+      configured: paidConfigured,
+      maskedKey: maskedPaidKey,
+      label: vault.paidKey?.label || "Paid VIP Dedicated Key",
+      status: vault.paidKey?.status || "inactive",
+      updatedAt: vault.paidKey?.updatedAt || null
+    },
+    vipRoutingEnabled: vault.vipRoutingEnabled,
+    stats: {
+      totalFree: vault.freeKeys.length,
+      activeFree: maskedFreeKeys.filter((k) => k.status === "active" && !k.inCooldown).length,
+      inCooldown: maskedFreeKeys.filter((k) => k.inCooldown).length,
+      fallbackEnvKeyConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 5)
+    }
+  });
+});
+app.post("/api/admin/api-keys/free", async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
+  }
+  const { apiKey, label } = req.body;
+  if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 15) {
+    return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F API Key\u0964 \u0915\u0943\u092A\u092F\u093E \u092E\u093E\u0928\u094D\u092F Google Gemini API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
+  }
+  const cleanKey = apiKey.trim();
+  const vault = loadApiKeysVault();
+  if (vault.freeKeys.some((k) => k.key === cleanKey)) {
+    return res.status(400).json({ error: "\u092F\u0939 API Key \u092A\u0939\u0932\u0947 \u0938\u0947 \u0939\u0940 \u092B\u094D\u0930\u0940 \u092A\u0942\u0932 \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948\u0964" });
+  }
+  try {
+    const testAi = new import_genai.GoogleGenAI({
+      apiKey: cleanKey,
+      httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
+    });
+    await testAi.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: "Say 'OK'"
+    });
+  } catch (testErr) {
+    console.warn("Key test warning:", testErr?.message);
+    if (testErr?.status === 400 || testErr?.message?.includes("API_KEY_INVALID")) {
+      return res.status(400).json({ error: `\u0905\u092E\u093E\u0928\u094D\u092F API Key: ${testErr?.message || "Google \u0926\u094D\u0935\u093E\u0930\u093E \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924"}` });
+    }
+  }
+  const newKeyItem = {
+    id: `free_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    key: cleanKey,
+    label: label && typeof label === "string" && label.trim() ? label.trim() : `Free Account #${vault.freeKeys.length + 1}`,
+    addedAt: Date.now(),
+    status: "active",
+    cooldownUntil: 0,
+    successCount: 0,
+    errorCount: 0
+  };
+  vault.freeKeys.push(newKeyItem);
+  saveApiKeysVault(vault);
+  return res.json({
+    success: true,
+    message: "\u2705 \u0928\u0908 \u092B\u094D\u0930\u0940 Gemini API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092B\u094D\u0930\u0940 \u092A\u0942\u0932 \u092E\u0947\u0902 \u091C\u094B\u0921\u093C \u0926\u0940 \u0917\u0908!",
+    key: {
+      id: newKeyItem.id,
+      label: newKeyItem.label,
+      maskedKey: maskApiKey(newKeyItem.key),
+      status: newKeyItem.status
+    }
+  });
+});
+app.delete("/api/admin/api-keys/free/:id", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
+  }
+  const { id } = req.params;
+  const vault = loadApiKeysVault();
+  const initialLen = vault.freeKeys.length;
+  vault.freeKeys = vault.freeKeys.filter((k) => k.id !== id);
+  if (vault.freeKeys.length === initialLen) {
+    return res.status(404).json({ error: "API Key \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940" });
+  }
+  saveApiKeysVault(vault);
+  return res.json({ success: true, message: "\u092B\u094D\u0930\u0940 API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
+});
+app.post("/api/admin/api-keys/paid", async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
+  }
+  const { apiKey, label, vipRoutingEnabled } = req.body;
+  const vault = loadApiKeysVault();
+  if (typeof vipRoutingEnabled === "boolean") {
+    vault.vipRoutingEnabled = vipRoutingEnabled;
+  }
+  if (apiKey && typeof apiKey === "string" && apiKey.trim().length >= 15) {
+    const cleanKey = apiKey.trim();
+    vault.paidKey = {
+      key: cleanKey,
+      label: label && typeof label === "string" && label.trim() ? label.trim() : "Paid VIP Dedicated Key",
+      updatedAt: Date.now(),
+      status: "active"
+    };
+  }
+  saveApiKeysVault(vault);
+  return res.json({
+    success: true,
+    message: "\u2705 \u092A\u0947\u0921 VIP API Key \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u094B \u0917\u0908\u0902!",
+    vipRoutingEnabled: vault.vipRoutingEnabled,
+    paidKeyConfigured: Boolean(vault.paidKey?.key)
+  });
+});
+app.delete("/api/admin/api-keys/paid", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
+  }
+  const vault = loadApiKeysVault();
+  vault.paidKey = null;
+  saveApiKeysVault(vault);
+  return res.json({ success: true, message: "\u092A\u0947\u0921 VIP API Key \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
+});
+app.post("/api/admin/api-keys/test", async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
+  }
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 15) {
+    return res.status(400).json({ error: "\u091C\u093E\u0902\u091A \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902" });
+  }
+  const start = Date.now();
+  try {
+    const testAi = new import_genai.GoogleGenAI({
+      apiKey: apiKey.trim(),
+      httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
+    });
+    const result = await testAi.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: "Respond in 2 words: Connected successfully"
+    });
+    const latency = Date.now() - start;
+    return res.json({
+      success: true,
+      message: `\u2705 API Key \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948! \u0930\u093F\u0938\u094D\u092A\u0949\u0928\u094D\u0938 \u0938\u092E\u092F: ${latency}ms`,
+      latencyMs: latency,
+      text: result.text || "OK"
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      error: `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${cleanErrorMessage(err)}`
+    });
+  }
+});
 function isInvalidUrlHeadline(text) {
   if (!text || typeof text !== "string") return true;
   const l = text.toLowerCase().trim();
@@ -10093,38 +10361,48 @@ ${rawLink}` : rawLink;
       }
       return result;
     };
-    const runGemini = async () => {
-      const activeGeminiKey = (req.body.geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
-      if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY is not configured");
-      }
-      const ai = new import_genai.GoogleGenAI({
-        apiKey: activeGeminiKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build"
-          }
-        }
-      });
-      const response = await generateWithFallbackAndRetry(
-        ai,
-        DEFAULT_FALLBACK_MODELS,
-        {
-          contents: prompt,
-          config: {
-            systemInstruction: editorialSystemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: GEMINI_NEWS_RESPONSE_SCHEMA
-          }
-        }
-      );
-      return JSON.parse(response.text || "{}");
-    };
     const userResolution = resolveUserTierAndRole(req);
     const userTier = userResolution.tier;
     const isVipDeskUser = Boolean(
       userResolution.role === "admin" || userResolution.role === "superadmin" || ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userTier.toLowerCase().trim()) || String(req.body?.userTier || "").toLowerCase().includes("vip")
     );
+    const runGemini = async () => {
+      const clientPassedKey = (req.body.geminiApiKey || "").trim();
+      if (clientPassedKey && clientPassedKey !== "MY_GEMINI_API_KEY") {
+        const ai = new import_genai.GoogleGenAI({
+          apiKey: clientPassedKey,
+          httpOptions: { headers: { "User-Agent": "aistudio-build-custom" } }
+        });
+        const response = await generateWithFallbackAndRetry(
+          ai,
+          DEFAULT_FALLBACK_MODELS,
+          {
+            contents: prompt,
+            config: {
+              systemInstruction: editorialSystemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: GEMINI_NEWS_RESPONSE_SCHEMA
+            }
+          }
+        );
+        return JSON.parse(response.text || "{}");
+      }
+      return await executeGeminiWithKeyPool(async (ai) => {
+        const response = await generateWithFallbackAndRetry(
+          ai,
+          DEFAULT_FALLBACK_MODELS,
+          {
+            contents: prompt,
+            config: {
+              systemInstruction: editorialSystemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: GEMINI_NEWS_RESPONSE_SCHEMA
+            }
+          }
+        );
+        return JSON.parse(response.text || "{}");
+      }, isVipDeskUser);
+    };
     const aiFeaturesCfg = getAiFeaturesConfig();
     const modelAccessCfg = aiFeaturesCfg.aiModelAccess || {};
     let actualProvider = "gemini";
@@ -10596,27 +10874,45 @@ JSON Output Schema:
       return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
     };
     const tryGemini = async () => {
-      const activeGeminiKey = (geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
-      if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY not configured");
-      }
-      const ai = new import_genai.GoogleGenAI({
-        apiKey: activeGeminiKey,
-        httpOptions: { headers: { "User-Agent": "aistudio-build" } }
-      });
-      const response = await generateWithFallbackAndRetry(
-        ai,
-        DEFAULT_FALLBACK_MODELS,
-        {
-          contents: regenPrompt,
-          config: {
-            systemInstruction: regenInstruction,
-            responseMimeType: "application/json"
+      const clientPassedKey = (geminiApiKey || "").trim();
+      if (clientPassedKey && clientPassedKey !== "MY_GEMINI_API_KEY") {
+        const ai = new import_genai.GoogleGenAI({
+          apiKey: clientPassedKey,
+          httpOptions: { headers: { "User-Agent": "aistudio-build-custom" } }
+        });
+        const response = await generateWithFallbackAndRetry(
+          ai,
+          DEFAULT_FALLBACK_MODELS,
+          {
+            contents: regenPrompt,
+            config: {
+              systemInstruction: regenInstruction,
+              responseMimeType: "application/json"
+            }
           }
-        }
+        );
+        const parsed = JSON.parse(response.text || "{}");
+        return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
+      }
+      const userResolution2 = resolveUserTierAndRole(req);
+      const isVipUser = Boolean(
+        userResolution2.role === "admin" || userResolution2.role === "superadmin" || ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userResolution2.tier.toLowerCase().trim()) || String(req.body?.userTier || "").toLowerCase().includes("vip")
       );
-      const parsed = JSON.parse(response.text || "{}");
-      return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
+      return await executeGeminiWithKeyPool(async (ai) => {
+        const response = await generateWithFallbackAndRetry(
+          ai,
+          DEFAULT_FALLBACK_MODELS,
+          {
+            contents: regenPrompt,
+            config: {
+              systemInstruction: regenInstruction,
+              responseMimeType: "application/json"
+            }
+          }
+        );
+        const parsed = JSON.parse(response.text || "{}");
+        return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
+      }, isVipUser);
     };
     let aiGeneratedOptions = [];
     let actualProvider = "gemini";

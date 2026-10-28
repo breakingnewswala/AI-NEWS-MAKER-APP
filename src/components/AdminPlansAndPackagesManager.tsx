@@ -121,6 +121,7 @@ import {
   toggleCategoryStatus,
   deleteCategoryItem,
 } from '../lib/categoryManager';
+import { AdminApiKeysManager } from './AdminApiKeysManager';
 interface AdminPlansAndPackagesManagerProps {
   currentUser?: any;
   onPlanChanged?: () => void;
@@ -141,7 +142,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onDeleteCategory,
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'policies' | ''>('');
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
 
   // Rewards & Claims Manager State (Part S)
@@ -4870,6 +4871,49 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </div>
         </div>
               )}
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 11B: एपीआई की मैनेजर (API KEY MANAGER - MASTER ADMIN ONLY)             */}
+        {/* ========================================================================= */}
+        {isSuperAdminUser && (
+        <div id="section-api-keys" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'api_keys' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'api_keys' ? '' : 'api_keys')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'api_keys' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <Key className="w-5 h-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm sm:text-base font-black text-white block truncate">
+                    एपीआई की मैनेजर (API Key Manager)
+                  </span>
+                  <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 text-[10px] font-black rounded uppercase">
+                    Free & Paid Pools
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  मल्टीपल फ्री जेमिनी कीज़ (ऑटो-रोटेशन व फेलओवर) एवं वीआईपी पेड की प्रबंधन
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-indigo-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
+                मास्टर एडमिन
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'api_keys' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'api_keys' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+              <AdminApiKeysManager currentUser={currentUser} />
             </div>
           )}
         </div>
