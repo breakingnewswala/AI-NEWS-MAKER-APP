@@ -997,7 +997,6 @@ __export(server_exports, {
   saveAiFeaturesConfig: () => saveAiFeaturesConfig,
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks: () => stripAllUrlsAndHyperlinks,
-  stripDanglingIncompleteWords: () => stripDanglingIncompleteWords,
   validateHeadlineOption: () => validateHeadlineOption
 });
 module.exports = __toCommonJS(server_exports);
@@ -1040,45 +1039,6 @@ if (!import_fs.default.existsSync(logosDir)) {
   import_fs.default.mkdirSync(logosDir, { recursive: true });
 }
 app.use("/uploads", import_express.default.static(publicUploadsDir));
-app.all("/__/auth/*", async (req, res) => {
-  const targetHost = "ai-news-maker-app.firebaseapp.com";
-  const targetUrl = `https://${targetHost}${req.originalUrl}`;
-  try {
-    const headers = {
-      host: targetHost,
-      accept: req.headers["accept"] || "*/*",
-      "user-agent": req.headers["user-agent"] || "Mozilla/5.0"
-    };
-    if (req.headers["content-type"]) {
-      headers["content-type"] = req.headers["content-type"];
-    }
-    if (req.headers["authorization"]) {
-      headers["authorization"] = req.headers["authorization"];
-    }
-    let bodyData = void 0;
-    if (["POST", "PUT", "PATCH"].includes(req.method.toUpperCase())) {
-      bodyData = typeof req.body === "object" ? JSON.stringify(req.body) : req.body;
-    }
-    const proxyRes = await fetch(targetUrl, {
-      method: req.method,
-      headers,
-      body: bodyData,
-      redirect: "manual"
-    });
-    res.status(proxyRes.status);
-    proxyRes.headers.forEach((val, key) => {
-      const lower = key.toLowerCase();
-      if (lower !== "content-encoding" && lower !== "transfer-encoding") {
-        res.setHeader(key, val);
-      }
-    });
-    const buffer = await proxyRes.arrayBuffer();
-    res.send(Buffer.from(buffer));
-  } catch (err) {
-    console.warn("[Auth Proxy] Error forwarding /__/auth request:", err?.message);
-    res.status(502).send("Auth Proxy Error");
-  }
-});
 var AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
 function generateAuthToken(user) {
   const payload = {
@@ -1389,43 +1349,6 @@ app.get("/api/admin/audit-logs", (req, res) => {
 });
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
-var AI_KEYS_CONFIG_FILE = import_path.default.join(process.cwd(), "ai_keys_config.json");
-function loadAiKeysConfig() {
-  try {
-    if (import_fs.default.existsSync(AI_KEYS_CONFIG_FILE)) {
-      const parsed = JSON.parse(import_fs.default.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8"));
-      if (parsed && typeof parsed === "object") {
-        if (parsed.geminiKey && (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY")) {
-          process.env.GEMINI_API_KEY = parsed.geminiKey.trim();
-        }
-        if (parsed.openaiKey && !dynamicOpenAiKey) {
-          dynamicOpenAiKey = parsed.openaiKey.trim();
-        }
-        if (parsed.customDomain && !dynamicCustomDomain) {
-          dynamicCustomDomain = parsed.customDomain.trim();
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Could not read ai_keys_config.json:", e);
-  }
-}
-function saveAiKeysConfig(updates) {
-  try {
-    let existing = {};
-    if (import_fs.default.existsSync(AI_KEYS_CONFIG_FILE)) {
-      try {
-        existing = JSON.parse(import_fs.default.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8"));
-      } catch {
-      }
-    }
-    const merged = { ...existing, ...updates };
-    import_fs.default.writeFileSync(AI_KEYS_CONFIG_FILE, JSON.stringify(merged, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("Could not save ai_keys_config.json:", e);
-  }
-}
-loadAiKeysConfig();
 var quotaExceededInfo = {
   isExceeded: false,
   lastChecked: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1480,7 +1403,6 @@ app.get("/api/cloud-status", (req, res) => {
     currentServerTime: (/* @__PURE__ */ new Date()).toISOString(),
     geminiAvailable,
     openaiAvailable,
-    maskedGeminiKey: geminiAvailable ? `${(geminiKey || "").slice(0, 6)}...${(geminiKey || "").slice(-4)}` : null,
     maskedOpenaiKey: openaiAvailable ? `${(openaiKey || "").slice(0, 6)}...${(openaiKey || "").slice(-4)}` : null,
     customDomain: dynamicCustomDomain || null
   });
@@ -1494,15 +1416,13 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     if (openaiKey !== void 0) {
       dynamicOpenAiKey = String(openaiKey).trim();
       openaiClient = null;
-      saveAiKeysConfig({ openaiKey: String(openaiKey).trim() });
     }
     if (geminiKey !== void 0 && String(geminiKey).trim().length > 5) {
       process.env.GEMINI_API_KEY = String(geminiKey).trim();
-      saveAiKeysConfig({ geminiKey: String(geminiKey).trim() });
+      aiClient = null;
     }
     if (customDomain !== void 0) {
       dynamicCustomDomain = String(customDomain).trim();
-      saveAiKeysConfig({ customDomain: String(customDomain).trim() });
     }
     const effectiveOpenaiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
     const openaiValid = Boolean(
@@ -1517,8 +1437,6 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
       } catch (testErr) {
         testMessage = `\u0915\u0940 \u0938\u0947\u0935 \u0939\u094B \u0917\u0908, \u0915\u093F\u0928\u094D\u0924\u0941 OpenAI \u091F\u0947\u0938\u094D\u091F \u091A\u0947\u0924\u093E\u0935\u0928\u0940: ${testErr?.message || "\u0915\u0943\u092A\u092F\u093E \u0915\u0940 \u0915\u0940 \u091C\u093E\u0902\u091A \u0915\u0930\u0947\u0902"}`;
       }
-    } else if (geminiKey && process.env.GEMINI_API_KEY) {
-      testMessage = "\u2705 Gemini AI Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u092A\u0921\u0947\u091F \u0935 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u094B \u0917\u0908!";
     }
     return res.json({
       success: true,
@@ -1532,6 +1450,7 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
   }
 });
 var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
+var EDITORIAL_APPROVED_DB_FILE = import_path.default.join(process.cwd(), "approved_editorial_database.json");
 var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
 var LOGO_REQUESTS_DB_FILE = import_path.default.join(process.cwd(), "logo_change_requests_db.json");
 var REWARDS_DB_FILE = import_path.default.join(process.cwd(), "rewards_database.json");
@@ -1879,6 +1798,88 @@ function saveNewsDatabase(posts) {
     return false;
   }
 }
+function loadApprovedEditorialDatabase() {
+  try {
+    const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
+    for (const loc of locations) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading approved_editorial_database.json:", err);
+  }
+  return {};
+}
+function saveApprovedEditorialDatabase(data) {
+  try {
+    const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
+    for (const loc of locations) {
+      try {
+        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
+          import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        }
+      } catch {
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("Error writing approved_editorial_database.json:", err);
+    return false;
+  }
+}
+function splitHindiSentences(text) {
+  return (text || "").split(/[।\n]+|\.\s+/).map((s) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+}
+function getOrEnsureApprovedEditorial(post) {
+  if (!post || !post.id) return null;
+  const db = loadApprovedEditorialDatabase();
+  if (db[post.id] && Array.isArray(db[post.id].headlines) && db[post.id].headlines.length > 0) {
+    return db[post.id];
+  }
+  const rawTitle = cleanHeadlineText(post.title || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930");
+  const fullContentStr = post.fullContent || post.summary || rawTitle;
+  const sentences = splitHindiSentences(fullContentStr);
+  const detectedLocation = cleanLocationField(post.location || post.district || "");
+  const headlines = generate5BalancedHeadlineOptions(rawTitle, sentences, detectedLocation);
+  const rawSummary = (post.summary || fullContentStr || rawTitle).trim();
+  const captionDetailed = `${rawTitle}
+
+${rawSummary}
+
+#BreakingNews #HindiNews #AINewsMaker`;
+  const captionBullets = `\u2022 ${rawTitle}\u0964
+\u2022 ${rawSummary.slice(0, 120)}\u0964
+
+#BreakingNews #HindiNews #AINewsMaker`;
+  const captionShort = `${rawTitle}
+
+#BreakingNews #AINewsMaker`;
+  const record = {
+    newsId: post.id,
+    title: rawTitle,
+    headlines: headlines.slice(0, 5),
+    headlineOptions: headlines.slice(0, 5),
+    captionDetailed,
+    captionBullets,
+    captionShort,
+    tags: ["#BreakingNews", "#HindiNews", "#AINewsMaker"],
+    location: detectedLocation,
+    category: post.categoryName || post.category || "\u0926\u0947\u0936",
+    imageUrl: post.imageUrl || "",
+    additionalPhotos: Array.isArray(post.additionalPhotos) ? post.additionalPhotos : [],
+    approvedAt: post.timestamp || Date.now(),
+    approvedBy: "editorial-desk",
+    status: "APPROVED"
+  };
+  db[post.id] = record;
+  saveApprovedEditorialDatabase(db);
+  return record;
+}
 function formatRelativeTime(timestamp) {
   const diffMs = Date.now() - timestamp;
   const diffMinutes = Math.max(1, Math.floor(diffMs / 6e4));
@@ -1970,32 +1971,8 @@ app.post("/api/news-posts", (req, res) => {
     const payload = req.body;
     let existing = loadNewsDatabase();
     if (Array.isArray(payload)) {
-      const existingMap = /* @__PURE__ */ new Map();
-      existing.forEach((p) => {
-        if (p && p.id) existingMap.set(p.id, p);
-      });
-      existing = payload.map((post) => {
-        if (!post || !post.id) return post;
-        const prev = existingMap.get(post.id);
-        if (prev && prev.editorialApproved && post.editorialApproved === void 0) {
-          return {
-            ...post,
-            editorialApproved: prev.editorialApproved,
-            approvedHeadlines: prev.approvedHeadlines,
-            approvedHeadline: prev.approvedHeadline,
-            approvedCaptionDetailed: prev.approvedCaptionDetailed,
-            approvedCaptionBullets: prev.approvedCaptionBullets,
-            approvedCaptionShort: prev.approvedCaptionShort,
-            approvedPhotos: prev.approvedPhotos,
-            approvedPhotoLayout: prev.approvedPhotoLayout,
-            approvedBy: prev.approvedBy,
-            approvedAt: prev.approvedAt
-          };
-        }
-        return post;
-      });
+      existing = payload;
     } else if (payload && payload.title) {
-      const prev = existing.find((p) => p.id === payload.id);
       const newPost = {
         id: payload.id || `post-${Date.now()}`,
         title: payload.title,
@@ -2011,19 +1988,7 @@ app.post("/api/news-posts", (req, res) => {
         fullContent: payload.fullContent || payload.summary || "",
         district: payload.district || "",
         location: payload.location || "",
-        timestamp: payload.timestamp || Date.now(),
-        isBonus: payload.isBonus !== void 0 ? Boolean(payload.isBonus) : prev?.isBonus,
-        rewardCoins: payload.rewardCoins || prev?.rewardCoins,
-        editorialApproved: payload.editorialApproved !== void 0 ? Boolean(payload.editorialApproved) : prev?.editorialApproved,
-        approvedHeadlines: payload.approvedHeadlines || prev?.approvedHeadlines,
-        approvedHeadline: payload.approvedHeadline || prev?.approvedHeadline,
-        approvedCaptionDetailed: payload.approvedCaptionDetailed || prev?.approvedCaptionDetailed,
-        approvedCaptionBullets: payload.approvedCaptionBullets || prev?.approvedCaptionBullets,
-        approvedCaptionShort: payload.approvedCaptionShort || prev?.approvedCaptionShort,
-        approvedPhotos: payload.approvedPhotos || prev?.approvedPhotos,
-        approvedPhotoLayout: payload.approvedPhotoLayout || prev?.approvedPhotoLayout,
-        approvedBy: payload.approvedBy || prev?.approvedBy,
-        approvedAt: payload.approvedAt || prev?.approvedAt
+        timestamp: payload.timestamp || Date.now()
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
@@ -2214,6 +2179,55 @@ app.post("/api/admin/migrate-approvals", (req, res) => {
     saveNewsDatabase(existing);
     const authoritative = existing.filter((p) => p.status === "APPROVED" || !p.status).map((p) => p.id);
     return res.json({ success: true, approvedIds: authoritative });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/editorial/approved/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadApprovedEditorialDatabase();
+    if (db[id] && Array.isArray(db[id].headlines) && db[id].headlines.length > 0) {
+      return res.json({ success: true, isApproved: true, data: db[id] });
+    }
+    const newsDb = loadNewsDatabase();
+    const post = newsDb.find((p) => p.id === id);
+    if (post && (post.status === "APPROVED" || !post.status)) {
+      const record = getOrEnsureApprovedEditorial(post);
+      return res.json({ success: true, isApproved: true, data: record });
+    }
+    return res.json({ success: true, isApproved: false, message: "No approved editorial content found" });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/editorial/approved/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const db = loadApprovedEditorialDatabase();
+    const existing = db[id] || {};
+    const updated = {
+      ...existing,
+      newsId: id,
+      title: body.title || existing.title || "\u0938\u092E\u093E\u091A\u093E\u0930",
+      headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : existing.headlines || [],
+      headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : existing.headlineOptions || [],
+      captionDetailed: body.captionDetailed || existing.captionDetailed || "",
+      captionBullets: body.captionBullets || existing.captionBullets || "",
+      captionShort: body.captionShort || existing.captionShort || "",
+      tags: Array.isArray(body.tags) ? body.tags : existing.tags || ["#BreakingNews", "#AINewsMaker"],
+      location: body.location || existing.location || "",
+      category: body.category || existing.category || "",
+      imageUrl: body.imageUrl || existing.imageUrl || "",
+      additionalPhotos: Array.isArray(body.additionalPhotos) ? body.additionalPhotos : existing.additionalPhotos || [],
+      approvedAt: Date.now(),
+      approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+      status: "APPROVED"
+    };
+    db[id] = updated;
+    saveApprovedEditorialDatabase(db);
+    return res.json({ success: true, message: "\u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0915\u0948\u092A\u094D\u0936\u0928 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u093F\u090F \u0917\u090F", data: updated });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -3588,20 +3602,6 @@ function enforceUserAccessMiddleware(req, res, next) {
   }
   next();
 }
-function enforceNewsProcessingAccessMiddleware(req, res, next) {
-  const identifier = extractUserIdentifier(req);
-  if (!identifier) return next();
-  const access = checkUserAccess(identifier);
-  if (access.blocked) {
-    return res.status(access.status || 403).json({
-      success: false,
-      error: access.error,
-      blocked: true,
-      isBlocked: true
-    });
-  }
-  next();
-}
 function syncUserToProfiles(u) {
   try {
     const allProfiles = loadProfilesDatabase();
@@ -3664,15 +3664,6 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
     const safeUsername = rawReqUser || existing.username || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username));
-    const resolvedTier = isSuper ? "ultra" : userPayload.tier || existing.tier || "basic";
-    const tierPlanMap = {
-      ultra: "VIP DESK",
-      professional: "PRO",
-      advanced: "ADVANCE",
-      basic: "BASIC"
-    };
-    const resolvedPlanName = isSuper ? "VIP DESK" : userPayload.planName || tierPlanMap[resolvedTier] || existing.planName || "BASIC";
-    const resolvedExpiresAt = userPayload.expiresAt || existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds);
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -3683,8 +3674,8 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || "",
       channelNameEn: userPayload.channelNameEn || existing.channelNameEn || "",
       channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: userPayload.channelLogoPngUrl,
-      channelLogoGifUrl: userPayload.channelLogoGifUrl,
+      channelLogoPngUrl: userPayload.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoGifUrl: userPayload.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
@@ -3696,19 +3687,19 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons !== void 0 ? userPayload.socialIcons : existing.socialIcons,
       role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
-      tier: resolvedTier,
-      planName: resolvedPlanName,
+      tier: isSuper ? "ultra" : existing.tier || userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
       createdAt: existing.createdAt || now,
       trialStartedAt: preservedTrialStart,
       trialEndsAt: preservedTrialEnds,
-      isTrialExpired: resolvedExpiresAt ? now >= resolvedExpiresAt : now >= preservedTrialEnds,
+      isTrialExpired: Date.now() >= preservedTrialEnds,
       lastLoginAt: now,
-      activatedAt: userPayload.activatedAt || existing.activatedAt || (isSuper ? now : preservedTrialStart),
-      expiresAt: resolvedExpiresAt,
-      activatedVia: userPayload.activatedVia || existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
+      activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
+      expiresAt: existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds),
+      activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
     };
     users[idx] = updatedRecord;
   } else {
@@ -3716,15 +3707,6 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const newTrialEnds = now + SEVEN_DAYS_MS;
     const safeUsername = rawReqUser || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name));
     const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString("hex").slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
-    const initialTier = isSuper ? "ultra" : userPayload.tier || "basic";
-    const tierPlanMap = {
-      ultra: "VIP DESK",
-      professional: "PRO",
-      advanced: "ADVANCE",
-      basic: "BASIC"
-    };
-    const initialPlanName = isSuper ? "VIP DESK" : userPayload.planName || tierPlanMap[initialTier] || "BASIC";
-    const initialExpiresAt = userPayload.expiresAt || (isSuper ? 2107057518060 : newTrialEnds);
     updatedRecord = {
       userId: deterministicUserId,
       email: emailRaw,
@@ -3748,19 +3730,19 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       websiteUrl: userPayload.websiteUrl || "",
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
       role: isSuper ? "superadmin" : userPayload.role || "user",
-      tier: initialTier,
-      planName: initialPlanName,
+      tier: isSuper ? "ultra" : userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : userPayload.planName || "BASIC",
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
       createdAt: now,
       trialStartedAt: newTrialStart,
       trialEndsAt: newTrialEnds,
-      isTrialExpired: initialExpiresAt ? now >= initialExpiresAt : false,
+      isTrialExpired: false,
       lastLoginAt: now,
-      activatedAt: userPayload.activatedAt || (isSuper ? now : newTrialStart),
-      expiresAt: initialExpiresAt,
-      activatedVia: userPayload.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
+      activatedAt: isSuper ? now : newTrialStart,
+      expiresAt: isSuper ? 2107057518060 : newTrialEnds,
+      activatedVia: isSuper ? "Super Admin Preset" : "Google Registration"
     };
     users.unshift(updatedRecord);
   }
@@ -4213,14 +4195,6 @@ function loadVideosDatabase() {
 function saveVideosDatabase(videos) {
   try {
     const locations = resolveAllDatabaseLocations("videos_database.json");
-    const extraLocations = [
-      import_path.default.join(process.cwd(), "public", "videos_database.json"),
-      import_path.default.join(process.cwd(), "web_studio", "public", "videos_database.json"),
-      import_path.default.join(process.cwd(), "app", "src", "main", "assets", "news_studio", "videos_database.json")
-    ];
-    for (const extra of extraLocations) {
-      if (!locations.includes(extra)) locations.push(extra);
-    }
     const jsonStr = JSON.stringify(videos, null, 2);
     for (const loc of locations) {
       try {
@@ -4289,49 +4263,6 @@ app.post("/api/admin/videos/upload", (req, res) => {
     if (!videoData || !videoData.title || !videoData.videoUrl) {
       return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0926\u094B\u0928\u094B\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
     }
-    let finalVideoUrl = String(videoData.videoUrl || "").trim();
-    if (finalVideoUrl.startsWith("data:video/") || finalVideoUrl.startsWith("data:application/")) {
-      try {
-        let ext = "mp4";
-        if (finalVideoUrl.startsWith("data:video/webm")) ext = "webm";
-        else if (finalVideoUrl.startsWith("data:video/quicktime")) ext = "mov";
-        else if (finalVideoUrl.startsWith("data:video/x-m4v")) ext = "m4v";
-        const savedFilename = `video_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-        const base64Data = finalVideoUrl.replace(/^data:[^;]+;base64,/, "");
-        const buffer = Buffer.from(base64Data, "base64");
-        if (!import_fs.default.existsSync(UPLOAD_VIDEOS_DIR)) import_fs.default.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
-        if (!import_fs.default.existsSync(WEB_UPLOAD_VIDEOS_DIR)) import_fs.default.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
-        import_fs.default.writeFileSync(import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename), buffer);
-        try {
-          import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename), buffer);
-        } catch {
-        }
-        finalVideoUrl = `/uploads/videos/${savedFilename}`;
-      } catch (err) {
-        console.error("Failed to convert base64 video to file:", err);
-      }
-    }
-    let finalThumbnailUrl = String(videoData.thumbnailUrl || "").trim();
-    if (finalThumbnailUrl.startsWith("data:image/")) {
-      try {
-        let ext = "jpg";
-        if (finalThumbnailUrl.startsWith("data:image/png")) ext = "png";
-        else if (finalThumbnailUrl.startsWith("data:image/webp")) ext = "webp";
-        const savedFilename = `thumb_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-        const base64Data = finalThumbnailUrl.replace(/^data:image\/[^;]+;base64,/, "");
-        const buffer = Buffer.from(base64Data, "base64");
-        if (!import_fs.default.existsSync(UPLOAD_THUMBNAILS_DIR)) import_fs.default.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
-        if (!import_fs.default.existsSync(WEB_UPLOAD_THUMBNAILS_DIR)) import_fs.default.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
-        import_fs.default.writeFileSync(import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename), buffer);
-        try {
-          import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename), buffer);
-        } catch {
-        }
-        finalThumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
-      } catch (err) {
-        console.error("Failed to convert base64 thumbnail to file:", err);
-      }
-    }
     const newVideo = {
       id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: videoData.title.trim(),
@@ -4341,8 +4272,8 @@ app.post("/api/admin/videos/upload", (req, res) => {
       duration: videoData.duration || "01:30",
       channel: videoData.channel || "\u090F\u0921\u092E\u093F\u0928 \u0935\u093E\u092F\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
       views: videoData.views || "1K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
-      videoUrl: finalVideoUrl,
-      thumbnailUrl: finalThumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+      videoUrl: videoData.videoUrl,
+      thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
       category: videoData.category || "\u0935\u093E\u092F\u0930\u0932",
       isBonus: Boolean(videoData.isBonus),
       rewardCoins: videoData.rewardCoins ? Number(videoData.rewardCoins) : videoData.isBonus ? 50 : void 0,
@@ -4785,79 +4716,6 @@ app.post("/api/notifications/mark-read", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/gemini/diagnostic-status", async (req, res) => {
-  const activeKey = getActiveGeminiKey(req);
-  const hasKey = Boolean(activeKey && activeKey !== "MY_GEMINI_API_KEY");
-  return res.json({
-    configured: hasKey,
-    hasKey,
-    activeModel: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash",
-    models: DEFAULT_FALLBACK_MODELS,
-    status: hasKey ? quotaExceededInfo.isExceeded ? "quota_warning" : "connected" : "missing_key",
-    statusText: hasKey ? quotaExceededInfo.isExceeded ? "Google Gemini API \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948" : "Google Gemini API \u0938\u0915\u094D\u0930\u093F\u092F \u0914\u0930 \u0915\u0928\u0947\u0915\u094D\u091F\u0947\u0921 \u0939\u0948" : "Gemini API Key \u0938\u0930\u094D\u0935\u0930 \u092A\u0930 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u090F\u0928\u0935\u093E\u092F\u0930\u0928\u092E\u0947\u0902\u091F \u092E\u0947\u0902 GEMINI_API_KEY \u091C\u094B\u0921\u093C\u0947\u0902\u0964",
-    lastChecked: quotaExceededInfo.lastChecked || (/* @__PURE__ */ new Date()).toISOString()
-  });
-});
-app.post("/api/gemini/diagnostic-test", async (req, res) => {
-  const activeKey = getActiveGeminiKey(req);
-  if (!activeKey || activeKey === "MY_GEMINI_API_KEY") {
-    return res.status(400).json({
-      success: false,
-      configured: false,
-      errorType: "missing_key",
-      message: "\u0938\u0930\u094D\u0935\u0930 \u092A\u0930 Gemini API Key \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E Firebase App Hosting \u092E\u0947\u0902 GEMINI_API_KEY \u091C\u094B\u0921\u093C\u0947\u0902\u0964"
-    });
-  }
-  const startTime = Date.now();
-  try {
-    const ai = getGeminiClient(activeKey);
-    const testModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash";
-    const testRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-      contents: "Respond with the single word: OK"
-    });
-    const latencyMs = Date.now() - startTime;
-    const replyText = String(testRes?.text || "").trim();
-    quotaExceededInfo.isExceeded = false;
-    quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
-    return res.json({
-      success: true,
-      configured: true,
-      model: testModel,
-      latencyMs,
-      reply: replyText || "OK",
-      status: "connected",
-      message: "Google Gemini API (" + testModel + ") \u0938\u0947 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0938\u092B\u0932 \u0930\u0939\u093E (" + latencyMs + "ms)\u0964",
-      lastChecked: quotaExceededInfo.lastChecked
-    });
-  } catch (err) {
-    const latencyMs = Date.now() - startTime;
-    const msg = String(err?.message || "").toLowerCase();
-    const status = err?.status || err?.code || 500;
-    let errorType = "unknown";
-    let hindiMsg = "Gemini API \u0938\u0947 \u0915\u0928\u0947\u0915\u094D\u091F \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0905\u091C\u094D\u091E\u093E\u0924 \u0924\u094D\u0930\u0941\u091F\u093F \u0906\u0908\u0964";
-    if (status === 401 || status === 403 || msg.includes("api key not valid") || msg.includes("invalid api key")) {
-      errorType = "auth_error";
-      hindiMsg = "Gemini API Key \u0905\u092E\u093E\u0928\u094D\u092F (Invalid) \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0938\u0939\u0940 Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964";
-    } else if (status === 404 || msg.includes("not found") || msg.includes("no longer available")) {
-      errorType = "model_not_found";
-      hindiMsg = "\u092E\u0949\u0921\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0938\u093F\u0938\u094D\u091F\u092E \u0928\u0935\u0940\u0928\u0924\u092E gemini-3.8-flash \u092A\u0930 \u0938\u094D\u0935\u093F\u091A \u0915\u0930 \u0930\u0939\u093E \u0939\u0948\u0964";
-    } else if (status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || status === 402) {
-      errorType = "quota_exhausted";
-      hindiMsg = "Gemini API \u0915\u0940 \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E (Rate Limit) \u092A\u0942\u0930\u0940 \u0939\u094B \u0917\u0908 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0926\u0947\u0930 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964";
-    } else {
-      hindiMsg = "Gemini API \u0924\u094D\u0930\u0941\u091F\u093F: " + (err?.message?.slice(0, 100) || "\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0938\u092E\u092F \u0938\u092E\u093E\u092A\u094D\u0924");
-    }
-    return res.status(502).json({
-      success: false,
-      configured: true,
-      errorType,
-      latencyMs,
-      message: hindiMsg,
-      status: "error",
-      lastChecked: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  }
-});
 app.get("/api/gemini-quota-status", (_req, res) => {
   return res.json({
     hasKey: Boolean(process.env.GEMINI_API_KEY),
@@ -4915,27 +4773,6 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
-var DELETED_RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "deleted_rss_sources_ids.json");
-function loadDeletedRssSourceIds() {
-  try {
-    if (import_fs.default.existsSync(DELETED_RSS_SOURCES_FILE)) {
-      const raw = import_fs.default.readFileSync(DELETED_RSS_SOURCES_FILE, "utf-8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) return new Set(list.map(String));
-    }
-  } catch {
-  }
-  return /* @__PURE__ */ new Set();
-}
-function markRssSourceAsDeleted(id, url) {
-  try {
-    const current = loadDeletedRssSourceIds();
-    if (id) current.add(String(id));
-    if (url) current.add(String(url).trim().toLowerCase());
-    import_fs.default.writeFileSync(DELETED_RSS_SOURCES_FILE, JSON.stringify(Array.from(current), null, 2), "utf-8");
-  } catch {
-  }
-}
 var DEFAULT_PRODUCTION_RSS_SOURCES = [
   {
     id: "src_aajtak_live",
@@ -4966,23 +4803,38 @@ var DEFAULT_PRODUCTION_RSS_SOURCES = [
   }
 ];
 function loadRssSourcesDatabase() {
-  const deletedIds = loadDeletedRssSourceIds();
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       if (import_fs.default.existsSync(loc)) {
         const raw = import_fs.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const valid = parsed.filter((s) => s && s.url && !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
-          return valid;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter((s) => s && s.url);
+          if (valid.length > 0) {
+            return valid;
+          }
+        }
+      }
+    }
+    for (const loc of locations) {
+      const backupFile = loc + ".bak";
+      if (import_fs.default.existsSync(backupFile)) {
+        const rawBak = import_fs.default.readFileSync(backupFile, "utf-8");
+        const parsedBak = JSON.parse(rawBak);
+        if (Array.isArray(parsedBak) && parsedBak.length > 0) {
+          const validBak = parsedBak.filter((s) => s && s.url);
+          if (validBak.length > 0) {
+            saveRssSourcesDatabase(validBak);
+            return validBak;
+          }
         }
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return DEFAULT_PRODUCTION_RSS_SOURCES.filter((s) => !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
 }
 function saveRssSourcesDatabase(sources) {
   try {
@@ -5461,7 +5313,6 @@ app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
     if (!id) return res.status(400).json({ error: "Source ID is required" });
     let sources = loadRssSourcesDatabase();
     const targetSource = sources.find((s) => s.id === id);
-    markRssSourceAsDeleted(id, targetSource?.url);
     sources = sources.filter((s) => s.id !== id);
     saveRssSourcesDatabase(sources);
     if (targetSource) {
@@ -6951,8 +6802,6 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
     const savedFilename = `video_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
-    if (!import_fs.default.existsSync(UPLOAD_VIDEOS_DIR)) import_fs.default.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
-    if (!import_fs.default.existsSync(WEB_UPLOAD_VIDEOS_DIR)) import_fs.default.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
     const filePath = import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
     import_fs.default.writeFileSync(filePath, buffer);
@@ -6986,8 +6835,6 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
     }
     const ext = magic.format || "jpg";
     const savedFilename = `thumb_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-    if (!import_fs.default.existsSync(UPLOAD_THUMBNAILS_DIR)) import_fs.default.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
-    if (!import_fs.default.existsSync(WEB_UPLOAD_THUMBNAILS_DIR)) import_fs.default.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
     const filePath = import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
     const webFilePath = import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
     import_fs.default.writeFileSync(filePath, buffer);
@@ -7085,21 +6932,10 @@ app.post("/api/admin/update-user", (req, res) => {
     const idx = users.findIndex(
       (u) => u.userId && u.userId.toLowerCase().trim() === key || u.email && u.email.toLowerCase().trim() === key || u.username && u.username.toLowerCase().trim() === key
     );
-    const tierPlanMap = {
-      ultra: "VIP DESK",
-      professional: "PRO",
-      advanced: "ADVANCE",
-      basic: "BASIC"
-    };
     if (idx >= 0) {
-      const newTier2 = updates.tier || users[idx].tier || "basic";
-      const resolvedPlanName2 = updates.planName || (updates.tier ? tierPlanMap[newTier2] : users[idx].planName) || "BASIC";
       users[idx] = {
         ...users[idx],
-        ...updates,
-        tier: newTier2,
-        planName: resolvedPlanName2,
-        updatedAt: Date.now()
+        ...updates
       };
       saveUsersMasterDatabase(users);
       syncUserToProfiles(users[idx]);
@@ -7108,251 +6944,13 @@ app.post("/api/admin/update-user", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const existing = allProfiles[key] || Object.values(allProfiles).find((p) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
     const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
-    const newTier = updates.tier || existing.tier || "basic";
-    const resolvedPlanName = updates.planName || (updates.tier ? tierPlanMap[newTier] : existing.planName) || "BASIC";
     allProfiles[effectiveKey] = {
       ...existing,
       ...updates,
-      tier: newTier,
-      planName: resolvedPlanName,
       updatedAt: Date.now()
     };
     saveProfilesDatabase(allProfiles);
     return res.json({ success: true, user: allProfiles[effectiveKey] });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-var INITIAL_SERVER_PROMO_CODES = [
-  {
-    id: "promo-basic-sample",
-    code: "NEWSBASIC2026",
-    planId: "basic",
-    planName: "BASIC",
-    usageType: "one_time",
-    status: "unused",
-    createdAt: Date.now() - 36e5,
-    durationDays: 30,
-    isActive: true,
-    notes: "\u092C\u0947\u0938\u093F\u0915 \u0938\u0948\u0902\u092A\u0932 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 (30 \u0926\u093F\u0928)"
-  },
-  {
-    id: "promo-adv-sample",
-    code: "ADVANCE2026",
-    planId: "advanced",
-    planName: "ADVANCE",
-    usageType: "one_time",
-    status: "unused",
-    createdAt: Date.now() - 36e5,
-    durationDays: 30,
-    isActive: true,
-    notes: "\u090F\u0921\u0935\u093E\u0902\u0938 \u0938\u0948\u0902\u092A\u0932 \u0915\u094B\u0921"
-  },
-  {
-    id: "promo-pro-sample",
-    code: "PRO2026",
-    planId: "professional",
-    planName: "PRO",
-    usageType: "one_time",
-    status: "unused",
-    createdAt: Date.now() - 36e5,
-    durationDays: 30,
-    isActive: true,
-    notes: "\u092A\u094D\u0930\u094B \u0938\u0948\u0902\u092A\u0932 \u0915\u094B\u0921"
-  },
-  {
-    id: "promo-vip-sample",
-    code: "VIP2026",
-    planId: "ultra",
-    planName: "VIP DESK",
-    usageType: "one_time",
-    status: "unused",
-    createdAt: Date.now() - 36e5,
-    durationDays: 30,
-    isActive: true,
-    notes: "\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u0938\u0948\u0902\u092A\u0932 \u0915\u094B\u0921"
-  }
-];
-function loadPromoCodesDatabase() {
-  try {
-    const locations = resolveAllDatabaseLocations("promo_codes_database.json");
-    for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8").replace(/^\uFEFF/, "").trim();
-        if (raw && raw.length >= 2) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Error reading promo_codes_database.json:", err);
-  }
-  return [...INITIAL_SERVER_PROMO_CODES];
-}
-function savePromoCodesDatabase(codes) {
-  try {
-    const locations = resolveAllDatabaseLocations("promo_codes_database.json");
-    const jsonStr = JSON.stringify(codes, null, 2);
-    for (const loc of locations) {
-      try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
-      } catch {
-      }
-    }
-    return true;
-  } catch (err) {
-    console.error("Error saving promo_codes_database.json:", err);
-    return false;
-  }
-}
-app.get("/api/promo-codes", (_req, res) => {
-  try {
-    const codes = loadPromoCodesDatabase();
-    return res.json({ success: true, promoCodes: codes });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
-app.post("/api/admin/promo-codes", (req, res) => {
-  try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u092C\u0928\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
-    const { code, planId, durationDays = 30, usageType = "one_time", maxUses = 1, notes = "" } = req.body;
-    const cleanCode = (code || "").toString().trim().toUpperCase().replace(/\s+/g, "");
-    if (!cleanCode || cleanCode.length < 3) {
-      return res.status(400).json({ error: "\u092E\u093E\u0928\u094D\u092F \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948 (\u0928\u094D\u092F\u0942\u0928\u0924\u092E 3 \u0905\u0915\u094D\u0937\u0930)\u0964" });
-    }
-    const validPlanId = ["basic", "advanced", "professional", "ultra"].includes(planId) ? planId : "basic";
-    const tierPlanMap = {
-      basic: "BASIC",
-      advanced: "ADVANCE",
-      professional: "PRO",
-      ultra: "VIP DESK"
-    };
-    const resolvedPlanName = tierPlanMap[validPlanId];
-    const codes = loadPromoCodesDatabase();
-    if (codes.some((c) => c.code === cleanCode)) {
-      return res.status(400).json({ error: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 "${cleanCode}" \u092A\u0939\u0932\u0947 \u0938\u0947 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948!` });
-    }
-    const newPromo = {
-      id: `promo-${Date.now()}-${import_crypto.default.randomBytes(3).toString("hex")}`,
-      code: cleanCode,
-      planId: validPlanId,
-      planName: resolvedPlanName,
-      usageType: usageType === "multi_use" ? "multi_use" : "one_time",
-      maxUses: Number(maxUses) || 1,
-      usedCount: 0,
-      status: "unused",
-      createdAt: Date.now(),
-      durationDays: Math.max(1, Number(durationDays) || 30),
-      isActive: true,
-      notes: notes || `${resolvedPlanName} \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 (${durationDays} \u0926\u093F\u0928)`
-    };
-    const updated = [newPromo, ...codes];
-    savePromoCodesDatabase(updated);
-    return res.json({
-      success: true,
-      message: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 "${cleanCode}" \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092C\u0928\u093E\u092F\u093E \u0917\u092F\u093E!`,
-      promoCode: newPromo
-    });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.post("/api/promo-codes/redeem", (req, res) => {
-  try {
-    const { code, userEmail, userId, username } = req.body;
-    const cleanCode = (code || "").toString().trim().toUpperCase().replace(/\s+/g, "");
-    if (!cleanCode) {
-      return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
-    }
-    const codes = loadPromoCodesDatabase();
-    const targetIdx = codes.findIndex((c) => c.code === cleanCode);
-    if (targetIdx === -1) {
-      return res.status(404).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921! \u092F\u0939 \u0915\u094B\u0921 \u0938\u093F\u0938\u094D\u091F\u092E \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
-    }
-    const targetCode = codes[targetIdx];
-    if (!targetCode.isActive || targetCode.status === "disabled") {
-      return res.status(400).json({ error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F (Disabled) \u0939\u0948\u0964" });
-    }
-    if (targetCode.status === "used" || targetCode.usageType === "one_time" && targetCode.usedAt) {
-      return res.status(400).json({ error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948!" });
-    }
-    if (targetCode.expiresAt && targetCode.expiresAt < Date.now()) {
-      return res.status(400).json({ error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0938\u092E\u093E\u092A\u094D\u0924 (Expired) \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
-    }
-    const now = Date.now();
-    const durationDays = targetCode.durationDays || 30;
-    const newExpiresAt = now + durationDays * 24 * 60 * 60 * 1e3;
-    const identifier = (userEmail || userId || username || "").toString().toLowerCase().trim();
-    targetCode.usedCount = (targetCode.usedCount || 0) + 1;
-    if (targetCode.usageType === "one_time" || targetCode.maxUses && targetCode.usedCount >= targetCode.maxUses) {
-      targetCode.status = "used";
-    }
-    targetCode.usedByEmail = identifier;
-    targetCode.usedAt = now;
-    codes[targetIdx] = targetCode;
-    savePromoCodesDatabase(codes);
-    let updatedUser = null;
-    if (identifier) {
-      const users = loadUsersMasterDatabase();
-      const userIdx = users.findIndex(
-        (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier || u.username && u.username.toLowerCase().trim() === identifier
-      );
-      if (userIdx >= 0) {
-        users[userIdx] = {
-          ...users[userIdx],
-          tier: targetCode.planId,
-          planName: targetCode.planName,
-          activatedAt: now,
-          expiresAt: newExpiresAt,
-          trialEndsAt: newExpiresAt,
-          isTrialExpired: false,
-          activatedVia: `Promo:${cleanCode}`,
-          updatedAt: now
-        };
-        updatedUser = users[userIdx];
-        saveUsersMasterDatabase(users);
-        syncUserToProfiles(users[userIdx]);
-      } else {
-        updatedUser = registerOrUpdateUserAuthoritative({
-          email: userEmail || identifier,
-          userId: userId || `usr_${Date.now()}`,
-          tier: targetCode.planId,
-          planName: targetCode.planName,
-          activatedAt: now,
-          expiresAt: newExpiresAt,
-          activatedVia: `Promo:${cleanCode}`
-        });
-      }
-    }
-    return res.json({
-      success: true,
-      message: `\u{1F389} \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0932\u093E\u0917\u0942 \u0939\u0941\u0906! \u0906\u092A\u0915\u093E "${targetCode.planName}" \u092A\u094D\u0932\u093E\u0928 ${durationDays} \u0926\u093F\u0928\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964`,
-      planId: targetCode.planId,
-      planName: targetCode.planName,
-      durationDays,
-      expiresAt: newExpiresAt,
-      user: updatedUser
-    });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.delete("/api/admin/promo-codes/:id", (req, res) => {
-  try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
-    const { id } = req.params;
-    let codes = loadPromoCodesDatabase();
-    codes = codes.filter((c) => c.id !== id);
-    savePromoCodesDatabase(codes);
-    return res.json({ success: true, message: "\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -7874,24 +7472,23 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
     return res.status(500).send("Error proxying image");
   }
 });
-function getActiveGeminiKey(req) {
-  loadAiKeysConfig();
-  const headerKey = req?.headers?.["x-gemini-key"] || req?.headers?.["x-goog-api-key"] || "";
-  if (headerKey && headerKey.trim().length > 10) return headerKey.trim();
-  const bodyKey = req?.body?.geminiApiKey || "";
-  if (bodyKey && bodyKey.trim().length > 10 && bodyKey !== "MY_GEMINI_API_KEY") return bodyKey.trim();
-  return (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
-}
-function getGeminiClient(keyOverride) {
-  const apiKey = (keyOverride || getActiveGeminiKey()).trim();
-  return new import_genai.GoogleGenAI({
-    apiKey: apiKey || "",
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build"
-      }
+var aiClient = null;
+function getGeminiClient() {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("GEMINI_API_KEY is not set in environment variables.");
     }
-  });
+    aiClient = new import_genai.GoogleGenAI({
+      apiKey: apiKey || "",
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build"
+        }
+      }
+    });
+  }
+  return aiClient;
 }
 var openaiClient = null;
 function getOpenAIClient() {
@@ -8104,11 +7701,6 @@ function isTierAllowedForOpenAI(tier, role) {
   return allowed.includes(cleanTier);
 }
 function resolveUserTierAndRole(req) {
-  if (req.body?.userTier) {
-    const explicitTier = req.body.userTier.toString().toLowerCase().trim();
-    const explicitRole = (req.body.role || "reporter").toString().toLowerCase().trim();
-    return { tier: explicitTier, role: explicitRole };
-  }
   const identifier = extractUserIdentifier(req);
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
@@ -8130,10 +7722,8 @@ function resolveUserTierAndRole(req) {
   return { tier: reqTier, role: reqRole };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-1.5-flash",
-  "gemini-flash-latest",
   "gemini-3.8-flash",
+  "gemini-flash-latest",
   "gemini-3.1-flash-lite"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
@@ -8153,24 +7743,17 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
         lastError = err;
         const msg = String(err?.message || "").toLowerCase();
         const status = err?.status || err?.code || 0;
-        const isDepletedCredits = status === 402 || msg.includes("402") || msg.includes("prepayment") || msg.includes("credits are depleted");
         const is503HighDemand = status === 503 || msg.includes("503") || msg.includes("high demand") || msg.includes("unavailable");
-        const isRateLimit = isDepletedCredits || status === 429 || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("quota");
+        const isRateLimit = status === 429 || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("quota");
         const isAccessDeniedOrNotFound = status === 403 || status === 404 || msg.includes("403") || msg.includes("404") || msg.includes("denied access") || msg.includes("no longer available") || msg.includes("not found");
         const isTransient = is503HighDemand || isRateLimit || msg.includes("temporarily") || msg.includes("timeout") || msg.includes("fetch failed");
-        if (isRateLimit) {
+        if (isRateLimit || isAccessDeniedOrNotFound) {
           quotaExceededInfo.isExceeded = true;
           quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
         }
-        if (isAccessDeniedOrNotFound) {
-          break;
-        }
         console.log(
-          `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}): ${isDepletedCredits ? "AI Studio Prepayment Credits Depleted (402)" : isRateLimit ? "Free tier rate/quota limit reached" : is503HighDemand ? "503 High Demand" : isAccessDeniedOrNotFound ? "Model tier restriction / 403" : "Transient failure"}`
+          `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}): ${isRateLimit ? "Free tier rate/quota limit reached" : is503HighDemand ? "503 High Demand" : isAccessDeniedOrNotFound ? "Model tier restriction / 403" : "Transient failure"}`
         );
-        if (isDepletedCredits) {
-          throw err;
-        }
         if (is503HighDemand || isRateLimit || isAccessDeniedOrNotFound) {
           break;
         }
@@ -9223,14 +8806,15 @@ function stripAllUrlsAndHyperlinks(text) {
 }
 function ensureHashtagHierarchy(summaryText, location = "", username = "", mode = "detailed", headlineToStrip = "") {
   if (!summaryText || typeof summaryText !== "string") return summaryText || "";
-  let rawBody = summaryText.replace(/(?:\n\s*(?:#[a-zA-Z0-9_\u0900-\u097F]+[\s,]*)+)+$/gu, "").trim();
+  const parts = summaryText.split(/\n\s*#/);
+  let rawBody = parts[0].trim();
   rawBody = stripAllUrlsAndHyperlinks(rawBody);
   rawBody = rawBody.replace(/(?:\+?91[\-\s]?)?[6-9]\d{9}\b/g, "");
   rawBody = rawBody.replace(/\b\d{3,5}[-\s]\d{6,8}\b/g, "");
   rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|शीर्षक|हेडलाइन|विवरण|सामग्री|कैप्शन|खबर|विस्तृत\s*कैप्शन|संक्षिप्त\s*कैप्शन|बुलेट\s*पॉइंट्स?)\s*[:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
-  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, "").trim();
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
   rawBody = sanitizePressNoteFlattery(rawBody, false);
   rawBody = sanitizeFlattery(rawBody);
   if (headlineToStrip && headlineToStrip.trim()) {
@@ -9248,49 +8832,29 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "", mode 
   }
   let finalBodyText = "";
   if (mode === "bullet") {
-    const rawLines = rawBody.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-    let introSentence = "";
-    const bulletCandidates = [];
-    if (rawLines.length > 0 && !rawLines[0].startsWith("\u2022") && !rawLines[0].startsWith("-") && !rawLines[0].startsWith("*")) {
-      introSentence = stripAllUrlsAndHyperlinks(rawLines[0]).replace(/[।\.\s]+$/, "") + "\u0964";
-      for (let i = 1; i < rawLines.length; i++) {
-        const cleaned = rawLines[i].replace(/^[•\-\*\d\.\s]+/, "").trim();
-        if (cleaned.length > 8 && /[\u0900-\u097F]/.test(cleaned)) {
-          bulletCandidates.push(cleaned);
-        }
-      }
-    } else {
-      for (const line of rawLines) {
-        const cleaned = line.replace(/^[•\-\*\d\.\s]+/, "").trim();
-        if (cleaned.length > 8 && /[\u0900-\u097F]/.test(cleaned)) {
-          bulletCandidates.push(cleaned);
-        }
-      }
-    }
-    if (bulletCandidates.length > 0) {
-      const distinct = Array.from(new Set(bulletCandidates)).slice(0, 5);
-      const bulletBlock = distinct.map((b) => `\u2022 ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
-      finalBodyText = introSentence ? `${introSentence}
-
-${bulletBlock}` : bulletBlock;
+    const bulletLines = rawBody.split(/\n+/).map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim()).filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
+    if (bulletLines.length > 0) {
+      finalBodyText = bulletLines.slice(0, 6).map((b) => `\u2022 ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
     } else {
       const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => stripAllUrlsAndHyperlinks(s).trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
-      if (sentences.length > 1) {
-        const intro = `${sentences[0].replace(/[।\.\s]+$/, "")}\u0964`;
-        const bullets = sentences.slice(1, 5).map((s) => `\u2022 ${s.replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
-        finalBodyText = `${intro}
-
-${bullets}`;
-      } else {
-        finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u093E \u0935\u093F\u0935\u0930\u0923"]).map((s) => `\u2022 ${s.replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
-      }
+      finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935\u093F\u0935\u0930\u0923\u0964"]).map((s) => `\u2022 ${s.replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
     }
   } else if (mode === "short") {
-    const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => stripAllUrlsAndHyperlinks(s).trim()).filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
-    if (sentences.length >= 1) {
-      finalBodyText = sentences.slice(0, 3).map((s) => `${s.replace(/[।\.\s]+$/, "")}\u0964`).join(" ");
+    const rawParagraphs = rawBody.split(/\n{2,}/).map((p) => p.replace(/[ \t]{2,}/g, " ").trim()).filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
+    if (rawParagraphs.length >= 2) {
+      finalBodyText = rawParagraphs.slice(0, 2).join("\n\n");
     } else {
-      finalBodyText = rawBody;
+      const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => stripAllUrlsAndHyperlinks(s).trim()).filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+      if (sentences.length >= 2) {
+        const mid = Math.ceil(sentences.length / 2);
+        const p1 = sentences.slice(0, mid).join("\u0964 ") + "\u0964";
+        const p2 = sentences.slice(mid).join("\u0964 ") + "\u0964";
+        finalBodyText = `${p1}
+
+${p2}`;
+      } else {
+        finalBodyText = rawParagraphs[0] || rawBody;
+      }
     }
   } else {
     const rawParagraphs = rawBody.split(/\n{2,}/).map((p) => p.replace(/[ \t]{2,}/g, " ").trim()).filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
@@ -9343,14 +8907,14 @@ ${sentences[1]}\u0964`;
       }
     }
   }
-  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText).replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, "").trim();
-  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/gu) || []).filter((t, i, arr) => arr.indexOf(t) === i);
-  const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined", "ainewsmaker", "ai_news_maker", "breakingnewswala", "bnwtv"].includes(cleanUser.toLowerCase());
+  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText);
+  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || []).filter((t, i, arr) => arr.indexOf(t) === i);
+  const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
+  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : "";
   let locTag = "";
   if (location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C") {
-    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, "");
+    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "");
     if (primaryCity && primaryCity.toLowerCase() !== "location" && primaryCity !== "\u0938\u094D\u0925\u093E\u0928") {
       locTag = `#${primaryCity}News`;
     }
@@ -9358,18 +8922,18 @@ ${sentences[1]}\u0964`;
   const filteredMiddleTags = [];
   for (const t of rawTags) {
     const lower = t.toLowerCase();
-    if (userTag && lower === userTag.toLowerCase() || lower === "#ainewsmaker" || lower === "#ai_news_maker" || lower === "#breakingnewswala" || lower === "#bnwtv" || lower === "#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E" || lower.startsWith("#http") || lower.startsWith("#www") || lower.startsWith("#url") || t.includes("-") || t.length > 25 || (t.match(/_/g) || []).length >= 2) {
+    if (userTag && lower === userTag.toLowerCase() || lower === "#ainewsmaker" || lower === "#ai_news_maker" || lower === "#breakingnewswala" || lower === "#bnwtv" || lower === "#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E" || lower.startsWith("#http") || lower.startsWith("#www") || lower.startsWith("#url")) {
       continue;
     }
     filteredMiddleTags.push(t);
   }
-  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase()) && (!userTag || userTag.toLowerCase() !== locTag.toLowerCase())) {
+  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
     filteredMiddleTags.unshift(locTag);
   }
-  const defaultSeeds = ["#BreakingNews", "#HindiNews", "#LatestUpdate", "#NewsUpdate", "#CityNews"];
+  const defaultSeeds = ["#BreakingNews", "#HindiNews", "#LatestUpdate", "#NewsUpdate"];
   for (const seed of defaultSeeds) {
-    if (filteredMiddleTags.length >= 6) break;
-    if ((!userTag || userTag.toLowerCase() !== seed.toLowerCase()) && !filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
+    if (filteredMiddleTags.length >= 5) break;
+    if (!filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
       filteredMiddleTags.push(seed);
     }
   }
@@ -9945,27 +9509,9 @@ function fitHeadlineNaturally(text, minChars = 50, maxChars = 100, factSentence)
   }
   return formatAsJournalisticHeadline(cleaned).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
 }
-function stripDanglingIncompleteWords(text) {
-  if (!text) return "";
-  let s = String(text).trim();
-  s = s.replace(/(?:\.{2,}|…|--+|—+)+/g, " ").trim();
-  let prev = "";
-  let iters = 0;
-  while (s && s !== prev && iters < 6) {
-    prev = s;
-    iters++;
-    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-    s = s.replace(/\s+[\u0915-\u0939]$/u, "").trim();
-    s = s.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले|किए|गए|हुए|रहा|रही|रहे|था|थी|थे))$/u, "").trim();
-    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-  }
-  return s;
-}
 function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], location = "") {
-  const cleanBase = stripDanglingIncompleteWords(
-    sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
-  );
-  const validFacts = (factSentences || []).map((s) => stripDanglingIncompleteWords(sanitizePressNoteFlattery(cleanHeadlineText(s), true))).filter((s) => s.length >= 20 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
+  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  const validFacts = (factSentences || []).map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim()).filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
   const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F");
   const locPrefix = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${location}: ` : "";
   const uniqueOptions = [];
@@ -9994,7 +9540,7 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
   for (const d of clauseDelims) {
     if (uniqueOptions.length >= 5) break;
     if (base.includes(d)) {
-      const parts = base.split(d).map((p) => stripDanglingIncompleteWords(p)).filter((p) => p.length >= 10);
+      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
       if (parts.length >= 2) {
         addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
         addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
@@ -10012,12 +9558,10 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
     addOptionIfClean(`${actor} \u0915\u0940 \u090F\u0902\u091F\u094D\u0930\u0940 \u0938\u0947 \u091A\u0930\u094D\u091A\u093E \u092E\u0947\u0902 ${action}`, true);
   }
   if (base.includes(" \u0928\u0947 ") || base.includes(" \u0915\u094B ") || base.includes(" \u092E\u0947\u0902 ")) {
-    const clauseMatch = base.match(/^(.+?(?:ने|को|में)\s+[^\s,।]+(?:\s+[^\s,।]+){2,8})/u);
-    if (clauseMatch && clauseMatch[1]) {
-      const naturalClause = stripDanglingIncompleteWords(clauseMatch[1]);
-      if (naturalClause.length >= 20 && naturalClause !== base) {
-        addOptionIfClean(naturalClause);
-      }
+    const words = base.split(/\s+/);
+    if (words.length >= 10) {
+      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
+      addOptionIfClean(naturalCut);
     }
   }
   const connectorMatches = base.match(/^(.+?)\s+(?:करने\s+पर|होने\s+पर|के\s+बाद|के\s+दौरान)\s*,?\s*(.+)$/u);
@@ -10056,7 +9600,7 @@ function fitSingleHeadlineToTier(text, maxLimit = HEADLINE_MAX_CHARACTER_LIMIT) 
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  cleaned = stripDanglingIncompleteWords(cleaned);
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
   if (visibleLength <= maxLimit) {
     return cleaned;
@@ -10079,7 +9623,8 @@ function fitSingleHeadlineToTier(text, maxLimit = HEADLINE_MAX_CHARACTER_LIMIT) 
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
   }
-  return stripDanglingIncompleteWords(result);
+  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
+  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 }
 function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext = "", location = "") {
   const safeHeadlines = Array.isArray(headlines) ? [...headlines] : [];
@@ -10104,15 +9649,6 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
         result.push(fitted);
       }
     }
-  }
-  let seedIdx = 1;
-  while (result.length < 5) {
-    const baseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : result[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
-    const backup = fitSingleHeadlineToTier(`\u0905\u092A\u0921\u0947\u091F ${seedIdx}: ${baseText}`, 150);
-    if (!result.includes(backup)) {
-      result.push(backup);
-    }
-    seedIdx++;
   }
   return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
 }
@@ -10218,14 +9754,12 @@ ${customPrompt}
    - \u0938\u092D\u0940 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0938\u094D\u0930\u094B\u0924 \u0915\u0940 \u0909\u0938\u0940 \u090F\u0915 \u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0918\u091F\u0928\u093E (Primary Event) \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u094B\u0928\u0947 \u091A\u093E\u0939\u093F\u090F\u0964
    - \u0906\u0932\u0947\u0916 \u0915\u0947 \u092C\u0949\u0921\u0940 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u094B \u091C\u094D\u092F\u094B\u0902-\u0915\u093E-\u0924\u094D\u092F\u094B\u0902 \u0915\u0949\u092A\u0940-\u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0915\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u092D\u0940 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964
    - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E (NO UNRELATED FILLER PHRASES): \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u092F\u093E \u0905\u0938\u0902\u092C\u0926\u094D\u0927 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u091C\u0941\u092E\u0932\u0947 (\u091C\u0948\u0938\u0947 '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0936\u093E\u0938\u0928 \u0915\u0940 \u0938\u0916\u094D\u0924 \u0928\u091C\u0930') \u0915\u092D\u0940 \u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902 \u091C\u092C \u0924\u0915 \u0915\u093F \u092E\u0942\u0932 \u0916\u092C\u0930 \u092E\u0947\u0902 \u0935\u093E\u0938\u094D\u0924\u0935 \u092E\u0947\u0902 \u0910\u0938\u093E \u0928 \u0932\u093F\u0916\u093E \u0939\u094B! \u092E\u0928\u094B\u0930\u0902\u091C\u0928, \u0916\u0947\u0932, \u0915\u093E\u0930\u094B\u092C\u093E\u0930 \u092F\u093E \u0938\u0902\u0938\u094D\u0915\u0943\u0924\u093F \u0915\u0940 \u0916\u092C\u0930\u094B\u0902 \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0936\u092C\u094D\u0926 \u0915\u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964 \u0915\u0947\u0935\u0932 \u0906\u0932\u0947\u0916 \u0915\u0947 \u092E\u0942\u0932 \u0935\u093F\u0937\u092F \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u093E \u0939\u0940 \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964
-2. 5 \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u0947\u0916\u0928 \u0936\u0948\u0932\u093F\u092F\u093E\u0901 (5 WRITING STYLES OF THE SAME CENTRAL EVENT):
-   - \u0938\u092D\u0940 5 \u0935\u093F\u0915\u0932\u094D\u092A \u090F\u0915 \u0939\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E, \u090F\u0915 \u0939\u0940 \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u0937\u092F \u0914\u0930 \u090F\u0915 \u0939\u0940 \u092E\u0942\u0932 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0905\u0930\u094D\u0925 \u0915\u094B \u0935\u094D\u092F\u0915\u094D\u0924 \u0915\u0930\u0947\u0902 (\u0915\u0939\u093E\u0928\u0940 \u0915\u093E \u0915\u094B\u0923 \u0928 \u092C\u0926\u0932\u0947\u0902)\u0964
-   - \u092A\u093E\u0901\u091A\u094B\u0902 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u0947\u0935\u0932 \u0935\u093E\u0915\u094D\u092F \u0930\u091A\u0928\u093E, \u0936\u092C\u094D\u0926\u093E\u0935\u0932\u0940, \u0936\u0941\u0930\u0941\u0906\u0924\u0940 \u0935\u093E\u0915\u094D\u092F\u093E\u0902\u0936 \u0914\u0930 \u092A\u094D\u0930\u0938\u094D\u0924\u0941\u0924\u093F \u0936\u0948\u0932\u0940 \u092E\u0947\u0902 \u092D\u093F\u0928\u094D\u0928 \u0939\u094B\u0902\u2014\u0935\u093F\u0937\u092F \u092F\u093E \u0915\u094B\u0923 \u092C\u0926\u0932\u0915\u0930 \u0928\u0939\u0940\u0902:
-     * \u0936\u0948\u0932\u0940 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u093E \u0938\u0940\u0927\u093E, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0935\u093F\u0935\u0930\u0923\u0964
-     * \u0936\u0948\u0932\u0940 2: \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u094B \u0909\u0938\u0915\u0947 \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0924\u0925\u094D\u092F \u0915\u0947 \u0938\u093E\u0925 \u092A\u094D\u0930\u0938\u094D\u0924\u0941\u0924 \u0915\u0930\u0928\u093E\u0964
-     * \u0936\u0948\u0932\u0940 3: \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u094B \u0909\u0938\u0915\u0947 \u0938\u0940\u0927\u0947 \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0915\u093F\u090F \u0917\u090F \u092A\u0930\u093F\u0923\u093E\u092E \u092F\u093E \u092A\u094D\u0930\u092D\u093E\u0935 \u0915\u0947 \u0938\u093E\u0925 \u092A\u094D\u0930\u0938\u094D\u0924\u0941\u0924 \u0915\u0930\u0928\u093E\u0964
-     * \u0936\u0948\u0932\u0940 4: \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u094B \u0905\u0927\u093F\u0915 \u0938\u094D\u092A\u0937\u094D\u091F \u0936\u092C\u094D\u0926\u093E\u0935\u0932\u0940 \u0914\u0930 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0935\u093F\u0935\u0930\u0923 \u0915\u0947 \u0938\u093E\u0925 \u092A\u094D\u0930\u0938\u094D\u0924\u0941\u0924 \u0915\u0930\u0928\u093E\u0964
-     * \u0936\u0948\u0932\u0940 5: \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u094B \u0938\u0936\u0915\u094D\u0924, \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0914\u0930 \u092A\u094D\u0930\u0915\u093E\u0936\u0928-\u092F\u094B\u0917\u094D\u092F \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u0940\u092F \u092D\u093E\u0937\u093E \u092E\u0947\u0902 \u092A\u094D\u0930\u0938\u094D\u0924\u0941\u0924 \u0915\u0930\u0928\u093E\u0964
+2. 5 \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0926\u0943\u0937\u094D\u091F\u093F\u0915\u094B\u0923 (5 EDITORIAL ANGLES OF THE SAME EVENT):
+   - \u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E (Core Event) \u2014 \u0915\u093F\u0938\u0928\u0947 \u0915\u094D\u092F\u093E \u0915\u093F\u092F\u093E, \u0915\u0939\u093E\u0901 \u0939\u0941\u0906, \u0938\u0940\u0927\u093E, \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0914\u0930 \u092A\u0942\u0930\u093E \u0935\u093F\u0935\u0930\u0923\u0964
+   - \u0935\u093F\u0915\u0932\u094D\u092A 2: \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u092F\u093E \u092E\u0941\u0916\u094D\u092F \u092A\u093E\u0924\u094D\u0930 \u0915\u094B\u0923 (Actor/Person Focus) \u2014 \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F, \u092D\u0942\u092E\u093F\u0915\u093E \u092F\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0928\u093F\u0930\u094D\u0923\u092F\u0964
+   - \u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u092F\u093E \u092A\u0930\u093F\u0923\u093E\u092E (Action/Consequence) \u2014 \u0918\u091F\u0928\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908, \u0905\u0938\u0930 \u092F\u093E \u0935\u093F\u0915\u093E\u0938\u0964
+   - \u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941 \u092F\u093E \u0926\u093E\u0935\u093E (Key Development/Quote) \u2014 \u0916\u092C\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F, \u0938\u0902\u0926\u0930\u094D\u092D \u092F\u093E \u092C\u092F\u093E\u0928\u0964
+   - \u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 (High-Impact Angle) \u2014 \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u093E \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u0927\u093E\u0930\u0926\u093E\u0930 \u0930\u0942\u092A\u0964
 3. \u090F\u0915\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u0902\u092C\u093E\u0908 \u0928\u093F\u092F\u092E \u2014 100 \u0938\u0947 150 \u0935\u0930\u094D\u0923 (SINGLE HEADLINE LENGTH RULE \u2014 100 TO 150 CHARACTERS):
    - \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u0947 \u0932\u093F\u090F \u0932\u0915\u094D\u0937\u094D\u092F \u0932\u0902\u092C\u093E\u0908: 100 \u0938\u0947 150 \u0926\u0943\u0936\u094D\u092F\u092E\u093E\u0928 \u0935\u0930\u094D\u0923 (visible characters), \u0905\u0902\u0924\u093F\u092E \u0938\u0940\u092E\u093E: \u0905\u0927\u093F\u0915\u0924\u092E 150 \u0935\u0930\u094D\u0923\u0964
    - \u091F\u0940\u0935\u0940 \u0928\u094D\u092F\u0942\u091C \u0915\u093E\u0930\u094D\u0921, \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0930\u093F\u092C\u0928 \u0914\u0930 4:5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0938\u0940\u0927\u0947 \u092A\u094D\u0930\u0926\u0930\u094D\u0936\u093F\u0924 \u0939\u094B\u0928\u0947 \u092F\u094B\u0917\u094D\u092F \u091A\u0941\u0938\u094D\u0924, \u0938\u094D\u092A\u0937\u094D\u091F, \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0914\u0930 \u0905\u0938\u0930\u0926\u093E\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u093F\u0916\u0947\u0902\u0964
@@ -10244,12 +9778,9 @@ ${customPrompt}
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0932\u093F\u0902\u0915, URL \u092F\u093E "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u092A\u0922\u093C\u0947\u0902" \u0915\u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u0915\u0940 \u0936\u0941\u0930\u0941\u0906\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928, 'Title:', '\u0936\u0940\u0930\u094D\u0937\u0915:', '\u0939\u0947\u0921\u0932\u093E\u0907\u0928:' \u092F\u093E \u0915\u093F\u0938\u0940 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u092A\u0930\u093F\u091A\u092F \u0935\u093E\u0915\u094D\u092F \u0938\u0947 \u0928 \u0915\u0930\u0947\u0902\u0964
    - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094B \u092A\u0939\u0932\u0947 \u0935\u093E\u0915\u094D\u092F \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0915\u092D\u0940 \u0928 \u0926\u094B\u0939\u0930\u093E\u090F\u0902\u0964 \u0938\u0940\u0927\u0947 \u0918\u091F\u0928\u093E \u0915\u0947 \u092A\u0941\u0937\u094D\u091F \u0924\u0925\u094D\u092F\u094B\u0902, \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u092F\u094B\u0902, \u0938\u094D\u0925\u093E\u0928 \u0914\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u0936\u0941\u0930\u0941\u0906\u0924 \u0915\u0930\u0947\u0902\u0964
-   - summary \u0935 captionDetailed: \u092A\u0942\u0930\u094D\u0923 \u0935\u093F\u0935\u0930\u0923 \u0938\u0939\u093F\u0924 \u0920\u0940\u0915 3 \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B (substantive paragraphs) \u0932\u093F\u0916\u0947\u0902:
-     * \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0914\u0930 \u0938\u0902\u0926\u0930\u094D\u092D (\u0915\u094D\u092F\u093E \u0939\u0941\u0906, \u0915\u0939\u093E\u0901 \u0939\u0941\u0906, \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0938\u0902\u0926\u0930\u094D\u092D)\u0964
-     * \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B 2: \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0935\u093F\u0935\u0930\u0923 (\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0928\u093E\u092E, \u0906\u0902\u0915\u0921\u093C\u0947, \u0924\u093E\u0930\u0940\u0916\u0947\u0902, \u092C\u092F\u093E\u0928 \u0935 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E)\u0964
-     * \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B 3: \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0915\u0940 \u0917\u0908 \u092A\u094D\u0930\u0924\u093F\u0915\u094D\u0930\u093F\u092F\u093E, \u0905\u0917\u0932\u093E \u0915\u0926\u092E \u092F\u093E \u092E\u0939\u0924\u094D\u0935 (\u092A\u0941\u0937\u094D\u091F \u092A\u094D\u0930\u0924\u093F\u0915\u094D\u0930\u093F\u092F\u093E \u092F\u093E \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u091C\u094D\u091E\u093E\u0924 \u0924\u0925\u094D\u092F)\u0964
-   - captionBullets: \u090F\u0915 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u092A\u0930\u093F\u091A\u092F\u093E\u0924\u094D\u092E\u0915 \u0935\u093E\u0915\u094D\u092F \u0938\u0947 \u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902, \u091C\u093F\u0938\u0915\u0947 \u092C\u093E\u0926 \u0938\u094D\u0930\u094B\u0924 \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 3 \u0938\u0947 5 \u0905\u0932\u0917-\u0905\u0932\u0917 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u092C\u0941\u0932\u0947\u091F \u092C\u093F\u0902\u0926\u0941 (\u2022 \u092C\u093F\u0902\u0926\u0941\u0964) \u0939\u094B\u0902\u0964
-   - captionShort: 1 \u0938\u0947 3 \u091B\u094B\u091F\u0947, \u092A\u0942\u0930\u094D\u0923 \u0939\u093F\u0902\u0926\u0940 \u0935\u093E\u0915\u094D\u092F \u091C\u094B \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0935 \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0935\u093F\u0935\u0930\u0923 \u0915\u094B \u0935\u094D\u092F\u0915\u094D\u0924 \u0915\u0930\u0947\u0902\u0964
+   - summary \u0935 captionDetailed: \u092A\u0942\u0930\u094D\u0923 \u0935\u093F\u0935\u0930\u0923 \u0938\u0939\u093F\u0924 \u0920\u0940\u0915 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B (substantive paragraphs) \u0932\u093F\u0916\u0947\u0902\u0964 \u0907\u0938\u092E\u0947\u0902 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0938\u092D\u0940 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F, \u0928\u093E\u092E, \u0938\u094D\u0925\u093E\u0928, \u0926\u093F\u0928\u093E\u0902\u0915, \u0938\u0902\u0926\u0930\u094D\u092D, \u0914\u0930 \u0906\u0917\u0947 \u0915\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0936\u093E\u092E\u093F\u0932 \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F\u0964 \u091B\u094B\u091F\u093E \u092F\u093E \u0905\u0927\u0942\u0930\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0915\u092D\u0940 \u0928 \u0932\u093F\u0916\u0947\u0902\u0964
+   - captionBullets: \u0938\u0940\u0927\u0947 \u092A\u0939\u0932\u0947 \u092C\u0941\u0932\u0947\u091F \u092A\u0949\u0907\u0902\u091F '\u2022 ' \u0938\u0947 \u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902\u0964 3 \u0938\u0947 5 \u092A\u0902\u0915\u094D\u0924\u093F\u092F\u094B\u0902 \u092E\u0947\u0902 \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941, \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u092A\u0902\u0915\u094D\u0924\u093F '\u2022 ' \u0938\u0947 \u0936\u0941\u0930\u0942 \u0939\u094B \u0914\u0930 '\u0964' \u092A\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B\u0964
+   - captionShort: \u0920\u0940\u0915 2 \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B, \u0938\u0940\u0927\u0947 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0935 \u0924\u0925\u094D\u092F\u094B\u0902 \u0938\u0947 \u0936\u0941\u0930\u0942\u0964
    - \u0905\u0902\u0924 \u092E\u0947\u0902 \u0920\u0940\u0915 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 6-8 \u0939\u0948\u0936\u091F\u0948\u0917:
      * \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917: ${userTagInstruction}
      * \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (#BreakingNews #HindiNews #LatestNews #CityNews)
@@ -10262,11 +9793,11 @@ Strictly return a valid JSON object matching these exact keys:
 {
   "headline": "\u092E\u0941\u0916\u094D\u092F \u0935 \u0938\u091F\u0940\u0915 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u092C\u093F\u0928\u093E \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E, \u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
   "headlineOptions": [
-    "\u0938\u0940\u0927\u093E \u0935 \u0938\u094D\u092A\u0937\u094D\u091F \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u092E\u0941\u0916\u094D\u092F \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0924\u0925\u094D\u092F \u0915\u0947 \u0938\u093E\u0925 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0915\u093F\u090F \u0917\u090F \u092A\u0930\u093F\u0923\u093E\u092E \u0915\u0947 \u0938\u093E\u0925 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0905\u0927\u093F\u0915 \u0938\u094D\u092A\u0937\u094D\u091F \u0935\u093F\u0935\u0930\u0923 \u0915\u0947 \u0938\u093E\u0925 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0938\u0936\u0915\u094D\u0924 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u0940\u092F \u0936\u0948\u0932\u0940 \u092E\u0947\u0902 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)"
+    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)"
   ],
   "highlightWords": ["\u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 1", "\u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 2"],
   "formattedHeadline": "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u093F\u0938\u092E\u0947\u0902 \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 [yellow]\u0936\u092C\u094D\u0926[/yellow] \u0938\u0947 \u091A\u093F\u0939\u094D\u0928\u093F\u0924 \u0939\u094B\u0902",
@@ -10330,7 +9861,7 @@ Content: ${extracted.content ? extracted.content.slice(0, 2e3) : ""}
     inaccessibleReason: extracted.inaccessibleReason
   };
 }
-app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessingAccessMiddleware, async (req, res) => {
+app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
   const {
     input,
     command,
@@ -10344,12 +9875,54 @@ app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessi
   } = req.body;
   try {
     const rawInputText = input || command;
-    if (!rawInputText && !linkUrl && !customPrompt) {
-      return res.status(400).json({ error: "Please provide a command, text, link or prompt" });
+    const requestedNewsId = String(req.body.newsId || "").trim();
+    if (!rawInputText && !linkUrl && !customPrompt && !requestedNewsId) {
+      return res.status(400).json({ error: "Please provide a command, text, link, prompt, or newsId" });
     }
     const channelUsername = (req.body.channelUsername || req.body.username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
     const userHashtag = channelUsername ? `#${channelUsername}` : "";
     let parsedData = null;
+    if (requestedNewsId) {
+      const db = loadApprovedEditorialDatabase();
+      let approvedRecord = db[requestedNewsId];
+      if (!approvedRecord) {
+        const newsDb = loadNewsDatabase();
+        const post = newsDb.find((p) => p.id === requestedNewsId);
+        if (post && (post.status === "APPROVED" || !post.status)) {
+          approvedRecord = getOrEnsureApprovedEditorial(post);
+        }
+      }
+      if (approvedRecord && Array.isArray(approvedRecord.headlines) && approvedRecord.headlines.length > 0) {
+        let finalDetailed = approvedRecord.captionDetailed || "";
+        if (userHashtag && finalDetailed.includes("#")) {
+          if (!finalDetailed.toLowerCase().includes(userHashtag.toLowerCase())) {
+            finalDetailed = finalDetailed.replace(/(#[^\s#]+)/, `${userHashtag} $1`);
+          }
+        }
+        return res.json({
+          success: true,
+          isApproved: true,
+          actualProvider: "editorial-archive",
+          data: {
+            headline: approvedRecord.headlines[0] || approvedRecord.title,
+            headlineOptions: approvedRecord.headlines,
+            formattedHeadline: approvedRecord.headlines[0] || approvedRecord.title,
+            location: approvedRecord.location || "",
+            category: approvedRecord.category || "",
+            summary: finalDetailed,
+            captionDetailed: finalDetailed,
+            captionBullets: approvedRecord.captionBullets,
+            captionShort: approvedRecord.captionShort,
+            tags: approvedRecord.tags || ["#BreakingNews", "#AINewsMaker"],
+            pickedImages: {
+              main: approvedRecord.imageUrl || void 0
+            },
+            extractedArticlePhotos: approvedRecord.additionalPhotos || [],
+            isApprovedEditorial: true
+          }
+        });
+      }
+    }
     const effectiveTemplateId = template_id || "graphic_001";
     const tplConfig = getTemplateConfig(effectiveTemplateId);
     const targetMaxLines = Number(headline_max_lines) || Number(headline_line_count) || tplConfig.headline_max_lines || 3;
@@ -10488,9 +10061,9 @@ ${rawLink}` : rawLink;
       return result;
     };
     const runGemini = async () => {
-      const activeGeminiKey = (req.body?.geminiApiKey || getActiveGeminiKey(req) || "").trim();
+      const activeGeminiKey = (req.body.geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
       if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u094D\u0932\u093E\u0909\u0921 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u092E\u0947\u0902 API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 \u0905\u0925\u0935\u093E .env \u092E\u0947\u0902 GEMINI_API_KEY \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964");
+        throw new Error("GEMINI_API_KEY is not configured");
       }
       const ai = new import_genai.GoogleGenAI({
         apiKey: activeGeminiKey,
@@ -10944,18 +10517,19 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       }
     };
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
-Generate exactly 5 distinct, publication-ready headline options representing 5 writing styles of the SAME central news event in pure Hindi Devanagari script:
-- All 5 options must be based strictly on the same central event, same main subject, and same factual meaning. Differ ONLY in wording, sentence structure, opening phrase, and presentation style\u2014do NOT switch angles.
-- STRICT RULE: Do NOT append generic administrative or police filler words (such as '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u0938\u0916\u094D\u0924 \u0928\u091C\u0930') unless that exact event actually took place in the news story.
+Generate exactly 5 distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
+- All 5 options must be based strictly on the same central event (no secondary stories or unrelated paragraphs).
+- STRICT RULE: Do NOT append generic administrative or police filler words (such as '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u0938\u0916\u094D\u0924 \u0928\u091C\u0930') unless that exact event actually took place in the news story. For entertainment, sports, business, or lifestyle news, keep the phrasing strictly relevant to the subject.
 - Single headline length policy: Target 100 to 150 visible characters per headline, with an absolute maximum of 150 visible characters.
-- Style 1: Direct and clear statement of the main event.
-- Style 2: The same event expressed with its most important verified fact.
-- Style 3: The same event expressed with a directly reported result/impact, where supported.
-- Style 4: The same event expressed with clearer wording and a relevant verified detail.
-- Style 5: The same event expressed in strong, natural, publication-ready journalistic language.
-- No ending punctuation (. or \u0964). No labels like '\u0935\u093F\u0915\u0932\u094D\u092A 1' or bracketed counts like '[58/100]'.
+- Aim for the 100-150 character range when supported by verified facts, with no artificial filler, padding, or fabricated administrative phrases.
+- Option 1: Core event (direct, hard news)
+- Option 2: Key person/actor angle
+- Option 3: Action/Development angle
+- Option 4: Crucial fact/Quote angle
+- Option 5: Crisp, punchy journalistic angle
+- No ending punctuation (. or \u0964). No tier labels or bracketed counts like '[58/100]'.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
-    const regenPrompt = `\u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0920\u0940\u0915 5 \u0928\u090F \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902 (\u0938\u092D\u0940 5 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u0947\u0935\u0932 \u0907\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 5 \u0932\u0947\u0916\u0928 \u0936\u0948\u0932\u093F\u092F\u093E\u0901 \u0939\u094B\u0902, \u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0905\u0927\u093F\u0915\u0924\u092E 150 \u0935\u0930\u094D\u0923, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947, \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)\u0964
+    const regenPrompt = `\u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0920\u0940\u0915 5 \u0928\u090F \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902 (\u0938\u092D\u0940 5 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u0947\u0935\u0932 \u0907\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u094B\u0902, \u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0905\u0927\u093F\u0915\u0924\u092E 150 \u0935\u0930\u094D\u0923, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947, \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)\u0964
 \u0936\u0940\u0930\u094D\u0937\u0915 \u0938\u0902\u0926\u0930\u094D\u092D: ${sourceTitle}
 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940/\u0924\u0925\u094D\u092F: ${sourceText.slice(0, 2500)}
 ${sourceLoc ? `\u0938\u094D\u0925\u093E\u0928: ${sourceLoc}
@@ -10967,11 +10541,11 @@ ${excludeTitles.map((t) => `- ${t}`).join("\n")}
 JSON Output Schema:
 {
   "headlineOptions": [
-    "\u0938\u0940\u0927\u093E \u0935 \u0938\u094D\u092A\u0937\u094D\u091F \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u092E\u0941\u0916\u094D\u092F \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0924\u0925\u094D\u092F \u0915\u0947 \u0938\u093E\u0925 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0930\u093F\u092A\u094B\u0930\u094D\u091F \u0915\u093F\u090F \u0917\u090F \u092A\u0930\u093F\u0923\u093E\u092E \u0915\u0947 \u0938\u093E\u0925 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0905\u0927\u093F\u0915 \u0938\u094D\u092A\u0937\u094D\u091F \u0935\u093F\u0935\u0930\u0923 \u0915\u0947 \u0938\u093E\u0925 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0938\u0936\u0915\u094D\u0924 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u0940\u092F \u092D\u093E\u0937\u093E \u092E\u0947\u0902 \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)"
+    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)"
   ]
 }`;
     const tryOpenAI = async () => {
@@ -10989,9 +10563,9 @@ JSON Output Schema:
       return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
     };
     const tryGemini = async () => {
-      const activeGeminiKey = (geminiApiKey || getActiveGeminiKey(req) || "").trim();
+      const activeGeminiKey = (geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
       if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u094D\u0932\u093E\u0909\u0921 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u092E\u0947\u0902 API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 \u0905\u0925\u0935\u093E .env \u092E\u0947\u0902 GEMINI_API_KEY \u0938\u0947\u091F \u0915\u0930\u0947\u0902\u0964");
+        throw new Error("GEMINI_API_KEY not configured");
       }
       const ai = new import_genai.GoogleGenAI({
         apiKey: activeGeminiKey,
@@ -11024,13 +10598,10 @@ JSON Output Schema:
         });
       }
     } else {
-      let lastGeminiErr = null;
       try {
         aiGeneratedOptions = await tryGemini();
         actualProvider = "gemini";
       } catch (geminiErr) {
-        lastGeminiErr = geminiErr;
-        console.warn("[News AI] Headline regen Gemini error:", geminiErr?.message || geminiErr);
         if (aiConfig.aiModelAccess?.gemini?.allowFallback) {
           try {
             aiGeneratedOptions = await tryOpenAI();
@@ -11038,15 +10609,6 @@ JSON Output Schema:
           } catch {
           }
         }
-      }
-      if (!aiGeneratedOptions || aiGeneratedOptions.length === 0) {
-        const errDetail = lastGeminiErr?.message || "Gemini \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948";
-        return res.status(502).json({
-          success: false,
-          error: `Google Gemini AI \u0938\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${errDetail}\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`,
-          canRetry: true,
-          provider: "gemini"
-        });
       }
     }
     if (Array.isArray(aiGeneratedOptions)) {
@@ -11115,7 +10677,7 @@ var CATEGORY_KEYWORDS_LIST = [
 ];
 function cleanHeadlineText(text) {
   if (!text) return "";
-  let cleaned = text;
+  let cleaned = cleanHtmlEntities(text).replace(/&[a-zA-Z0-9#]+;/g, "").replace(/&;/g, "");
   cleaned = cleaned.replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "").replace(/(?:loading[\s\.]*)+/gi, "").replace(/(?:please wait[\s\.]*)+/gi, "").replace(/(?:generating[\s\.]*)+/gi, "").replace(/(?:ai is processing[\s\.]*)+/gi, "");
   cleaned = cleaned.replace(
     /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
@@ -11215,7 +10777,6 @@ function cleanHeadlineText(text) {
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/मध्यप्रदेश/g, "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936").replace(/उत्तरप्रदेश/g, "\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936").replace(/हिमाचलप्रदेश/g, "\u0939\u093F\u092E\u093E\u091A\u0932 \u092A\u094D\u0930\u0926\u0947\u0936").replace(/आंध्रप्रदेश/g, "\u0906\u0902\u0927\u094D\u0930 \u092A\u094D\u0930\u0926\u0947\u0936");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-  cleaned = stripDanglingIncompleteWords(cleaned);
   return cleaned;
 }
 function cleanLocationField(loc) {
@@ -11866,12 +11427,16 @@ app.post("/api/generate-video-headlines", async (req, res) => {
     "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 4"
   ]
 }`;
-        const response = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json"
-          }
-        });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), 3500));
+        const response = await Promise.race([
+          generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json"
+            }
+          }),
+          timeoutPromise
+        ]);
         const raw = response.text?.trim() || "";
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed?.headlines) && parsed.headlines.length >= 4) {
@@ -13216,6 +12781,5 @@ startServer().catch((err) => {
   saveAiFeaturesConfig,
   scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks,
-  stripDanglingIncompleteWords,
   validateHeadlineOption
 });

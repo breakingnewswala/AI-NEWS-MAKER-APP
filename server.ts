@@ -51,54 +51,6 @@ if (!fs.existsSync(logosDir)) {
 app.use("/uploads", express.static(publicUploadsDir));
 
 // ============================================================================
-// FIREBASE AUTHENTICATION TRANSPARENT PROXY (/__/auth/*)
-// Bypasses browser cross-origin storage partitioning, origin_mismatch and redirect drops
-// ============================================================================
-app.all("/__/auth/*", async (req, res) => {
-  const targetHost = "ai-news-maker-app.firebaseapp.com";
-  const targetUrl = `https://${targetHost}${req.originalUrl}`;
-  try {
-    const headers: Record<string, string> = {
-      host: targetHost,
-      accept: req.headers["accept"] || "*/*",
-      "user-agent": req.headers["user-agent"] || "Mozilla/5.0",
-    };
-    if (req.headers["content-type"]) {
-      headers["content-type"] = req.headers["content-type"];
-    }
-    if (req.headers["authorization"]) {
-      headers["authorization"] = req.headers["authorization"];
-    }
-
-    let bodyData: any = undefined;
-    if (["POST", "PUT", "PATCH"].includes(req.method.toUpperCase())) {
-      bodyData = typeof req.body === "object" ? JSON.stringify(req.body) : req.body;
-    }
-
-    const proxyRes = await fetch(targetUrl, {
-      method: req.method,
-      headers,
-      body: bodyData,
-      redirect: "manual",
-    });
-
-    res.status(proxyRes.status);
-    proxyRes.headers.forEach((val, key) => {
-      const lower = key.toLowerCase();
-      if (lower !== "content-encoding" && lower !== "transfer-encoding") {
-        res.setHeader(key, val);
-      }
-    });
-
-    const buffer = await proxyRes.arrayBuffer();
-    res.send(Buffer.from(buffer));
-  } catch (err: any) {
-    console.warn("[Auth Proxy] Error forwarding /__/auth request:", err?.message);
-    res.status(502).send("Auth Proxy Error");
-  }
-});
-
-// ============================================================================
 // CRYPTOGRAPHIC SESSION TOKEN & AUTHENTICATION ENGINE (HMAC-SHA256 JWT)
 // ============================================================================
 const AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
@@ -583,42 +535,6 @@ let dynamicOpenAiKey: string = (process.env.OPENAI_API_KEY && process.env.OPENAI
   ? process.env.OPENAI_API_KEY
   : "";
 let dynamicCustomDomain: string = "";
-
-const AI_KEYS_CONFIG_FILE = path.join(process.cwd(), "ai_keys_config.json");
-function loadAiKeysConfig() {
-  try {
-    if (fs.existsSync(AI_KEYS_CONFIG_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8"));
-      if (parsed && typeof parsed === 'object') {
-        if (parsed.geminiKey && (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "MY_GEMINI_API_KEY")) {
-          process.env.GEMINI_API_KEY = parsed.geminiKey.trim();
-        }
-        if (parsed.openaiKey && !dynamicOpenAiKey) {
-          dynamicOpenAiKey = parsed.openaiKey.trim();
-        }
-        if (parsed.customDomain && !dynamicCustomDomain) {
-          dynamicCustomDomain = parsed.customDomain.trim();
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Could not read ai_keys_config.json:", e);
-  }
-}
-function saveAiKeysConfig(updates: { geminiKey?: string; openaiKey?: string; customDomain?: string }) {
-  try {
-    let existing: any = {};
-    if (fs.existsSync(AI_KEYS_CONFIG_FILE)) {
-      try { existing = JSON.parse(fs.readFileSync(AI_KEYS_CONFIG_FILE, "utf-8")); } catch {}
-    }
-    const merged = { ...existing, ...updates };
-    fs.writeFileSync(AI_KEYS_CONFIG_FILE, JSON.stringify(merged, null, 2), "utf-8");
-  } catch (e) {
-    console.warn("Could not save ai_keys_config.json:", e);
-  }
-}
-loadAiKeysConfig();
-
 let quotaExceededInfo = {
   isExceeded: false,
   lastChecked: new Date().toISOString(),
@@ -685,7 +601,6 @@ app.get("/api/cloud-status", (req, res) => {
     currentServerTime: new Date().toISOString(),
     geminiAvailable,
     openaiAvailable,
-    maskedGeminiKey: geminiAvailable ? `${(geminiKey || "").slice(0, 6)}...${(geminiKey || "").slice(-4)}` : null,
     maskedOpenaiKey: openaiAvailable ? `${(openaiKey || "").slice(0, 6)}...${(openaiKey || "").slice(-4)}` : null,
     customDomain: dynamicCustomDomain || null,
   });
@@ -700,16 +615,14 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     const { openaiKey, geminiKey, customDomain } = req.body;
     if (openaiKey !== undefined) {
       dynamicOpenAiKey = String(openaiKey).trim();
-      openaiClient = null;
-      saveAiKeysConfig({ openaiKey: String(openaiKey).trim() });
+      openaiClient = null; // Re-create OpenAI client with new key
     }
     if (geminiKey !== undefined && String(geminiKey).trim().length > 5) {
       process.env.GEMINI_API_KEY = String(geminiKey).trim();
-      saveAiKeysConfig({ geminiKey: String(geminiKey).trim() });
+      aiClient = null;
     }
     if (customDomain !== undefined) {
       dynamicCustomDomain = String(customDomain).trim();
-      saveAiKeysConfig({ customDomain: String(customDomain).trim() });
     }
 
     const effectiveOpenaiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
@@ -728,8 +641,6 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
       } catch (testErr: any) {
         testMessage = `की सेव हो गई, किन्तु OpenAI टेस्ट चेतावनी: ${testErr?.message || "कृपया की की जांच करें"}`;
       }
-    } else if (geminiKey && process.env.GEMINI_API_KEY) {
-      testMessage = "✅ Gemini AI Key सफलतापूर्वक अपडेट व सुरक्षित हो गई!";
     }
 
     return res.json({
@@ -770,19 +681,10 @@ interface StoredNewsPost {
   coinValue?: number;
   coinCost?: number;
   restrictedPlans?: string[];
-  editorialApproved?: boolean;
-  approvedHeadlines?: string[];
-  approvedHeadline?: string;
-  approvedCaptionDetailed?: string;
-  approvedCaptionBullets?: string;
-  approvedCaptionShort?: string;
-  approvedPhotos?: string[];
-  approvedPhotoLayout?: "single" | "two" | "three";
-  approvedBy?: string;
-  approvedAt?: number;
 }
 
 const NEWS_DB_FILE = path.join(process.cwd(), "news_database.json");
+const EDITORIAL_APPROVED_DB_FILE = path.join(process.cwd(), "approved_editorial_database.json");
 const PROFILES_DB_FILE = path.join(process.cwd(), "user_profiles_db.json");
 const LOGO_REQUESTS_DB_FILE = path.join(process.cwd(), "logo_change_requests_db.json");
 const REWARDS_DB_FILE = path.join(process.cwd(), "rewards_database.json");
@@ -1212,6 +1114,90 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
   }
 }
 
+function loadApprovedEditorialDatabase(): Record<string, any> {
+  try {
+    const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading approved_editorial_database.json:", err);
+  }
+  return {};
+}
+
+function saveApprovedEditorialDatabase(data: Record<string, any>): boolean {
+  try {
+    const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
+    for (const loc of locations) {
+      try {
+        if (fs.existsSync(path.dirname(loc))) {
+          fs.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        }
+      } catch {}
+    }
+    return true;
+  } catch (err) {
+    console.error("Error writing approved_editorial_database.json:", err);
+    return false;
+  }
+}
+
+function splitHindiSentences(text: string): string[] {
+  return (text || "")
+    .split(/[।\n]+|\.\s+/)
+    .map((s) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim())
+    .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+}
+
+function getOrEnsureApprovedEditorial(post: StoredNewsPost): any {
+  if (!post || !post.id) return null;
+  const db = loadApprovedEditorialDatabase();
+  if (db[post.id] && Array.isArray(db[post.id].headlines) && db[post.id].headlines.length > 0) {
+    return db[post.id];
+  }
+
+  // Derive 5 distinct balanced headlines deterministically per editorial standards
+  const rawTitle = cleanHeadlineText(post.title || "मुख्य समाचार");
+  const fullContentStr = post.fullContent || post.summary || rawTitle;
+  const sentences = splitHindiSentences(fullContentStr);
+  const detectedLocation = cleanLocationField(post.location || post.district || "");
+  const headlines = generate5BalancedHeadlineOptions(rawTitle, sentences, detectedLocation);
+
+  const rawSummary = (post.summary || fullContentStr || rawTitle).trim();
+  const captionDetailed = `${rawTitle}\n\n${rawSummary}\n\n#BreakingNews #HindiNews #AINewsMaker`;
+  const captionBullets = `• ${rawTitle}।\n• ${rawSummary.slice(0, 120)}।\n\n#BreakingNews #HindiNews #AINewsMaker`;
+  const captionShort = `${rawTitle}\n\n#BreakingNews #AINewsMaker`;
+
+  const record = {
+    newsId: post.id,
+    title: rawTitle,
+    headlines: headlines.slice(0, 5),
+    headlineOptions: headlines.slice(0, 5),
+    captionDetailed,
+    captionBullets,
+    captionShort,
+    tags: ["#BreakingNews", "#HindiNews", "#AINewsMaker"],
+    location: detectedLocation,
+    category: post.categoryName || post.category || "देश",
+    imageUrl: post.imageUrl || "",
+    additionalPhotos: Array.isArray(post.additionalPhotos) ? post.additionalPhotos : [],
+    approvedAt: post.timestamp || Date.now(),
+    approvedBy: "editorial-desk",
+    status: "APPROVED"
+  };
+
+  db[post.id] = record;
+  saveApprovedEditorialDatabase(db);
+  return record;
+}
+
 // Dynamic relative time formatter helper
 function formatRelativeTime(timestamp: number): string {
   const diffMs = Date.now() - timestamp;
@@ -1410,33 +1396,9 @@ app.post("/api/news-posts", (req, res) => {
     let existing = loadNewsDatabase();
 
     if (Array.isArray(payload)) {
-      // Bulk sync: preserve existing approved editorial content if incoming item lacks it
-      const existingMap = new Map<string, StoredNewsPost>();
-      existing.forEach((p) => {
-        if (p && p.id) existingMap.set(p.id, p);
-      });
-      existing = payload.map((post: any) => {
-        if (!post || !post.id) return post;
-        const prev = existingMap.get(post.id);
-        if (prev && prev.editorialApproved && post.editorialApproved === undefined) {
-          return {
-            ...post,
-            editorialApproved: prev.editorialApproved,
-            approvedHeadlines: prev.approvedHeadlines,
-            approvedHeadline: prev.approvedHeadline,
-            approvedCaptionDetailed: prev.approvedCaptionDetailed,
-            approvedCaptionBullets: prev.approvedCaptionBullets,
-            approvedCaptionShort: prev.approvedCaptionShort,
-            approvedPhotos: prev.approvedPhotos,
-            approvedPhotoLayout: prev.approvedPhotoLayout,
-            approvedBy: prev.approvedBy,
-            approvedAt: prev.approvedAt,
-          };
-        }
-        return post;
-      });
+      // Bulk sync or replace
+      existing = payload;
     } else if (payload && payload.title) {
-      const prev = existing.find((p) => p.id === payload.id);
       const newPost: StoredNewsPost = {
         id: payload.id || `post-${Date.now()}`,
         title: payload.title,
@@ -1453,18 +1415,6 @@ app.post("/api/news-posts", (req, res) => {
         district: payload.district || "",
         location: payload.location || "",
         timestamp: payload.timestamp || Date.now(),
-        isBonus: payload.isBonus !== undefined ? Boolean(payload.isBonus) : prev?.isBonus,
-        rewardCoins: payload.rewardCoins || prev?.rewardCoins,
-        editorialApproved: payload.editorialApproved !== undefined ? Boolean(payload.editorialApproved) : prev?.editorialApproved,
-        approvedHeadlines: payload.approvedHeadlines || prev?.approvedHeadlines,
-        approvedHeadline: payload.approvedHeadline || prev?.approvedHeadline,
-        approvedCaptionDetailed: payload.approvedCaptionDetailed || prev?.approvedCaptionDetailed,
-        approvedCaptionBullets: payload.approvedCaptionBullets || prev?.approvedCaptionBullets,
-        approvedCaptionShort: payload.approvedCaptionShort || prev?.approvedCaptionShort,
-        approvedPhotos: payload.approvedPhotos || prev?.approvedPhotos,
-        approvedPhotoLayout: payload.approvedPhotoLayout || prev?.approvedPhotoLayout,
-        approvedBy: payload.approvedBy || prev?.approvedBy,
-        approvedAt: payload.approvedAt || prev?.approvedAt,
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
@@ -1684,7 +1634,60 @@ app.post("/api/admin/migrate-approvals", (req, res) => {
   }
 });
 
-// 10. PUT update existing post (Supports Bonus News toggle and reward coins)
+// 10. GET Persistent Approved Editorial Content (Preserves 5 approved headlines & captions without AI re-generation)
+app.get("/api/editorial/approved/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = loadApprovedEditorialDatabase();
+    if (db[id] && Array.isArray(db[id].headlines) && db[id].headlines.length > 0) {
+      return res.json({ success: true, isApproved: true, data: db[id] });
+    }
+    const newsDb = loadNewsDatabase();
+    const post = newsDb.find((p) => p.id === id);
+    if (post && (post.status === "APPROVED" || !post.status)) {
+      const record = getOrEnsureApprovedEditorial(post);
+      return res.json({ success: true, isApproved: true, data: record });
+    }
+    return res.json({ success: true, isApproved: false, message: "No approved editorial content found" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// 11. POST Save/Update Approved Editorial Content (Admin review & approval)
+app.post("/api/editorial/approved/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const db = loadApprovedEditorialDatabase();
+    const existing = db[id] || {};
+    const updated = {
+      ...existing,
+      newsId: id,
+      title: body.title || existing.title || "समाचार",
+      headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : (existing.headlines || []),
+      headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : (existing.headlineOptions || []),
+      captionDetailed: body.captionDetailed || existing.captionDetailed || "",
+      captionBullets: body.captionBullets || existing.captionBullets || "",
+      captionShort: body.captionShort || existing.captionShort || "",
+      tags: Array.isArray(body.tags) ? body.tags : (existing.tags || ["#BreakingNews", "#AINewsMaker"]),
+      location: body.location || existing.location || "",
+      category: body.category || existing.category || "",
+      imageUrl: body.imageUrl || existing.imageUrl || "",
+      additionalPhotos: Array.isArray(body.additionalPhotos) ? body.additionalPhotos : (existing.additionalPhotos || []),
+      approvedAt: Date.now(),
+      approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+      status: "APPROVED"
+    };
+    db[id] = updated;
+    saveApprovedEditorialDatabase(db);
+    return res.json({ success: true, message: "संपादकीय हेडलाइन व कैप्शन सुरक्षित किए गए", data: updated });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// 12. PUT update existing post (Supports Bonus News toggle and reward coins)
 app.put("/api/news-posts/:id", (req, res) => {
   try {
     const { id } = req.params;
@@ -3054,7 +3057,6 @@ interface AuthoritativeUser {
   unblockedBy?: string | null;
   blockedReason?: string | null;
   createdAt: number;
-  updatedAt?: number;
   trialStartedAt: number;
   trialEndsAt: number;
   isTrialExpired?: boolean;
@@ -3386,24 +3388,6 @@ function enforceUserAccessMiddleware(req: express.Request, res: express.Response
   next();
 }
 
-function enforceNewsProcessingAccessMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const identifier = extractUserIdentifier(req);
-  if (!identifier) return next();
-  const access = checkUserAccess(identifier);
-  // Strictly block accounts banned or blocked by admin
-  if (access.blocked) {
-    return res.status(access.status || 403).json({
-      success: false,
-      error: access.error,
-      blocked: true,
-      isBlocked: true,
-    });
-  }
-  // Graphic Studio initial news generation via Gemini is permitted for all users (trial-expired / basic)
-  // so normal users receive the exact same high-quality Gemini editorial processing as Admin.
-  next();
-}
-
 function syncUserToProfiles(u: AuthoritativeUser) {
   try {
     const allProfiles = loadProfilesDatabase();
@@ -3483,113 +3467,93 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
           ? 'breakingnewswala'
           : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
 
-    const resolvedTier = isSuper ? 'ultra' : (userPayload.tier || existing.tier || 'basic');
-    const tierPlanMap: Record<string, string> = {
-      ultra: 'VIP DESK',
-      professional: 'PRO',
-      advanced: 'ADVANCE',
-      basic: 'BASIC',
+    updatedRecord = {
+      ...existing,
+      email: emailRaw || existing.email,
+      name: userPayload.name || userPayload.fullName || existing.name || 'यूज़र',
+      fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || 'यूज़र',
+      username: safeUsername,
+      channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || '',
+      channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || '',
+      channelNameEn: userPayload.channelNameEn || existing.channelNameEn || '',
+      channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || '',
+      channelLogoPngUrl: userPayload.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoGifUrl: userPayload.channelLogoGifUrl || existing.channelLogoGifUrl,
+      channelLogoType: userPayload.channelLogoType || existing.channelLogoType || 'png',
+      mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || '',
+      mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || '',
+      district: userPayload.district || userPayload.location || existing.district || existing.location || '',
+      location: userPayload.location || userPayload.district || existing.location || existing.district || '',
+      state: userPayload.state || existing.state || '',
+      address: userPayload.address || existing.address || '',
+      pincode: userPayload.pincode || existing.pincode || '',
+      websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
+      socialIcons: userPayload.socialIcons !== undefined ? userPayload.socialIcons : existing.socialIcons,
+      role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
+      tier: isSuper ? 'ultra' : (existing.tier || userPayload.tier || 'basic'),
+      planName: isSuper ? 'VIP DESK' : (existing.planName || userPayload.planName || 'BASIC'),
+      isBlocked: Boolean(existing.isBlocked),
+      blockedAt: existing.blockedAt,
+      blockedBy: existing.blockedBy,
+      createdAt: existing.createdAt || now,
+      trialStartedAt: preservedTrialStart,
+      trialEndsAt: preservedTrialEnds,
+      isTrialExpired: Date.now() >= preservedTrialEnds,
+      lastLoginAt: now,
+      activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
+      expiresAt: existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds),
+      activatedVia: existing.activatedVia || (isSuper ? 'Super Admin Preset' : 'Google Registration'),
     };
-    const resolvedPlanName = isSuper ? 'VIP DESK' : (userPayload.planName || tierPlanMap[resolvedTier] || existing.planName || 'BASIC');
-    const resolvedExpiresAt = userPayload.expiresAt || existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds);
+    users[idx] = updatedRecord;
+  } else {
+    const newTrialStart = now;
+    const newTrialEnds = now + SEVEN_DAYS_MS;
+
+    const safeUsername = rawReqUser || (cleanEmail === 'admin.ainewsmaker@gmail.com'
+      ? 'AI News Maker'
+      : (isBreakingNewsWala
+          ? 'breakingnewswala'
+          : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
+
+    const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString('hex').slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
 
     updatedRecord = {
-        ...existing,
-        email: emailRaw || existing.email,
-        name: userPayload.name || userPayload.fullName || existing.name || 'यूज़र',
-        fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || 'यूज़र',
-        username: safeUsername,
-        channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || '',
-        channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || '',
-        channelNameEn: userPayload.channelNameEn || existing.channelNameEn || '',
-        channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || '',
-        channelLogoPngUrl: userPayload.channelLogoPngUrl,
-        channelLogoGifUrl: userPayload.channelLogoGifUrl,
-        channelLogoType: userPayload.channelLogoType || existing.channelLogoType || 'png',
-        mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || '',
-        mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || '',
-        district: userPayload.district || userPayload.location || existing.district || existing.location || '',
-        location: userPayload.location || userPayload.district || existing.location || existing.district || '',
-        state: userPayload.state || existing.state || '',
-        address: userPayload.address || existing.address || '',
-        pincode: userPayload.pincode || existing.pincode || '',
-        websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
-        socialIcons: userPayload.socialIcons !== undefined ? userPayload.socialIcons : existing.socialIcons,
-        role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
-        tier: resolvedTier,
-        planName: resolvedPlanName,
-        isBlocked: Boolean(existing.isBlocked),
-        blockedAt: existing.blockedAt,
-        blockedBy: existing.blockedBy,
-        createdAt: existing.createdAt || now,
-        trialStartedAt: preservedTrialStart,
-        trialEndsAt: preservedTrialEnds,
-        isTrialExpired: resolvedExpiresAt ? (now >= resolvedExpiresAt) : (now >= preservedTrialEnds),
-        lastLoginAt: now,
-        activatedAt: userPayload.activatedAt || existing.activatedAt || (isSuper ? now : preservedTrialStart),
-        expiresAt: resolvedExpiresAt,
-        activatedVia: userPayload.activatedVia || existing.activatedVia || (isSuper ? 'Super Admin Preset' : 'Google Registration'),
-      };
-      users[idx] = updatedRecord;
-    } else {
-      const newTrialStart = now;
-      const newTrialEnds = now + SEVEN_DAYS_MS;
-
-      const safeUsername = rawReqUser || (cleanEmail === 'admin.ainewsmaker@gmail.com'
-        ? 'AI News Maker'
-        : (isBreakingNewsWala
-            ? 'breakingnewswala'
-            : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
-
-      const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString('hex').slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
-
-      const initialTier = isSuper ? 'ultra' : (userPayload.tier || 'basic');
-      const tierPlanMap: Record<string, string> = {
-        ultra: 'VIP DESK',
-        professional: 'PRO',
-        advanced: 'ADVANCE',
-        basic: 'BASIC',
-      };
-      const initialPlanName = isSuper ? 'VIP DESK' : (userPayload.planName || tierPlanMap[initialTier] || 'BASIC');
-      const initialExpiresAt = userPayload.expiresAt || (isSuper ? 2107057518060 : newTrialEnds);
-
-      updatedRecord = {
-        userId: deterministicUserId,
-        email: emailRaw,
-        name: userPayload.name || userPayload.fullName || 'यूज़र',
-        fullName: userPayload.fullName || userPayload.name || 'यूज़र',
-        username: safeUsername,
-        channelName: userPayload.channelName || userPayload.channelNameHi || '',
-        channelNameHi: userPayload.channelNameHi || userPayload.channelName || '',
-        channelNameEn: userPayload.channelNameEn || '',
-        channelLogoUrl: userPayload.channelLogoUrl || '',
-        channelLogoPngUrl: userPayload.channelLogoPngUrl,
-        channelLogoGifUrl: userPayload.channelLogoGifUrl,
-        channelLogoType: userPayload.channelLogoType || 'png',
-        mobile: userPayload.mobile || userPayload.mobileNumber || '',
-        mobileNumber: userPayload.mobileNumber || userPayload.mobile || '',
-        district: userPayload.district || userPayload.location || '',
-        location: userPayload.location || userPayload.district || '',
-        state: userPayload.state || '',
-        address: userPayload.address || '',
-        pincode: userPayload.pincode || '',
-        websiteUrl: userPayload.websiteUrl || '',
-        socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
-        role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
-        tier: initialTier,
-        planName: initialPlanName,
-        isBlocked: false,
-        blockedAt: null,
-        blockedBy: null,
-        createdAt: now,
-        trialStartedAt: newTrialStart,
-        trialEndsAt: newTrialEnds,
-        isTrialExpired: initialExpiresAt ? (now >= initialExpiresAt) : false,
-        lastLoginAt: now,
-        activatedAt: userPayload.activatedAt || (isSuper ? now : newTrialStart),
-        expiresAt: initialExpiresAt,
-        activatedVia: userPayload.activatedVia || (isSuper ? 'Super Admin Preset' : 'Google Registration'),
-      };
+      userId: deterministicUserId,
+      email: emailRaw,
+      name: userPayload.name || userPayload.fullName || 'यूज़र',
+      fullName: userPayload.fullName || userPayload.name || 'यूज़र',
+      username: safeUsername,
+      channelName: userPayload.channelName || userPayload.channelNameHi || '',
+      channelNameHi: userPayload.channelNameHi || userPayload.channelName || '',
+      channelNameEn: userPayload.channelNameEn || '',
+      channelLogoUrl: userPayload.channelLogoUrl || '',
+      channelLogoPngUrl: userPayload.channelLogoPngUrl,
+      channelLogoGifUrl: userPayload.channelLogoGifUrl,
+      channelLogoType: userPayload.channelLogoType || 'png',
+      mobile: userPayload.mobile || userPayload.mobileNumber || '',
+      mobileNumber: userPayload.mobileNumber || userPayload.mobile || '',
+      district: userPayload.district || userPayload.location || '',
+      location: userPayload.location || userPayload.district || '',
+      state: userPayload.state || '',
+      address: userPayload.address || '',
+      pincode: userPayload.pincode || '',
+      websiteUrl: userPayload.websiteUrl || '',
+      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
+      role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
+      tier: isSuper ? 'ultra' : (userPayload.tier || 'basic'),
+      planName: isSuper ? 'VIP DESK' : (userPayload.planName || 'BASIC'),
+      isBlocked: false,
+      blockedAt: null,
+      blockedBy: null,
+      createdAt: now,
+      trialStartedAt: newTrialStart,
+      trialEndsAt: newTrialEnds,
+      isTrialExpired: false,
+      lastLoginAt: now,
+      activatedAt: isSuper ? now : newTrialStart,
+      expiresAt: isSuper ? 2107057518060 : newTrialEnds,
+      activatedVia: isSuper ? 'Super Admin Preset' : 'Google Registration',
+    };
     users.unshift(updatedRecord);
   }
 
@@ -4127,14 +4091,6 @@ function loadVideosDatabase(): StoredVideoItem[] {
 function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
   try {
     const locations = resolveAllDatabaseLocations("videos_database.json");
-    const extraLocations = [
-      path.join(process.cwd(), "public", "videos_database.json"),
-      path.join(process.cwd(), "web_studio", "public", "videos_database.json"),
-      path.join(process.cwd(), "app", "src", "main", "assets", "news_studio", "videos_database.json"),
-    ];
-    for (const extra of extraLocations) {
-      if (!locations.includes(extra)) locations.push(extra);
-    }
     const jsonStr = JSON.stringify(videos, null, 2);
     for (const loc of locations) {
       try {
@@ -4213,46 +4169,6 @@ app.post("/api/admin/videos/upload", (req, res) => {
     if (!videoData || !videoData.title || !videoData.videoUrl) {
       return res.status(400).json({ error: "वीडियो और शीर्षक दोनों अनिवार्य हैं।" });
     }
-
-    let finalVideoUrl = String(videoData.videoUrl || "").trim();
-    if (finalVideoUrl.startsWith("data:video/") || finalVideoUrl.startsWith("data:application/")) {
-      try {
-        let ext = "mp4";
-        if (finalVideoUrl.startsWith("data:video/webm")) ext = "webm";
-        else if (finalVideoUrl.startsWith("data:video/quicktime")) ext = "mov";
-        else if (finalVideoUrl.startsWith("data:video/x-m4v")) ext = "m4v";
-        const savedFilename = `video_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
-        const base64Data = finalVideoUrl.replace(/^data:[^;]+;base64,/, "");
-        const buffer = Buffer.from(base64Data, "base64");
-        if (!fs.existsSync(UPLOAD_VIDEOS_DIR)) fs.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
-        if (!fs.existsSync(WEB_UPLOAD_VIDEOS_DIR)) fs.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
-        fs.writeFileSync(path.join(UPLOAD_VIDEOS_DIR, savedFilename), buffer);
-        try { fs.writeFileSync(path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename), buffer); } catch {}
-        finalVideoUrl = `/uploads/videos/${savedFilename}`;
-      } catch (err: any) {
-        console.error("Failed to convert base64 video to file:", err);
-      }
-    }
-
-    let finalThumbnailUrl = String(videoData.thumbnailUrl || "").trim();
-    if (finalThumbnailUrl.startsWith("data:image/")) {
-      try {
-        let ext = "jpg";
-        if (finalThumbnailUrl.startsWith("data:image/png")) ext = "png";
-        else if (finalThumbnailUrl.startsWith("data:image/webp")) ext = "webp";
-        const savedFilename = `thumb_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
-        const base64Data = finalThumbnailUrl.replace(/^data:image\/[^;]+;base64,/, "");
-        const buffer = Buffer.from(base64Data, "base64");
-        if (!fs.existsSync(UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
-        if (!fs.existsSync(WEB_UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
-        fs.writeFileSync(path.join(UPLOAD_THUMBNAILS_DIR, savedFilename), buffer);
-        try { fs.writeFileSync(path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename), buffer); } catch {}
-        finalThumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
-      } catch (err: any) {
-        console.error("Failed to convert base64 thumbnail to file:", err);
-      }
-    }
-
     const newVideo: StoredVideoItem = {
       id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: videoData.title.trim(),
@@ -4262,8 +4178,8 @@ app.post("/api/admin/videos/upload", (req, res) => {
       duration: videoData.duration || "01:30",
       channel: videoData.channel || "एडमिन वायरल डेस्क",
       views: videoData.views || "1K देखा गया",
-      videoUrl: finalVideoUrl,
-      thumbnailUrl: finalThumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+      videoUrl: videoData.videoUrl,
+      thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
       category: videoData.category || "वायरल",
       isBonus: Boolean(videoData.isBonus),
       rewardCoins: videoData.rewardCoins ? Number(videoData.rewardCoins) : (videoData.isBonus ? 50 : undefined),
@@ -4791,92 +4707,6 @@ app.post("/api/notifications/mark-read", (req, res) => {
 
 
 // 9. GET Gemini API quota and status
-
-// Diagnostic endpoint: Status of Gemini API integration
-app.get("/api/gemini/diagnostic-status", async (req, res) => {
-  const activeKey = getActiveGeminiKey(req);
-  const hasKey = Boolean(activeKey && activeKey !== "MY_GEMINI_API_KEY");
-  return res.json({
-    configured: hasKey,
-    hasKey,
-    activeModel: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash",
-    models: DEFAULT_FALLBACK_MODELS,
-    status: hasKey ? (quotaExceededInfo.isExceeded ? "quota_warning" : "connected") : "missing_key",
-    statusText: hasKey
-      ? (quotaExceededInfo.isExceeded ? "Google Gemini API कोटा सीमा सक्रिय है" : "Google Gemini API सक्रिय और कनेक्टेड है")
-      : "Gemini API Key सर्वर पर अनुपलब्ध है। कृपया एनवायरनमेंट में GEMINI_API_KEY जोड़ें।",
-    lastChecked: quotaExceededInfo.lastChecked || new Date().toISOString(),
-  });
-});
-
-// Diagnostic endpoint: Safe, lightweight validation test against active Gemini model
-app.post("/api/gemini/diagnostic-test", async (req, res) => {
-  const activeKey = getActiveGeminiKey(req);
-  if (!activeKey || activeKey === "MY_GEMINI_API_KEY") {
-    return res.status(400).json({
-      success: false,
-      configured: false,
-      errorType: "missing_key",
-      message: "सर्वर पर Gemini API Key कॉन्फ़िगर नहीं है। कृपया Firebase App Hosting में GEMINI_API_KEY जोड़ें।",
-    });
-  }
-
-  const startTime = Date.now();
-  try {
-    const ai = getGeminiClient(activeKey);
-    const testModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.8-flash";
-    const testRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-      contents: "Respond with the single word: OK",
-    });
-    const latencyMs = Date.now() - startTime;
-    const replyText = String(testRes?.text || "").trim();
-
-    quotaExceededInfo.isExceeded = false;
-    quotaExceededInfo.lastChecked = new Date().toISOString();
-
-    return res.json({
-      success: true,
-      configured: true,
-      model: testModel,
-      latencyMs,
-      reply: replyText || "OK",
-      status: "connected",
-      message: "Google Gemini API (" + testModel + ") से सुरक्षित कनेक्शन सफल रहा (" + latencyMs + "ms)।",
-      lastChecked: quotaExceededInfo.lastChecked,
-    });
-  } catch (err: any) {
-    const latencyMs = Date.now() - startTime;
-    const msg = String(err?.message || "").toLowerCase();
-    const status = err?.status || err?.code || 500;
-
-    let errorType = "unknown";
-    let hindiMsg = "Gemini API से कनेक्ट करने में अज्ञात त्रुटि आई।";
-
-    if (status === 401 || status === 403 || msg.includes("api key not valid") || msg.includes("invalid api key")) {
-      errorType = "auth_error";
-      hindiMsg = "Gemini API Key अमान्य (Invalid) है। कृपया सही Key दर्ज करें।";
-    } else if (status === 404 || msg.includes("not found") || msg.includes("no longer available")) {
-      errorType = "model_not_found";
-      hindiMsg = "मॉडल उपलब्ध नहीं है। सिस्टम नवीनतम gemini-3.8-flash पर स्विच कर रहा है।";
-    } else if (status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || status === 402) {
-      errorType = "quota_exhausted";
-      hindiMsg = "Gemini API की कोटा सीमा (Rate Limit) पूरी हो गई है। कृपया कुछ देर प्रतीक्षा करें।";
-    } else {
-      hindiMsg = "Gemini API त्रुटि: " + (err?.message?.slice(0, 100) || "कनेक्शन समय समाप्त");
-    }
-
-    return res.status(502).json({
-      success: false,
-      configured: true,
-      errorType,
-      latencyMs,
-      message: hindiMsg,
-      status: "error",
-      lastChecked: new Date().toISOString(),
-    });
-  }
-});
-
 app.get("/api/gemini-quota-status", (_req, res) => {
   return res.json({
     hasKey: Boolean(process.env.GEMINI_API_KEY),
@@ -4944,27 +4774,6 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
 // =========================================================================
 const RSS_SOURCES_FILE = path.join(process.cwd(), "rss_sources_database.json");
 
-const DELETED_RSS_SOURCES_FILE = path.join(process.cwd(), "deleted_rss_sources_ids.json");
-function loadDeletedRssSourceIds(): Set<string> {
-  try {
-    if (fs.existsSync(DELETED_RSS_SOURCES_FILE)) {
-      const raw = fs.readFileSync(DELETED_RSS_SOURCES_FILE, "utf-8");
-      const list = JSON.parse(raw);
-      if (Array.isArray(list)) return new Set(list.map(String));
-    }
-  } catch {}
-  return new Set();
-}
-function markRssSourceAsDeleted(id: string, url?: string) {
-  try {
-    const current = loadDeletedRssSourceIds();
-    if (id) current.add(String(id));
-    if (url) current.add(String(url).trim().toLowerCase());
-    fs.writeFileSync(DELETED_RSS_SOURCES_FILE, JSON.stringify(Array.from(current), null, 2), "utf-8");
-  } catch {}
-}
-
-
 interface AdminRssSourceRecord {
   id: string;
   name: string;
@@ -5008,23 +4817,39 @@ const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
 ];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
-  const deletedIds = loadDeletedRssSourceIds();
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       if (fs.existsSync(loc)) {
         const raw = fs.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const valid = parsed.filter((s: any) => s && s.url && !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
-          return valid;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter((s: any) => s && s.url);
+          if (valid.length > 0) {
+            return valid;
+          }
+        }
+      }
+    }
+    // Fallback 1: check .bak backup file
+    for (const loc of locations) {
+      const backupFile = loc + ".bak";
+      if (fs.existsSync(backupFile)) {
+        const rawBak = fs.readFileSync(backupFile, "utf-8");
+        const parsedBak = JSON.parse(rawBak);
+        if (Array.isArray(parsedBak) && parsedBak.length > 0) {
+          const validBak = parsedBak.filter((s: any) => s && s.url);
+          if (validBak.length > 0) {
+            saveRssSourcesDatabase(validBak);
+            return validBak;
+          }
         }
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return DEFAULT_PRODUCTION_RSS_SOURCES.filter(s => !deletedIds.has(String(s.id)) && !deletedIds.has(String(s.url).trim().toLowerCase()));
+  return DEFAULT_PRODUCTION_RSS_SOURCES;
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
@@ -5603,7 +5428,6 @@ app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
     if (!id) return res.status(400).json({ error: "Source ID is required" });
     let sources = loadRssSourcesDatabase();
     const targetSource = sources.find((s) => s.id === id);
-    markRssSourceAsDeleted(id, targetSource?.url);
     sources = sources.filter((s) => s.id !== id);
     saveRssSourcesDatabase(sources);
 
@@ -7513,9 +7337,6 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    if (!fs.existsSync(UPLOAD_VIDEOS_DIR)) fs.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
-    if (!fs.existsSync(WEB_UPLOAD_VIDEOS_DIR)) fs.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
-
     const filePath = path.join(UPLOAD_VIDEOS_DIR, savedFilename);
     const webFilePath = path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
     fs.writeFileSync(filePath, buffer);
@@ -7553,9 +7374,6 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
 
     const ext = magic.format || "jpg";
     const savedFilename = `thumb_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
-
-    if (!fs.existsSync(UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
-    if (!fs.existsSync(WEB_UPLOAD_THUMBNAILS_DIR)) fs.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
 
     const filePath = path.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
     const webFilePath = path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
@@ -7675,22 +7493,10 @@ app.post("/api/admin/update-user", (req, res) => {
       (u.username && u.username.toLowerCase().trim() === key)
     );
 
-    const tierPlanMap: Record<string, string> = {
-      ultra: 'VIP DESK',
-      professional: 'PRO',
-      advanced: 'ADVANCE',
-      basic: 'BASIC',
-    };
-
     if (idx >= 0) {
-      const newTier = updates.tier || users[idx].tier || 'basic';
-      const resolvedPlanName = updates.planName || (updates.tier ? tierPlanMap[newTier] : users[idx].planName) || 'BASIC';
       users[idx] = {
         ...users[idx],
         ...updates,
-        tier: newTier,
-        planName: resolvedPlanName,
-        updatedAt: Date.now(),
       };
       saveUsersMasterDatabase(users);
       syncUserToProfiles(users[idx]);
@@ -7700,301 +7506,13 @@ app.post("/api/admin/update-user", (req, res) => {
     const allProfiles = loadProfilesDatabase();
     const existing: any = allProfiles[key] || Object.values(allProfiles).find((p: any) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
     const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
-    const newTier = updates.tier || existing.tier || 'basic';
-    const resolvedPlanName = updates.planName || (updates.tier ? tierPlanMap[newTier] : existing.planName) || 'BASIC';
     allProfiles[effectiveKey] = {
       ...existing,
       ...updates,
-      tier: newTier,
-      planName: resolvedPlanName,
       updatedAt: Date.now()
     };
     saveProfilesDatabase(allProfiles);
     return res.json({ success: true, user: allProfiles[effectiveKey] });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// ============================================================================
-// PROMO CODES / COUPONS BACKEND DATABASE & REST ENDPOINTS
-// ============================================================================
-interface BackendPromoCode {
-  id: string;
-  code: string;
-  planId: 'basic' | 'advanced' | 'professional' | 'ultra';
-  planName: 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
-  usageType: 'one_time' | 'multi_use';
-  maxUses?: number;
-  usedCount?: number;
-  status: 'unused' | 'used' | 'disabled';
-  createdAt: number;
-  durationDays: number;
-  isActive: boolean;
-  notes?: string;
-  usedByEmail?: string;
-  usedAt?: number;
-  expiresAt?: number;
-}
-
-const INITIAL_SERVER_PROMO_CODES: BackendPromoCode[] = [
-  {
-    id: 'promo-basic-sample',
-    code: 'NEWSBASIC2026',
-    planId: 'basic',
-    planName: 'BASIC',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'बेसिक सैंपल प्रोमो कोड (30 दिन)',
-  },
-  {
-    id: 'promo-adv-sample',
-    code: 'ADVANCE2026',
-    planId: 'advanced',
-    planName: 'ADVANCE',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'एडवांस सैंपल कोड',
-  },
-  {
-    id: 'promo-pro-sample',
-    code: 'PRO2026',
-    planId: 'professional',
-    planName: 'PRO',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'प्रो सैंपल कोड',
-  },
-  {
-    id: 'promo-vip-sample',
-    code: 'VIP2026',
-    planId: 'ultra',
-    planName: 'VIP DESK',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'वीआईपी डेस्क सैंपल कोड',
-  },
-];
-
-function loadPromoCodesDatabase(): BackendPromoCode[] {
-  try {
-    const locations = resolveAllDatabaseLocations("promo_codes_database.json");
-    for (const loc of locations) {
-      if (fs.existsSync(loc)) {
-        const raw = fs.readFileSync(loc, "utf-8").replace(/^\uFEFF/, "").trim();
-        if (raw && raw.length >= 2) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Error reading promo_codes_database.json:", err);
-  }
-  return [...INITIAL_SERVER_PROMO_CODES];
-}
-
-function savePromoCodesDatabase(codes: BackendPromoCode[]): boolean {
-  try {
-    const locations = resolveAllDatabaseLocations("promo_codes_database.json");
-    const jsonStr = JSON.stringify(codes, null, 2);
-    for (const loc of locations) {
-      try {
-        const dir = path.dirname(loc);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(loc, jsonStr, "utf-8");
-      } catch {}
-    }
-    return true;
-  } catch (err) {
-    console.error("Error saving promo_codes_database.json:", err);
-    return false;
-  }
-}
-
-// 1. GET /api/promo-codes - List all promo codes
-app.get("/api/promo-codes", (_req, res) => {
-  try {
-    const codes = loadPromoCodesDatabase();
-    return res.json({ success: true, promoCodes: codes });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
-
-// 2. POST /api/admin/promo-codes - Create new promo code (Admin authorized)
-app.post("/api/admin/promo-codes", (req, res) => {
-  try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही प्रोमो कोड बना सकते हैं।" });
-    }
-    const { code, planId, durationDays = 30, usageType = 'one_time', maxUses = 1, notes = '' } = req.body;
-    const cleanCode = (code || '').toString().trim().toUpperCase().replace(/\s+/g, '');
-    if (!cleanCode || cleanCode.length < 3) {
-      return res.status(400).json({ error: "मान्य प्रोमो कोड अनिवार्य है (न्यूनतम 3 अक्षर)।" });
-    }
-
-    const validPlanId = (['basic', 'advanced', 'professional', 'ultra'].includes(planId) ? planId : 'basic') as BackendPromoCode['planId'];
-    const tierPlanMap: Record<string, 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK'> = {
-      basic: 'BASIC',
-      advanced: 'ADVANCE',
-      professional: 'PRO',
-      ultra: 'VIP DESK',
-    };
-    const resolvedPlanName = tierPlanMap[validPlanId];
-
-    const codes = loadPromoCodesDatabase();
-    if (codes.some((c) => c.code === cleanCode)) {
-      return res.status(400).json({ error: `प्रोमो कोड "${cleanCode}" पहले से मौजूद है!` });
-    }
-
-    const newPromo: BackendPromoCode = {
-      id: `promo-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
-      code: cleanCode,
-      planId: validPlanId,
-      planName: resolvedPlanName,
-      usageType: usageType === 'multi_use' ? 'multi_use' : 'one_time',
-      maxUses: Number(maxUses) || 1,
-      usedCount: 0,
-      status: 'unused',
-      createdAt: Date.now(),
-      durationDays: Math.max(1, Number(durationDays) || 30),
-      isActive: true,
-      notes: notes || `${resolvedPlanName} प्रोमो कोड (${durationDays} दिन)`,
-    };
-
-    const updated = [newPromo, ...codes];
-    savePromoCodesDatabase(updated);
-
-    return res.json({
-      success: true,
-      message: `प्रोमो कोड "${cleanCode}" सफलतापूर्वक बनाया गया!`,
-      promoCode: newPromo,
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// 3. POST /api/promo-codes/redeem - Redeem promo code and permanently update user entitlement
-app.post("/api/promo-codes/redeem", (req, res) => {
-  try {
-    const { code, userEmail, userId, username } = req.body;
-    const cleanCode = (code || '').toString().trim().toUpperCase().replace(/\s+/g, '');
-    if (!cleanCode) {
-      return res.status(400).json({ error: "कृपया प्रोमो कोड दर्ज करें।" });
-    }
-
-    const codes = loadPromoCodesDatabase();
-    const targetIdx = codes.findIndex((c) => c.code === cleanCode);
-    if (targetIdx === -1) {
-      return res.status(404).json({ error: "अमान्य प्रोमो कोड! यह कोड सिस्टम में मौजूद नहीं है।" });
-    }
-
-    const targetCode = codes[targetIdx];
-    if (!targetCode.isActive || targetCode.status === 'disabled') {
-      return res.status(400).json({ error: "यह प्रोमो कोड वर्तमान में निष्क्रिय (Disabled) है।" });
-    }
-
-    if (targetCode.status === 'used' || (targetCode.usageType === 'one_time' && targetCode.usedAt)) {
-      return res.status(400).json({ error: "यह प्रोमो कोड पहले ही उपयोग किया जा चुका है!" });
-    }
-
-    if (targetCode.expiresAt && targetCode.expiresAt < Date.now()) {
-      return res.status(400).json({ error: "यह प्रोमो कोड समाप्त (Expired) हो चुका है।" });
-    }
-
-    const now = Date.now();
-    const durationDays = targetCode.durationDays || 30;
-    const newExpiresAt = now + durationDays * 24 * 60 * 60 * 1000;
-    const identifier = (userEmail || userId || username || "").toString().toLowerCase().trim();
-
-    // Mark code as used
-    targetCode.usedCount = (targetCode.usedCount || 0) + 1;
-    if (targetCode.usageType === 'one_time' || (targetCode.maxUses && targetCode.usedCount >= targetCode.maxUses)) {
-      targetCode.status = 'used';
-    }
-    targetCode.usedByEmail = identifier;
-    targetCode.usedAt = now;
-    codes[targetIdx] = targetCode;
-    savePromoCodesDatabase(codes);
-
-    // Update authoritative user database
-    let updatedUser: AuthoritativeUser | null = null;
-    if (identifier) {
-      const users = loadUsersMasterDatabase();
-      const userIdx = users.findIndex(u =>
-        (u.email && u.email.toLowerCase().trim() === identifier) ||
-        (u.userId && u.userId.toLowerCase().trim() === identifier) ||
-        (u.username && u.username.toLowerCase().trim() === identifier)
-      );
-
-      if (userIdx >= 0) {
-        users[userIdx] = {
-          ...users[userIdx],
-          tier: targetCode.planId,
-          planName: targetCode.planName,
-          activatedAt: now,
-          expiresAt: newExpiresAt,
-          trialEndsAt: newExpiresAt,
-          isTrialExpired: false,
-          activatedVia: `Promo:${cleanCode}`,
-          updatedAt: now,
-        };
-        updatedUser = users[userIdx];
-        saveUsersMasterDatabase(users);
-        syncUserToProfiles(users[userIdx]);
-      } else {
-        // Create user with new plan entitlement
-        updatedUser = registerOrUpdateUserAuthoritative({
-          email: userEmail || identifier,
-          userId: userId || `usr_${Date.now()}`,
-          tier: targetCode.planId,
-          planName: targetCode.planName,
-          activatedAt: now,
-          expiresAt: newExpiresAt,
-          activatedVia: `Promo:${cleanCode}`,
-        });
-      }
-    }
-
-    return res.json({
-      success: true,
-      message: `🎉 प्रोमो कोड सफलतापूर्वक लागू हुआ! आपका "${targetCode.planName}" प्लान ${durationDays} दिनों के लिए सक्रिय हो गया है।`,
-      planId: targetCode.planId,
-      planName: targetCode.planName,
-      durationDays,
-      expiresAt: newExpiresAt,
-      user: updatedUser,
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-// 4. DELETE /api/admin/promo-codes/:id - Delete promo code
-app.delete("/api/admin/promo-codes/:id", (req, res) => {
-  try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही प्रोमो कोड हटा सकते हैं।" });
-    }
-    const { id } = req.params;
-    let codes = loadPromoCodesDatabase();
-    codes = codes.filter((c) => c.id !== id);
-    savePromoCodesDatabase(codes);
-    return res.json({ success: true, message: "प्रोमो कोड हटा दिया गया।" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -8623,30 +8141,23 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
 });
 
 // Server-side Gemini initialization
-function getActiveGeminiKey(req?: express.Request): string {
-  loadAiKeysConfig();
-  const headerKey = (req?.headers?.["x-gemini-key"] || req?.headers?.["x-goog-api-key"] || "") as string;
-  if (headerKey && headerKey.trim().length > 10) return headerKey.trim();
-  const bodyKey = (req?.body?.geminiApiKey || "") as string;
-  if (bodyKey && bodyKey.trim().length > 10 && bodyKey !== "MY_GEMINI_API_KEY") return bodyKey.trim();
-  return (
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.VITE_GEMINI_API_KEY ||
-    ""
-  ).trim();
-}
-
-function getGeminiClient(keyOverride?: string): GoogleGenAI {
-  const apiKey = (keyOverride || getActiveGeminiKey()).trim();
-  return new GoogleGenAI({
-    apiKey: apiKey || "",
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
+let aiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("GEMINI_API_KEY is not set in environment variables.");
+    }
+    aiClient = new GoogleGenAI({
+      apiKey: apiKey || "",
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
       },
-    },
-  });
+    });
+  }
+  return aiClient;
 }
 
 // Server-side OpenAI initialization (lazy loading)
@@ -8904,13 +8415,6 @@ export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
 }
 
 export function resolveUserTierAndRole(req: express.Request): { tier: string; role: string } {
-  // If request body explicitly specifies userTier, honor it for tier-based enforcement and testing
-  if (req.body?.userTier) {
-    const explicitTier = req.body.userTier.toString().toLowerCase().trim();
-    const explicitRole = (req.body.role || "reporter").toString().toLowerCase().trim();
-    return { tier: explicitTier, role: explicitRole };
-  }
-
   const identifier = extractUserIdentifier(req);
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
@@ -8949,10 +8453,8 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-1.5-flash",
-  "gemini-flash-latest",
   "gemini-3.8-flash",
+  "gemini-flash-latest",
   "gemini-3.1-flash-lite",
 ];
 
@@ -8982,18 +8484,12 @@ async function generateWithFallbackAndRetry(
         lastError = err;
         const msg = String(err?.message || "").toLowerCase();
         const status = err?.status || err?.code || 0;
-        const isDepletedCredits =
-          status === 402 ||
-          msg.includes("402") ||
-          msg.includes("prepayment") ||
-          msg.includes("credits are depleted");
         const is503HighDemand =
           status === 503 ||
           msg.includes("503") ||
           msg.includes("high demand") ||
           msg.includes("unavailable");
         const isRateLimit =
-          isDepletedCredits ||
           status === 429 ||
           msg.includes("429") ||
           msg.includes("resource_exhausted") ||
@@ -9013,19 +8509,14 @@ async function generateWithFallbackAndRetry(
           msg.includes("timeout") ||
           msg.includes("fetch failed");
 
-        if (isRateLimit) {
+        if (isRateLimit || isAccessDeniedOrNotFound) {
           quotaExceededInfo.isExceeded = true;
           quotaExceededInfo.lastChecked = new Date().toISOString();
-        }
-        if (isAccessDeniedOrNotFound) {
-          break;
         }
 
         console.log(
           `[Gemini Call] Model "${model}" (attempt ${attempt + 1}/${maxRetriesPerModel}): ${
-            isDepletedCredits
-              ? "AI Studio Prepayment Credits Depleted (402)"
-              : isRateLimit
+            isRateLimit
               ? "Free tier rate/quota limit reached"
               : is503HighDemand
               ? "503 High Demand"
@@ -9034,11 +8525,6 @@ async function generateWithFallbackAndRetry(
               : "Transient failure"
           }`
         );
-
-        if (isDepletedCredits) {
-          // AI Studio project prepayment credits depleted on project - throw immediately for instant OpenAI/local failover
-          throw err;
-        }
 
         if (is503HighDemand || isRateLimit || isAccessDeniedOrNotFound) {
           break; // Try next fallback model immediately
@@ -10629,8 +10115,9 @@ export function ensureHashtagHierarchy(
 ): string {
   if (!summaryText || typeof summaryText !== "string") return summaryText || "";
 
-  // 1. Separate body text from any existing trailing hashtag block
-  let rawBody = summaryText.replace(/(?:\n\s*(?:#[a-zA-Z0-9_\u0900-\u097F]+[\s,]*)+)+$/gu, "").trim();
+  // 1. Separate body text from any existing hashtag line
+  const parts = summaryText.split(/\n\s*#/);
+  let rawBody = parts[0].trim();
 
   // Strip all URLs, links, and click artifacts (Section 7)
   rawBody = stripAllUrlsAndHyperlinks(rawBody);
@@ -10644,8 +10131,8 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
 
-  // a. Strip all lingering inline or trailing hashtags from body text
-  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, "").trim();
+  // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
+  rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
 
   // Strip press note flattery using Attachment 5
   rawBody = sanitizePressNoteFlattery(rawBody, false);
@@ -10669,64 +10156,48 @@ export function ensureHashtagHierarchy(
   let finalBodyText = "";
 
   if (mode === "bullet") {
-    // Structured bullet-point news summary: 1 intro sentence + 3-5 verified bullets (Module 2.2)
-    const rawLines = rawBody
+    // Structured bullet-point news summary (Section 8B)
+    const bulletLines = rawBody
       .split(/\n+/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+      .map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim())
+      .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
 
-    let introSentence = "";
-    const bulletCandidates: string[] = [];
-
-    if (rawLines.length > 0 && !rawLines[0].startsWith('•') && !rawLines[0].startsWith('-') && !rawLines[0].startsWith('*')) {
-      introSentence = stripAllUrlsAndHyperlinks(rawLines[0]).replace(/[।\.\s]+$/, "") + "।";
-      for (let i = 1; i < rawLines.length; i++) {
-        const cleaned = rawLines[i].replace(/^[•\-\*\d\.\s]+/, "").trim();
-        if (cleaned.length > 8 && /[\u0900-\u097F]/.test(cleaned)) {
-          bulletCandidates.push(cleaned);
-        }
-      }
-    } else {
-      for (const line of rawLines) {
-        const cleaned = line.replace(/^[•\-\*\d\.\s]+/, "").trim();
-        if (cleaned.length > 8 && /[\u0900-\u097F]/.test(cleaned)) {
-          bulletCandidates.push(cleaned);
-        }
-      }
-    }
-
-    if (bulletCandidates.length > 0) {
-      const distinct = Array.from(new Set(bulletCandidates)).slice(0, 5);
-      const bulletBlock = distinct
+    if (bulletLines.length > 0) {
+      finalBodyText = bulletLines
+        .slice(0, 6)
         .map((b) => `• ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}।`)
         .join("\n");
-      finalBodyText = introSentence ? `${introSentence}\n\n${bulletBlock}` : bulletBlock;
     } else {
       const sentences = rawBody
         .split(/[।\n]+|\.\s+/)
         .map((s) => stripAllUrlsAndHyperlinks(s).trim())
         .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
-      if (sentences.length > 1) {
-        const intro = `${sentences[0].replace(/[।\.\s]+$/, "")}।`;
-        const bullets = sentences.slice(1, 5).map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`).join("\n");
-        finalBodyText = `${intro}\n\n${bullets}`;
-      } else {
-        finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["मुख्य घटनाक्रम का विवरण"])
-          .map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`)
-          .join("\n");
-      }
+      finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["मुख्य घटनाक्रम का संक्षिप्त विवरण।"])
+        .map((s) => `• ${s.replace(/[।\.\s]+$/, "")}।`)
+        .join("\n");
     }
   } else if (mode === "short") {
-    // Short caption: 1 to 3 short complete sentences (Module 2.3)
-    const sentences = rawBody
-      .split(/[।\n]+|\.\s+/)
-      .map((s) => stripAllUrlsAndHyperlinks(s).trim())
-      .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+    // Exactly 2 substantive paragraphs (Section 8C)
+    const rawParagraphs = rawBody
+      .split(/\n{2,}/)
+      .map((p) => p.replace(/[ \t]{2,}/g, " ").trim())
+      .filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
 
-    if (sentences.length >= 1) {
-      finalBodyText = sentences.slice(0, 3).map((s) => `${s.replace(/[।\.\s]+$/, "")}।`).join(" ");
+    if (rawParagraphs.length >= 2) {
+      finalBodyText = rawParagraphs.slice(0, 2).join("\n\n");
     } else {
-      finalBodyText = rawBody;
+      const sentences = rawBody
+        .split(/[।\n]+|\.\s+/)
+        .map((s) => stripAllUrlsAndHyperlinks(s).trim())
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+      if (sentences.length >= 2) {
+        const mid = Math.ceil(sentences.length / 2);
+        const p1 = sentences.slice(0, mid).join("। ") + "।";
+        const p2 = sentences.slice(mid).join("। ") + "।";
+        finalBodyText = `${p1}\n\n${p2}`;
+      } else {
+        finalBodyText = rawParagraphs[0] || rawBody;
+      }
     }
   } else {
     // Mode 'detailed': Exactly 3 substantive paragraphs (Section 8A)
@@ -10771,27 +10242,25 @@ export function ensureHashtagHierarchy(
     }
   }
 
-  // Final cleanup of body text to guarantee zero URLs and zero stray inline hashtags
-  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText).replace(/#[a-zA-Z0-9_\u0900-\u097F]+/gu, "").trim();
+  // Final cleanup of body text to guarantee zero URLs
+  finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText);
 
-  // 3. Extract and construct hashtags (Permanent Hashtag Hierarchy Rule)
-  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/gu) || [])
+  // 3. Extract and construct hashtags (Section 9)
+  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
-  // b. 1st tag: Configured username (#[username]), omit if absent or generic
-  const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined", "ainewsmaker", "ai_news_maker", "breakingnewswala", "bnwtv"].includes(cleanUser.toLowerCase());
+  const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
+  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : "";
 
   let locTag = "";
   if (location && location !== "विशेष कवरेज") {
-    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/gu, "");
+    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "");
     if (primaryCity && primaryCity.toLowerCase() !== "location" && primaryCity !== "स्थान") {
       locTag = `#${primaryCity}News`;
     }
   }
 
-  // c. Middle 4 to 6 hashtags: news location/topic related, STRICTLY excluding #ainewsmaker
   const filteredMiddleTags: string[] = [];
   for (const t of rawTags) {
     const lower = t.toLowerCase();
@@ -10804,26 +10273,20 @@ export function ensureHashtagHierarchy(
       lower === "#ब्रेकिंगन्यूजवाला" ||
       lower.startsWith("#http") ||
       lower.startsWith("#www") ||
-      lower.startsWith("#url") ||
-      t.includes("-") ||
-      t.length > 25 ||
-      (t.match(/_/g) || []).length >= 2
+      lower.startsWith("#url")
     ) {
       continue;
     }
     filteredMiddleTags.push(t);
   }
 
-  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase()) && (!userTag || userTag.toLowerCase() !== locTag.toLowerCase())) {
+  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
     filteredMiddleTags.unshift(locTag);
   }
-  const defaultSeeds = ["#BreakingNews", "#HindiNews", "#LatestUpdate", "#NewsUpdate", "#CityNews"];
+  const defaultSeeds = ["#BreakingNews", "#HindiNews", "#LatestUpdate", "#NewsUpdate"];
   for (const seed of defaultSeeds) {
-    if (filteredMiddleTags.length >= 6) break;
-    if (
-      (!userTag || userTag.toLowerCase() !== seed.toLowerCase()) &&
-      !filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())
-    ) {
+    if (filteredMiddleTags.length >= 5) break;
+    if (!filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
       filteredMiddleTags.push(seed);
     }
   }
@@ -10851,10 +10314,9 @@ export function ensureHashtagHierarchy(
     }
   }
 
-  // d. Final hashtag: MANDATORY and strictly only #AINewsMaker as the very last tag
+  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
   orderedTags.push("#AINewsMaker");
 
-  // e. Exactly ONE blank line between body text and hashtag block
   return `${finalBodyText}\n\n${orderedTags.join(" ")}`.trim();
 }
 
@@ -11627,36 +11089,6 @@ function ensureWordCount(text: string, minWords: number, maxWords: number, fille
 }
 
 /**
- * Strips publisher ellipses, trailing dangling single Devanagari consonants (e.g. cut "क", "ख"),
- * and trailing hanging postpositions/connectors that result from abrupt sentence truncations.
- */
-export function stripDanglingIncompleteWords(text: string): string {
-  if (!text) return '';
-  let s = String(text).trim();
-  // Remove multi-dots, unicode ellipses, and trailing dashes
-  s = s.replace(/(?:\.{2,}|…|--+|—+)+/g, ' ').trim();
-
-  let prev = '';
-  let iters = 0;
-  while (s && s !== prev && iters < 6) {
-    prev = s;
-    iters++;
-    // Strip trailing punctuation & spaces
-    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
-
-    // Strip trailing standalone single Devanagari consonant / incomplete letter (e.g. cut "क", "ख")
-    s = s.replace(/\s+[\u0915-\u0939]$/u, '').trim();
-
-    // Strip trailing dangling postpositions / conjunctions that make a headline incomplete
-    s = s.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले|किए|गए|हुए|रहा|रही|रहे|था|थी|थे))$/u, '').trim();
-
-    // Strip trailing punctuation again if connector removal exposed punctuation
-    s = s.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
-  }
-  return s;
-}
-
-/**
  * Helper: Generate 5 distinct, balanced headline options across the 5 editorial angles
  * Strictly anchored to the SAME verified primary news event (BREAKING NEWS WALA standard)
  * 1. The core event — direct, hard news, who did what where
@@ -11670,13 +11102,13 @@ export function generate5BalancedHeadlineOptions(
   factSentences: string[] = [],
   location: string = ""
 ): string[] {
-  const cleanBase = stripDanglingIncompleteWords(
-    sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
-  );
+  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true)
+    .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
+    .trim();
 
   const validFacts = (factSentences || [])
-    .map((s) => stripDanglingIncompleteWords(sanitizePressNoteFlattery(cleanHeadlineText(s), true)))
-    .filter((s) => s.length >= 20 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
+    .map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim())
+    .filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
 
   const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "मुख्य समाचार अपडेट");
   const locPrefix = location && location !== "विशेष कवरेज" ? `${location}: ` : "";
@@ -11716,7 +11148,7 @@ export function generate5BalancedHeadlineOptions(
   for (const d of clauseDelims) {
     if (uniqueOptions.length >= 5) break;
     if (base.includes(d)) {
-      const parts = base.split(d).map((p) => stripDanglingIncompleteWords(p)).filter((p) => p.length >= 10);
+      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
       if (parts.length >= 2) {
         addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
         addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
@@ -11736,14 +11168,12 @@ export function generate5BalancedHeadlineOptions(
     addOptionIfClean(`${actor} की एंट्री से चर्चा में ${action}`, true);
   }
 
-  // Action / Announcement restructuring using complete meaningful clauses from base
+  // Action / Announcement restructuring using words from base
   if (base.includes(" ने ") || base.includes(" को ") || base.includes(" में ")) {
-    const clauseMatch = base.match(/^(.+?(?:ने|को|में)\s+[^\s,।]+(?:\s+[^\s,।]+){2,8})/u);
-    if (clauseMatch && clauseMatch[1]) {
-      const naturalClause = stripDanglingIncompleteWords(clauseMatch[1]);
-      if (naturalClause.length >= 20 && naturalClause !== base) {
-        addOptionIfClean(naturalClause);
-      }
+    const words = base.split(/\s+/);
+    if (words.length >= 10) {
+      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
+      addOptionIfClean(naturalCut);
     }
   }
 
@@ -11801,7 +11231,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  cleaned = stripDanglingIncompleteWords(cleaned);
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 
   // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
@@ -11830,7 +11260,8 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
   }
-  return stripDanglingIncompleteWords(result);
+  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
+  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 }
 
 /**
@@ -11870,18 +11301,6 @@ export function fitHeadlinesTo5TierRanges(
         result.push(fitted);
       }
     }
-  }
-
-  let seedIdx = 1;
-  while (result.length < 5) {
-    const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
-      ? baseOrContext.trim()
-      : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (result[0] || 'मुख्य समाचार'));
-    const backup = fitSingleHeadlineToTier(`अपडेट ${seedIdx}: ${baseText}`, 150);
-    if (!result.includes(backup)) {
-      result.push(backup);
-    }
-    seedIdx++;
   }
 
   return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
@@ -12019,14 +11438,12 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - सभी 5 हेडलाइन विकल्प स्रोत की उसी एक मुख्य समाचार घटना (Primary Event) पर आधारित होने चाहिए।
    - आलेख के बॉडी वाक्यों को ज्यों-का-त्यों कॉपी-पेस्ट करके हेडलाइन कभी न बनाएं।
    - कड़ा नियम (NO UNRELATED FILLER PHRASES): मनगढ़ंत या असंबद्ध प्रशासनिक जुमले (जैसे 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'स्थिति पर अधिकारियों की लगातार निगरानी', 'पूरे घटनाक्रम पर शासन की सख्त नजर') कभी भी न जोड़ें जब तक कि मूल खबर में वास्तव में ऐसा न लिखा हो! मनोरंजन, खेल, कारोबार या संस्कृति की खबरों में प्रशासनिक शब्द कभी न जोड़ें। केवल आलेख के मूल विषय से जुड़े शब्दों का ही प्रयोग करें।
-2. 5 संतुलित हेडलाइन लेखन शैलियाँ (5 WRITING STYLES OF THE SAME CENTRAL EVENT):
-   - सभी 5 विकल्प एक ही मुख्य घटना, एक ही मुख्य विषय और एक ही मूल तथ्यात्मक अर्थ को व्यक्त करें (कहानी का कोण न बदलें)।
-   - पाँचों विकल्प केवल वाक्य रचना, शब्दावली, शुरुआती वाक्यांश और प्रस्तुति शैली में भिन्न हों—विषय या कोण बदलकर नहीं:
-     * शैली 1: मुख्य घटना का सीधा, स्पष्ट और तथ्यात्मक विवरण।
-     * शैली 2: उसी मुख्य घटना को उसके सबसे महत्वपूर्ण सत्यापित तथ्य के साथ प्रस्तुत करना।
-     * शैली 3: उसी मुख्य घटना को उसके सीधे रिपोर्ट किए गए परिणाम या प्रभाव के साथ प्रस्तुत करना।
-     * शैली 4: उसी मुख्य घटना को अधिक स्पष्ट शब्दावली और प्रासंगिक सत्यापित विवरण के साथ प्रस्तुत करना।
-     * शैली 5: उसी मुख्य घटना को सशक्त, स्वाभाविक और प्रकाशन-योग्य पत्रकारीय भाषा में प्रस्तुत करना।
+2. 5 संतुलित हेडलाइन दृष्टिकोण (5 EDITORIAL ANGLES OF THE SAME EVENT):
+   - विकल्प 1: मुख्य घटना (Core Event) — किसने क्या किया, कहाँ हुआ, सीधा, तथ्यपरक और पूरा विवरण।
+   - विकल्प 2: व्यक्ति या मुख्य पात्र कोण (Actor/Person Focus) — मुख्य व्यक्ति, भूमिका या आधिकारिक निर्णय।
+   - विकल्प 3: कार्रवाई या परिणाम (Action/Consequence) — घटना से जुड़ी कार्रवाई, असर या विकास।
+   - विकल्प 4: मुख्य बिंदु या दावा (Key Development/Quote) — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान।
+   - विकल्प 5: सारगर्भित व प्रभावशाली (High-Impact Angle) — उसी मुख्य घटना का संतुलित, धारदार रूप।
 3. एकल हेडलाइन लंबाई नियम — 100 से 150 वर्ण (SINGLE HEADLINE LENGTH RULE — 100 TO 150 CHARACTERS):
    - प्रत्येक हेडलाइन विकल्प के लिए लक्ष्य लंबाई: 100 से 150 दृश्यमान वर्ण (visible characters), अंतिम सीमा: अधिकतम 150 वर्ण।
    - टीवी न्यूज कार्ड, ब्रेकिंग रिबन और 4:5 ग्राफिक कार्ड पर सीधे प्रदर्शित होने योग्य चुस्त, स्पष्ट, तथ्यपरक और असरदार हेडलाइन लिखें।
@@ -12045,12 +11462,9 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" कभी न जोड़ें।
    - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
    - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं। सीधे घटना के पुष्ट तथ्यों, मुख्य व्यक्तियों, स्थान और घटनाक्रम से शुरुआत करें।
-   - summary व captionDetailed: पूर्ण विवरण सहित ठीक 3 अर्थपूर्ण पैराग्राफ (substantive paragraphs) लिखें:
-     * पैराग्राफ 1: मुख्य घटना और संदर्भ (क्या हुआ, कहाँ हुआ, अनिवार्य संदर्भ)।
-     * पैराग्राफ 2: सत्यापित विवरण (महत्वपूर्ण नाम, आंकड़े, तारीखें, बयान व घटनाक्रम)।
-     * पैराग्राफ 3: रिपोर्ट की गई प्रतिक्रिया, अगला कदम या महत्व (पुष्ट प्रतिक्रिया या प्रासंगिक ज्ञात तथ्य)।
-   - captionBullets: एक संक्षिप्त परिचयात्मक वाक्य से शुरू करें, जिसके बाद स्रोत पर आधारित 3 से 5 अलग-अलग सत्यापित बुलेट बिंदु (• बिंदु।) हों।
-   - captionShort: 1 से 3 छोटे, पूर्ण हिंदी वाक्य जो मुख्य घटना व सबसे महत्वपूर्ण सत्यापित विवरण को व्यक्त करें।
+   - summary व captionDetailed: पूर्ण विवरण सहित ठीक 3 विस्तृत पैराग्राफ (substantive paragraphs) लिखें। इसमें समाचार के सभी महत्वपूर्ण तथ्य, नाम, स्थान, दिनांक, संदर्भ, और आगे की कार्रवाई शामिल होनी चाहिए। छोटा या अधूरा कैप्शन कभी न लिखें।
+   - captionBullets: सीधे पहले बुलेट पॉइंट '• ' से शुरू करें। 3 से 5 पंक्तियों में मुख्य बिंदु, प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो।
+   - captionShort: ठीक 2 संतुलित पैराग्राफ, सीधे मुख्य घटनाक्रम व तथ्यों से शुरू।
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
@@ -12063,11 +11477,11 @@ Strictly return a valid JSON object matching these exact keys:
 {
   "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम, लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
   "headlineOptions": [
-    "सीधा व स्पष्ट मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "मुख्य सत्यापित तथ्य के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "रिपोर्ट किए गए परिणाम के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "अधिक स्पष्ट विवरण के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "सशक्त पत्रकारीय शैली में घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
+    "विकल्प 1: मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
   ],
   "highlightWords": ["मुख्य शब्द 1", "मुख्य शब्द 2"],
   "formattedHeadline": "हेडलाइन जिसमें मुख्य शब्द [yellow]शब्द[/yellow] से चिह्नित हों",
@@ -12148,7 +11562,7 @@ Content: ${extracted.content ? extracted.content.slice(0, 2000) : ""}
 }
 
 // Process News Link or Natural Language Command / Text into News Graphic structure
-app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessingAccessMiddleware, async (req, res) => {
+app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
   const {
     input,
     command,
@@ -12162,13 +11576,57 @@ app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessi
   } = req.body;
   try {
     const rawInputText = input || command;
-    if (!rawInputText && !linkUrl && !customPrompt) {
-      return res.status(400).json({ error: "Please provide a command, text, link or prompt" });
+    const requestedNewsId = String(req.body.newsId || "").trim();
+    if (!rawInputText && !linkUrl && !customPrompt && !requestedNewsId) {
+      return res.status(400).json({ error: "Please provide a command, text, link, prompt, or newsId" });
     }
 
     const channelUsername = (req.body.channelUsername || req.body.username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
     const userHashtag = channelUsername ? `#${channelUsername}` : "";
     let parsedData: any = null;
+
+    // Short-circuit: Check if this newsId corresponds to an approved editorial item (avoids redundant Gemini/OpenAI API calls)
+    if (requestedNewsId) {
+      const db = loadApprovedEditorialDatabase();
+      let approvedRecord = db[requestedNewsId];
+      if (!approvedRecord) {
+        const newsDb = loadNewsDatabase();
+        const post = newsDb.find((p) => p.id === requestedNewsId);
+        if (post && (post.status === "APPROVED" || !post.status)) {
+          approvedRecord = getOrEnsureApprovedEditorial(post);
+        }
+      }
+      if (approvedRecord && Array.isArray(approvedRecord.headlines) && approvedRecord.headlines.length > 0) {
+        let finalDetailed = approvedRecord.captionDetailed || "";
+        if (userHashtag && finalDetailed.includes("#")) {
+          if (!finalDetailed.toLowerCase().includes(userHashtag.toLowerCase())) {
+            finalDetailed = finalDetailed.replace(/(#[^\s#]+)/, `${userHashtag} $1`);
+          }
+        }
+        return res.json({
+          success: true,
+          isApproved: true,
+          actualProvider: "editorial-archive",
+          data: {
+            headline: approvedRecord.headlines[0] || approvedRecord.title,
+            headlineOptions: approvedRecord.headlines,
+            formattedHeadline: approvedRecord.headlines[0] || approvedRecord.title,
+            location: approvedRecord.location || "",
+            category: approvedRecord.category || "",
+            summary: finalDetailed,
+            captionDetailed: finalDetailed,
+            captionBullets: approvedRecord.captionBullets,
+            captionShort: approvedRecord.captionShort,
+            tags: approvedRecord.tags || ["#BreakingNews", "#AINewsMaker"],
+            pickedImages: {
+              main: approvedRecord.imageUrl || undefined,
+            },
+            extractedArticlePhotos: approvedRecord.additionalPhotos || [],
+            isApprovedEditorial: true,
+          },
+        });
+      }
+    }
 
     const effectiveTemplateId = template_id || "graphic_001";
     const tplConfig = getTemplateConfig(effectiveTemplateId);
@@ -12347,9 +11805,9 @@ app.post(["/api/process-news-command", "/api/process-news"], enforceNewsProcessi
     };
 
     const runGemini = async (): Promise<any> => {
-      const activeGeminiKey = (req.body?.geminiApiKey || getActiveGeminiKey(req) || "").trim();
+      const activeGeminiKey = (req.body.geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
       if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY कॉन्फ़िगर नहीं है। कृपया क्लाउड सेटिंग्स में API Key दर्ज करें अथवा .env में GEMINI_API_KEY सेट करें।");
+        throw new Error("GEMINI_API_KEY is not configured");
       }
       const ai = new GoogleGenAI({
         apiKey: activeGeminiKey,
@@ -12897,19 +12355,20 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     };
 
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
-Generate exactly 5 distinct, publication-ready headline options representing 5 writing styles of the SAME central news event in pure Hindi Devanagari script:
-- All 5 options must be based strictly on the same central event, same main subject, and same factual meaning. Differ ONLY in wording, sentence structure, opening phrase, and presentation style—do NOT switch angles.
-- STRICT RULE: Do NOT append generic administrative or police filler words (such as 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story.
+Generate exactly 5 distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
+- All 5 options must be based strictly on the same central event (no secondary stories or unrelated paragraphs).
+- STRICT RULE: Do NOT append generic administrative or police filler words (such as 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story. For entertainment, sports, business, or lifestyle news, keep the phrasing strictly relevant to the subject.
 - Single headline length policy: Target 100 to 150 visible characters per headline, with an absolute maximum of 150 visible characters.
-- Style 1: Direct and clear statement of the main event.
-- Style 2: The same event expressed with its most important verified fact.
-- Style 3: The same event expressed with a directly reported result/impact, where supported.
-- Style 4: The same event expressed with clearer wording and a relevant verified detail.
-- Style 5: The same event expressed in strong, natural, publication-ready journalistic language.
-- No ending punctuation (. or ।). No labels like 'विकल्प 1' or bracketed counts like '[58/100]'.
+- Aim for the 100-150 character range when supported by verified facts, with no artificial filler, padding, or fabricated administrative phrases.
+- Option 1: Core event (direct, hard news)
+- Option 2: Key person/actor angle
+- Option 3: Action/Development angle
+- Option 4: Crucial fact/Quote angle
+- Option 5: Crisp, punchy journalistic angle
+- No ending punctuation (. or ।). No tier labels or bracketed counts like '[58/100]'.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
-    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित 5 लेखन शैलियाँ हों, लक्ष्य 100-150 वर्ण, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
+    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित हों, लक्ष्य 100-150 वर्ण, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 2500)}
 ${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
@@ -12917,11 +12376,11 @@ ${excludeTitles.length > 0 ? `पिछले विकल्प जिन्ह
 JSON Output Schema:
 {
   "headlineOptions": [
-    "सीधा व स्पष्ट मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "मुख्य सत्यापित तथ्य के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "रिपोर्ट किए गए परिणाम के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "अधिक स्पष्ट विवरण के साथ घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "सशक्त पत्रकारीय भाषा में घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
+    "विकल्प 1: मुख्य घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
   ]
 }`;
 
@@ -12941,9 +12400,9 @@ JSON Output Schema:
     };
 
     const tryGemini = async (): Promise<string[]> => {
-      const activeGeminiKey = (geminiApiKey || getActiveGeminiKey(req) || "").trim();
+      const activeGeminiKey = (geminiApiKey || process.env.GEMINI_API_KEY || "").trim();
       if (!activeGeminiKey || activeGeminiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("GEMINI_API_KEY कॉन्फ़िगर नहीं है। कृपया क्लाउड सेटिंग्स में API Key दर्ज करें अथवा .env में GEMINI_API_KEY सेट करें।");
+        throw new Error("GEMINI_API_KEY not configured");
       }
       const ai = new GoogleGenAI({
         apiKey: activeGeminiKey,
@@ -12978,28 +12437,16 @@ JSON Output Schema:
         });
       }
     } else {
-      let lastGeminiErr: any = null;
       try {
         aiGeneratedOptions = await tryGemini();
         actualProvider = "gemini";
       } catch (geminiErr: any) {
-        lastGeminiErr = geminiErr;
-        console.warn("[News AI] Headline regen Gemini error:", geminiErr?.message || geminiErr);
         if (aiConfig.aiModelAccess?.gemini?.allowFallback) {
           try {
             aiGeneratedOptions = await tryOpenAI();
             actualProvider = "openai";
           } catch {}
         }
-      }
-      if (!aiGeneratedOptions || aiGeneratedOptions.length === 0) {
-        const errDetail = lastGeminiErr?.message || "Gemini सेवा अस्थायी रूप से अनुपलब्ध है";
-        return res.status(502).json({
-          success: false,
-          error: `Google Gemini AI से हेडलाइन पुनर्जनन में त्रुटि: ${errDetail}। कृपया पुनः प्रयास करें।`,
-          canRetry: true,
-          provider: "gemini",
-        });
       }
     }
 
@@ -13076,7 +12523,7 @@ const CATEGORY_KEYWORDS_LIST = [
 
 export function cleanHeadlineText(text: string): string {
   if (!text) return "";
-  let cleaned = text;
+  let cleaned = cleanHtmlEntities(text).replace(/&[a-zA-Z0-9#]+;/g, "").replace(/&;/g, "");
 
   // 1. Remove UI status / loading text
   cleaned = cleaned
@@ -13235,9 +12682,6 @@ export function cleanHeadlineText(text: string): string {
 
   // 15. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-
-  // 16. Strip publisher ellipses and dangling incomplete words/letters
-  cleaned = stripDanglingIncompleteWords(cleaned);
 
   return cleaned;
 }
@@ -14103,12 +13547,16 @@ app.post("/api/generate-video-headlines", async (req, res) => {
   ]
 }`;
 
-        const response = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-          },
-        });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), 3500));
+        const response = (await Promise.race([
+          generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+            },
+          }),
+          timeoutPromise,
+        ])) as any;
 
         const raw = response.text?.trim() || "";
         const parsed = JSON.parse(raw);

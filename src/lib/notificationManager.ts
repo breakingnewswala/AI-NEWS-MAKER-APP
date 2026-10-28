@@ -53,24 +53,10 @@ export function getNotifications(): AppNotification[] {
   }
 }
 
-export function syncAppBadge(count?: number): void {
-  if (typeof navigator !== 'undefined' && 'setAppBadge' in navigator) {
-    try {
-      const unread = count !== undefined ? count : getUnreadNotificationCount();
-      if (unread > 0) {
-        (navigator as any).setAppBadge(unread).catch(() => {});
-      } else if ('clearAppBadge' in navigator) {
-        (navigator as any).clearAppBadge().catch(() => {});
-      }
-    } catch {}
-  }
-}
-
 export function saveNotifications(list: AppNotification[]) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    syncAppBadge(list.filter((n) => n.unread).length);
     window.dispatchEvent(new CustomEvent('ai_news_notifications_updated', { detail: list }));
   } catch {}
 }
@@ -268,16 +254,16 @@ export function playNormalNotificationSound(): void {
 
     osc.type = 'sine';
     osc.frequency.setValueAtTime(880, now);
-    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.14);
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
 
-    gain.gain.setValueAtTime(settings.normalVolume * 0.40, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    gain.gain.setValueAtTime(settings.normalVolume * 0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start(now);
-    osc.stop(now + 0.28);
+    osc.stop(now + 0.25);
   } catch {}
 }
 
@@ -374,7 +360,3 @@ export function triggerBreakingNewsAlert(story: { id: string; title: string; sum
   return true;
 }
 
-
-export function getUnreadNotificationCount(): number {
-  return getNotifications().filter((n) => n.unread).length;
-}

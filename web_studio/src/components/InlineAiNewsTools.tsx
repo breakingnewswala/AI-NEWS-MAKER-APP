@@ -39,16 +39,13 @@ export interface AutoFillNewsData {
   autoTrigger?: boolean;
   timestamp?: number;
   additionalPhotos?: string[];
-  editorialApproved?: boolean;
-  approvedHeadline?: string;
+  isApproved?: boolean;
   approvedHeadlines?: string[];
-  approvedCaptionDetailed?: string;
-  approvedCaptionBullets?: string;
-  approvedCaptionShort?: string;
-  approvedPhotos?: string[];
-  approvedPhotoLayout?: 'single' | 'two_vertical' | 'three_grid';
-  approvedBy?: string;
-  approvedAt?: string;
+  headlineOptions?: string[];
+  captionDetailed?: string;
+  captionBullets?: string;
+  captionShort?: string;
+  tags?: string[];
 }
 
 interface InlineAiNewsToolsProps {
@@ -283,6 +280,26 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const lastTriggerPayloadRef = React.useRef<string>('');
   const currentAbortControllerRef = React.useRef<AbortController | null>(null);
   const isResetRef = React.useRef<boolean>(false);
+
+  // Progressive Loading Stages for News Processing
+  const [loadingStageIndex, setLoadingStageIndex] = useState<number>(0);
+  const loadingStages = [
+    'मूल समाचार स्रोत और तथ्यों का विश्लेषण किया जा रहा है...',
+    'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
+    '5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन तैयार हो रहे हैं...',
+    'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+  ];
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStageIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setLoadingStageIndex((prev) => (prev + 1) % 4);
+    }, 850);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   // Synchronize state changes to localStorage so navigation across tabs preserves generated headlines
   useEffect(() => {
@@ -574,6 +591,54 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       });
     }
 
+    // Approved Editorial Content: apply 5 approved headlines and captions directly without AI API calls
+    if (autoFillNews.isApproved && Array.isArray(autoFillNews.approvedHeadlines) && autoFillNews.approvedHeadlines.length > 0) {
+      const approvedOpts = autoFillNews.approvedHeadlines.slice(0, 5);
+      const topHeadline = approvedOpts[0] || autoFillNews.title || '';
+      
+      const channelUsername = getActiveCaptionUsername(card, currentUser);
+      const userHashtag = channelUsername ? `#${channelUsername}` : '';
+      let formattedCaption = autoFillNews.captionDetailed || autoFillNews.summary || rawContent;
+      if (userHashtag && formattedCaption.includes('#')) {
+        if (!formattedCaption.toLowerCase().includes(userHashtag.toLowerCase())) {
+          formattedCaption = formattedCaption.replace(/(#[^\s#]+)/, `${userHashtag} $1`);
+        }
+      }
+
+      setHeadlineOptions(approvedOpts);
+      setSelectedHeadlineIndex(0);
+      setLoading(false);
+      autoFillNews.autoTrigger = false;
+
+      const editorialResult: AIAnalysisResult = {
+        headline: topHeadline,
+        headlineOptions: approvedOpts,
+        formattedHeadline: topHeadline,
+        highlightWords: [],
+        location: cleanLocationField(autoFillNews.location || card.location || ''),
+        category: cleanCategoryField(autoFillNews.category || card.category || ''),
+        summary: formattedCaption,
+        captionDetailed: formattedCaption,
+        captionBullets: autoFillNews.captionBullets,
+        captionShort: autoFillNews.captionShort,
+        tags: autoFillNews.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
+      };
+      setResult(editorialResult);
+
+      onChange({
+        headline: topHeadline,
+        formattedHeadline: topHeadline,
+        location: editorialResult.location,
+        category: editorialResult.category,
+        summary: formattedCaption,
+      });
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(formattedCaption).then(() => setCaptionCopied(true)).catch(() => {});
+      }
+      return;
+    }
+
     // Only auto-trigger once per triggerKey. If already triggered or if headlines already exist for this session, DO NOT re-trigger!
     if (autoFillNews.autoTrigger && !isAlreadyTriggered) {
       if (globalActiveTriggerKey === triggerKey && globalIsExecuting) {
@@ -671,6 +736,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setHeadlineOptions([]);
     setSelectedHeadlineIndex(0);
     setGeneratedAiImageUrl(null);
+
+    window.dispatchEvent(
+      new CustomEvent('ai_news_show_branded_loader', {
+        detail: {
+          mode: 'ai_generation',
+          title: 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
+        },
+      })
+    );
 
     const tplConfig = getTemplateHeadlineConfig(card.frameDesign);
     const targetMaxLines = tplConfig.headline_max_lines;
@@ -1026,6 +1100,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setLoading(false);
       isExecutingRef.current = false;
       globalIsExecuting = false;
+      window.dispatchEvent(new CustomEvent('ai_news_hide_branded_loader'));
     }
   };
 
@@ -1073,6 +1148,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setResult(null);
     setHeadlineOptions([]);
     setGeneratedAiImageUrl(null);
+
+    window.dispatchEvent(
+      new CustomEvent('ai_news_show_branded_loader', {
+        detail: {
+          mode: 'ai_generation',
+          title: 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
+        },
+      })
+    );
 
     const tplConfig = getTemplateHeadlineConfig(card.frameDesign);
     const targetMaxLines = tplConfig.headline_max_lines;
@@ -1306,6 +1390,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     } finally {
       setLoading(false);
       isExecutingRef.current = false;
+      window.dispatchEvent(new CustomEvent('ai_news_hide_branded_loader'));
     }
   };
 
@@ -1571,19 +1656,38 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   return (
     <div className="space-y-3 relative">
-      {/* Full Blocking Loading Overlay */}
+      {/* Dedicated Viewport-Centered Loading Modal ("खबर जनरेट हो रही है, वेट करें") */}
       {loading && (
-        <div className="absolute inset-0 z-50 bg-neutral-950/90 backdrop-blur-sm rounded-xl p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in">
-          <div className="relative">
-            <Loader2 className="w-12 h-12 text-yellow-400 animate-spin" />
-            <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-pulse" />
-          </div>
-          <div className="space-y-1.5 max-w-md">
-            <h4 className="text-base font-black text-white">
-              मूल समाचार पढ़ा और सत्यापित किया जा रहा है... कृपया प्रतीक्षा करें
-            </h4>
-            <p className="text-xs text-neutral-300">
-              स्रोत आलेख का विश्लेषण कर 5 संतुलित हेडलाइन्स व सोशल मीडिया कैप्शन तैयार किए जा रहे हैं
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-neutral-900 border-2 border-amber-500/60 rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in zoom-in-95">
+            {/* Spinning glowing circular indicator */}
+            <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-amber-500/20 animate-ping" />
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-500/60 flex items-center justify-center shadow-lg">
+                <Loader2 className="w-9 h-9 text-yellow-400 animate-spin" />
+              </div>
+              <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-bounce" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-xl font-black text-white font-['Baloo_2'] tracking-wide">
+                अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...
+              </h3>
+              <p className="text-xs sm:text-sm text-amber-300 font-semibold min-h-[36px] flex items-center justify-center transition-all px-2">
+                {loadingStages[loadingStageIndex]}
+              </p>
+            </div>
+
+            {/* Smooth progress bar */}
+            <div className="w-full bg-neutral-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-amber-500 to-yellow-400 h-2 rounded-full animate-pulse transition-all duration-700"
+                style={{ width: `${Math.min(100, (loadingStageIndex + 1) * 25)}%` }}
+              />
+            </div>
+
+            <p className="text-[11px] text-neutral-400">
+              ⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा
             </p>
           </div>
         </div>
@@ -2112,52 +2216,78 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           )}
 
           {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts (Available to All Plans on Initial Generation) */}
+          {/* Headline Options: Exactly 5 Simple Numbered Options with Radio Buttons and Character Counts */}
           {headlineOptions.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="text-[11px] text-neutral-400 font-bold">
-                तैयार 5 संतुलित AI हेडलाइन विकल्प (पसंदीदा पर एक क्लिक करें):
-              </span>
-              {headlineOptions.slice(0, 5).map((opt, idx) => {
-                const isSelected = selectedHeadlineIndex === idx;
-                const displayText = isSelected && result?.headline ? result.headline : opt;
-                const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
-                const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
-                const charCount = cleanDisplay.length;
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-neutral-300 font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span>तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):</span>
+                </span>
+                <span className="text-[10px] text-amber-300/80 font-mono">100-150 वर्ण सीमा</span>
+              </div>
+              <div className="space-y-1.5" role="radiogroup" aria-label="हेडलाइन विकल्प">
+                {headlineOptions.slice(0, 5).map((opt, idx) => {
+                  const isSelected = selectedHeadlineIndex === idx;
+                  const displayText = isSelected && result?.headline ? result.headline : opt;
+                  const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+                  const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
+                  const charCount = cleanDisplay.length;
+                  const angleNames = [
+                    'मुख्य घटना (Core Event)',
+                    'पात्र/व्यक्ति कोण (Actor/Authority)',
+                    'कार्रवाई/परिणाम (Action/Consequence)',
+                    'मुख्य बिंदु/तथ्य (Key Detail/Quote)',
+                    'सारगर्भित (High-Impact)',
+                  ];
 
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => handleSelectHeadline(opt, idx)}
-                    className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1 ${
-                      isSelected
-                        ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
-                        : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                          विकल्प {idx + 1}
-                        </span>
-                        <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
-                          <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
-                          <span className="text-neutral-600">•</span>
-                          <span>{charCount} अक्षर</span>
-                        </span>
-                      </div>
-                      {isSelected && (
-                        <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold">
-                          <Check className="w-3.5 h-3.5 text-yellow-400" />
-                          <span>चयनित</span>
+                  return (
+                    <label
+                      key={idx}
+                      onClick={() => handleSelectHeadline(opt, idx)}
+                      className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
+                        isSelected
+                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="headline_selection_radio"
+                            checked={isSelected}
+                            onChange={() => handleSelectHeadline(opt, idx)}
+                            className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
+                          />
+                          <span className="text-[11px] font-black text-yellow-400 tracking-wide">
+                            विकल्प {idx + 1}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-400 border border-neutral-800">
+                            {angleNames[idx] || `कोण ${idx + 1}`}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                    <div className="leading-snug text-neutral-200">
-                      {displayText}
-                    </div>
-                  </div>
-                );
-              })}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
+                            <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
+                            <span className="text-neutral-600">•</span>
+                            <span className={charCount > 150 ? 'text-red-400' : 'text-neutral-300'}>{charCount} अक्षर</span>
+                          </span>
+                          {isSelected && (
+                            <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold shrink-0">
+                              <Check className="w-3.5 h-3.5 text-yellow-400" />
+                              <span className="hidden sm:inline">सक्रिय</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="leading-snug text-neutral-200 pl-6">
+                        {displayText}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
 

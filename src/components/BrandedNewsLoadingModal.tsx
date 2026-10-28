@@ -1,64 +1,94 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
+
+export type BrandedLoaderMode = 'ai_generation' | 'graphic_preparation' | 'approved_presentation';
 
 export interface BrandedNewsLoadingModalProps {
   isOpen: boolean;
-  mode?: 'headline' | 'graphic' | 'approved_loading';
+  mode?: BrandedLoaderMode;
   title?: string;
   durationSeconds?: number;
+  subtitles?: string[];
+  subtitleIntervalMs?: number;
   onComplete?: () => void;
   onCancel?: () => void;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
-// 5 exact rotating supporting taglines (rotating every 2 seconds during the 10-second minimum duration)
-const DEFAULT_SUBTITLES: string[] = [
+// 4 distinct journalistic Hindi subtitles rotating every ~5 seconds per requirements
+export const BRANDED_LOADER_SUBTITLES: string[] = [
   'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
   'समाचार के मुख्य तथ्य और संदर्भ व्यवस्थित किए जा रहे हैं...',
-  '5 संतुलित और प्रभावी हेडलाइन विकल्प तैयार हो रहे हैं...',
-  'सोशल मीडिया के लिए विस्तृत और संक्षिप्त कैप्शन बनाए जा रहे हैं...',
+  'संतुलित हेडलाइन और उपयोगी कैप्शन तैयार किए जा रहे हैं...',
   'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
 ];
 
 export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = ({
   isOpen,
-  mode = 'graphic',
+  mode = 'graphic_preparation',
   title,
-  durationSeconds = 10,
+  durationSeconds,
+  subtitles = BRANDED_LOADER_SUBTITLES,
+  subtitleIntervalMs = 5000,
   onComplete,
   onCancel,
+  error = null,
+  onRetry,
 }) => {
   const [subtitleIndex, setSubtitleIndex] = useState<number>(0);
+  const [isSubtitleFading, setIsSubtitleFading] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const timerRef = useRef<any>(null);
   const countdownRef = useRef<any>(null);
   const completeFiredRef = useRef<boolean>(false);
 
-  // Subtitle rotation every 2 seconds across 10-second duration
+  // Check for reduced motion preference
+  const prefersReducedMotion = typeof window !== 'undefined'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false;
+
+  // Subtitle rotation approximately every 5 seconds (5000ms) with smooth fade transition
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || error) {
+      if (timerRef.current) clearInterval(timerRef.current);
       setSubtitleIndex(0);
+      setIsSubtitleFading(false);
+      return;
+    }
+
+    setSubtitleIndex(0);
+    setIsSubtitleFading(false);
+
+    timerRef.current = setInterval(() => {
+      if (prefersReducedMotion) {
+        setSubtitleIndex((prev) => (prev + 1) % subtitles.length);
+      } else {
+        setIsSubtitleFading(true);
+        setTimeout(() => {
+          setSubtitleIndex((prev) => (prev + 1) % subtitles.length);
+          setIsSubtitleFading(false);
+        }, 250);
+      }
+    }, subtitleIntervalMs);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isOpen, error, subtitles, subtitleIntervalMs, prefersReducedMotion]);
+
+  // Duration countdown for fixed presentation intervals (e.g. 10-second approved news presentation)
+  useEffect(() => {
+    if (!isOpen || error || !durationSeconds || durationSeconds <= 0) {
+      if (countdownRef.current) clearInterval(countdownRef.current);
       setElapsedSeconds(0);
       completeFiredRef.current = false;
       return;
     }
 
-    setSubtitleIndex(0);
     setElapsedSeconds(0);
     completeFiredRef.current = false;
-
-    timerRef.current = setInterval(() => {
-      setSubtitleIndex((prev) => (prev + 1) % DEFAULT_SUBTITLES.length);
-    }, 2000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isOpen]);
-
-  // Duration countdown (10-second minimum requirement)
-  useEffect(() => {
-    if (!isOpen || !durationSeconds || durationSeconds <= 0) return;
 
     countdownRef.current = setInterval(() => {
       setElapsedSeconds((prev) => {
@@ -69,7 +99,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
           if (onComplete) {
             setTimeout(() => {
               onComplete();
-            }, 50);
+            }, 60);
           }
           return durationSeconds;
         }
@@ -80,20 +110,25 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [isOpen, durationSeconds, onComplete]);
+  }, [isOpen, error, durationSeconds, onComplete]);
 
   if (!isOpen) return null;
 
+  // Operation-Specific Main Loading Message:
+  // For actual AI headline generation: “अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...”
+  // For actual graphic preparation, layout rendering, or photo mapping: “ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...”
   const defaultTitle =
-    mode === 'graphic' || mode === 'approved_loading'
-      ? 'कृपया प्रतीक्षा करें, समाचार सामग्री का विश्लेषण कर ग्राफिक और हेडलाइन तैयार की जा रही हैं...'
-      : 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...';
+    mode === 'ai_generation'
+      ? 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
+      : 'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...';
 
   const displayTitle = title || defaultTitle;
-  const currentSubtitle = DEFAULT_SUBTITLES[subtitleIndex] || DEFAULT_SUBTITLES[0];
+  const currentSubtitle = subtitles[subtitleIndex] || subtitles[0];
+
+  // Calculated progress for presentation timer or indeterminate animation
   const progressPercent = durationSeconds && durationSeconds > 0
     ? Math.min(100, Math.round((elapsedSeconds / durationSeconds) * 100))
-    : Math.min(100, Math.round((elapsedSeconds / 10) * 100));
+    : null;
 
   const modalContent = (
     <div
@@ -102,13 +137,25 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
       aria-labelledby="branded-loading-title"
       className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950 border-2 border-amber-500/50 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-amber-500/20 space-y-5 animate-in zoom-in-95 duration-200">
-        {/* Subtle decorative glow */}
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-amber-500/15 blur-2xl rounded-full pointer-events-none" />
+      <div className="relative w-full max-w-md bg-gradient-to-b from-neutral-900 via-neutral-950 to-black border-2 border-amber-500/60 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-amber-500/25 space-y-5 animate-in zoom-in-95 duration-200">
+        {/* Subtle decorative gold top glow */}
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-amber-500/20 blur-2xl rounded-full pointer-events-none" />
 
-        {/* Authentic AI NEWS MAKER Brand Logo */}
-        <div className="flex flex-col items-center justify-center gap-2">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-slate-900/90 border border-amber-500/50 p-2 shadow-lg flex items-center justify-center overflow-hidden">
+        {/* Optional top close / cancel button */}
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-white rounded-full bg-neutral-800/60 hover:bg-neutral-800 transition-colors cursor-pointer"
+            title="रद्द करें"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Authentic AI NEWS MAKER Brand Logo & Editorial Desk Badge */}
+        <div className="flex flex-col items-center justify-center gap-2 pt-1">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-neutral-900 border border-amber-500/60 p-2 shadow-lg flex items-center justify-center overflow-hidden">
             <img
               src="/assets/ai_news_maker_logo.png"
               alt="AI News Maker Logo"
@@ -118,69 +165,115 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               }}
             />
           </div>
-          <span className="text-[11px] font-black tracking-widest text-amber-400 uppercase">
+          <span className="text-[11px] font-black tracking-widest text-amber-400 uppercase drop-shadow-sm">
             AI News Maker • संपादकीय डेस्क
           </span>
         </div>
 
-        {/* Recognizable rotating animation & progress indicator */}
-        <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping opacity-60" />
-          <div className="absolute inset-0 rounded-full border-2 border-t-amber-400 border-r-amber-500 border-b-transparent border-l-transparent animate-spin" />
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+        {/* Spinner Section: matches screenshot #910 with rotating amber circle and top sparkle */}
+        <div className="relative w-20 h-20 mx-auto flex items-center justify-center my-1">
+          {/* Subtle outer pulse */}
+          <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping opacity-40 pointer-events-none" />
+
+          {/* Main golden rotating ring */}
+          <div className="absolute inset-1 rounded-full border-2 border-amber-500/30 border-t-amber-400 border-r-amber-500 animate-spin" />
+
+          {/* Decorative Sparkle icon placed at upper-right border matching Screenshot #910 */}
+          <div className="absolute -top-1 -right-1 p-1 bg-amber-500/20 rounded-full border border-amber-400/40">
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+          </div>
+
+          {/* Center inner container with animated loader */}
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
             <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
           </div>
         </div>
 
-        {/* Main prominent message (approx 2 lines on mobile) */}
-        <div className="space-y-2">
-          <h2
-            id="branded-loading-title"
-            className="text-base sm:text-lg font-black text-white leading-snug font-['Noto_Sans_Devanagari'] px-2"
-          >
-            {displayTitle}
-          </h2>
-
-          {/* Rotating yellow subtitle changing every 2 seconds with smooth transition */}
-          <p
-            key={subtitleIndex}
-            className="text-xs sm:text-sm font-semibold text-amber-300 leading-relaxed font-['Noto_Sans_Devanagari'] min-h-[40px] flex items-center justify-center transition-all duration-300 animate-in fade-in"
-          >
-            {currentSubtitle}
-          </p>
-        </div>
-
-        {/* Progress bar showing 10-second countdown */}
-        <div className="space-y-1.5 px-4">
-          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-200 rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
+        {/* Error state alert if an error occurred */}
+        {error ? (
+          <div className="p-4 rounded-2xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs sm:text-sm space-y-3 shadow-lg">
+            <div className="flex items-center justify-center gap-2 text-rose-300 font-bold">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>प्रक्रिया पूरी नहीं हो सकी</span>
+            </div>
+            <p className="text-xs text-rose-200/90 leading-relaxed">{error}</p>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>पुनः प्रयास करें</span>
+                </button>
+              )}
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  बंद करें
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex justify-between text-[11px] text-slate-300 font-bold">
-            <span className="text-amber-300">तैयारी जारी है...</span>
-            <span className="text-amber-400 font-mono">{Math.floor(elapsedSeconds)}s / {durationSeconds}s</span>
-          </div>
-        </div>
+        ) : (
+          <>
+            {/* Main prominent message in white Hindi typography */}
+            <div className="space-y-2.5 px-2">
+              <h2
+                id="branded-loading-title"
+                className="text-base sm:text-lg font-black text-white leading-snug font-['Noto_Sans_Devanagari'] drop-shadow-sm"
+              >
+                {displayTitle}
+              </h2>
 
-        {/* Brand supporting line near bottom */}
-        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium">
-          <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span>AI News Maker • डिजिटल पत्रकारिता का नया युग</span>
-        </div>
+              {/* Rotating yellow subtitle changing every ~5 seconds with smooth fade transition */}
+              <p
+                className={`text-xs sm:text-sm font-semibold text-amber-300 leading-relaxed font-['Noto_Sans_Devanagari'] min-h-[42px] flex items-center justify-center px-1 transition-opacity duration-300 ${
+                  isSubtitleFading ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
+                }`}
+              >
+                {currentSubtitle}
+              </p>
+            </div>
 
-        {/* Cancel button if provided */}
-        {onCancel && (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer underline"
-            >
-              रद्द करें
-            </button>
-          </div>
+            {/* Smooth animated progress bar */}
+            <div className="space-y-1.5 px-3">
+              <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden border border-neutral-700/80">
+                {progressPercent !== null ? (
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 transition-all duration-200 rounded-full shadow-sm"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                ) : (
+                  <div className="h-full w-2/5 bg-gradient-to-r from-amber-500 to-yellow-300 rounded-full animate-pulse transition-all duration-300" />
+                )}
+              </div>
+              <div className="flex justify-between text-[11px] font-bold text-neutral-400">
+                <span className="text-amber-400">
+                  {mode === 'approved_presentation' ? 'संपादकीय सामग्री प्रस्तुतीकरण...' : 'तैयारी जारी है...'}
+                </span>
+                {progressPercent !== null && (
+                  <span className="text-amber-300 font-mono">
+                    {Math.floor(elapsedSeconds)}s / {durationSeconds}s
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Brand supporting line at bottom */}
+            <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>
+                {mode === 'ai_generation'
+                  ? '⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा'
+                  : '⚡ पत्रकारिता मानकों के अनुसार सटीक लेआउट तैयार किया जा रहा है'}
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>
