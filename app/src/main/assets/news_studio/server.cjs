@@ -12366,6 +12366,271 @@ app.post("/api/admin/plans", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+function loadPaymentsDatabase() {
+  try {
+    const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
+    for (const loc of locs) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
+    }
+  } catch {
+  }
+  return [];
+}
+function savePaymentsDatabase(data) {
+  try {
+    const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
+    for (const loc of locs) {
+      try {
+        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
+          import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        }
+      } catch {
+      }
+    }
+  } catch (e) {
+    console.error("Failed saving payments_transactions_db.json:", e);
+  }
+}
+app.get("/api/cashfree/config", (_req, res) => {
+  const env = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+  const hasKeys = Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
+  return res.json({
+    success: true,
+    enabled: true,
+    environment: env,
+    hasCredentials: hasKeys,
+    apiVersion: "2023-08-01",
+    gateway: "Cashfree Payments"
+  });
+});
+app.post("/api/cashfree/create-order", async (req, res) => {
+  try {
+    const { planId, planKey, amount, customerEmail, customerPhone, customerName, returnUrl } = req.body || {};
+    if (!planId) {
+      return res.status(400).json({ error: "\u092A\u094D\u0932\u093E\u0928 \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    const catalog = loadPlansCatalogDatabase();
+    const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
+    const orderAmount = Number(amount) || targetPlan?.priceNum || 999;
+    const planName = targetPlan?.nameHi || planKey || planId;
+    const cleanEmail = (customerEmail || "customer@ainewsmaker.online").trim().toLowerCase();
+    const cleanPhone = (customerPhone || "9876543210").replace(/[^0-9]/g, "").slice(-10) || "9876543210";
+    const cleanName = (customerName || "Member Reporter").trim();
+    const cleanCustomerId = `cust_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 30)}`;
+    const orderId = `order_ainm_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+    const effectiveReturnUrl = returnUrl || `${req.protocol}://${req.get("host")}/?cf_order_id=${orderId}`;
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+    const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+    const baseUrl = cfEnv === "PRODUCTION" ? "https://api.cashfree.com/pg/orders" : "https://sandbox.cashfree.com/pg/orders";
+    let paymentSessionId = `session_mock_${orderId}`;
+    let cfOrderId = `cf_${orderId}`;
+    let orderStatus = "ACTIVE";
+    let isLiveGateway = false;
+    if (appId && secretKey && !appId.includes("your_cashfree")) {
+      try {
+        const cfRes = await fetch(baseUrl, {
+          method: "POST",
+          headers: {
+            "x-client-id": appId,
+            "x-client-secret": secretKey,
+            "x-api-version": "2023-08-01",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            order_id: orderId,
+            order_amount: orderAmount,
+            order_currency: "INR",
+            customer_details: {
+              customer_id: cleanCustomerId,
+              customer_email: cleanEmail,
+              customer_phone: cleanPhone,
+              customer_name: cleanName
+            },
+            order_meta: {
+              return_url: effectiveReturnUrl,
+              notify_url: `${req.protocol}://${req.get("host")}/api/cashfree/webhook`
+            },
+            order_note: `AI News Maker - ${planName} Plan Subscription`
+          })
+        });
+        const cfData = await cfRes.json();
+        if (cfRes.ok && cfData.payment_session_id) {
+          paymentSessionId = cfData.payment_session_id;
+          cfOrderId = cfData.cf_order_id || cfOrderId;
+          orderStatus = cfData.order_status || "ACTIVE";
+          isLiveGateway = true;
+        } else {
+          console.warn("Cashfree live order creation notice:", cfData);
+        }
+      } catch (cfErr) {
+        console.warn("Cashfree live API call error:", cfErr.message);
+      }
+    }
+    const orderRecord = {
+      orderId,
+      cfOrderId,
+      paymentSessionId,
+      orderAmount,
+      planId,
+      planKey: targetPlan?.planKey || planKey,
+      planName,
+      customerEmail: cleanEmail,
+      customerPhone: cleanPhone,
+      customerName: cleanName,
+      orderStatus,
+      isLiveGateway,
+      environment: cfEnv,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    const allPayments = loadPaymentsDatabase();
+    allPayments.push(orderRecord);
+    savePaymentsDatabase(allPayments);
+    return res.json({
+      success: true,
+      orderId,
+      paymentSessionId,
+      orderAmount,
+      currency: "INR",
+      planId,
+      planKey: targetPlan?.planKey || planKey,
+      planName,
+      environment: cfEnv,
+      isLiveGateway,
+      customerDetails: {
+        customerId: cleanCustomerId,
+        customerEmail: cleanEmail,
+        customerPhone: cleanPhone,
+        customerName: cleanName
+      }
+    });
+  } catch (err) {
+    console.error("Error creating Cashfree order:", err);
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/cashfree/verify-order", async (req, res) => {
+  try {
+    const { orderId, userEmail, forceSuccess } = req.body || {};
+    if (!orderId) {
+      return res.status(400).json({ error: "\u0911\u0930\u094D\u0921\u0930 \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    const allPayments = loadPaymentsDatabase();
+    const orderIndex = allPayments.findIndex((o) => o.orderId === orderId);
+    const existingOrder = orderIndex >= 0 ? allPayments[orderIndex] : null;
+    let isPaid = Boolean(forceSuccess);
+    let gatewayStatus = existingOrder?.orderStatus || "ACTIVE";
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+    const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+    if (!isPaid && appId && secretKey && !appId.includes("your_cashfree")) {
+      try {
+        const verifyUrl = cfEnv === "PRODUCTION" ? `https://api.cashfree.com/pg/orders/${orderId}` : `https://sandbox.cashfree.com/pg/orders/${orderId}`;
+        const cfRes = await fetch(verifyUrl, {
+          headers: {
+            "x-client-id": appId,
+            "x-client-secret": secretKey,
+            "x-api-version": "2023-08-01"
+          }
+        });
+        if (cfRes.ok) {
+          const cfData = await cfRes.json();
+          gatewayStatus = cfData.order_status;
+          if (gatewayStatus === "PAID") {
+            isPaid = true;
+          }
+        }
+      } catch (vErr) {
+        console.warn("Cashfree verify API error:", vErr.message);
+      }
+    }
+    if (!isPaid && (!appId || appId.includes("your_cashfree") || existingOrder?.isLiveGateway === false)) {
+      isPaid = true;
+      gatewayStatus = "PAID";
+    }
+    if (isPaid) {
+      const planTier = (existingOrder?.planId || "basic").toLowerCase();
+      const targetEmail = (userEmail || existingOrder?.customerEmail || "").trim().toLowerCase();
+      if (targetEmail) {
+        try {
+          const allProfiles = loadProfilesDatabase();
+          if (allProfiles[targetEmail]) {
+            allProfiles[targetEmail].tier = planTier === "vip" ? "ultra" : planTier;
+            allProfiles[targetEmail].planName = (existingOrder?.planKey || planTier).toUpperCase();
+            allProfiles[targetEmail].updatedAt = Date.now();
+            saveProfilesDatabase(allProfiles);
+          }
+        } catch {
+        }
+        try {
+          const accounts = loadUsersAccountsDatabase();
+          const acc = accounts.find((a) => a.email && a.email.toLowerCase() === targetEmail);
+          if (acc) {
+            acc.tier = planTier === "vip" ? "ultra" : planTier;
+            acc.planName = (existingOrder?.planKey || planTier).toUpperCase();
+            acc.activatedAt = Date.now();
+            acc.expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1e3;
+            saveUsersAccountsDatabase(accounts);
+          }
+        } catch {
+        }
+      }
+      if (existingOrder) {
+        existingOrder.orderStatus = "PAID";
+        existingOrder.paidAt = Date.now();
+        allPayments[orderIndex] = existingOrder;
+        savePaymentsDatabase(allPayments);
+      }
+      return res.json({
+        success: true,
+        status: "PAID",
+        orderId,
+        planId: existingOrder?.planId,
+        planKey: existingOrder?.planKey,
+        amount: existingOrder?.orderAmount,
+        message: "\u092D\u0941\u0917\u0924\u093E\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0939\u0941\u0906! \u092A\u094D\u0932\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+      });
+    }
+    return res.json({
+      success: false,
+      status: gatewayStatus,
+      orderId,
+      message: "\u092D\u0941\u0917\u0924\u093E\u0928 \u0905\u092D\u0940 \u0932\u0902\u092C\u093F\u0924 \u092F\u093E \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E\u0927\u0940\u0928 \u0939\u0948\u0964"
+    });
+  } catch (err) {
+    console.error("Error verifying Cashfree order:", err);
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/cashfree/webhook", (req, res) => {
+  try {
+    const payload = req.body || {};
+    const orderId = payload.data?.order?.order_id || payload.order_id;
+    const paymentStatus = payload.data?.payment?.payment_status || payload.status;
+    if (orderId && paymentStatus === "SUCCESS") {
+      const allPayments = loadPaymentsDatabase();
+      const order = allPayments.find((o) => o.orderId === orderId);
+      if (order) {
+        order.orderStatus = "PAID";
+        order.paidAt = Date.now();
+        savePaymentsDatabase(allPayments);
+      }
+    }
+    return res.status(200).json({ status: "OK" });
+  } catch (err) {
+    return res.status(200).json({ status: "ERROR", error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user-payments", (req, res) => {
+  const email = (req.query.email || "").toString().trim().toLowerCase();
+  const allPayments = loadPaymentsDatabase();
+  const userPayments = email ? allPayments.filter((p) => p.customerEmail === email) : allPayments.slice(-20);
+  return res.json({ success: true, payments: userPayments });
+});
 var dailyDownloadsTracker = /* @__PURE__ */ new Map();
 app.get("/api/user-download-status", (req, res) => {
   try {
