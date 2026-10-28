@@ -1218,7 +1218,7 @@ export default function App() {
 
     const handleDeepLinkVideo = (e: any) => {
       const videoId = e.detail?.videoId;
-      const targetVideo = videoItems.find((v) => String(v.id) === String(videoId));
+      const targetVideo = videos.find((v) => String(v.id) === String(videoId));
       if (targetVideo) {
         setStudioInitialItem(targetVideo);
         if (targetVideo.videoUrl) setStudioInitialVideo(targetVideo.videoUrl);
@@ -1237,7 +1237,7 @@ export default function App() {
       window.removeEventListener('ai_news_open_specific_post', handleDeepLinkPost);
       window.removeEventListener('ai_news_open_specific_video', handleDeepLinkVideo);
     };
-  }, [posts, videoItems]);
+  }, [posts, videos]);
 
   const isAdminUser = isUserAdmin(currentUser);
   const actionAllowance = isUserActionAllowed(currentUser, userSubscription);
