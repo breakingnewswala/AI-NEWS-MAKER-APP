@@ -21,10 +21,13 @@ import {
   RefreshCw,
   User,
   Shield,
-  ExternalLink,
   X,
   Eye,
   ChevronDown,
+  History,
+  PlusCircle,
+  CheckCircle2,
+  Video,
 } from 'lucide-react';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft } from '../lib/draftsManager';
@@ -38,6 +41,48 @@ import {
   updateInquiryStatus,
   deleteInquiry,
 } from '../lib/supportInboxManager';
+
+export interface ProjectHistoryItem {
+  id: string;
+  title: string;
+  type: 'graphic' | 'video';
+  status: 'exported' | 'generated' | 'draft';
+  thumbnailUrl?: string;
+  timestamp: number;
+  data?: any;
+}
+
+export function loadUserProjectHistory(): ProjectHistoryItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('ai_news_maker_projects_history_v1');
+    const list: ProjectHistoryItem[] = raw ? JSON.parse(raw) : [];
+
+    // Also include user saved drafts that are not sample defaults
+    const drafts = getSavedDrafts().filter((d) => !d.id.startsWith('draft-sample-'));
+    const draftItems: ProjectHistoryItem[] = drafts.map((d) => ({
+      id: d.id,
+      title: d.headline || d.title || 'समाचार प्रोजेक्ट',
+      type: (d.draftType === 'video' || (d as any).videoData) ? 'video' : 'graphic',
+      status: 'draft',
+      thumbnailUrl: d.thumbnailUrl || (d.cardData as any)?.photoUrl || (d.cardData as any)?.images?.main,
+      timestamp: d.updatedAt || d.createdAt || Date.now(),
+      data: d,
+    }));
+
+    const map = new Map<string, ProjectHistoryItem>();
+    list.forEach((p) => map.set(p.id, p));
+    draftItems.forEach((d) => {
+      if (!map.has(d.id)) {
+        map.set(d.id, d);
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+  } catch {
+    return [];
+  }
+}
 
 interface NewsroomScreenWebProps {
   onOpenStudioWithDraft: (draft: NewsDraft) => void;
@@ -70,6 +115,12 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       [section]: !prev[section],
     }));
   };
+
+  // 4 Primary Navigation Tabs per Section 4: create_new, support, history, drafts
+  const [activeTab, setActiveTab] = useState<'create_new' | 'support' | 'history' | 'drafts'>('create_new');
+  const [projectHistory, setProjectHistory] = useState<ProjectHistoryItem[]>(() => loadUserProjectHistory());
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'graphic' | 'video'>('all');
 
   // Drafts state
   const [drafts, setDrafts] = useState<NewsDraft[]>(() => getSavedDrafts());
@@ -110,10 +161,14 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     const handleInquiriesUpdate = () => {
       setInquiries(getSupportInquiries());
     };
+    const handleHistoryUpdate = () => {
+      setProjectHistory(loadUserProjectHistory());
+    };
 
     window.addEventListener('ai_news_drafts_updated', handleDraftsUpdate);
     window.addEventListener('ai_news_support_inquiry_added', handleInquiriesUpdate);
     window.addEventListener('ai_news_support_inquiry_updated', handleInquiriesUpdate);
+    window.addEventListener('ai_news_project_history_updated', handleHistoryUpdate);
 
     // Sync remote support inquiries from Cloud
     const userId = currentUser?.email || currentUser?.username;
@@ -126,6 +181,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       window.removeEventListener('ai_news_drafts_updated', handleDraftsUpdate);
       window.removeEventListener('ai_news_support_inquiry_added', handleInquiriesUpdate);
       window.removeEventListener('ai_news_support_inquiry_updated', handleInquiriesUpdate);
+      window.removeEventListener('ai_news_project_history_updated', handleHistoryUpdate);
     };
   }, [currentUser, isAdmin]);
 
@@ -163,6 +219,15 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       (d.category && d.category.toLowerCase().includes(q)) ||
       (d.title && d.title.toLowerCase().includes(q))
     );
+  });
+
+  const filteredHistory = projectHistory.filter((p) => {
+    if (historyTypeFilter !== 'all' && p.type !== historyTypeFilter) return false;
+    if (historySearchQuery) {
+      const q = historySearchQuery.toLowerCase();
+      return p.title.toLowerCase().includes(q);
+    }
+    return true;
   });
 
   // Speech Recognition Setup (Web Speech API)
@@ -375,13 +440,301 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </div>
       </div>
 
-      {/* 2. Three Expandable Sections: 1. Drafts & Projects, 2. Support Inbox, 3. ePaper (Coming Soon) */}
+      {/* 2. Four Primary Navigation Tabs per Requirement 4 in exact order */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-lg">
+        <button
+          type="button"
+          onClick={() => setActiveTab('create_new')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'create_new'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <PlusCircle className="w-4 h-4" />
+          <span>1. नया बनाएँ</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('support')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'support'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>2. सपोर्ट इनबॉक्स</span>
+          {pendingCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-bold">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <History className="w-4 h-4" />
+          <span>3. प्रोजेक्ट हिस्ट्री</span>
+          {projectHistory.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-amber-300 border border-slate-700 text-[10px] font-bold">
+              {projectHistory.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('drafts')}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'drafts'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <FolderOpen className="w-4 h-4" />
+          <span>4. ड्राफ्ट्स एवं प्रोजेक्ट्स</span>
+          {drafts.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold">
+              {drafts.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* TAB 1: CREATE NEW VIEW */}
+      {activeTab === 'create_new' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              onClick={onNavigateToStudio}
+              className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border-2 border-amber-500/50 hover:border-amber-400 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl hover:shadow-amber-500/10 cursor-pointer group flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+                  <ImageIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black text-white group-hover:text-amber-300 transition-colors">
+                      नया न्यूज़ ग्राफिक बनाएं (Graphic Studio)
+                    </h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                      1080x1350 HD
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    5 संतुलित AI हेडलाइन्स, टीवी न्यूज़ फ्रेम्स, 1-4 फोटो लेआउट और चैनल हेडर-फुटर के साथ पेशेवर सोशल मीडिया न्यूज़ कार्ड बनाएं।
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs font-black text-amber-400 pt-2 border-t border-slate-800">
+                <span>ग्राफिक स्टूडियो खोलें ➔</span>
+                <span className="text-[10px] text-slate-400 font-normal">9 न्यूज़ फ्रेम्स उपलब्ध</span>
+              </div>
+            </div>
+
+            <div
+              onClick={onNavigateToVideos}
+              className="bg-gradient-to-br from-red-950/40 via-slate-900 to-slate-950 border-2 border-red-500/50 hover:border-red-400 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl hover:shadow-red-500/10 cursor-pointer group flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+                  <Video className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black text-white group-hover:text-red-300 transition-colors">
+                      नया वीडियो न्यूज़ बनाएं (Video Studio)
+                    </h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/20 text-red-300 font-bold border border-red-500/30">
+                      रील्स व टीवी
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    9:16 रील्स/शॉर्ट्स, 16:9 टीवी स्क्रीन या 1:1 स्क्वायर वीडियो न्यूज़ बनाएं। ब्रेकिंग टिकर, न्यूज़ बीट्स ऑडियो व लोगो जोड़ें।
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs font-black text-red-400 pt-2 border-t border-slate-800">
+                <span>वीडियो स्टूडियो खोलें ➔</span>
+                <span className="text-[10px] text-slate-400 font-normal">मल्टी-रेश्यो रेंडरिंग</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PROJECT HISTORY VIEW per Requirement 4 */}
+      {activeTab === 'history' && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full border-b border-slate-800 pb-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-amber-400" />
+                <span>प्रोजेक्ट हिस्ट्री (Project History)</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                  {filteredHistory.length} प्रोजेक्ट्स
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                आपके द्वारा तैयार व एक्सपोर्ट किए गए सभी न्यूज़ ग्राफिक्स एवं वीडियो प्रोजेक्ट्स का रिकॉर्ड
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setHistoryTypeFilter('all')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer transition ${
+                    historyTypeFilter === 'all' ? 'bg-amber-400 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  सभी
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryTypeFilter('graphic')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer transition flex items-center gap-1 ${
+                    historyTypeFilter === 'graphic' ? 'bg-amber-400 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ImageIcon className="w-3 h-3" />
+                  <span>ग्राफिक्स</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryTypeFilter('video')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer transition flex items-center gap-1 ${
+                    historyTypeFilter === 'video' ? 'bg-amber-400 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Video className="w-3 h-3" />
+                  <span>वीडियो</span>
+                </button>
+              </div>
+
+              <div className="relative min-w-[200px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder="प्रोजेक्ट खोजें..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          {filteredHistory.length === 0 ? (
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-10 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                <History className="w-6 h-6" />
+              </div>
+              <h4 className="text-base font-bold text-slate-300">कोई प्रोजेक्ट हिस्ट्री नहीं मिली</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                जब आप ग्राफिक या वीडियो स्टूडियो से प्रोजेक्ट एक्सपोर्ट या तैयार करेंगे, तो उसका वास्तविक रिकॉर्ड यहाँ स्वतः उपलब्ध रहेगा।
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={onNavigateToStudio}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-black rounded-xl transition cursor-pointer shadow"
+                >
+                  🎨 नया ग्राफिक बनाएं
+                </button>
+                <button
+                  type="button"
+                  onClick={onNavigateToVideos}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  🎬 वीडियो स्टूडियो
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredHistory.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-slate-950 border border-slate-800 hover:border-amber-400/60 rounded-2xl p-3.5 transition-all hover:shadow-xl flex flex-col justify-between group space-y-3"
+                >
+                  <div className="space-y-2.5">
+                    <div className="relative w-full h-36 bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
+                      {item.thumbnailUrl ? (
+                        <img src={item.thumbnailUrl} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1 bg-slate-900">
+                          {item.type === 'video' ? <Video className="w-8 h-8 text-red-400" /> : <ImageIcon className="w-8 h-8 text-amber-400" />}
+                          <span className="text-[10px] font-bold">नो थंबनेल</span>
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2 flex items-center gap-1">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase backdrop-blur-md ${
+                          item.type === 'video' ? 'bg-red-600/90 text-white' : 'bg-amber-500/90 text-slate-950'
+                        }`}>
+                          {item.type === 'video' ? '🎬 वीडियो' : '📸 ग्राफिक'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/70 text-slate-200 backdrop-blur-md">
+                          {item.status === 'exported' ? '✓ एक्सपोर्टेड' : item.status === 'generated' ? '⚡ जनरेटेड' : '📝 ड्राफ्ट'}
+                        </span>
+                      </div>
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/80 text-[10px] text-slate-300 backdrop-blur-md flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span>{formatTime(item.timestamp)}</span>
+                      </div>
+                    </div>
+
+                    <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors line-clamp-2 leading-snug">
+                      {item.title}
+                    </h4>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-850">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.type === 'video') {
+                          onNavigateToVideos();
+                        } else if (item.data) {
+                          onOpenStudioWithDraft(item.data);
+                        } else {
+                          onNavigateToStudio();
+                        }
+                      }}
+                      className="flex-1 py-1.5 px-2 bg-amber-400/10 hover:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-400/40 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <FileEdit className="w-3.5 h-3.5" />
+                      <span>स्टूडियो में खोलें</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expandable Sections for Support, Drafts, and ePaper */}
       <div className="space-y-4">
-        {/* Section 1: Drafts & Projects */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+        {/* Section 4: Drafts & Projects (visible when activeTab === 'drafts' or user expands) */}
+        <div className={`bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all ${activeTab === 'drafts' ? 'ring-2 ring-amber-500/50' : ''}`}>
           <button
             type="button"
-            onClick={() => toggleSection('drafts')}
+            onClick={() => {
+              setActiveTab('drafts');
+              toggleSection('drafts');
+            }}
             className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
           >
             <div className="flex items-center gap-3">

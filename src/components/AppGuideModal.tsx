@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Layers,
@@ -9,6 +9,11 @@ import {
   Download,
   CheckCircle2,
   HelpCircle,
+  Video,
+  Film,
+  Music,
+  Maximize2,
+  Tv,
   Share2,
 } from 'lucide-react';
 
@@ -23,7 +28,8 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
   onClose,
   onSelectStep,
 }) => {
-  const [dontShowAgain, setDontShowAgain] = React.useState(false);
+  const [activeGuideTab, setActiveGuideTab] = useState<'graphic' | 'video'>('graphic');
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   if (!isOpen) return null;
 
@@ -45,79 +51,134 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
     }
   };
 
-  const stepsData = [
+  const graphicSteps = [
     {
       step: 1,
-      title: 'स्टेप 1: टेम्पलेट या न्यूज़ फ्रेम्स चुनें',
+      title: '1. होम फ़ीड से खबर चुनें या फ़िल्टर करें',
       icon: <Layers className="w-5 h-5 text-yellow-400" />,
-      badge: '9 न्यूज़ फ्रेम्स',
+      badge: 'होम फ़ीड',
       badgeColor: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
       description:
-        'अपनी खबर के अनुरूप सही फ्रेम चुनें — जैसे मूल जैकेट (Original Jacket), सुपर ब्रेकिंग रेड, कोट/बयान जैकेट, 16:9 टीवी फ्रेम, मॉर्निंग शो आदि।',
-      tips: 'हर टेम्प्लेट में टीवी न्यूज़ चैनलों जैसा पेशेवर हेडर, ब्रेकिंग टिकर और आकर्षक बैकग्राउंड सेट है।',
+        'होम स्क्रीन पर देश, राजनीति, राज्य, खेल, व्यापार व क्राइम कैटेगरी के अनुसार ताज़ा खबरें देखें। किसी भी खबर के नीचे दिए गए मुख्य बिंदुओं को पढ़ें।',
+      tips: 'आप अपनी पसंद की कैटेगरी चुनकर पसंदीदा खबरें जल्दी ढूंढ सकते हैं।',
     },
     {
       step: 2,
-      title: 'स्टेप 2: AI टूल्स (Gemini 3.1 Pro)',
+      title: '2. "खबर से ग्राफिक बनाएँ" पर क्लिक करें',
       icon: <Sparkles className="w-5 h-5 text-amber-400" />,
-      badge: 'AI ऑटोमेशन',
+      badge: 'ब्रांडेड लोडर',
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       description:
-        'खबर का विवरण या लिंक पेस्ट करें, AI एक क्लिक में 3-लाइन कैची हेडलाइन, मुख्य कीवर्ड्स और आवश्यक विवरण तैयार कर देगा। साथ ही AI इमेज सर्च व ऑटो-एनालिसिस भी उपलब्ध है।',
-      tips: 'यह आपका 80% समय बचाता है और खबर को सोशल मीडिया के लिए तुरंत वायरल-रेडी बनाता है।',
+        'बटन दबाते ही 10-सेकंड का प्रतिष्ठित AI News Maker संपादकीय लोडर शुरू होता है। यदि खबर पहले से स्वीकृत है तो बिना किसी AI खर्च के 5 संतुलित हेडलाइन तुरंत तैयार मिलती हैं।',
+      tips: 'लोडर के दौरान स्क्रीन पर पत्रकारिता तथ्यों की समीक्षा और लेआउट मैपिंग की प्रगति दिखाई देती है।',
     },
     {
       step: 3,
-      title: 'स्टेप 3: फोटो लेआउट व अपलोड',
+      title: '3. पाँच संतुलित AI हेडलाइन में से मनपसंद चुनें',
+      icon: <Type className="w-5 h-5 text-red-400" />,
+      badge: '5 संतुलित विकल्प',
+      badgeColor: 'bg-red-500/20 text-red-300 border-red-500/30',
+      description:
+        'रेडियो बटन से 5 अलग-अलग पत्रकारिता कोणों (मुख्य घटना, पात्र कोण, कार्रवाई, मुख्य बिंदु, सारगर्भित) में से अपनी पसंद की हेडलाइन चुनें और ज़रूरत पड़ने पर संपादित करें।',
+      tips: 'हर हेडलाइन में शब्द और अक्षर संख्या (100-150 सीमा) लाइव दिखाई देती है।',
+    },
+    {
+      step: 4,
+      title: '4. फोटो समीक्षा, अतिरिक्त फोटो व कटआउट जोड़ें',
       icon: <ImageIcon className="w-5 h-5 text-sky-400" />,
       badge: 'मल्टी-फोटो ग्रिड',
       badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
       description:
-        'तय करें कि खबर 1 फोटो, 2 फोटो (ऊपर-नीचे या 50-50), 3 फोटो या 4 फोटो में बनेगी। इसके बाद गैलरी या कैमरे से फोटो अपलोड करें। साथ ही स्पेशल लीडर/पर्सन कटआउट PNG भी जोड़ सकते हैं।',
-      tips: 'फोटो को ड्रैग, ज़ूम और सही फ्रेम में पोजीशन भी कर सकते हैं।',
-    },
-    {
-      step: 4,
-      title: 'स्टेप 4: हेडलाइन व टेक्स्ट मैटर दर्ज करें',
-      icon: <Type className="w-5 h-5 text-red-400" />,
-      badge: '3-लाइन हेडलाइन',
-      badgeColor: 'bg-red-500/20 text-red-300 border-red-500/30',
-      description:
-        'अपनी मुख्य खबर का शीर्षक (हेडलाइन) 3 पंक्तियों में लिखें। फॉन्ट साइज एडजस्ट करें और महत्वपूर्ण शब्दों को पीले रंग से हाइलाइट करें।',
-      tips: 'Baloo 2, Mukta और Noto Serif जैसे प्रीमियम हिंदी फॉन्ट्स का चयन कर सकते हैं।',
+        'वेबसाइट से प्राप्त फोटो को रखें, गैलरी से 3 अतिरिक्त फोटो तक अपलोड करें या 1, 2, 3, 4 फोटो ग्रिड लेआउट में सेट करें। आप पारदर्शी लीडर कटआउट PNG भी जोड़ सकते हैं।',
+      tips: 'फोटो को टच करके ज़ूम और स्थिति समायोजित की जा सकती है।',
     },
     {
       step: 5,
-      title: 'स्टेप 5: जिला, स्थान व विस्तृत विवरण',
-      icon: <MapPin className="w-5 h-5 text-emerald-400" />,
-      badge: 'लोकेशन व डेट',
+      title: '5. लोकेशन, सोशल हैंडल व हाई-रेज़ डाउनलोड',
+      icon: <Download className="w-5 h-5 text-emerald-400" />,
+      badge: 'फुल एचडी एक्सपोर्ट',
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
       description:
-        'अपना जिला/स्थान (जैसे रीवा / सीधी / भोपाल / दिल्ली) दर्ज करें। 90° रोटेटेड डेटलाइन और स्पेशल कॉलआउट टैग (#बड़ी_खबर, #एक्सक्लूसिव) सक्रिय करें।',
-      tips: 'तारीख अपने आप वर्तमान दिन के अनुसार सेट रहती है।',
+        'अपना जिला या स्थान डालें। आपका चैनल लोगो, हेडर, फुटर और सोशल मीडिया हैंडल्स पहले से सेट रहेंगे। एक क्लिक में 1080x1350 फुल एचडी जेपीईजी या पीएनजी डाउनलोड करें।',
+      tips: 'कैप्शन को भी एक क्लिक में कॉपी करके सीधे सोशल मीडिया (FB/Insta/WhatsApp) पर पेस्ट कर सकते हैं।',
     },
   ];
 
+  const videoSteps = [
+    {
+      step: 1,
+      title: '1. वीडियो एंड रील्स सेक्शन में वीडियो चुनें',
+      icon: <Film className="w-5 h-5 text-red-400" />,
+      badge: 'वीडियो फ़ीड',
+      badgeColor: 'bg-red-500/20 text-red-300 border-red-500/30',
+      description:
+        'टॉप मेन्यू में "🎬 वीडियो एंड रील्स" टैब खोलें। ट्रेंडिंग वीडियो स्टोरीज़, बाइट्स और ग्राउंड रिपोर्ट्स को इनलाइन प्ले करके प्रीव्यू करें।',
+      tips: 'बोनस वीडियो देखने और बनाने पर रिवॉर्ड कॉइन्स भी मिलते हैं।',
+    },
+    {
+      step: 2,
+      title: '2. "वीडियो न्यूज़ बनाएं" से वीडियो स्टूडियो में जाएं',
+      icon: <Video className="w-5 h-5 text-amber-400" />,
+      badge: 'वीडियो स्टूडियो',
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      description:
+        'पसंदीदा वीडियो कार्ड पर "वीडियो न्यूज़ बनाएं" बटन दबाएं। वीडियो तुरंत वीडियो न्यूज़ स्टूडियो में लोड हो जाएगा, जहां आप अपनी ब्रांडिंग जोड़ सकते हैं।',
+      tips: 'आप अपनी फ़ोन गैलरी या कंप्यूटर से भी कस्टम MP4 वीडियो फ़ाइल अपलोड कर सकते हैं।',
+    },
+    {
+      step: 3,
+      title: '3. आस्पेक्ट रेश्यो चुनें (16:9, 9:16 रील्स, 1:1 स्क्वायर)',
+      icon: <Maximize2 className="w-5 h-5 text-sky-400" />,
+      badge: 'सोशल मीडिया रेश्यो',
+      badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+      description:
+        'इंस्टाग्राम रील्स/यूट्यूब शॉर्ट्स के लिए 9:16 वर्टिकल, यूट्यूब/टीवी स्क्रीन के लिए 16:9 हॉरिजॉन्टल, या फ़ेसबुक/ट्विटर के लिए 1:1 स्क्वायर रेश्यो चुनें।',
+      tips: 'रेश्यो बदलते ही वीडियो फ्रेम और टेक्स्ट टिकर स्वतः उसी माप में सेट हो जाते हैं।',
+    },
+    {
+      step: 4,
+      title: '4. टीवी न्यूज़ फ्रेम्स, ब्रेकिंग टिकर व लोगो लगाएं',
+      icon: <Tv className="w-5 h-5 text-yellow-400" />,
+      badge: 'टीवी फ्रेम्स',
+      badgeColor: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+      description:
+        'सुपर ब्रेकिंग लाल पट्टी, टीवी न्यूज़ चैनल हेडर, लाइव टिकर, जिला लोकेशन और अपना चैनल लोगो वीडियो के ऊपर पेशेवर अंदाज़ में लगाएं।',
+      tips: 'हेडलाइन टेक्स्ट को 2 या 3 लाइनों में अपनी सुविधा अनुसार संपादित किया जा सकता है।',
+    },
+    {
+      step: 5,
+      title: '5. बैकग्राउंड म्यूज़िक, ऑडियो व एक्सपोर्ट/शेयर',
+      icon: <Music className="w-5 h-5 text-emerald-400" />,
+      badge: 'ऑडियो व रेंडरिंग',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+      description:
+        'न्यूज़ बीट्स, सस्पेंस टोन या ब्रेकिंग चाइम म्यूज़िक जोड़ें। वीडियो को रेंडर करके सीधे गैलरी में सेव करें या व्हाट्सएप और यूट्यूब पर शेयर करें।',
+      tips: 'वीडियो प्रीव्यू में प्ले/पॉज़ करके अंतिम रेंडर से पहले पूरा लुक चेक कर सकते हैं।',
+    },
+  ];
+
+  const currentSteps = activeGuideTab === 'graphic' ? graphicSteps : videoSteps;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 bg-neutral-950/60 sticky top-0 z-10 backdrop-blur-md">
+        <div className="px-5 py-4 border-b border-neutral-800 bg-neutral-950/80 sticky top-0 z-10 backdrop-blur-md flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-yellow-400/10 border border-yellow-400/20 text-yellow-400">
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-sm">
               <HelpCircle className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-black text-white tracking-tight font-['Baloo_2']">
-                  ग्राफिक कैसे बनाएं? (स्टेप-बाय-स्टेप गाइड)
+                  ऐप कैसे उपयोग करें? (User Guide)
                 </h2>
-                <span className="text-[10px] uppercase font-black px-1.5 py-0.5 rounded bg-red-600/20 text-red-400 border border-red-500/30">
-                  सहायता
+                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-red-600/20 text-red-400 border border-red-500/30">
+                  मार्गदर्शिका
                 </span>
               </div>
               <p className="text-xs text-neutral-400 font-medium">
-                मात्र 5 सरल स्टेप्स में तैयार करें 1080x1350 फुल एचडी न्यूज़ कार्ड
+                सरल स्टेप्स में ग्राफिक फोटो व वीडियो न्यूज़ बनाना सीखें
               </p>
             </div>
           </div>
@@ -125,44 +186,72 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white transition-colors cursor-pointer"
             title="बंद करें"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* 2 Tabs: Graphic Studio vs Video Studio per Section 3.2 */}
+        <div className="p-3 bg-neutral-950/60 border-b border-neutral-800 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveGuideTab('graphic')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeGuideTab === 'graphic'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
+            }`}
+          >
+            <ImageIcon className="w-4 h-4" />
+            <span>(A) ग्राफिक फोटो स्टूडियो गाइड</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveGuideTab('video')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeGuideTab === 'video'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            <span>(B) वीडियो न्यूज़ स्टूडियो गाइड</span>
+          </button>
+        </div>
+
         {/* Modal Body - Scrollable */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 divide-y divide-neutral-800/60 text-neutral-200">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 text-neutral-200">
           {/* Quick intro note */}
-          <div className="bg-gradient-to-r from-amber-500/10 via-neutral-900 to-red-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-200 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-amber-500/10 via-neutral-900 to-red-500/10 border border-amber-500/20 rounded-2xl p-3 text-xs text-amber-200 flex items-center justify-between">
             <span>
-              👋 <strong>स्वागत है!</strong> यह गाइड आपको न्यूज़ ग्राफिक बनाने की पूरी प्रक्रिया समझाती है:
+              👋 <strong>{activeGuideTab === 'graphic' ? 'ग्राफिक फोटो स्टूडियो' : 'वीडियो न्यूज़ स्टूडियो'}:</strong> नीचे दिए गए 5 आसान चरणों का पालन करें:
             </span>
-            <span className="hidden sm:inline text-[11px] font-bold text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-full">
-              कुल 5 स्टेप्स
+            <span className="text-[11px] font-bold text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-full border border-yellow-500/30">
+              5 सरल स्टेप्स
             </span>
           </div>
 
           {/* Step list */}
-          <div className="space-y-3 pt-2">
-            {stepsData.map((item) => (
+          <div className="space-y-3">
+            {currentSteps.map((item) => (
               <div
                 key={item.step}
-                className="group p-3 sm:p-3.5 rounded-xl bg-neutral-950/60 hover:bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 transition-all flex items-start gap-3 sm:gap-4"
+                className="group p-3 sm:p-4 rounded-2xl bg-neutral-950/70 hover:bg-neutral-950 border border-neutral-800/80 hover:border-neutral-700 transition-all flex items-start gap-3 sm:gap-4"
               >
-                {/* Step badge / icon */}
                 <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 shrink-0 mt-0.5 shadow-inner">
                   {item.icon}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <h3 className="text-sm font-extrabold text-white font-['Baloo_2']">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white font-['Baloo_2']">
                       {item.title}
                     </h3>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.badgeColor}`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${item.badgeColor}`}
                     >
                       {item.badge}
                     </span>
@@ -172,7 +261,7 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
                     {item.description}
                   </p>
 
-                  <p className="text-[11px] text-yellow-400/90 font-medium mt-1 flex items-center gap-1">
+                  <p className="text-[11px] text-amber-300/90 font-medium mt-1 flex items-center gap-1">
                     <span>💡</span>
                     <span>{item.tips}</span>
                   </p>
@@ -182,60 +271,27 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
           </div>
 
           {/* Special Dedicated Section: Header & Footer Customization via Profile */}
-          <div className="mt-4 pt-4 border-t border-neutral-800">
-            <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 via-neutral-900 to-red-650/10 border-2 border-amber-500/30 shadow-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">🏷️</span>
-                  <h3 className="text-sm sm:text-base font-black text-amber-300 font-['Baloo_2']">
-                    विशेष गाइड: हेडर व फुटर कैसे बदलें? (प्रोफ़ाइल सेटिंग्स)
-                  </h3>
-                </div>
-                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400 text-neutral-950">
-                  प्रोफ़ाइल सेटिंग्स
-                </span>
-              </div>
-
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                अपने न्यूज़ चैनल या पोर्टल का ओरिजिनल लोगो, हेडर बैनर PNG, बॉटम फुटर PNG और सोशल मीडिया हैंडल्स सेट करने के लिए यह आसान तरीका अपनाएं:
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div className="p-2.5 rounded-lg bg-neutral-950/80 border border-neutral-800 space-y-1">
-                  <span className="font-extrabold text-amber-400">1. प्रोफ़ाइल टैब पर जाएं:</span>
-                  <p className="text-[11px] text-neutral-300">
-                    ऐप के सबसे नीचे नेविगेशन बार में दाईं ओर <strong>&apos;प्रोफ़ाइल (Profile)&apos;</strong> टैब पर क्लिक करें।
-                  </p>
+          {activeGuideTab === 'graphic' && (
+            <div className="pt-2">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-neutral-900 to-red-600/10 border-2 border-amber-500/30 shadow-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🏷️</span>
+                    <h3 className="text-sm sm:text-base font-black text-amber-300 font-['Baloo_2']">
+                      विशेष टिप: चैनल हेडर व फुटर कैसे सेट करें?
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-400 text-neutral-950">
+                    प्रोफ़ाइल सेटिंग्स
+                  </span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-neutral-950/80 border border-neutral-800 space-y-1">
-                  <span className="font-extrabold text-amber-400">2. टेम्पलेट चुनें:</span>
-                  <p className="text-[11px] text-neutral-300">
-                    &apos;हेडर एवं फुटर सेटिंग्स&apos; कार्ड में सबसे ऊपर ड्रॉपडाउन से अपना न्यूज़ टेम्पलेट (जैसे ओरिजिनल, सुपर ब्रेकिंग) चुनें।
-                  </p>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-neutral-950/80 border border-neutral-800 space-y-1">
-                  <span className="font-extrabold text-amber-400">3. PNG फाइल्स अपलोड करें:</span>
-                  <p className="text-[11px] text-neutral-300">
-                    चैनल का <strong>लोगो</strong>, <strong>टॉप हेडर PNG</strong> व <strong>बॉटम फुटर PNG</strong> अपलोड करें।
-                  </p>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-neutral-950/80 border border-neutral-800 space-y-1">
-                  <span className="font-extrabold text-amber-400">4. सेव करें:</span>
-                  <p className="text-[11px] text-neutral-300">
-                    व्हाट्सऐप व सोशल हैंडल लिखकर <strong>&apos;हेडर/फुटर सुरक्षित करें&apos;</strong> दबाएं। अब हर कार्ड पर आपकी ब्रांडिंग स्वतः दिखेगी!
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-2 rounded-lg bg-amber-400/10 border border-amber-400/20 text-[11px] text-amber-200 flex items-center gap-2">
-                <span>💡</span>
-                <span><strong>टिप:</strong> आपको हर बार हेडर-फुटर नहीं लगाना पड़ेगा, प्रोफ़ाइल में एक बार सेव करने के बाद यह हमेशा के लिए सुरक्षित रहेगा।</span>
+                <p className="text-xs text-neutral-300 leading-relaxed">
+                  ऐप में बार-बार हेडर-फुटर लगाने की आवश्यकता नहीं है। <strong>&apos;प्रोफ़ाइल&apos;</strong> टैब में जाकर अपना न्यूज़ चैनल लोगो, टॉप हेडर PNG और बॉटम फुटर PNG एक बार सेव करें, यह हर न्यूज़ कार्ड पर अपने आप लग जाएगा!
+                </p>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Modal Footer */}
@@ -245,7 +301,7 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
               type="checkbox"
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
-              className="w-4 h-4 rounded bg-neutral-800 border-neutral-700 text-yellow-400 focus:ring-yellow-400 cursor-pointer"
+              className="w-4 h-4 rounded bg-neutral-800 border-neutral-700 text-amber-400 focus:ring-amber-400 cursor-pointer accent-amber-400"
             />
             <span>लॉगिन पर दोबारा यह गाइड स्वतः न खोलें</span>
           </label>
@@ -253,10 +309,10 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-neutral-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-95"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-neutral-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-95"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>समझ गया / ग्राफिक बनाना शुरू करें</span>
+            <span>समझ गया / शुरू करें</span>
           </button>
         </div>
       </div>

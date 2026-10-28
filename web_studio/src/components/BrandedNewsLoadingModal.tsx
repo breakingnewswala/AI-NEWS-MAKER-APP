@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
+import {
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  X,
+  FileText,
+  ListOrdered,
+  Layout,
+  CheckCircle2,
+} from 'lucide-react';
 
 export type BrandedLoaderMode = 'ai_generation' | 'graphic_preparation' | 'approved_presentation';
 
@@ -23,6 +33,14 @@ export const BRANDED_LOADER_SUBTITLES: string[] = [
   'समाचार के मुख्य तथ्य और संदर्भ व्यवस्थित किए जा रहे हैं...',
   'संतुलित हेडलाइन और उपयोगी कैप्शन तैयार किए जा रहे हैं...',
   'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+];
+
+// 4-step newsroom activity stages
+const NEWSROOM_STAGES = [
+  { id: 1, label: 'ड्राफ्ट समीक्षा', detail: 'संपादक द्वारा समीक्षा', icon: FileText },
+  { id: 2, label: '5 हेडलाइन्स', detail: 'संतुलित विकल्प चयन', icon: ListOrdered },
+  { id: 3, label: 'लेआउट मैपिंग', detail: 'फोटो व ब्रांडिंग व्यवस्था', icon: Layout },
+  { id: 4, label: 'न्यूज़ कार्ड', detail: 'प्रकाशन-योग्य अंतिम कार्ड', icon: CheckCircle2 },
 ];
 
 export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = ({
@@ -116,10 +134,13 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
 
   // Operation-Specific Main Loading Message:
   // For actual AI headline generation: “अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...”
-  // For actual graphic preparation, layout rendering, or photo mapping: “ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...”
+  // For pre-approved editorial presentation: “संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...”
+  // For graphic preparation: “ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...”
   const defaultTitle =
     mode === 'ai_generation'
       ? 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
+      : mode === 'approved_presentation'
+      ? 'संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...'
       : 'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...';
 
   const displayTitle = title || defaultTitle;
@@ -129,6 +150,13 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   const progressPercent = durationSeconds && durationSeconds > 0
     ? Math.min(100, Math.round((elapsedSeconds / durationSeconds) * 100))
     : null;
+
+  // Determine current active newsroom step (0 to 3) based on elapsed time or loop
+  const activeStepIndex = durationSeconds && durationSeconds > 0
+    ? Math.min(3, Math.floor((elapsedSeconds / durationSeconds) * 4))
+    : Math.floor((Date.now() / 2500) % 4);
+
+  const CurrentStageIcon = NEWSROOM_STAGES[activeStepIndex]?.icon || FileText;
 
   const modalContent = (
     <div
@@ -165,27 +193,61 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               }}
             />
           </div>
-          <span className="text-[11px] font-black tracking-widest text-amber-400 uppercase drop-shadow-sm">
-            AI News Maker • संपादकीय डेस्क
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-black tracking-widest text-amber-400 uppercase drop-shadow-sm">
+              AI NEWS MAKER
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+              {mode === 'ai_generation' ? '🤖 AI जनरेशन इंजन' : '✍️ संपादकीय न्यूज़रूम डेस्क'}
+            </span>
+          </div>
         </div>
 
-        {/* Spinner Section: matches screenshot #910 with rotating amber circle and top sparkle */}
-        <div className="relative w-20 h-20 mx-auto flex items-center justify-center my-1">
-          {/* Subtle outer pulse */}
-          <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 animate-ping opacity-40 pointer-events-none" />
+        {/* 4-Step Newsroom Process Animation Area per Section 2.4 */}
+        <div className="relative py-2 px-1">
+          {/* Central Newsroom Activity Graphic */}
+          <div className="relative w-20 h-20 mx-auto flex items-center justify-center mb-3">
+            {/* Subtle outer pulse */}
+            <div className={`absolute inset-0 rounded-full border-2 border-amber-500/20 ${prefersReducedMotion ? '' : 'animate-ping'} opacity-30 pointer-events-none`} />
 
-          {/* Main golden rotating ring */}
-          <div className="absolute inset-1 rounded-full border-2 border-amber-500/30 border-t-amber-400 border-r-amber-500 animate-spin" />
+            {/* Rotating golden circle */}
+            <div className={`absolute inset-1 rounded-full border-2 border-amber-500/30 border-t-amber-400 border-r-amber-500 ${prefersReducedMotion ? '' : 'animate-spin'}`} />
 
-          {/* Decorative Sparkle icon placed at upper-right border matching Screenshot #910 */}
-          <div className="absolute -top-1 -right-1 p-1 bg-amber-500/20 rounded-full border border-amber-400/40">
-            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            {/* Upper-right sparkle */}
+            <div className="absolute -top-1 -right-1 p-1 bg-amber-500/20 rounded-full border border-amber-400/40">
+              <Sparkles className="w-4 h-4 text-amber-300" />
+            </div>
+
+            {/* Dynamic Center Stage Icon */}
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner text-amber-400 transition-all duration-300">
+              <CurrentStageIcon className="w-6 h-6 animate-in zoom-in-75 duration-200" />
+            </div>
           </div>
 
-          {/* Center inner container with animated loader */}
-          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner">
-            <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+          {/* 4 Newsroom Activity Steps Tracker */}
+          <div className="grid grid-cols-4 gap-1.5 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800">
+            {NEWSROOM_STAGES.map((stg, idx) => {
+              const isActive = idx === activeStepIndex;
+              const isPassed = idx < activeStepIndex;
+              const IconComp = stg.icon;
+              return (
+                <div
+                  key={stg.id}
+                  className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-center transition-all duration-300 ${
+                    isActive
+                      ? 'bg-amber-500/20 border border-amber-500/60 shadow-sm text-amber-300'
+                      : isPassed
+                      ? 'bg-neutral-800/60 border border-neutral-700/60 text-emerald-400'
+                      : 'bg-transparent text-neutral-500'
+                  }`}
+                >
+                  <IconComp className={`w-3.5 h-3.5 mb-1 ${isActive ? 'text-amber-400 scale-110' : isPassed ? 'text-emerald-400' : 'text-neutral-500'}`} />
+                  <span className={`text-[10px] font-black leading-tight truncate w-full ${isActive ? 'text-amber-300' : isPassed ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                    {stg.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -222,7 +284,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
         ) : (
           <>
             {/* Main prominent message in white Hindi typography */}
-            <div className="space-y-2.5 px-2">
+            <div className="space-y-2 px-2">
               <h2
                 id="branded-loading-title"
                 className="text-base sm:text-lg font-black text-white leading-snug font-['Noto_Sans_Devanagari'] drop-shadow-sm"
@@ -254,7 +316,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               </div>
               <div className="flex justify-between text-[11px] font-bold text-neutral-400">
                 <span className="text-amber-400">
-                  {mode === 'approved_presentation' ? 'संपादकीय सामग्री प्रस्तुतीकरण...' : 'तैयारी जारी है...'}
+                  {mode === 'approved_presentation' ? 'स्वीकृत सामग्री प्रस्तुतीकरण...' : 'तैयारी जारी है...'}
                 </span>
                 {progressPercent !== null && (
                   <span className="text-amber-300 font-mono">
@@ -284,3 +346,4 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   }
   return modalContent;
 };
+

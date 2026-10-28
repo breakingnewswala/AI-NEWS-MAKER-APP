@@ -1654,11 +1654,12 @@ app.get("/api/editorial/approved/:id", (req, res) => {
   }
 });
 
-// 11. POST Save/Update Approved Editorial Content (Admin review & approval)
+// 11. POST Save/Update Approved Editorial Content (Admin review & approval & pre-publish)
 app.post("/api/editorial/approved/:id", (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body || {};
+    const isPrePublished = body.isPrePublished !== undefined ? Boolean(body.isPrePublished) : true;
     const db = loadApprovedEditorialDatabase();
     const existing = db[id] || {};
     const updated = {
@@ -1677,11 +1678,48 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       additionalPhotos: Array.isArray(body.additionalPhotos) ? body.additionalPhotos : (existing.additionalPhotos || []),
       approvedAt: Date.now(),
       approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
-      status: "APPROVED"
+      status: "APPROVED",
+      isPrePublished,
+      prePublishedAt: isPrePublished ? Date.now() : existing.prePublishedAt,
     };
     db[id] = updated;
     saveApprovedEditorialDatabase(db);
-    return res.json({ success: true, message: "संपादकीय हेडलाइन व कैप्शन सुरक्षित किए गए", data: updated });
+
+    // Also synchronize news_database.json so feed immediately displays pre-published badge & data
+    try {
+      let newsDb = loadNewsDatabase();
+      let modified = false;
+      newsDb = newsDb.map((p) => {
+        if (p.id === id) {
+          modified = true;
+          return {
+            ...p,
+            status: "APPROVED",
+            isApproved: true,
+            isPrePublished,
+            headlineOptions: updated.headlines,
+            approvedHeadlines: updated.headlines,
+            summary: updated.captionDetailed || p.summary,
+            image: updated.imageUrl || p.image,
+            additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos,
+          };
+        }
+        return p;
+      });
+      if (modified) {
+        saveNewsDatabase(newsDb);
+      }
+    } catch (syncErr) {
+      console.warn("Could not sync approved post to news_database:", syncErr);
+    }
+
+    return res.json({
+      success: true,
+      message: isPrePublished
+        ? "संपादकीय हेडलाइन व प्री-पब्लिश सामग्री सफलतापूर्वक सुरक्षित की गई"
+        : "संपादकीय हेडलाइन व ड्राफ्ट सुरक्षित किए गए",
+      data: updated
+    });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }

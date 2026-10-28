@@ -582,9 +582,19 @@ export default function App() {
     setIsSyncingNews(false);
   };
 
+  const isFetchingNewsRef = useRef(false);
+
   useEffect(() => {
     fetchLiveNews();
-    const interval = setInterval(fetchLiveNews, 12000); // 12-second real-time polling for news
+    // Silent background auto-refresh every 3 minutes (180,000ms) without disrupting editor or scroll
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (isFetchingNewsRef.current) return;
+      isFetchingNewsRef.current = true;
+      fetchLiveNews().finally(() => {
+        isFetchingNewsRef.current = false;
+      });
+    }, 180000);
     const handleNewsApproved = () => {
       fetchLiveNews();
     };
@@ -680,9 +690,19 @@ export default function App() {
     }
   };
 
+  const isFetchingVideosRef = useRef(false);
+
   useEffect(() => {
     fetchLiveVideos();
-    const interval = setInterval(fetchLiveVideos, 15000); // 15-second real-time polling
+    // Silent background auto-refresh every 3 minutes (180,000ms)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (isFetchingVideosRef.current) return;
+      isFetchingVideosRef.current = true;
+      fetchLiveVideos().finally(() => {
+        isFetchingVideosRef.current = false;
+      });
+    }, 180000);
     const handleVideoEvent = () => {
       fetchLiveVideos();
     };
@@ -1181,6 +1201,43 @@ export default function App() {
       window.removeEventListener('user_trial_expired', handleExpired);
     };
   }, [currentUser?.email]);
+
+  // Deep linking listeners for notifications & external triggers
+  useEffect(() => {
+    const handleDeepLinkPost = (e: any) => {
+      const postId = e.detail?.postId;
+      if (!postId) return;
+      const targetPost = posts.find((p) => String(p.id) === String(postId));
+      if (targetPost) {
+        handleOpenStudioWithNews(targetPost);
+      } else {
+        navigateToTab('home');
+        showToast('📢 सूचना से संबंधित खबर लोड की जा रही है...');
+      }
+    };
+
+    const handleDeepLinkVideo = (e: any) => {
+      const videoId = e.detail?.videoId;
+      const targetVideo = videoItems.find((v) => String(v.id) === String(videoId));
+      if (targetVideo) {
+        setStudioInitialItem(targetVideo);
+        if (targetVideo.videoUrl) setStudioInitialVideo(targetVideo.videoUrl);
+        if (targetVideo.title) setStudioInitialHeadline(targetVideo.title);
+        updateStudioMode('video');
+        navigateToTab('studio');
+      } else {
+        navigateToTab('video_feed');
+        showToast('🎬 वीडियो सेक्शन खोला गया');
+      }
+    };
+
+    window.addEventListener('ai_news_open_specific_post', handleDeepLinkPost);
+    window.addEventListener('ai_news_open_specific_video', handleDeepLinkVideo);
+    return () => {
+      window.removeEventListener('ai_news_open_specific_post', handleDeepLinkPost);
+      window.removeEventListener('ai_news_open_specific_video', handleDeepLinkVideo);
+    };
+  }, [posts, videoItems]);
 
   const isAdminUser = isUserAdmin(currentUser);
   const actionAllowance = isUserActionAllowed(currentUser, userSubscription);
@@ -1837,6 +1894,31 @@ export default function App() {
 
       await downloadCanvas(canvas, filename, fmt);
 
+      // Automatically record in Project History
+      try {
+        const historyItem = {
+          id: 'proj_' + Date.now(),
+          title: card.headline || card.category || 'समाचार ग्राफिक',
+          type: 'graphic' as const,
+          category: card.category || 'ताज़ा खबर',
+          thumbnail: card.image || '',
+          timestamp: Date.now(),
+          status: 'exported' as const,
+          data: {
+            ...card,
+            exportedAt: new Date().toISOString(),
+            filename,
+          },
+        };
+        const rawHistory = localStorage.getItem('ai_news_maker_projects_history_v1');
+        const list = rawHistory ? JSON.parse(rawHistory) : [];
+        list.unshift(historyItem);
+        localStorage.setItem('ai_news_maker_projects_history_v1', JSON.stringify(list.slice(0, 50)));
+        window.dispatchEvent(new CustomEvent('ai_news_project_history_updated'));
+      } catch (histErr) {
+        console.warn('Saving to project history failed:', histErr);
+      }
+
       // Refresh daily download quota status across app
       fetchUserDailyDownloadStatus(currentUser?.email).catch(() => {});
 
@@ -2055,11 +2137,11 @@ export default function App() {
     );
 
     if (isApprovedNews) {
-      // 1. Immediately trigger the branded loading screen with ~10-second presentation per Requirement 5
+      // 1. Immediately trigger the branded loading screen with minimum 10-second presentation per Requirement 2
       setBrandedLoader({
         isOpen: true,
         mode: 'approved_presentation',
-        title: 'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+        title: 'संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...',
         durationSeconds: 10,
         error: null,
       });

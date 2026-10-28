@@ -17,7 +17,9 @@ import {
   LogOut,
   Volume2,
   VolumeX,
+  HelpCircle,
 } from 'lucide-react';
+import { AppGuideModal } from './AppGuideModal';
 import { ReporterUser } from './LoginModal';
 import {
   getUserSubscription,
@@ -76,6 +78,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const [testPlan, setTestPlan] = useState(() => getAdminTestPlanTier());
   const [notificationsList, setNotificationsList] = useState<AppNotification[]>(() => getNotifications());
   const [notifPermission, setNotifPermission] = useState(() => getNotificationPermissionStatus());
+  const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
 
   const isAdminUser = isUserAdmin(currentUser);
 
@@ -232,7 +235,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </div>
 
               <div>
-                {/* Header line: AI News Maker + LIVE Badge */}
+                {/* Header line: AI News Maker + LIVE Badge + Guide Button */}
                 <div className="flex items-center gap-2">
                   <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
                     AI News Maker
@@ -240,6 +243,18 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
                     LIVE
                   </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsGuideOpen(true);
+                    }}
+                    className="p-1 rounded-full bg-slate-800/90 hover:bg-amber-500/20 text-slate-300 hover:text-amber-400 border border-slate-700/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center"
+                    title="ऐप कैसे उपयोग करें? (मार्गदर्शिका / User Guide)"
+                    aria-label="ऐप कैसे उपयोग करें"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
                 <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
@@ -400,8 +415,11 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 >
                   <Bell className="w-4 h-4" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-slate-950 shadow-md">
-                      {unreadCount > 99 ? '99+' : unreadCount}
+                    <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px]">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 pointer-events-none motion-reduce:hidden" />
+                      <span className="relative min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-slate-950 shadow-md">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
                     </span>
                   )}
                 </button>
@@ -544,7 +562,16 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                             onClick={() => {
                               markNotificationAsRead(n.id);
                               setNotificationsList(getNotifications());
-                              if (n.linkTab) onNavigateToTab(n.linkTab);
+                              // Deep linking per Requirement 6:
+                              if ((n as any).newsId || (n as any).postId) {
+                                const targetNewsId = (n as any).newsId || (n as any).postId;
+                                window.dispatchEvent(new CustomEvent('ai_news_open_specific_post', { detail: { newsId: targetNewsId } }));
+                              } else if ((n as any).videoId) {
+                                window.dispatchEvent(new CustomEvent('ai_news_open_specific_video', { detail: { videoId: (n as any).videoId } }));
+                              } else if (n.linkTab) {
+                                onNavigateToTab(n.linkTab);
+                              }
+                              setShowNotifications(false);
                             }}
                             className={`p-2.5 rounded-xl border space-y-1 transition-colors cursor-pointer ${
                               n.unread
@@ -572,6 +599,16 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             </div>
         </div>
       </div>
+
+      {/* User Guide Modal per Requirement 3 */}
+      <AppGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        onSelectStep={() => {
+          setIsGuideOpen(false);
+          onNavigateToTab('studio');
+        }}
+      />
     </header>
     </>
   );

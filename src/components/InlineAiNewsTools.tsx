@@ -16,6 +16,7 @@ import {
   Bot,
   Server,
   Zap,
+  CheckCircle2,
 } from 'lucide-react';
 import { AIAnalysisResult, NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
@@ -269,6 +270,50 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   // 3 Caption Styles: detailed (3 paragraphs), bullets (bullet points), short (2 paragraphs)
   const [captionStyle, setCaptionStyle] = useState<'detailed' | 'bullets' | 'short'>('detailed');
+  const [isPrePublishing, setIsPrePublishing] = useState<boolean>(false);
+  const [prePublishMsg, setPrePublishMsg] = useState<string | null>(null);
+
+  const handlePrePublishEditorial = async () => {
+    if (!result) return;
+    setIsPrePublishing(true);
+    setPrePublishMsg(null);
+    try {
+      const targetNewsId = autoFillNews?.newsId || card.sourceNewsId || `editorial-${Date.now()}`;
+      const headlinesToSave = headlineOptions.length > 0 ? headlineOptions.slice(0, 5) : [result.headline || card.headline];
+      const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(targetNewsId)}`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
+        },
+        body: JSON.stringify({
+          title: card.originalHeadline || result.headline || headlineOptions[0],
+          headlines: headlinesToSave,
+          captionDetailed: result.captionDetailed || card.summary || result.summary,
+          captionBullets: result.captionBullets || '',
+          captionShort: result.captionShort || '',
+          tags: result.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
+          location: card.location || result.location || '',
+          category: card.category || result.category || '',
+          imageUrl: card.images?.main || autoFillNews?.imageUrl || '',
+          additionalPhotos: card.extractedArticlePhotos || [],
+          isPrePublished: true,
+        }),
+      });
+      if (res.ok) {
+        setPrePublishMsg('✅ यह खबर 5 स्वीकृत हेडलाइन व फोटो सहित सफलतापूर्वक प्री-पब्लिश हो गई है! अब सामान्य यूज़र्स इसे तुरंत लोड कर सकेंगे।');
+        window.dispatchEvent(new CustomEvent('ai_news_approved'));
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      } else {
+        setPrePublishMsg('⚠️ प्री-पब्लिश नहीं हो सका। कृपया पुनः प्रयास करें।');
+      }
+    } catch {
+      setPrePublishMsg('⚠️ सर्वर से संपर्क नहीं हो सका।');
+    } finally {
+      setIsPrePublishing(false);
+    }
+  };
+
   const isAutomatedEntry = Boolean(
     card.sourceNewsId ||
     (autoFillNews && (autoFillNews.newsId || autoFillNews.autoTrigger))
@@ -2555,6 +2600,51 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               </div>
             )}
           </div>
+
+          {/* Admin Pre-Publish Editorial Action per Section 1.1 */}
+          {isAdminOrSuperAdmin && (
+            <div className="p-3.5 bg-gradient-to-r from-emerald-950/70 via-slate-900 to-amber-950/60 border-2 border-emerald-500/60 rounded-xl space-y-2.5 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-300 font-black text-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>संपादकीय प्री-पब्लिश डेस्क (Admin Pre-Publish Desk)</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                  एडमिन अधिकार
+                </span>
+              </div>
+
+              <p className="text-[11px] text-neutral-300 leading-relaxed">
+                इस खबर की 5 हेडलाइन्स, कैप्शन और फोटो को स्वीकृत करके "प्री-पब्लिश" करें ताकि सामान्य यूज़र्स बिना अतिरिक्त AI कॉल के इसे तुरंत उपयोग कर सकें।
+              </p>
+
+              {prePublishMsg && (
+                <div className="p-2 rounded-lg bg-emerald-950 border border-emerald-500 text-emerald-200 text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{prePublishMsg}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handlePrePublishEditorial}
+                disabled={isPrePublishing}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg active:scale-98 transition cursor-pointer disabled:opacity-50"
+              >
+                {isPrePublishing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>प्री-पब्लिश हो रहा है...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                    <span>🚀 प्री-पब्लिश करें (Pre-Publish to All Users)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
 
           {/* Primary Action Button: Apply and Go to Step 3 */}
           <div className="pt-2 space-y-2">

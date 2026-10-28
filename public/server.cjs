@@ -2205,6 +2205,7 @@ app.post("/api/editorial/approved/:id", (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body || {};
+    const isPrePublished = body.isPrePublished !== void 0 ? Boolean(body.isPrePublished) : true;
     const db = loadApprovedEditorialDatabase();
     const existing = db[id] || {};
     const updated = {
@@ -2223,11 +2224,43 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       additionalPhotos: Array.isArray(body.additionalPhotos) ? body.additionalPhotos : existing.additionalPhotos || [],
       approvedAt: Date.now(),
       approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
-      status: "APPROVED"
+      status: "APPROVED",
+      isPrePublished,
+      prePublishedAt: isPrePublished ? Date.now() : existing.prePublishedAt
     };
     db[id] = updated;
     saveApprovedEditorialDatabase(db);
-    return res.json({ success: true, message: "\u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0915\u0948\u092A\u094D\u0936\u0928 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u093F\u090F \u0917\u090F", data: updated });
+    try {
+      let newsDb = loadNewsDatabase();
+      let modified = false;
+      newsDb = newsDb.map((p) => {
+        if (p.id === id) {
+          modified = true;
+          return {
+            ...p,
+            status: "APPROVED",
+            isApproved: true,
+            isPrePublished,
+            headlineOptions: updated.headlines,
+            approvedHeadlines: updated.headlines,
+            summary: updated.captionDetailed || p.summary,
+            image: updated.imageUrl || p.image,
+            additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos
+          };
+        }
+        return p;
+      });
+      if (modified) {
+        saveNewsDatabase(newsDb);
+      }
+    } catch (syncErr) {
+      console.warn("Could not sync approved post to news_database:", syncErr);
+    }
+    return res.json({
+      success: true,
+      message: isPrePublished ? "\u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u092A\u094D\u0930\u0940-\u092A\u092C\u094D\u0932\u093F\u0936 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u0940 \u0917\u0908" : "\u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u093F\u090F \u0917\u090F",
+      data: updated
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }

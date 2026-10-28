@@ -42,6 +42,7 @@ import {
   Gift,
   Film,
   Unlock,
+  CheckCircle2,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import {
@@ -1957,6 +1958,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.categoryName}
                         </span>
 
+                        {/* Pre-Published Approved Editorial Badge */}
+                        {Boolean((post as any).isPrePublished || (post as any).isApproved) && (
+                          <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>प्री-पब्लिश</span>
+                          </span>
+                        )}
+
                         {/* Pending RSS/Web Badge */}
                         {canModerate && (post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                           <span className="px-2 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
@@ -2676,7 +2685,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingPost(null)}
@@ -2684,6 +2693,50 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 >
                   रद्द करें
                 </button>
+
+                {/* Explicit Admin Pre-Publish Action per Section 1.1 */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!editingPost) return;
+                    try {
+                      const headlineList = (editingPost as any).headlineOptions || (editingPost as any).approvedHeadlines || [editingPost.title];
+                      const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(editingPost.id)}`), {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
+                        },
+                        body: JSON.stringify({
+                          title: editingPost.title,
+                          headlines: headlineList.slice(0, 5),
+                          captionDetailed: editingPost.summary,
+                          location: editingPost.location || '',
+                          category: editingPost.categoryName || editingPost.category || '',
+                          imageUrl: editingPost.imageSource === 'manual' ? (editingPost.manualThumbnailUrl || editingPost.image) : editingPost.image,
+                          additionalPhotos: editingPost.additionalPhotos || [],
+                          isPrePublished: true,
+                        }),
+                      });
+                      if (res.ok) {
+                        alert('✅ यह खबर सफलतापूर्वक "प्री-पब्लिश" कर दी गई है!\nअब सभी यूज़र्स बिना अतिरिक्त AI कॉल के स्वीकृत हेडलाइन से तुरंत ग्राफिक बना सकेंगे।');
+                        if (onRefreshLiveNews) onRefreshLiveNews();
+                        setEditingPost(null);
+                      } else {
+                        alert('प्री-पब्लिश करने में विफल रहा।');
+                      }
+                    } catch (err) {
+                      console.error('Pre-publish error:', err);
+                      alert('सर्वर से संपर्क नहीं हो सका।');
+                    }
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
+                  title="इस खबर को 5 स्वीकृत हेडलाइन व फोटो के साथ प्री-पब्लिश करें"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                  <span>प्री-पब्लिश (Pre-Publish)</span>
+                </button>
+
                 <button
                   type="submit"
                   className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
