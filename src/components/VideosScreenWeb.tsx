@@ -472,13 +472,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             'Content-Type': 'application/json',
             'x-admin-key': 'master-admin',
             'x-user-role': 'admin',
-            'x-admin-email': currentUser?.email || 'admin.ainewsmaker@gmail.com',
-            'x-user-email': currentUser?.email || '',
+            'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
+            'x-user-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
           },
           body: JSON.stringify({
             videoData: base64Data,
             filename: file.name,
-            adminEmail: currentUser?.email || 'admin.ainewsmaker@gmail.com',
+            adminEmail: currentUser?.email || 'breakingnewswala.com@gmail.com',
           }),
         });
 
@@ -536,13 +536,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             'Content-Type': 'application/json',
             'x-admin-key': 'master-admin',
             'x-user-role': 'admin',
-            'x-admin-email': currentUser?.email || 'admin.ainewsmaker@gmail.com',
-            'x-user-email': currentUser?.email || '',
+            'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
+            'x-user-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
           },
           body: JSON.stringify({
             imageData: base64,
             filename: file.name,
-            adminEmail: currentUser?.email || 'admin.ainewsmaker@gmail.com',
+            adminEmail: currentUser?.email || 'breakingnewswala.com@gmail.com',
           }),
         });
 

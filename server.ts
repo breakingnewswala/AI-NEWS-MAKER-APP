@@ -1708,6 +1708,34 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       });
       if (modified) {
         saveNewsDatabase(newsDb);
+      } else {
+        const newApprovedPost: StoredNewsPost = {
+          id,
+          title: updated.title || body.title || "समाचार",
+          summary: updated.captionDetailed || body.summary || "",
+          sourceChannel: body.sourceChannel || body.channel || "आरएसएस / वेब",
+          sourceUrl: body.sourceUrl || body.url || "",
+          category: updated.category || body.category || "breaking",
+          categoryName: body.categoryName || "मुख्य समाचार",
+          publishedTime: body.publishedTime || "अभी-अभी",
+          imageUrl: updated.imageUrl || body.imageUrl || body.image || getCategoryFallbackImage("general"),
+          additionalPhotos: updated.additionalPhotos || [],
+          breaking: body.breaking !== undefined ? body.breaking : true,
+          isExclusive: body.isExclusive || false,
+          fullContent: body.fullContent || updated.captionDetailed || "",
+          location: updated.location || body.location || "",
+          district: updated.location || body.location || "",
+          timestamp: Date.now(),
+          status: "APPROVED",
+          isApproved: true,
+          isPrePublished,
+          headlineOptions: updated.headlines,
+          approvedHeadlines: updated.headlines,
+          isBonus: body.isBonus || false,
+          rewardCoins: body.rewardCoins || 100,
+        } as any;
+        newsDb.unshift(newApprovedPost);
+        saveNewsDatabase(newsDb);
       }
     } catch (syncErr) {
       console.warn("Could not sync approved post to news_database:", syncErr);

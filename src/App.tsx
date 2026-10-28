@@ -2397,7 +2397,10 @@ export default function App() {
   };
 
   const handleEditNews = (editedPost: NewsFeedPost) => {
-    const updated = posts.map((p) => (p.id === editedPost.id ? editedPost : p));
+    const exists = posts.some((p) => p.id === editedPost.id);
+    const updated = exists
+      ? posts.map((p) => (p.id === editedPost.id ? editedPost : p))
+      : [editedPost, ...posts];
     setPosts(updated);
     try {
       localStorage.setItem('app_news_posts_v2', JSON.stringify(updated));

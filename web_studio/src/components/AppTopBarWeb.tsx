@@ -322,8 +322,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
           {/* Right Action Icons - Full on Desktop, hidden in Mobile Studio */}
           <div className={`items-center gap-1.5 sm:gap-2 shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}>
 
-            {/* Wallet Coin Balance Button */}
-            {(!isAdminUser || adminSystemMode === 'test') && (
+            {/* Wallet Coin Balance Button - Hide unconditionally for admin */}
+            {!isAdminUser && (
               <button
                 type="button"
                 onClick={() => {

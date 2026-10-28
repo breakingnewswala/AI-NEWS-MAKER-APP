@@ -462,6 +462,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const [isPreviewModalOpen, setIsPreviewModalOpen] = React.useState<boolean>(false);
   const [captionCopied, setCaptionCopied] = React.useState<boolean>(false);
 
+  React.useEffect(() => {
+    const handleOpenGraphicPreview = () => {
+      setIsPreviewModalOpen(true);
+    };
+    window.addEventListener('ai_news_open_graphic_preview', handleOpenGraphicPreview);
+    return () => window.removeEventListener('ai_news_open_graphic_preview', handleOpenGraphicPreview);
+  }, []);
+
   const handleDirectCopyCaption = () => {
     try {
       const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
@@ -4409,16 +4417,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           style={{ scrollMarginTop: '120px' }}
           className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 scroll-mt-28"
         >
-          <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-amber-400 text-neutral-950 font-black flex items-center justify-center text-sm shadow-sm">
+          <div className="flex flex-col sm:flex-row items-center justify-between text-center sm:text-left gap-2 pb-3 border-b border-neutral-800">
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <span className="w-7 h-7 rounded-full bg-amber-400 text-neutral-950 font-black flex items-center justify-center text-sm shadow-sm shrink-0">
                 7
               </span>
               <h2 className="text-base sm:text-lg font-black text-white font-['Mukta']">
                 डाउनलोड व कैप्शन (HD कार्ड एक्सपोर्ट व सोशल शेयर)
               </h2>
             </div>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30">
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30 shrink-0">
               1080×1350 HD
             </span>
           </div>
@@ -4480,8 +4488,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </button>
           </div>
 
-          {/* 4. Bottom Standardized Step Navigation */}
-          {renderMobileStepNavigation(7)}
         </div>
       )}
         </>

@@ -1601,66 +1601,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     </div>
                   )}
 
-                  {/* MASTER ADMIN ONE-CLICK DIRECT LOGIN BUTTON */}
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleDirectMasterAdminLogin()}
-                      disabled={isLoggingIn}
-                      className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-xl flex items-center justify-center gap-2.5 transition-all transform active:scale-98 cursor-pointer border border-yellow-400/60 ring-2 ring-yellow-400/20"
-                    >
-                      {isLoggingIn ? (
-                        <Loader2 className="w-4 h-4 text-white animate-spin shrink-0" />
-                      ) : (
-                        <Crown className="w-4 h-4 text-yellow-300 shrink-0" />
-                      )}
-                      <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (breakingnewswala.com@gmail.com)</span>
-                    </button>
-                    <p className="text-[10px] text-amber-400/80 text-center mt-1">
-                      बिना Google Popup के सीधा मास्टर एडमिन डैशबोर्ड एक्सेस
-                    </p>
-                  </div>
-
-                  {/* Alternate: Direct Email Sign-In (No Popup / No Origin Mismatch) */}
-                  <div className="pt-1 border-t border-slate-800/80">
-                    {!showEmailLoginForm ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowEmailLoginForm(true)}
-                        className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-850 text-slate-300 font-bold text-xs rounded-xl border border-slate-800 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                      >
-                        <Mail className="w-3.5 h-3.5 text-blue-400" />
-                        <span>ईमेल आईडी से सीधा लॉगिन (No Popup Required)</span>
-                      </button>
-                    ) : (
-                      <form onSubmit={handleDirectEmailLogin} className="space-y-2 p-3 bg-slate-950 rounded-xl border border-slate-800 text-left animate-in fade-in">
-                        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-amber-400" />
-                          <span>पंजीकृत / गूगल ईमेल आईडी दर्ज करें:</span>
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="email"
-                            required
-                            placeholder="उदा. breakingnewswala.com@gmail.com"
-                            value={customLoginEmail}
-                            onChange={(e) => setCustomLoginEmail(e.target.value)}
-                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                          />
-                          <button
-                            type="submit"
-                            disabled={isLoggingIn}
-                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg shadow cursor-pointer transition-colors shrink-0"
-                          >
-                            लॉगिन
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-slate-500">
-                          पॉपअप ब्लॉक या ऑरिजन एरर के बिना तुरंत प्रवेश करें।
-                        </p>
-                      </form>
-                    )}
-                  </div>
 
                   {isPopupBlocked && (
                     <div className="p-3.5 bg-amber-500/15 border-2 border-amber-500/60 rounded-xl space-y-2 text-left animate-in fade-in">
