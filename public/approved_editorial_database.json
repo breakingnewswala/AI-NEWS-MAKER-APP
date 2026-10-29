@@ -97,5 +97,25 @@
     "status": "APPROVED",
     "isPrePublished": true,
     "prePublishedAt": 1793257201396
+  },
+  "rss-src_aajtak_live-1793287513679": {
+    "newsId": "rss-src_aajtak_live-1793287513679",
+    "title": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
+    "headlines": [
+      "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी"
+    ],
+    "headlineOptions": [
+      "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी"
+    ],
+    "approvedHeadline": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
+    "captionDetailed": "मध्य प्रदेश में नई सौर ऊर्जा नीति के तहत किसानों को 90 प्रतिशत सब्सिडी देने का बड़ा फैसला लिया गया है।",
+    "captionBullets": "",
+    "captionShort": "",
+    "sourceUrl": "https://feeds.feedburner.com/aajtak/top",
+    "additionalPhotos": [],
+    "status": "APPROVED",
+    "isPrePublished": true,
+    "approvedAt": 1793287513692,
+    "approvedBy": "breakingnewswala.com@gmail.com"
   }
 }

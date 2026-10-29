@@ -1922,6 +1922,7 @@ app.get("/api/news-posts", (req, res) => {
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
   const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
   const activePosts = posts.filter((p) => {
+    if (p.status === "REJECTED") return false;
     if (String(p.id).startsWith("live-post-")) return false;
     const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
     if (isApprovedStory) {
@@ -2266,6 +2267,14 @@ app.post("/api/admin/reject-news/:id", (req, res) => {
     let existing = loadNewsDatabase();
     existing = existing.map((p) => p.id === id ? { ...p, status: "REJECTED" } : p);
     saveNewsDatabase(existing);
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      if (edDb[id]) {
+        delete edDb[id];
+        saveApprovedEditorialDatabase(edDb);
+      }
+    } catch {
+    }
     const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
     logAdminAudit(adminEmail, "REJECT_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id });
@@ -8319,14 +8328,20 @@ function getHeadlineRegenCoinCost(tier, role) {
   if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 35;
   return 50;
 }
-function isRegenerateAllowed(config, _effectiveTier) {
+function isRegenerateAllowed(config, effectiveTier) {
   if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
+  if (config.permissions?.regenerateHeadlines) {
+    const perm = config.permissions.regenerateHeadlines;
+    if (perm.allowAllTiers === false) {
+      const cleanTier = (effectiveTier || "basic").toLowerCase().trim();
+      const allowed = Array.isArray(perm.allowedTiers) ? perm.allowedTiers.map((t) => t.toLowerCase().trim()) : [];
+      return allowed.includes(cleanTier);
+    }
+  }
   return true;
 }
 function isTierAllowedForOpenAI(tier, role) {
-  const cleanRole = (role || "").toLowerCase().trim();
-  if (cleanRole === "admin" || cleanRole === "superadmin") return true;
   const cleanTier = (tier || "").toLowerCase().trim();
   const allowed = [
     "pro",
@@ -8340,14 +8355,20 @@ function isTierAllowedForOpenAI(tier, role) {
     "admin",
     "superadmin"
   ];
-  return allowed.includes(cleanTier);
+  if (allowed.includes(cleanTier)) return true;
+  const cleanRole = (role || "").toLowerCase().trim();
+  if ((cleanRole === "admin" || cleanRole === "superadmin") && cleanTier !== "basic" && cleanTier !== "advance" && cleanTier !== "advanced") {
+    return true;
+  }
+  return false;
 }
 function resolveUserTierAndRole(req) {
+  const explicitTier = (req.body?.userTier || req.body?.tier || req.headers["x-user-tier"] || req.query?.tier)?.toString().toLowerCase().trim();
   const identifier = extractUserIdentifier(req);
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
     if (isProtectedAdminAccount(clean)) {
-      return { tier: "superadmin", role: "superadmin" };
+      return { tier: explicitTier || "superadmin", role: "superadmin" };
     }
     const users = loadUsersMasterDatabase();
     const match = users.find(
@@ -8355,11 +8376,11 @@ function resolveUserTierAndRole(req) {
     );
     if (match) {
       const role = (match.role || "reporter").toLowerCase().trim();
-      const tier = (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
+      const tier = explicitTier || (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
       return { tier, role };
     }
   }
-  const reqTier = (req.user?.tier || req.user?.subscriptionTier || req.body?.userTier || req.headers["x-user-tier"] || "basic").toString().toLowerCase().trim();
+  const reqTier = explicitTier || (req.user?.tier || req.user?.subscriptionTier || "basic").toString().toLowerCase().trim();
   const reqRole = (req.user?.role || req.body?.role || "reporter").toString().toLowerCase().trim();
   return { tier: reqTier, role: reqRole };
 }
@@ -10516,11 +10537,11 @@ var HEADLINE_5_TIER_RANGES = [
   { min: 80, max: 110, label: "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (80-110 \u0905\u0915\u094D\u0937\u0930)" },
   { min: 100, max: 130, label: "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (100-130 \u0905\u0915\u094D\u0937\u0930)" },
   { min: 125, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (125-150 \u0905\u0915\u094D\u0937\u0930)" },
-  { min: 130, max: 160, label: "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (130-160 \u0905\u0915\u094D\u0937\u0930)" },
-  { min: 150, max: 200, label: "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0935\u093F\u0938\u094D\u0924\u0943\u0924/\u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 (150-200 \u0905\u0915\u094D\u0937\u0930)" }
+  { min: 130, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (130-150 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 130, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0935\u093F\u0938\u094D\u0924\u0943\u0924/\u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 (130-150 \u0905\u0915\u094D\u0937\u0930)" }
 ];
-var HEADLINE_MAX_CHARACTER_LIMIT = 200;
-var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+var HEADLINE_MAX_CHARACTER_LIMIT = 150;
+var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 150, 150];
 function fitSingleHeadlineToTier(text, maxLimit = 150, minLimit = 0, factSentence) {
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
@@ -10817,6 +10838,19 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
   try {
     const rawInputText = input || command;
     const requestedNewsId = String(req.body.newsId || "").trim();
+    const requestedProvider = (req.body.aiProvider || "gemini").toLowerCase();
+    const userResolution = resolveUserTierAndRole(req);
+    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
+    if (requestedProvider === "openai") {
+      if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
+        return res.status(403).json({
+          success: false,
+          error: "\u092F\u0939 \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u0947\u0935\u0932 \u092A\u093E\u0924\u094D\u0930 Pro \u092F\u093E VIP-Dash \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964",
+          requiredTiers: ["pro", "vip_dash", "admin"],
+          currentTier: userTier
+        });
+      }
+    }
     if (!rawInputText && !linkUrl && !customPrompt && !requestedNewsId) {
       return res.status(400).json({ error: "Please provide a command, text, link, prompt, or newsId" });
     }
@@ -11001,8 +11035,6 @@ ${rawLink}` : rawLink;
       }
       return result;
     };
-    const userResolution = resolveUserTierAndRole(req);
-    const userTier = userResolution.tier;
     const isVipDeskUser = Boolean(
       userResolution.role === "admin" || userResolution.role === "superadmin" || ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userTier.toLowerCase().trim()) || String(req.body?.userTier || "").toLowerCase().includes("vip")
     );
@@ -11413,7 +11445,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       geminiApiKey = ""
     } = req.body;
     const userResolution = resolveUserTierAndRole(req);
-    const userTier = userResolution.tier;
+    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
     const requestedProvider = (aiProvider || "gemini").toLowerCase();
     if (requestedProvider === "openai") {
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
@@ -11430,6 +11462,12 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           error: "ChatGPT (OpenAI) \u0938\u0941\u0935\u093F\u0927\u093E \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F \u0915\u0940 \u0917\u0908 \u0939\u0948\u0964"
         });
       }
+    }
+    if (!isRegenerateAllowed(aiConfig, userTier)) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0928\u0930\u0947\u091F (Regenerate Headlines) \u0938\u0941\u0935\u093F\u0927\u093E \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0906\u092A\u0915\u0947 \u092A\u094D\u0932\u093E\u0928/\u091F\u093F\u092F\u0930 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964"
+      });
     }
     const userEmail = (req.body.email || req.user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
     const userId = (req.body.userId || req.user?.userId || req.headers["x-user-id"] || userEmail).toString().trim();

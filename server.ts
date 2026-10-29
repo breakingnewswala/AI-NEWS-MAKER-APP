@@ -1322,6 +1322,9 @@ app.get("/api/news-posts", (req, res) => {
   const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
 
   const activePosts = posts.filter((p) => {
+    // 0. Explicitly rejected items should never appear in home feed
+    if (p.status === "REJECTED") return false;
+
     // 1. Never show obsolete live-post seeds
     if (String(p.id).startsWith("live-post-")) return false;
 
@@ -1726,6 +1729,13 @@ app.post("/api/admin/reject-news/:id", (req, res) => {
     let existing = loadNewsDatabase();
     existing = existing.map((p) => (p.id === id ? { ...p, status: "REJECTED" as const } : p));
     saveNewsDatabase(existing);
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      if (edDb[id]) {
+        delete edDb[id];
+        saveApprovedEditorialDatabase(edDb);
+      }
+    } catch {}
     const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
     logAdminAudit(adminEmail, "REJECT_NEWS", id);
     return res.json({ success: true, message: "खबर अस्वीकृत हो गई", id });
@@ -9086,17 +9096,23 @@ export function getHeadlineRegenCoinCost(tier: string, role?: string): number {
   return 50; // Basic / default
 }
 
-export function isRegenerateAllowed(config: any, _effectiveTier: string): boolean {
+export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
   if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
-  // Per Part 4.1: Available to Basic, Basic Advanced, Pro, VIP Desk with coin charges
+  if (config.permissions?.regenerateHeadlines) {
+    const perm = config.permissions.regenerateHeadlines;
+    if (perm.allowAllTiers === false) {
+      const cleanTier = (effectiveTier || "basic").toLowerCase().trim();
+      const allowed = Array.isArray(perm.allowedTiers)
+        ? perm.allowedTiers.map((t: string) => t.toLowerCase().trim())
+        : [];
+      return allowed.includes(cleanTier);
+    }
+  }
   return true;
 }
 
 export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
-  const cleanRole = (role || "").toLowerCase().trim();
-  if (cleanRole === "admin" || cleanRole === "superadmin") return true;
-
   const cleanTier = (tier || "").toLowerCase().trim();
   const allowed = [
     "pro",
@@ -9110,15 +9126,22 @@ export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
     "admin",
     "superadmin",
   ];
-  return allowed.includes(cleanTier);
+  if (allowed.includes(cleanTier)) return true;
+  const cleanRole = (role || "").toLowerCase().trim();
+  if ((cleanRole === "admin" || cleanRole === "superadmin") && cleanTier !== "basic" && cleanTier !== "advance" && cleanTier !== "advanced") {
+    return true;
+  }
+  return false;
 }
 
 export function resolveUserTierAndRole(req: express.Request): { tier: string; role: string } {
+  const explicitTier = (req.body?.userTier || req.body?.tier || req.headers["x-user-tier"] || (req.query?.tier as string))?.toString().toLowerCase().trim();
+
   const identifier = extractUserIdentifier(req);
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
     if (isProtectedAdminAccount(clean)) {
-      return { tier: "superadmin", role: "superadmin" };
+      return { tier: explicitTier || "superadmin", role: "superadmin" };
     }
     const users = loadUsersMasterDatabase();
     const match = users.find(u =>
@@ -9128,16 +9151,14 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
     );
     if (match) {
       const role = (match.role || "reporter").toLowerCase().trim();
-      const tier = (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
+      const tier = explicitTier || (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
       return { tier, role };
     }
   }
 
-  const reqTier = (
+  const reqTier = explicitTier || (
     (req as any).user?.tier ||
     (req as any).user?.subscriptionTier ||
-    req.body?.userTier ||
-    req.headers["x-user-tier"] ||
     "basic"
   ).toString().toLowerCase().trim();
 
@@ -12270,12 +12291,12 @@ export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
   { min: 80, max: 110, label: 'विकल्प 1: मुख्य घटनाक्रम (80-110 अक्षर)' },
   { min: 100, max: 130, label: 'विकल्प 2: प्राधिकारी/व्यक्ति कोण (100-130 अक्षर)' },
   { min: 125, max: 150, label: 'विकल्प 3: कार्रवाई/परिणाम कोण (125-150 अक्षर)' },
-  { min: 130, max: 160, label: 'विकल्प 4: मुख्य बिंदु/तथ्य कोण (130-160 अक्षर)' },
-  { min: 150, max: 200, label: 'विकल्प 5: विस्तृत/सारगर्भित कोण (150-200 अक्षर)' },
+  { min: 130, max: 150, label: 'विकल्प 4: मुख्य बिंदु/तथ्य कोण (130-150 अक्षर)' },
+  { min: 130, max: 150, label: 'विकल्प 5: विस्तृत/सारगर्भित कोण (130-150 अक्षर)' },
 ];
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
-export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+export const HEADLINE_MAX_CHARACTER_LIMIT = 150;
+export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 150, 150];
 
 /**
  * Enforces character limits without padding or mid-word cutoffs
@@ -12657,6 +12678,20 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
   try {
     const rawInputText = input || command;
     const requestedNewsId = String(req.body.newsId || "").trim();
+
+    const requestedProvider = (req.body.aiProvider || "gemini").toLowerCase();
+    const userResolution = resolveUserTierAndRole(req);
+    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
+    if (requestedProvider === "openai") {
+      if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
+        return res.status(403).json({
+          success: false,
+          error: "यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।",
+          requiredTiers: ["pro", "vip_dash", "admin"],
+          currentTier: userTier,
+        });
+      }
+    }
     if (!rawInputText && !linkUrl && !customPrompt && !requestedNewsId) {
       return res.status(400).json({ error: "Please provide a command, text, link, prompt, or newsId" });
     }
@@ -12884,8 +12919,6 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       return result;
     };
 
-    const userResolution = resolveUserTierAndRole(req);
-    const userTier = userResolution.tier;
     const isVipDeskUser = Boolean(
       userResolution.role === "admin" ||
       userResolution.role === "superadmin" ||
@@ -13379,7 +13412,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
 
     // Tier Access Enforcement from central config
     const userResolution = resolveUserTierAndRole(req);
-    const userTier = userResolution.tier;
+    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
     const requestedProvider = (aiProvider || "gemini").toLowerCase();
 
     if (requestedProvider === "openai") {
@@ -13397,6 +13430,13 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           error: "ChatGPT (OpenAI) सुविधा वर्तमान में व्यवस्थापक द्वारा निष्क्रिय की गई है।"
         });
       }
+    }
+
+    if (!isRegenerateAllowed(aiConfig, userTier)) {
+      return res.status(403).json({
+        success: false,
+        error: "हेडलाइन रीजनरेट (Regenerate Headlines) सुविधा वर्तमान में आपके प्लान/टियर के लिए उपलब्ध नहीं है।"
+      });
     }
 
     // User identity and coin-based billing per Part 4

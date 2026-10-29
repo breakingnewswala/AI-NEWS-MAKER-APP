@@ -1,5 +1,38 @@
 [
   {
+    "id": "req-limit-1793288381611-oi20",
+    "email": "reporter_1793288381551@example.com",
+    "userId": "reporter_1793288381551@example.com",
+    "tier": "basic",
+    "currentLimit": 10,
+    "reason": "विशेष कवरेज हेतु अतिरिक्त लिमिट की आवश्यकता है",
+    "dateStr": "2026-10-29",
+    "requestedAt": 1793288381611,
+    "status": "pending"
+  },
+  {
+    "id": "req-limit-1793288193337-pn9s",
+    "email": "reporter_1793288193186@example.com",
+    "userId": "reporter_1793288193186@example.com",
+    "tier": "basic",
+    "currentLimit": 10,
+    "reason": "विशेष कवरेज हेतु अतिरिक्त लिमिट की आवश्यकता है",
+    "dateStr": "2026-10-29",
+    "requestedAt": 1793288193337,
+    "status": "pending"
+  },
+  {
+    "id": "req-limit-1793287378273-tile",
+    "email": "reporter_1793287378226@example.com",
+    "userId": "reporter_1793287378226@example.com",
+    "tier": "basic",
+    "currentLimit": 10,
+    "reason": "विशेष कवरेज हेतु अतिरिक्त लिमिट की आवश्यकता है",
+    "dateStr": "2026-10-29",
+    "requestedAt": 1793287378273,
+    "status": "pending"
+  },
+  {
     "id": "req-limit-1793259471904-jdt9",
     "email": "reporter_1793259471839@example.com",
     "userId": "reporter_1793259471839@example.com",
