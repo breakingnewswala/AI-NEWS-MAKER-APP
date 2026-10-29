@@ -1398,9 +1398,106 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-24 transition-colors">
-      {/* Admin Filter Bar (Unfreezed - Scrolls naturally with content) */}
+      {/* Admin Filter Bar */}
       {canModerate && (
-        <div className="relative z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 text-slate-800 dark:text-white px-3 sm:px-6 lg:px-8 py-2.5 shadow-sm dark:shadow-xl backdrop-blur-md">
+        <>
+          {/* Mobile-Only Admin Layout (Phase 9): Row 1 & Row 2 */}
+          <div className="sm:hidden px-3 pt-3 pb-1 space-y-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 backdrop-blur-md">
+            {/* Row 1: Refresh Button, Raw News, Pending RSS */}
+            <div className="grid grid-cols-3 gap-1.5 w-full">
+              <button
+                type="button"
+                disabled={isSyncingNews}
+                onClick={() => {
+                  if (onRefreshLiveNews && !isSyncingNews) onRefreshLiveNews();
+                }}
+                className="py-2 px-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition shadow-xs cursor-pointer"
+                title="लाइव फ़ीड रीफ्रेश करें"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${isSyncingNews ? 'animate-spin text-amber-500' : ''}`} />
+                <span className="text-[10px] font-black text-slate-800 dark:text-slate-200">{isSyncingNews ? 'रिफ्रेश...' : 'रिफ्रेश'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsRawNewsModalOpen(true)}
+                className="py-2 px-1 bg-gradient-to-r from-red-600 to-amber-600 text-white rounded-xl text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition shadow-sm cursor-pointer"
+                title="रॉ न्यूज़ जोड़ें"
+              >
+                <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[10px] font-black">+ रॉ न्यूज़</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminPendingOnly(!adminPendingOnly);
+                  if (!adminPendingOnly) setAdminPublishedOnly(false);
+                }}
+                className={`py-2 px-1 rounded-xl text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition shadow-xs cursor-pointer border ${
+                  adminPendingOnly
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                    : 'bg-slate-50 dark:bg-slate-950 text-amber-700 dark:text-amber-300 border-slate-200 dark:border-slate-800'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[10px] font-bold">पेंडिंग ({pendingRssCount})</span>
+              </button>
+            </div>
+
+            {/* Row 2: Channels List, Published News, Bonus News in one horizontal row */}
+            <div className="grid grid-cols-3 gap-1.5 w-full pb-1">
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-1 py-1.5 flex items-center justify-center shadow-xs">
+                <select
+                  value={adminFilterChannel}
+                  onChange={(e) => setAdminFilterChannel(e.target.value)}
+                  className="bg-transparent text-amber-700 dark:text-amber-300 text-[10.5px] font-bold outline-none cursor-pointer w-full text-center truncate"
+                >
+                  <option value="" className="bg-slate-900 text-white">सभी चैनल</option>
+                  {savedChannels.map((c: any, idx) => {
+                    const chanName = typeof c === 'string' ? c : (c.channelName || c.name || '');
+                    if (!chanName) return null;
+                    return (
+                      <option key={`${c.id || chanName}-${idx}`} value={chanName} className="bg-slate-900 text-white">
+                        {chanName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminPublishedOnly(!adminPublishedOnly);
+                  if (!adminPublishedOnly) setAdminPendingOnly(false);
+                }}
+                className={`py-1.5 px-1 rounded-xl text-center flex items-center justify-center gap-1 active:scale-95 transition shadow-xs cursor-pointer border text-[10px] truncate ${
+                  adminPublishedOnly
+                    ? 'bg-emerald-600 text-white border-emerald-500 font-black'
+                    : 'bg-slate-50 dark:bg-slate-950 text-emerald-700 dark:text-emerald-300 border-slate-200 dark:border-slate-800 font-bold'
+                }`}
+              >
+                <span>✅ प्रकाशित ({publishedCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAdminBonusOnly(!adminBonusOnly)}
+                className={`py-1.5 px-1 rounded-xl text-center flex items-center justify-center gap-1 active:scale-95 transition shadow-xs cursor-pointer border text-[10px] truncate ${
+                  adminBonusOnly
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                    : 'bg-slate-50 dark:bg-slate-950 text-amber-700 dark:text-amber-300 border-slate-200 dark:border-slate-800 font-bold'
+                }`}
+              >
+                <Coins className="w-3 h-3 text-amber-500 shrink-0" />
+                <span className="truncate">बोनस ({bonusCount})</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Desktop Admin Bar */}
+          <div className="hidden sm:block relative z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 text-slate-800 dark:text-white px-3 sm:px-6 lg:px-8 py-2.5 shadow-sm dark:shadow-xl backdrop-blur-md">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1500,11 +1597,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </div>
           </div>
         </div>
+        </>
       )}
       {/* Centered Container: All boxes share the exact same width and alignment */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-6">
 
-        {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Graphics, Refresh with Part 7 tactile motion) */}
+        {/* Mobile 3-Card Summary Row (Hidden for admin who has dedicated Row 1 & 2 controls above) */}
+        {!canModerate && (
         <div className="grid grid-cols-3 gap-2 md:hidden w-full">
           {/* Card 1: Coins */}
           <button
@@ -1551,6 +1650,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">लाइव फ़ीड</span>
           </button>
         </div>
+        )}
+
+        {/* Approved Center-Aligned Tagline & Subtitle */}
+        <div className="text-center py-1 sm:py-2 select-none">
+          <h2 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-red-600 via-amber-500 to-yellow-500 bg-clip-text text-transparent">
+            खबर देखने से खबर बनाने तक सिर्फ दो मिनट
+          </h2>
+          <p className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 mt-0.5">
+            डिजिटल news चैनलों का AI स्टूडियो
+          </p>
+        </div>
 
         {/* 1. Live Breaking News Ticker (Centered Box, 1 news at a time, auto-changes every 4 seconds) */}
         {breakingPosts.length > 0 && currentTickerPost && (
@@ -1575,9 +1685,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 onClick={() => onOpenStudioWithNews(currentTickerPost)}
                 title="क्लिक करके स्टूडियो में कार्ड बनाएं"
               >
-                <span className="text-red-400 font-bold shrink-0">
-                  [#{currentTickerIndex + 1}]
-                </span>
+                
                 <span className="truncate">{cleanViewerHeadline(currentTickerPost.title)}</span>
               </div>
 
@@ -1597,7 +1705,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 title="इस खबर से ग्राफिक बनाएं"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                <span className="hidden md:inline">खबर से ग्राफिक बनाएं</span>
+                <span className="hidden md:inline">खबर से ग्राफिक बनाएं · शेष {canModerate || dailyQuotaStatus?.unlimited ? "असीमित" : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}</span>
               </button>
 
               <div className="flex items-center">
@@ -1985,8 +2093,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
                           <span>
                             {isNewsGraphicCreated(currentUser?.email, post.id)
-                              ? `ग्राफिक्स फिर से बनाएँ${dailyQuotaStatus && !dailyQuotaStatus.unlimited && !canModerate ? ` · शेष ${dailyQuotaStatus.remainingToday}` : ''}`
-                              : `खबर से ग्राफिक बनाएं${dailyQuotaStatus && !dailyQuotaStatus.unlimited && !canModerate ? ` · शेष ${dailyQuotaStatus.remainingToday}` : ''}`}
+                              ? `ग्राफिक्स फिर से बनाएँ · शेष ${canModerate || dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`
+                              : `खबर से ग्राफिक बनाएं · शेष ${canModerate || dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`}
                           </span>
                         </button>
                       )}
@@ -2295,7 +2403,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               handleOpenStudioSafe(post);
                             }
                           }}
-                          className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
+                          className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
                           title="क्लिक करके स्टूडियो में कार्ड बनाएं"
                         >
                           {cleanViewerHeadline(post.title)}
@@ -2431,8 +2539,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
                           <span>
                             {isNewsGraphicCreated(currentUser?.email, post.id)
-                              ? `ग्राफिक्स फिर से बनाएँ${dailyQuotaStatus && !dailyQuotaStatus.unlimited && !canModerate ? ` · शेष ${dailyQuotaStatus.remainingToday}` : ''}`
-                              : `खबर से ग्राफिक बनाएं${dailyQuotaStatus && !dailyQuotaStatus.unlimited && !canModerate ? ` · शेष ${dailyQuotaStatus.remainingToday}` : ''}`}
+                              ? `ग्राफिक्स फिर से बनाएँ · शेष ${canModerate || dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`
+                              : `खबर से ग्राफिक बनाएं · शेष ${canModerate || dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`}
                           </span>
                         </button>
                       )}
@@ -4134,7 +4242,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         </div>
       )}
 
-      {/* Floating Back to Top Button */}
+      {/* Bottom Approved Centered Footer Text */}
+        <div className="text-center py-6 border-t border-slate-200 dark:border-slate-800/80 mt-8 select-none">
+          <p className="text-xs sm:text-sm font-black text-slate-600 dark:text-slate-400 tracking-wide">
+            AI News Maker — स्वचालित ब्रेकिंग न्यूज़
+          </p>
+        </div>
+
+        {/* Floating Back to Top Button */}
       {showBackToTop && (
         <button
           type="button"

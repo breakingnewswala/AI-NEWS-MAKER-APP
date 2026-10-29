@@ -1202,14 +1202,29 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
               </button>
 
-              {/* Card 2: Remaining Videos */}
-              <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
-                <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
-                  <Film className="w-4 h-4 shrink-0 text-red-500" />
-                  <span>{isAdmin || isVipDesk ? 'असीमित' : (hasVideoPlan ? 50 : 0)}</span>
+              {/* Card 2: Remaining Videos for normal users / Video Category Manager for Admin */}
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAdminPanelOpen(true)}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-purple-500/30 shadow-xs hover:border-purple-500/60 active:scale-95 transition-all duration-150 text-center cursor-pointer"
+                  title="वीडियो श्रेणियाँ व अपलोड कंट्रोल"
+                >
+                  <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-black text-sm">
+                    <Layers className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span>कंट्रोल</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कैटेगरी व अपलोड</span>
+                </button>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
+                  <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
+                    <Film className="w-4 h-4 shrink-0 text-red-500" />
+                    <span>{isVipDesk ? 'असीमित' : (hasVideoPlan ? 50 : 0)}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष वीडियो</span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष वीडियो</span>
-              </div>
+              )}
 
               {/* Card 3: Refresh Button */}
               <button

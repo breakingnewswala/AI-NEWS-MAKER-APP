@@ -143,7 +143,31 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onDeleteCategory,
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | ''>('');
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>('');
+  const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video'>('news');
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+
+  const fetchAnalytics = async () => {
+    setIsLoadingAnalytics(true);
+    try {
+      const res = await fetch('/api/admin/analytics/summary', {
+        headers: { 'x-user-email': currentUser?.email || '' },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAnalyticsData(data);
+      }
+    } catch {}
+    setIsLoadingAnalytics(false);
+  };
+
+  useEffect(() => {
+    if (subTab === 'analytics') {
+      fetchAnalytics();
+    }
+  }, [subTab]);
+
   const [userSub, setUserSub] = useState(() => getUserSubscription());
 
   // Admin Notification Panel State (Phase 5)
@@ -2568,7 +2592,116 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 फिलहाल कोई यूज़र रिकॉर्ड नहीं है। नए यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
               </div>
             ) : (
-              <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-full overflow-x-auto touch-pan-x scrollbar-thin pb-2">
+              <>
+              {/* Mobile Registered Users Cards (Phase 6) */}
+              <div className="sm:hidden space-y-3">
+                {planUsers
+                  .filter((u) => {
+                    if (userTierCategory !== 'ALL') {
+                      const normTier = (u.tier || 'basic').toLowerCase();
+                      if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
+                      if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
+                      if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
+                      if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
+                    }
+                    if (userStatusFilter === 'active' && u.isBlocked) return false;
+                    if (userStatusFilter === 'blocked' && !u.isBlocked) return false;
+                    if (userStatusFilter === 'trial_active') {
+                      if (u.isBlocked || u.isTrialExpired || (u.daysRemaining !== undefined && u.daysRemaining <= 0)) return false;
+                    }
+                    if (userStatusFilter === 'trial_expired') {
+                      if (!u.isTrialExpired && (u.daysRemaining === undefined || u.daysRemaining > 0)) return false;
+                    }
+                    if (!userSearch.trim()) return true;
+                    const s = userSearch.toLowerCase();
+                    return (
+                      u.email.toLowerCase().includes(s) ||
+                      (u.name && u.name.toLowerCase().includes(s)) ||
+                      (u.channelName && u.channelName.toLowerCase().includes(s)) ||
+                      (u.mobile && u.mobile.includes(s))
+                    );
+                  })
+                  .map((u) => (
+                    <div key={u.userId || u.email} className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2.5 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center font-black text-slate-950 text-xs shrink-0 overflow-hidden">
+                            {u.channelLogoUrl ? <img src={u.channelLogoUrl} alt={u.name} className="w-full h-full object-contain" /> : (u.name ? u.name[0].toUpperCase() : '👤')}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-black text-white truncate">{u.name || u.fullName || 'यूज़र'}</div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">{u.email}</div>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                          u.tier === 'ultra' ? 'bg-purple-900/80 text-purple-300 border border-purple-600' :
+                          u.tier === 'professional' ? 'bg-amber-900/80 text-amber-300 border border-amber-600' :
+                          u.tier === 'advanced' ? 'bg-blue-900/80 text-blue-300 border border-blue-600' :
+                          'bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}>
+                          {u.planName || u.tier || 'BASIC'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-950/60 p-2 rounded-lg border border-slate-800/60">
+                        <div>
+                          <span className="text-slate-500">चैनल: </span>
+                          <span className="font-bold text-slate-200 truncate">{u.channelName || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">फोन: </span>
+                          <span className="font-mono text-emerald-400 font-bold">{u.mobile ? `+91 ${u.mobile}` : 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">स्थिति: </span>
+                          <span className={u.isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                            {u.isBlocked ? 'ब्लॉक' : 'सक्रिय'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500">दैनिक कोटा: </span>
+                          <span className="font-mono text-amber-300 font-bold">
+                            {u.tier === 'ultra' ? 'असीमित' : u.tier === 'professional' ? '50/दिन' : u.tier === 'advanced' ? '25/दिन' : '10/दिन'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-800/60">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextTier = u.tier === 'basic' ? 'advanced' : u.tier === 'advanced' ? 'professional' : u.tier === 'professional' ? 'ultra' : 'basic';
+                            adminUpdateUserRecord(u.email, { tier: nextTier });
+                            adminUpdateCloudUser(u.userId, { tier: nextTier });
+                            setPlanUsers(getPlanUsers());
+                          }}
+                          className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold rounded-lg cursor-pointer hover:bg-amber-500/30 active:scale-95 transition"
+                        >
+                          प्लान बदलें
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextBlocked = !u.isBlocked;
+                            adminUpdateUserRecord(u.email, { isBlocked: nextBlocked });
+                            adminUpdateCloudUser(u.userId, { isBlocked: nextBlocked });
+                            setPlanUsers(getPlanUsers());
+                          }}
+                          className={`px-2.5 py-1 text-[10px] font-bold rounded-lg cursor-pointer active:scale-95 transition border ${
+                            u.isBlocked
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                              : 'bg-rose-950 text-rose-300 border-rose-700'
+                          }`}
+                        >
+                          {u.isBlocked ? 'अनब्लॉक' : 'ब्लॉक'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Desktop Registered Users Table */}
+              <div className="hidden sm:block w-full max-w-[calc(100vw-2rem)] sm:max-w-full overflow-x-auto touch-pan-x scrollbar-thin pb-2">
                 <table className="w-full min-w-[720px] text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/60">
@@ -2887,6 +3020,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 
@@ -3557,14 +3691,76 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               </button>
                             </div>
                           ) : claim.status === 'approved' ? (
-                            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-bold rounded-lg shadow-xs">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                              <span>स्वीकृत (कॉइन्स क्रेडिटेड)</span>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-bold rounded-lg shadow-xs">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                <span>स्वीकृत (कॉइन्स क्रेडिटेड)</span>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isProcessingRewardAction}
+                                onClick={async () => {
+                                  if (confirm(`क्या आप "${claim.userName || claim.userEmail}" का यह क्लेम रिकॉर्ड हटाना चाहते हैं?`)) {
+                                    setIsProcessingRewardAction(true);
+                                    try {
+                                      const res = await fetch(`/api/admin/rewards/claims/${claim.id || claim.claimId}`, {
+                                        method: 'DELETE',
+                                        headers: { 'Content-Type': 'application/json', 'x-user-email': currentUser?.email || '' },
+                                      });
+                                      if (res.ok) {
+                                        fetchAdminRewardClaims();
+                                        showToast('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
+                                      } else {
+                                        showToast('❌ क्लेम हटाने में समस्या आई।');
+                                      }
+                                    } catch (e: any) {
+                                      showToast('❌ त्रुटि: ' + e.message);
+                                    } finally {
+                                      setIsProcessingRewardAction(false);
+                                    }
+                                  }
+                                }}
+                                className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
+                                title="क्लेम डिलीट करें"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1.5 px-3 py-1 bg-red-950/80 border border-red-700 text-red-300 text-xs font-bold rounded-lg shadow-xs">
-                              <AlertCircle className="w-4 h-4 text-red-400" />
-                              <span>अस्वीकृत</span>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 px-3 py-1 bg-red-950/80 border border-red-700 text-red-300 text-xs font-bold rounded-lg shadow-xs">
+                                <AlertCircle className="w-4 h-4 text-red-400" />
+                                <span>अस्वीकृत</span>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isProcessingRewardAction}
+                                onClick={async () => {
+                                  if (confirm(`क्या आप "${claim.userName || claim.userEmail}" का यह क्लेम रिकॉर्ड हटाना चाहते हैं?`)) {
+                                    setIsProcessingRewardAction(true);
+                                    try {
+                                      const res = await fetch(`/api/admin/rewards/claims/${claim.id || claim.claimId}`, {
+                                        method: 'DELETE',
+                                        headers: { 'Content-Type': 'application/json', 'x-user-email': currentUser?.email || '' },
+                                      });
+                                      if (res.ok) {
+                                        fetchAdminRewardClaims();
+                                        showToast('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
+                                      } else {
+                                        showToast('❌ क्लेम हटाने में समस्या आई।');
+                                      }
+                                    } catch (e: any) {
+                                      showToast('❌ त्रुटि: ' + e.message);
+                                    } finally {
+                                      setIsProcessingRewardAction(false);
+                                    }
+                                  }
+                                }}
+                                className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
+                                title="क्लेम डिलीट करें"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           )}
                         </div>
@@ -4872,7 +5068,62 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </span>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
+            {/* Mobile Restricted Channels Cards (Phase 8) */}
+            <div className="sm:hidden space-y-2.5">
+              {restrictedList
+                .filter((c) => {
+                  if (!restrictedSearch) return true;
+                  const q = restrictedSearch.toLowerCase();
+                  return (
+                    c.channelName.toLowerCase().includes(q) ||
+                    c.websiteUrl.toLowerCase().includes(q) ||
+                    c.username.toLowerCase().includes(q) ||
+                    (c.reason && c.reason.toLowerCase().includes(q))
+                  );
+                })
+                .map((item) => (
+                  <div key={item.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {item.logoUrl ? (
+                          <img src={item.logoUrl} alt={item.channelName} className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800 shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-black flex items-center justify-center shrink-0">
+                            🛡️
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="font-bold text-white text-xs block truncate">{item.channelName}</span>
+                          <span className="font-mono text-[10px] text-amber-300 truncate">@{item.username}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
+                            deleteRestrictedChannel(item.id);
+                            setRestrictedList(getRestrictedChannels());
+                            setRestrictedMsg({ type: 'success', text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।` });
+                          }
+                        }}
+                        className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
+                        title="प्रतिबंध हटाएं"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[10px] pt-1 border-t border-slate-800/60">
+                      <span className="text-blue-300 font-mono truncate">{item.websiteUrl}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 font-bold shrink-0">
+                        {item.reason || 'प्रतिबंधित'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Desktop Restricted Channels Table */}
+            <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
                   <tr>

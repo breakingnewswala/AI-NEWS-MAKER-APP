@@ -4,7 +4,7 @@ import { Sun, Moon } from 'lucide-react';
 export const ThemeToggle: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
-    const saved = localStorage.getItem('theme');
+    const saved = localStorage.getItem('theme') || localStorage.getItem('ai_news_theme');
     if (saved) return saved === 'dark';
     return true; // Default dark theme for news studio
   });
@@ -13,10 +13,10 @@ export const ThemeToggle: React.FC = () => {
     const root = document.documentElement;
     if (isDark) {
       root.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+      localStorage.setItem('theme', 'dark'); localStorage.setItem('ai_news_theme', 'dark'); localStorage.setItem('ai_news_theme', 'dark');
     } else {
       root.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      localStorage.setItem('theme', 'light'); localStorage.setItem('ai_news_theme', 'light'); localStorage.setItem('ai_news_theme', 'light');
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('app_theme_changed', { detail: { isDark } }));

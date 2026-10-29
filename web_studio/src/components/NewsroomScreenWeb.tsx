@@ -512,9 +512,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           </div>
           <div>
             <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2 justify-center sm:justify-start">
-              <span>ऐप डाउनलोड करें (Download App)</span>
+              <span>ऐप डाउनलोड करें</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
-                ऑफ़िशियल PWA व APK
+                ऑफ़िशियल मोबाइल ऐप
               </span>
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">

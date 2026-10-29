@@ -732,6 +732,78 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
       {/* ========================================================================= */}
       {isAdmin && (
         <div className="space-y-6 animate-in fade-in">
+          {/* Phase 5: Mobile Single-Row 3 Controls + Details Section Below */}
+          <div className="md:hidden space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsGraphicsExpanded(!isGraphicsExpanded);
+                  setIsVideoExpanded(false);
+                  setIsApprovalExpanded(false);
+                }}
+                className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                  isGraphicsExpanded
+                    ? 'bg-purple-600 text-white border-purple-400 font-black shadow-md'
+                    : 'bg-slate-900 text-purple-300 border-purple-500/30'
+                }`}
+              >
+                <Layout className="w-4 h-4" />
+                <span className="text-[11px] font-bold leading-tight">ग्राफिक टेम्पलेट</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVideoExpanded(!isVideoExpanded);
+                  setIsGraphicsExpanded(false);
+                  setIsApprovalExpanded(false);
+                }}
+                className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                  isVideoExpanded
+                    ? 'bg-amber-600 text-white border-amber-400 font-black shadow-md'
+                    : 'bg-slate-900 text-amber-300 border-amber-500/30'
+                }`}
+              >
+                <Film className="w-4 h-4" />
+                <span className="text-[11px] font-bold leading-tight">वीडियो टेम्पलेट</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsApprovalExpanded(!isApprovalExpanded);
+                  setIsGraphicsExpanded(false);
+                  setIsVideoExpanded(false);
+                }}
+                className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                  isApprovalExpanded
+                    ? 'bg-indigo-600 text-white border-indigo-400 font-black shadow-md'
+                    : 'bg-slate-900 text-indigo-300 border-indigo-500/30'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span className="text-[11px] font-bold leading-tight">ऐड अप्रूवल</span>
+              </button>
+            </div>
+
+            {/* Additional Details (Pro, VIP Desk, 9:16) placed in separate section below */}
+            <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300 shadow-sm">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold border-b border-slate-800/80 pb-1.5">
+                <span>एक्सेस व फॉर्मेट विवरण:</span>
+                <span className="text-amber-400 font-bold">PRO & VIP DESK</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[10.5px]">
+                <div className="text-purple-300">• 8 ग्राफिक श्रेणियां</div>
+                <div className="text-amber-300">• 9:16, 1:1, 4:5 वीडियो</div>
+                <div className="text-indigo-300">• कस्टम हेडर/फुटर</div>
+                <div className="text-emerald-300">• VIP Desk अप्रूवल</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop 3-Section Collapsible Layout */}
+          <div className="hidden md:block space-y-6">
           {/* 15.1 SECTION 1: Graphics Template Control */}
           <div id="admin-graphics-section" className="border border-purple-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
             <button
@@ -1314,6 +1386,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
               )}
             </div>
           </div>
+        </div>
         )}
       </div>
     </div>

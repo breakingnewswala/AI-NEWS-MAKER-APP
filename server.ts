@@ -2432,6 +2432,178 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
   }
 });
 
+// 8.1 Admin DELETE Bonus Reward Claim (Manual Admin Action)
+app.delete("/api/admin/rewards/claims/:id", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही क्लेम हटा सकते हैं" });
+    }
+    const { id } = req.params;
+    const rDb = loadRewardsDatabase();
+    const index = rDb.claims.findIndex((c) => c.claimId === id || (c as any).id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "क्लेम नहीं मिला" });
+    }
+    const claim = rDb.claims[index];
+    if (claim.status === "pending") {
+      const walletKey = (claim.userEmail || claim.userId || "").toLowerCase().trim();
+      const coins = claim.rewardCoins || 5;
+      if (rDb.wallets[walletKey]) {
+        rDb.wallets[walletKey].pendingCoins = Math.max(0, rDb.wallets[walletKey].pendingCoins - coins);
+      }
+    }
+    rDb.claims.splice(index, 1);
+    saveRewardsDatabase(rDb);
+    return res.json({ success: true, message: "बोनस क्लेम सफलतापूर्वक हटा दिया गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Automatic 4-day cleanup for processed (approved/rejected) bonus claims
+function cleanupOldBonusClaims() {
+  try {
+    const rDb = loadRewardsDatabase();
+    if (!rDb || !Array.isArray(rDb.claims)) return;
+    const now = Date.now();
+    const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+    const initialCount = rDb.claims.length;
+    rDb.claims = rDb.claims.filter((c: any) => {
+      if (c.status === "pending") return true;
+      const claimAge = now - (c.reviewedAt || c.createdAt || now);
+      return claimAge < FOUR_DAYS_MS;
+    });
+    if (rDb.claims.length !== initialCount) {
+      saveRewardsDatabase(rDb);
+      console.log(`[Bonus Cleanup] Purged ${initialCount - rDb.claims.length} processed bonus claims older than 4 days.`);
+    }
+  } catch (err: any) {
+    console.warn("[Bonus Cleanup Notice]:", err.message);
+  }
+}
+cleanupOldBonusClaims();
+setInterval(cleanupOldBonusClaims, 24 * 60 * 60 * 1000);
+
+// --- Analytics Module (News & Video Separate) ---
+interface AnalyticsData {
+  news: {
+    totalViews: number;
+    clickCreate: number;
+    generationStarts: number;
+    generationSuccess: number;
+    downloads: number;
+    uniqueUsers: string[];
+    items: Record<string, { title: string; views: number; creates: number }>;
+  };
+  video: {
+    totalViews: number;
+    clickCreate: number;
+    generationStarts: number;
+    generationSuccess: number;
+    downloads: number;
+    uniqueUsers: string[];
+    items: Record<string, { title: string; views: number; creates: number }>;
+  };
+}
+
+function loadAnalyticsDatabase(): AnalyticsData {
+  try {
+    const locs = resolveAllDatabaseLocations("analytics_database.json");
+    for (const loc of locs) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
+    }
+  } catch {}
+  return {
+    news: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+    video: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+  };
+}
+
+function saveAnalyticsDatabase(data: AnalyticsData) {
+  try {
+    const locs = resolveAllDatabaseLocations("analytics_database.json");
+    for (const loc of locs) {
+      if (fs.existsSync(path.dirname(loc))) {
+        fs.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+      }
+    }
+  } catch (e) {
+    console.error("Failed saving analytics_database.json:", e);
+  }
+}
+
+app.post("/api/analytics/track", (req, res) => {
+  try {
+    const { type = "news", event = "view", itemId, userId, title } = req.body || {};
+    const aType: "news" | "video" = type === "video" ? "video" : "news";
+    const aDb = loadAnalyticsDatabase();
+    const section = aDb[aType];
+    const userIdentifier = (userId || req.ip || "anon").toString().trim().toLowerCase();
+
+    if (!section.uniqueUsers.includes(userIdentifier)) {
+      section.uniqueUsers.push(userIdentifier);
+      if (section.uniqueUsers.length > 5000) section.uniqueUsers.shift();
+    }
+
+    if (event === "view") section.totalViews = (section.totalViews || 0) + 1;
+    else if (event === "click_create") section.clickCreate = (section.clickCreate || 0) + 1;
+    else if (event === "gen_start") section.generationStarts = (section.generationStarts || 0) + 1;
+    else if (event === "gen_success") section.generationSuccess = (section.generationSuccess || 0) + 1;
+    else if (event === "download") section.downloads = (section.downloads || 0) + 1;
+
+    if (itemId) {
+      const cleanId = itemId.toString();
+      if (!section.items[cleanId]) {
+        section.items[cleanId] = { title: title || cleanId, views: 0, creates: 0 };
+      }
+      if (event === "view") section.items[cleanId].views += 1;
+      if (event === "click_create" || event === "download") section.items[cleanId].creates += 1;
+    }
+
+    saveAnalyticsDatabase(aDb);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.get("/api/admin/analytics/summary", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन एनालिटिक्स देख सकते हैं" });
+    }
+    const aDb = loadAnalyticsDatabase();
+
+    const formatSection = (sec: AnalyticsData["news"]) => {
+      const sortedItems = Object.entries(sec.items || {})
+        .map(([id, val]) => ({ id, ...val }))
+        .sort((a, b) => (b.views + b.creates * 2) - (a.views + a.creates * 2))
+        .slice(0, 8);
+
+      return {
+        uniqueUsers: sec.uniqueUsers?.length || 0,
+        totalViews: sec.totalViews || 0,
+        clickCreate: sec.clickCreate || 0,
+        generationStarts: sec.generationStarts || 0,
+        generationSuccess: sec.generationSuccess || 0,
+        downloads: sec.downloads || 0,
+        trending: sortedItems,
+      };
+    };
+
+    return res.json({
+      success: true,
+      news: formatSection(aDb.news),
+      video: formatSection(aDb.video),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // 9. POST /api/upload-logo - Downscaled & compressed logo upload endpoint (PNG & GIF)
 app.post("/api/upload-logo", async (req, res) => {
   const release = await userDbLock.acquire();

@@ -45,6 +45,14 @@ if (!fs.existsSync(webStudioNodeModules)) {
   }
 }
 
+// 2. Target directories to sync dist files to
+const distDir = path.resolve(__dirname, 'dist');
+const targets = [
+  path.resolve(rootDir, 'public'),
+  path.resolve(rootDir, 'dist'),
+  path.resolve(rootDir, 'app/src/main/assets/news_studio'),
+];
+
 // 2. Run web_studio build
 console.log('📦 Step 1: Compiling web_studio frontend & server...');
 try {
@@ -66,14 +74,6 @@ try {
     throw buildErr;
   }
 }
-
-// 2. Target directories to sync dist files to
-const distDir = path.resolve(__dirname, 'dist');
-const targets = [
-  path.resolve(rootDir, 'public'),
-  path.resolve(rootDir, 'dist'),
-  path.resolve(rootDir, 'app/src/main/assets/news_studio'),
-];
 
 console.log('\n📂 Step 2: Copying build output to deployment targets...');
 targets.forEach((target) => {

@@ -1,5 +1,71 @@
 [
   {
+    "id": "notif_news_rss-src_aajtak_live-1793301239273",
+    "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
+    "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
+    "time": "अभी",
+    "timestamp": 1793301239289,
+    "unread": true,
+    "type": "news",
+    "targetUserEmail": "all",
+    "linkTab": "home"
+  },
+  {
+    "id": "notif_video_vid-test-45-1793301157522",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "विशेष 4:5 ग्राउंड रिपोर्ट",
+    "time": "अभी",
+    "timestamp": 1793301157533,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
+    "id": "notif_video_vid-test-1793301157501",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "संसद में ऐतिहासिक डिजिटल मीडिया बिल पास",
+    "time": "अभी",
+    "timestamp": 1793301157511,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
+    "id": "notif_news_rss-src_aajtak_live-1793299913136",
+    "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
+    "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
+    "time": "अभी",
+    "timestamp": 1793299913155,
+    "unread": true,
+    "type": "news",
+    "targetUserEmail": "all",
+    "linkTab": "home"
+  },
+  {
+    "id": "notif_video_vid-test-45-1793299830304",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "विशेष 4:5 ग्राउंड रिपोर्ट",
+    "time": "अभी",
+    "timestamp": 1793299830313,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
+    "id": "notif_video_vid-test-1793299830282",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "संसद में ऐतिहासिक डिजिटल मीडिया बिल पास",
+    "time": "अभी",
+    "timestamp": 1793299830294,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
     "id": "notif_news_rss-src_aajtak_live-1793292802083",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",

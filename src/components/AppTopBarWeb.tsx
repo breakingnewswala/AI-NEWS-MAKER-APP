@@ -13,7 +13,7 @@ import {
   UserCheck,
   FileSpreadsheet,
   Smartphone,
-  Coins,
+  Coins, Palette,
   LogOut,
   Volume2,
   VolumeX,
@@ -23,7 +23,7 @@ import { AppGuideModal } from './AppGuideModal';
 import { ReporterUser } from './LoginModal';
 import { ThemeToggle } from './ThemeToggle';
 import {
-  getUserSubscription,
+  getUserSubscription, getCachedUserDailyDownloadStatus,
   isUserAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
@@ -122,6 +122,21 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   }, [currentUser?.email]);
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
+  const [desktopRemainingQuota, setDesktopRemainingQuota] = useState<number | 'असीमित'>(() => {
+    const cached = getCachedUserDailyDownloadStatus();
+    if (cached?.unlimited) return 'असीमित';
+    return cached?.remainingToday ?? 10;
+  });
+  useEffect(() => {
+    const handleQuotaSync = (e: any) => {
+      if (e?.detail) {
+        if (e.detail.unlimited) setDesktopRemainingQuota('असीमित');
+        else if (typeof e.detail.remainingToday === 'number') setDesktopRemainingQuota(e.detail.remainingToday);
+      }
+    };
+    window.addEventListener('ai_news_download_status_updated', handleQuotaSync);
+    return () => window.removeEventListener('ai_news_download_status_updated', handleQuotaSync);
+  }, []);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isWalletLoading, setIsWalletLoading] = useState<boolean>(true);
 
@@ -355,6 +370,20 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-500' : ''}`} />
                   <span>रिफ्रेश</span>
                 </button>
+              )}
+
+              {/* Desktop Remaining Graphics Counter Badge */}
+              {currentTab === 'home' && (
+                <div
+                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 dark:border-red-500/40 font-bold rounded-xl text-xs shadow-xs select-none"
+                  title="आज के शेष ग्राफ़िक्स"
+                >
+                  <Palette className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span className="font-mono font-black">
+                    {isAdminUser ? 'असीमित' : desktopRemainingQuota}
+                  </span>
+                  <span className="text-[10px] hidden lg:inline">शेष ग्राफ़िक्स</span>
+                </div>
               )}
 
               {/* Theme Switcher Toggle (Light & Dark Mode) */}
