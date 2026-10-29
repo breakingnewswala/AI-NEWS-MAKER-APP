@@ -1294,6 +1294,7 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
 app.get("/api/news-posts", (req, res) => {
   const { role, includePending } = req.query;
   const posts = loadNewsDatabase();
+  const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
 
   const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
@@ -1303,6 +1304,12 @@ app.get("/api/news-posts", (req, res) => {
   const activePosts = posts.filter((p) => {
     // 1. Never show obsolete live-post seeds
     if (String(p.id).startsWith("live-post-")) return false;
+
+    // Check if story is already approved or pre-published by admin
+    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    if (isApprovedStory) {
+      return true;
+    }
 
     // 2. 3-day expiration rule
     const postTime = p.timestamp || now;
@@ -1342,6 +1349,9 @@ app.get("/api/news-posts", (req, res) => {
       if (String(p.id).startsWith("live-post-")) return false;
       if (activeIds.has(p.id)) return false;
 
+      const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      if (isApprovedStory) return true;
+
       // Ensure pending and rejected posts are NEVER used for backfill for regular users
       if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
         return false;
@@ -1379,11 +1389,47 @@ app.get("/api/news-posts", (req, res) => {
     return String(b.id).localeCompare(String(a.id));
   });
 
-  // Update publishedTime dynamically
-  const dynamicPosts = activePosts.map((p) => ({
-    ...p,
-    publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
-  }));
+  // Update publishedTime dynamically and merge approved editorial headlines/captions
+  const dynamicPosts = activePosts.map((p) => {
+    const ed = editorialDb[p.id];
+    const headlines = (ed && Array.isArray(ed.headlines) && ed.headlines.length > 0)
+      ? ed.headlines
+      : (p.headlineOptions && Array.isArray(p.headlineOptions) && p.headlineOptions.length > 0)
+      ? p.headlineOptions
+      : (p.approvedHeadlines && Array.isArray(p.approvedHeadlines) && p.approvedHeadlines.length > 0)
+      ? p.approvedHeadlines
+      : (p.title ? [p.title] : []);
+
+    const rawTitle = p.title || (headlines[0] || "समाचार");
+    const rawSummary = (ed?.captionDetailed || p.summary || p.fullContent || rawTitle).trim();
+    const defaultBullets = `• ${rawTitle}।\n• ${rawSummary.slice(0, 140)}।\n\n#BreakingNews #HindiNews #AINewsMaker`;
+    const defaultShort = `${rawTitle}\n\n#BreakingNews #AINewsMaker`;
+
+    const capDetailed = ed?.captionDetailed || p.captionDetailed || p.approvedCaptionDetailed || rawSummary;
+    const capBullets = ed?.captionBullets || p.captionBullets || p.approvedCaptionBullets || defaultBullets;
+    const capShort = ed?.captionShort || p.captionShort || p.approvedCaptionShort || defaultShort;
+
+    return {
+      ...p,
+      publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
+      headlineOptions: headlines,
+      approvedHeadlines: headlines,
+      approvedHeadline: ed?.approvedHeadline || headlines[0] || rawTitle,
+      captionDetailed: capDetailed,
+      captionBullets: capBullets,
+      captionShort: capShort,
+      approvedCaptionDetailed: capDetailed,
+      approvedCaptionBullets: capBullets,
+      approvedCaptionShort: capShort,
+      summary: capDetailed || p.summary,
+      isPrePublished: ed ? Boolean(ed.isPrePublished) : Boolean((p as any).isPrePublished),
+      editorialApproved: ed ? (ed.status === "APPROVED" || ed.isPrePublished) : Boolean((p as any).editorialApproved),
+      approvedPhotos: (ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0)
+        ? ed.additionalPhotos
+        : (p.approvedPhotos || p.additionalPhotos || []),
+      sourceUrl: ed?.sourceUrl || p.sourceUrl || "",
+    };
+  });
 
   // Support array format direct access as well as object
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
@@ -1511,18 +1557,75 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
         const postData = req.body || {};
         const updatedTitle = postData.title || p.title;
         approvedTitle = updatedTitle;
+        const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0
+          ? postData.approvedHeadlines
+          : (Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : (p.headlineOptions || [updatedTitle]));
+        const cDetailed = postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || p.summary;
+        const cBullets = postData.captionBullets || postData.approvedCaptionBullets || (p as any).captionBullets || "";
+        const cShort = postData.captionShort || postData.approvedCaptionShort || (p as any).captionShort || "";
+
         return {
           ...p,
+          ...postData,
           title: updatedTitle,
-          summary: postData.summary || p.summary,
+          summary: cDetailed || p.summary,
+          captionDetailed: cDetailed,
+          captionBullets: cBullets,
+          captionShort: cShort,
+          approvedCaptionDetailed: cDetailed,
+          approvedCaptionBullets: cBullets,
+          approvedCaptionShort: cShort,
+          headlineOptions: hList,
+          approvedHeadlines: hList,
+          approvedHeadline: postData.approvedHeadline || hList[0] || updatedTitle,
           imageUrl: postData.imageUrl || p.imageUrl,
+          imageSource: postData.imageSource || p.imageSource || 'source',
+          manualThumbnailUrl: postData.manualThumbnailUrl !== undefined ? postData.manualThumbnailUrl : p.manualThumbnailUrl,
           sourceChannel: postData.sourceChannel || p.sourceChannel,
+          sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : p.sourceUrl,
+          additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (p.additionalPhotos || []),
+          approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : (p.approvedPhotos || p.additionalPhotos || []),
           status: "APPROVED" as const,
+          editorialApproved: postData.editorialApproved !== undefined ? postData.editorialApproved : true,
+          isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : Boolean((p as any).isPrePublished),
+          breaking: postData.breaking !== undefined ? postData.breaking : p.breaking,
+          isExclusive: postData.isExclusive !== undefined ? postData.isExclusive : p.isExclusive,
+          isBonus: postData.isBonus !== undefined ? postData.isBonus : p.isBonus,
+          rewardCoins: postData.rewardCoins || p.rewardCoins || 100,
           timestamp: Date.now()
         };
       }
       return p;
     });
+
+    // Also synchronize approved_editorial_database.json for complete parity
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      const postData = req.body || {};
+      const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0
+        ? postData.approvedHeadlines
+        : (Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : [approvedTitle]);
+      edDb[id] = {
+        ...(edDb[id] || {}),
+        newsId: id,
+        title: approvedTitle,
+        headlines: hList.slice(0, 5),
+        headlineOptions: hList.slice(0, 5),
+        approvedHeadline: postData.approvedHeadline || hList[0] || approvedTitle,
+        captionDetailed: postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || "",
+        captionBullets: postData.captionBullets || postData.approvedCaptionBullets || "",
+        captionShort: postData.captionShort || postData.approvedCaptionShort || "",
+        sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : (edDb[id]?.sourceUrl || ""),
+        additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (edDb[id]?.additionalPhotos || []),
+        status: "APPROVED",
+        isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : true,
+        approvedAt: Date.now(),
+        approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+      };
+      saveApprovedEditorialDatabase(edDb);
+    } catch (e) {
+      console.warn("Could not sync editorial db:", e);
+    }
 
     if (!found) {
       const postData = req.body || {};
@@ -1699,9 +1802,19 @@ app.post("/api/editorial/approved/:id", (req, res) => {
             isPrePublished,
             headlineOptions: updated.headlines,
             approvedHeadlines: updated.headlines,
+            approvedHeadline: body.approvedHeadline || updated.headlines[0] || p.title,
+            captionDetailed: updated.captionDetailed || p.summary,
+            captionBullets: updated.captionBullets || "",
+            captionShort: updated.captionShort || "",
+            approvedCaptionDetailed: updated.captionDetailed || p.summary,
+            approvedCaptionBullets: updated.captionBullets || "",
+            approvedCaptionShort: updated.captionShort || "",
             summary: updated.captionDetailed || p.summary,
+            sourceUrl: updated.sourceUrl || p.sourceUrl,
             image: updated.imageUrl || p.image,
+            imageUrl: updated.imageUrl || p.imageUrl,
             additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos,
+            approvedPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.approvedPhotos,
           };
         }
         return p;
@@ -8487,23 +8600,21 @@ export function saveAiFeaturesConfig(cfg: any): boolean {
   }
 }
 
-export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
+export function getHeadlineRegenCoinCost(tier: string, role?: string): number {
+  const cleanRole = (role || "").toLowerCase().trim();
+  if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
+  const t = (tier || "basic").toLowerCase().trim();
+  if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
+  if (t === "professional" || t === "pro") return 25;
+  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 35;
+  return 50; // Basic / default
+}
+
+export function isRegenerateAllowed(config: any, _effectiveTier: string): boolean {
   if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
-
-  const lowerTier = (effectiveTier || "basic").toLowerCase().trim();
-  const isVipOrAdmin = (
-    lowerTier === "ultra" ||
-    lowerTier === "vip desk" ||
-    lowerTier === "vip_desk" ||
-    lowerTier === "vip_dash" ||
-    lowerTier === "vip-dash" ||
-    lowerTier === "vip" ||
-    lowerTier === "admin" ||
-    lowerTier === "superadmin"
-  );
-
-  return isVipOrAdmin;
+  // Per Part 4.1: Available to Basic, Basic Advanced, Pro, VIP Desk with coin charges
+  return true;
 }
 
 export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
@@ -12760,14 +12871,25 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       }
     }
 
-    const isAllowed = isRegenerateAllowed(aiConfig, userTier);
-    if (!isAllowed) {
-      const allowedList = aiConfig.permissions?.regenerateHeadlines?.allowedTiers || regenConfig.allowedTiers || [];
-      return res.status(403).json({
+    // User identity and coin-based billing per Part 4
+    const userEmail = (req.body.email || (req as any).user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.body.userId || (req as any).user?.userId || req.headers["x-user-id"] || userEmail).toString().trim();
+    const walletKey = userEmail || userId;
+    const requiredCoins = getHeadlineRegenCoinCost(userTier, userResolution.role);
+
+    const rDb = loadRewardsDatabase();
+    if (walletKey && !rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    const currentBalance = (walletKey && rDb.wallets[walletKey]) ? rDb.wallets[walletKey].coinBalance : 0;
+
+    if (requiredCoins > 0 && currentBalance < requiredCoins) {
+      return res.status(400).json({
         success: false,
-        error: `आपकी वर्तमान योजना (${userTier}) में हेडलाइन पुनर्जनन (Regenerate Headlines) की सुविधा अनुमत नहीं है। कृपया योजना अपग्रेड करें।`,
-        requiredTiers: allowedList,
-        currentTier: userTier
+        insufficientCoins: true,
+        error: `अपर्याप्त कॉइन बैलेंस! 5 नई हेडलाइन बनाने के लिए ${requiredCoins} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${currentBalance} कॉइन्स उपलब्ध हैं।`,
+        requiredCoins,
+        currentBalance,
       });
     }
 
@@ -12954,6 +13076,39 @@ JSON Output Schema:
       sourceLoc
     );
 
+    // Atomic coin billing upon successful generation per Part 4.4
+    let coinsDeducted = 0;
+    let remainingCoins = currentBalance;
+    if (requiredCoins > 0 && walletKey) {
+      rDb.wallets[walletKey].coinBalance = Math.max(0, (rDb.wallets[walletKey].coinBalance || 0) - requiredCoins);
+      coinsDeducted = requiredCoins;
+      remainingCoins = rDb.wallets[walletKey].coinBalance;
+
+      const txId = `tx-regen-hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const tx: ServerWalletTransaction = {
+        id: txId,
+        transactionId: txId,
+        userId: userId || walletKey,
+        userEmail: userEmail || walletKey,
+        newsItemId: (req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
+        newsTitle: sourceTitle || "5 नई हेडलाइन्स",
+        description: `5 नई हेडलाइन्स जनरेशन (${userTier.toUpperCase()}): -${requiredCoins} कॉइन्स`,
+        transactionType: "debit",
+        type: "debit",
+        coins: requiredCoins,
+        coinCost: requiredCoins,
+        amount: requiredCoins,
+        timestamp: Date.now(),
+        createdAt: new Date().toISOString(),
+        status: "completed",
+      };
+      if (!Array.isArray(rDb.transactions)) rDb.transactions = [];
+      rDb.transactions.unshift(tx);
+      saveRewardsDatabase(rDb);
+    } else if (walletKey && rDb.wallets[walletKey]) {
+      remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
+    }
+
     return res.json({
       success: true,
       actualProvider,
@@ -12961,6 +13116,9 @@ JSON Output Schema:
       headlineOptions: finalOptions,
       options: finalOptions,
       headline: finalOptions[0] || "",
+      coinsDeducted,
+      remainingCoins,
+      wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : undefined,
       canonicalContext: {
         ...canonicalContext,
         lastRegeneratedAt: new Date().toISOString(),

@@ -371,6 +371,71 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [editorialError, setEditorialError] = useState<string | null>(null);
   const [editorialSuccess, setEditorialSuccess] = useState<string | null>(null);
 
+  // Dedicated Open News Editor function per Part 1.3: Loads all approved and saved content without loss
+  const openNewsEditModal = async (post: NewsFeedPost) => {
+    const rawHeadlines = (post.approvedHeadlines && post.approvedHeadlines.length > 0)
+      ? post.approvedHeadlines
+      : (post.headlineOptions && post.headlineOptions.length > 0)
+      ? post.headlineOptions
+      : [post.title];
+    const initialPhotos = post.approvedPhotos && post.approvedPhotos.length > 0
+      ? post.approvedPhotos
+      : (Array.isArray(post.additionalPhotos) && post.additionalPhotos.length > 0
+        ? post.additionalPhotos
+        : (post.imageUrl ? [post.imageUrl] : []));
+
+    const initialEditPost: NewsFeedPost = {
+      ...post,
+      title: decodeHtmlEntities(post.title),
+      summary: decodeHtmlEntities(post.summary || ''),
+      approvedHeadlines: rawHeadlines.map(h => decodeHtmlEntities(h)),
+      approvedHeadline: decodeHtmlEntities(post.approvedHeadline || rawHeadlines[0] || post.title),
+      approvedCaptionDetailed: decodeHtmlEntities(post.approvedCaptionDetailed || (post as any).captionDetailed || post.summary || ''),
+      approvedCaptionBullets: decodeHtmlEntities(post.approvedCaptionBullets || (post as any).captionBullets || ''),
+      approvedCaptionShort: decodeHtmlEntities(post.approvedCaptionShort || (post as any).captionShort || ''),
+      approvedPhotos: initialPhotos,
+      approvedPhotoLayout: post.approvedPhotoLayout || (initialPhotos.length >= 2 ? 'two_vertical' : 'single'),
+      editorialApproved: post.editorialApproved !== undefined ? post.editorialApproved : Boolean((post as any).isPrePublished || (post as any).isApproved),
+      isPrePublished: Boolean((post as any).isPrePublished || (post as any).isApproved),
+      sourceUrl: post.sourceUrl || '',
+    };
+
+    setEditingPost(initialEditPost);
+    setEditorialError(null);
+    setEditorialSuccess(null);
+
+    // Fetch persistent approved editorial database record from server to ensure 100% data completeness
+    try {
+      const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(post.id)}`));
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.isApproved && json.data) {
+          const ed = json.data;
+          setEditingPost((prev) => {
+            if (!prev || prev.id !== post.id) return prev;
+            const edHeadlines = (Array.isArray(ed.headlines) && ed.headlines.length > 0)
+              ? ed.headlines
+              : (Array.isArray(ed.headlineOptions) && ed.headlineOptions.length > 0 ? ed.headlineOptions : prev.approvedHeadlines);
+            return {
+              ...prev,
+              approvedHeadlines: edHeadlines.map((h: string) => decodeHtmlEntities(h)),
+              approvedHeadline: decodeHtmlEntities(ed.approvedHeadline || edHeadlines[0] || prev.approvedHeadline),
+              approvedCaptionDetailed: decodeHtmlEntities(ed.captionDetailed || prev.approvedCaptionDetailed),
+              approvedCaptionBullets: decodeHtmlEntities(ed.captionBullets || prev.approvedCaptionBullets),
+              approvedCaptionShort: decodeHtmlEntities(ed.captionShort || prev.approvedCaptionShort),
+              approvedPhotos: (Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0) ? ed.additionalPhotos : prev.approvedPhotos,
+              sourceUrl: ed.sourceUrl || prev.sourceUrl,
+              editorialApproved: true,
+              isPrePublished: ed.isPrePublished !== undefined ? ed.isPrePublished : prev.isPrePublished,
+            };
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch approved editorial record:', e);
+    }
+  };
+
   const handleGenerateEditorialData = async () => {
     if (!editingPost) return;
     setIsGeneratingEditorial(true);
@@ -417,6 +482,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       }
       setEditingPost({
         ...editingPost,
+        title: primaryH,
+        summary: decodeHtmlEntities(aiData.summary || detailedCap).slice(0, 320),
         approvedHeadlines: generatedHeadlines,
         approvedHeadline: primaryH,
         approvedCaptionDetailed: detailedCap,
@@ -425,7 +492,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         approvedPhotos: photos,
         approvedPhotoLayout: photos.length >= 2 ? 'two_vertical' : 'single',
       });
-      setEditorialSuccess('AI हेडलाइन (5 विकल्प), 3 कैप्शन और फ़ोटो तैयार हो गए! समीक्षा कर स्वीकृति दें।');
+      setEditorialSuccess('AI हेडलाइन (5 विकल्प), 3 कैप्शन और फ़ोटो तैयार हो गए! ऊपर शीर्षक/विवरण अपडेट हो चुके हैं।');
     } catch (err: any) {
       setEditorialError(err?.message || 'हेडलाइन व कैप्शन जनरेट करने में त्रुटि');
     } finally {
@@ -2173,8 +2240,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.categoryName}
                         </span>
 
-                        {/* Pre-Published Approved Editorial Badge */}
-                        {Boolean((post as any).isPrePublished || (post as any).isApproved) && (
+                        {/* Pre-Published Approved Editorial Badge (Admin-only per Part 2.2) */}
+                        {canModerate && Boolean((post as any).isPrePublished || (post as any).isApproved) && (
                           <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
                             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
                             <span>प्री-पब्लिश</span>
@@ -2432,13 +2499,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                 if (post.manualThumbnailUrl) {
                                   next = 'manual';
                                 } else {
-                                  setEditingPost({
-                                    ...post,
-                                    title: decodeHtmlEntities(post.title),
-                                    summary: decodeHtmlEntities(post.summary),
-                                  });
-                                  setEditorialError(null);
-                                  setEditorialSuccess(null);
+                                  openNewsEditModal(post);
                                   return;
                                 }
                               } else {
@@ -2529,15 +2590,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {/* 5. Edit Button */}
                           <button
                             type="button"
-                            onClick={() => {
-                              setEditingPost({
-                                ...post,
-                                title: decodeHtmlEntities(post.title),
-                                summary: decodeHtmlEntities(post.summary),
-                              });
-                              setEditorialError(null);
-                              setEditorialSuccess(null);
-                            }}
+                            onClick={() => openNewsEditModal(post)}
                             className="py-1.5 px-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/60 dark:hover:bg-blue-800 border border-blue-200 dark:border-blue-600 text-blue-700 dark:text-blue-200 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
                             title="खबर एडिट करें"
                           >
@@ -2609,8 +2662,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 e.preventDefault();
                 if (editingPost) {
                   try {
-                    fetch(getApiUrl(`/api/admin/approve-news/${encodeURIComponent(editingPost.id)}`), {
+                    await fetch(getApiUrl(`/api/admin/approve-news/${encodeURIComponent(editingPost.id)}`), {
                       method: 'POST',
+                      headers: getAuthHeaders(),
+                      body: JSON.stringify(editingPost),
+                    }).catch(() => {});
+                    await fetch(getApiUrl(`/api/news-posts/${encodeURIComponent(editingPost.id)}`), {
+                      method: 'PUT',
                       headers: getAuthHeaders(),
                       body: JSON.stringify(editingPost),
                     }).catch(() => {});
@@ -2670,14 +2728,38 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  संक्षिप्त विवरण
+                  संक्षिप्त विवरण / रॉ न्यूज़ स्क्रिप्ट
                 </label>
                 <textarea
                   rows={3}
                   value={editingPost.summary}
                   onChange={(e) => setEditingPost({ ...editingPost, summary: e.target.value })}
+                  placeholder="खबर का विवरण या रॉ स्क्रिप्ट दर्ज करें..."
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden resize-none"
                 />
+              </div>
+
+              {/* Part 1.1: AI Headline & Caption Generation Button placed directly below URL & Short Description */}
+              <div className="pt-0.5 pb-1">
+                <button
+                  type="button"
+                  disabled={isGeneratingEditorial}
+                  onClick={handleGenerateEditorialData}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="पेस्ट किए गए URL या रॉ स्क्रिप्ट से AI हेडलाइन, कैप्शन और संक्षिप्त विवरण तैयार करें"
+                >
+                  {isGeneratingEditorial ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>AI से हेडलाइन व कैप्शन तैयार हो रहे हैं...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 text-white" />
+                      <span>AI Headline व Caption तैयार करें</span>
+                    </>
+                  )}
+                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2986,98 +3068,99 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </>
                     )}
                   </button>
-                  <button
-                    type="button"
-                    disabled={isGeneratingEditorial}
-                    onClick={handleGenerateEditorialData}
-                    className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-white" />
-                    <span>AI हेडलाइन व कैप्शन तैयार करें</span>
-                  </button>
                 </div>
 
-                {/* 5 Headline Options Inputs */}
-                {editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <label className="block text-xs font-black text-yellow-300">
-                      5 संतुलित हेडलाइन विकल्प (प्राथमिक हेडलाइन चुनने के लिए रेडियो बटन दबाएं):
-                    </label>
-                    <div className="space-y-1.5">
-                      {editingPost.approvedHeadlines.map((h, hIdx) => {
-                        const isSelected = (editingPost.approvedHeadline || editingPost.approvedHeadlines?.[0]) === h;
-                        return (
-                          <div key={hIdx} className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="admin_approved_headline_radio"
-                              checked={isSelected}
-                              onChange={() => setEditingPost({ ...editingPost, approvedHeadline: h })}
-                              className="w-4 h-4 accent-amber-400 cursor-pointer shrink-0"
-                              title="इस हेडलाइन को प्राथमिक चुनें"
-                            />
-                            <span className="text-[11px] font-bold text-amber-400 shrink-0 w-14">
-                              विकल्प {hIdx + 1}:
-                            </span>
-                            <input
-                              type="text"
-                              value={h}
-                              onChange={(e) => {
-                                const updated = [...(editingPost.approvedHeadlines || [])];
-                                updated[hIdx] = e.target.value;
-                                setEditingPost({
-                                  ...editingPost,
-                                  approvedHeadlines: updated,
-                                  approvedHeadline: isSelected ? e.target.value : editingPost.approvedHeadline,
-                                });
-                              }}
-                              className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-bold focus:border-amber-400 focus:outline-hidden"
-                            />
-                          </div>
-                        );
-                      })}
+                {/* 5 Headline Options Inputs - Always visible and editable per Part 1.3 */}
+                {(() => {
+                  const existingList = Array.isArray(editingPost.approvedHeadlines) && editingPost.approvedHeadlines.length > 0
+                    ? [...editingPost.approvedHeadlines]
+                    : [editingPost.title];
+                  while (existingList.length < 5) {
+                    existingList.push('');
+                  }
+                  return (
+                    <div className="space-y-2 pt-2">
+                      <label className="block text-xs font-black text-yellow-300">
+                        5 संतुलित हेडलाइन विकल्प (प्राथमिक हेडलाइन चुनने के लिए रेडियो बटन दबाएं):
+                      </label>
+                      <div className="space-y-1.5">
+                        {existingList.slice(0, 5).map((h, hIdx) => {
+                          const isSelected = (editingPost.approvedHeadline || existingList[0] || editingPost.title) === h;
+                          return (
+                            <div key={hIdx} className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="admin_approved_headline_radio"
+                                checked={isSelected}
+                                onChange={() => setEditingPost({ ...editingPost, approvedHeadline: h })}
+                                className="w-4 h-4 accent-amber-400 cursor-pointer shrink-0"
+                                title="इस हेडलाइन को प्राथमिक चुनें"
+                              />
+                              <span className="text-[11px] font-bold text-amber-400 shrink-0 w-14">
+                                विकल्प {hIdx + 1}:
+                              </span>
+                              <input
+                                type="text"
+                                value={h}
+                                placeholder={`हेडलाइन विकल्प ${hIdx + 1}...`}
+                                onChange={(e) => {
+                                  const updated = [...existingList];
+                                  updated[hIdx] = e.target.value;
+                                  setEditingPost({
+                                    ...editingPost,
+                                    approvedHeadlines: updated,
+                                    approvedHeadline: isSelected ? e.target.value : editingPost.approvedHeadline,
+                                  });
+                                }}
+                                className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-bold focus:border-amber-400 focus:outline-hidden"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
-                {/* 3 Caption Textareas (Detailed, Bullets, Short) */}
-                {(editingPost.approvedCaptionDetailed || editingPost.approvedCaptionBullets || editingPost.approvedCaptionShort) && (
-                  <div className="space-y-2.5 pt-2 border-t border-slate-800">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        1. विस्तृत सोशल मीडिया कैप्शन:
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={editingPost.approvedCaptionDetailed || ''}
-                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionDetailed: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        2. मुख्य बुलेट पॉइंट्स कैप्शन:
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={editingPost.approvedCaptionBullets || ''}
-                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionBullets: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        3. संक्षिप्त कैप्शन:
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={editingPost.approvedCaptionShort || ''}
-                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionShort: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
-                      />
-                    </div>
+                {/* 3 Caption Textareas (Detailed, Bullets, Short) - Always visible per Part 1.3 */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      1. विस्तृत सोशल मीडिया कैप्शन:
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={editingPost.approvedCaptionDetailed || ''}
+                      placeholder="विस्तृत समाचार कैप्शन..."
+                      onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionDetailed: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                    />
                   </div>
-                )}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      2. मुख्य बुलेट पॉइंट्स कैप्शन:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editingPost.approvedCaptionBullets || ''}
+                      placeholder="• बिंदु 1&#10;• बिंदु 2"
+                      onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionBullets: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      3. संक्षिप्त कैप्शन:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editingPost.approvedCaptionShort || ''}
+                      placeholder="संक्षिप्त मुख्य बिंदु कैप्शन..."
+                      onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionShort: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
 
                 {/* Photos & Layout Selection */}
                 {editingPost.approvedPhotos && editingPost.approvedPhotos.length > 0 && (
@@ -3131,7 +3214,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   onClick={async () => {
                     if (!editingPost) return;
                     try {
-                      const headlineList = (editingPost as any).headlineOptions || (editingPost as any).approvedHeadlines || [editingPost.title];
+                      const headlineList = (editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0)
+                        ? editingPost.approvedHeadlines
+                        : ((editingPost as any).headlineOptions || [editingPost.title]);
+                      const chosenH = editingPost.approvedHeadline || headlineList[0] || editingPost.title;
                       const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(editingPost.id)}`), {
                         method: 'POST',
                         headers: {
@@ -3141,14 +3227,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         body: JSON.stringify({
                           title: editingPost.title,
                           headlines: headlineList.slice(0, 5),
-                          captionDetailed: editingPost.summary,
+                          headlineOptions: headlineList.slice(0, 5),
+                          approvedHeadline: chosenH,
+                          captionDetailed: editingPost.approvedCaptionDetailed || editingPost.summary || '',
+                          captionBullets: editingPost.approvedCaptionBullets || '',
+                          captionShort: editingPost.approvedCaptionShort || '',
                           sourceUrl: editingPost.sourceUrl || '',
                           sourceChannel: editingPost.sourceChannel || '',
                           location: editingPost.location || '',
                           category: editingPost.categoryName || editingPost.category || '',
-                          imageUrl: editingPost.imageSource === 'manual' ? (editingPost.manualThumbnailUrl || editingPost.image) : editingPost.image,
+                          imageUrl: editingPost.imageSource === 'manual' ? (editingPost.manualThumbnailUrl || editingPost.imageUrl || editingPost.image) : (editingPost.imageUrl || editingPost.image),
                           additionalPhotos: editingPost.additionalPhotos || [],
                           isPrePublished: true,
+                          status: 'APPROVED',
                         }),
                       });
                       if (res.ok) {

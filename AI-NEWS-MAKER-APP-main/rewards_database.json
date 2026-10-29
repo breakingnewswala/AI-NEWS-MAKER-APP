@@ -99,6 +99,23 @@
   ],
   "transactions": [
     {
+      "id": "tx-regen-hl-1793257307074-t6fc",
+      "transactionId": "tx-regen-hl-1793257307074-t6fc",
+      "userId": "newuser-01",
+      "userEmail": "newuser.test@gmail.com",
+      "newsItemId": "",
+      "newsTitle": "सुप्रीम कोर्ट का चुनाव आयोग से सवाल",
+      "description": "5 नई हेडलाइन्स जनरेशन (BASIC): -50 कॉइन्स",
+      "transactionType": "debit",
+      "type": "debit",
+      "coins": 50,
+      "coinCost": 50,
+      "amount": 50,
+      "timestamp": 1793257307074,
+      "createdAt": "2026-10-29T07:01:47.074Z",
+      "status": "completed"
+    },
+    {
       "id": "tx-frame-1793165970036-cv0b",
       "transactionId": "tx-frame-1793165970036-cv0b",
       "userId": "coin_test_1793165970002@example.com",

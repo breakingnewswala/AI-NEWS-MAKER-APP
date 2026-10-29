@@ -1195,7 +1195,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
               <span className="px-2.5 py-1 bg-slate-950 text-emerald-400 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                {userSub?.planKey || 'बेसिक'}
+                {userSub?.planKey || userSub?.planName || 'VIP DESK'}
               </span>
               <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'upgrade' ? 'rotate-180 text-amber-400' : ''}`} />
             </div>
