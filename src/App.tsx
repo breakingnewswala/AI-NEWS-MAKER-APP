@@ -3036,8 +3036,8 @@ export default function App() {
       {(currentTab === 'generator' || currentTab === 'studio') && (
         <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
           <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
-          {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile only shows Graphic unless opened via 'इस वीडियो को बनाएँ' */}
-          <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
+          {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile it is integrated into the sticky header */}
+          <div className={`hidden lg:block w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible && (!studioInitialItem ? 'max-h-20 opacity-100 mb-3' : 'max-h-20 opacity-100 mb-3')
           }`}>
             <div className="flex items-center justify-between bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl p-1 shadow-sm dark:shadow-lg max-w-lg mx-auto">
@@ -3086,96 +3086,132 @@ export default function App() {
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
               <div className="lg:hidden w-full flex flex-col min-h-screen">
+                {/* 🔒 STICKY / FROZEN STUDIO HEADER (Tabs + 70/30 Preview & Steps + Live Preview Action Strip) */}
                 <div
-                  id="mobile-studio-workspace"
-                  className="w-full bg-white/95 dark:bg-slate-950/95 p-2 shadow-sm dark:shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
+                  id="mobile-studio-sticky-header"
+                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2.5 pt-2 pb-1.5 transition-all"
                 >
-                  {/* 1. Preview canvas (4:5 aspect ratio) near top - ~70% screen */}
-                  <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
-                    <CardPreview
-                      card={card}
-                      className="w-full h-full"
-                      showSafeZone={showSafeZone}
-                      onChange={handleUpdateCard}
-                    />
+                  {/* Row 1: Studio Mode Selector Tabs (Graphic Photo News & Video News) */}
+                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 mb-2 max-w-md mx-auto">
+                    <button
+                      type="button"
+                      onClick={() => updateStudioMode('graphic')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                        studioMode === 'graphic'
+                          ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 shadow-md font-black'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <Palette className="w-3.5 h-3.5 text-slate-950" />
+                      <span>ग्राफिक फोटो न्यूज़</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStudioMode('video')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                        studioMode === 'video'
+                          ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <Film className="w-3.5 h-3.5 text-white" />
+                      <span>वीडियो न्यूज़</span>
+                    </button>
                   </div>
 
-                  {/* 2. Action strip directly below Preview */}
-                  <div className="flex items-center justify-between w-full max-w-[340px] sm:max-w-[400px] py-2 px-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                      <span className="text-xs font-black tracking-wider uppercase text-slate-800 dark:text-slate-200">LIVE CANVAS</span>
+                  {/* Row 2: Balanced 70/30 Split (Left ~70%: 4:5 Preview | Right ~30%: 7 Editor Steps) */}
+                  <div className="flex flex-row items-stretch gap-2.5 max-w-md mx-auto w-full">
+                    {/* Left Column: ~70% width for 4:5 Graphic Preview */}
+                    <div className="w-[69%] min-w-0 flex flex-col justify-start">
+                      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1 truncate">
+                        4:5 PREVIEW SPACE — 70% WIDTH
+                      </div>
+                      <div className="w-full aspect-[4/5] max-h-[300px] rounded-xl sm:rounded-2xl overflow-hidden ring-1 ring-slate-800 shadow-2xl bg-black flex items-center justify-center relative">
+                        <CardPreview
+                          card={card}
+                          className="w-full h-full"
+                          showSafeZone={showSafeZone}
+                          onChange={handleUpdateCard}
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    {/* Right Column: ~30% width for 7 Editor Steps (Text only, exact order) */}
+                    <div className="w-[31%] min-w-0 flex flex-col justify-between py-0.5">
+                      <div className="text-[11px] sm:text-xs font-black text-amber-400 tracking-wide mb-1 text-center truncate">
+                        एडिटर स्टेप्स
+                      </div>
+                      <div className="flex-1 flex flex-col justify-between gap-1">
+                        {[
+                          { step: 1, label: 'टेम्पलेट्स' },
+                          { step: 2, label: 'एआई टूल्स' },
+                          { step: 3, label: 'हेडलाइन' },
+                          { step: 4, label: 'फोटोज एंड वॉटरमार्क' },
+                          { step: 5, label: 'स्थान व दिनांक' },
+                          { step: 6, label: 'टेक्स्ट एंड फुटर' },
+                          { step: 7, label: 'डाउनलोड व कैप्शन' },
+                        ].map((s) => {
+                          const isActive = activeStep === s.step;
+                          return (
+                            <button
+                              key={s.step}
+                              type="button"
+                              onClick={() => {
+                                setActiveStep(s.step);
+                                const el = document.getElementById('mobile-active-step-commands');
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }
+                              }}
+                              className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all text-center truncate cursor-pointer select-none ${
+                                isActive
+                                  ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                                  : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 border border-slate-800/80'
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Live Preview Action Strip */}
+                  <div className="flex items-center justify-between w-full max-w-md mx-auto pt-2 pb-0.5 border-t border-slate-800/80 mt-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shadow-sm" />
+                      <span className="text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-slate-200">
+                        LIVE PREVIEW CANVAS
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={handleSaveDraft}
-                        className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-400 text-xs font-bold rounded-lg border border-amber-500/30 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-bold rounded-lg border border-amber-500/40 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="ड्राफ्ट सेव करें"
                       >
-                        <Bookmark className="w-3.5 h-3.5" />
+                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
                         <span>DRAFT</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleResetCard}
-                        className="px-3 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="नया सत्र / रीसेट"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" />
+                        <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
                         <span>REFRESH</span>
                       </button>
                     </div>
                   </div>
-
-                  {/* 3. Editor Steps section directly below Action strip */}
-                  <div className="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1 ring-1 ring-slate-800">
-                    <div className="text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5 px-1">
-                      STEPS
-                    </div>
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
-                      {[
-                        { step: 1, label: 'टेम्पलेट्स' },
-                        { step: 2, label: 'एआई टूल्स' },
-                        { step: 3, label: 'हेडलाइन' },
-                        { step: 4, label: 'फोटो व वाटरमार्क' },
-                        { step: 5, label: 'स्थान व दिनांक' },
-                        { step: 6, label: 'टैग्स और फुटर' },
-                        { step: 7, label: 'डाउनलोड व कैप्शन' }
-                      ].map((s) => {
-                        const isActive = activeStep === s.step;
-                        return (
-                          <button
-                            key={s.step}
-                            type="button"
-                            onClick={() => {
-                              setActiveStep(s.step);
-                              const el = document.getElementById('mobile-active-step-commands');
-                              if (el) {
-                                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              }
-                            }}
-                            className={`flex-shrink-0 px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs whitespace-nowrap ${
-                              isActive
-                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60 font-semibold'
-                            }`}
-                          >
-                            <span>{s.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Distinct Horizontal Partition / Divider Line */}
-                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
                 </div>
 
-                {/* 4. Editor Content Panel - Opens directly below Steps navigation */}
+                {/* 4. Selected Step Editor Content Panel - Scrolls Underneath the Sticky Upper Area */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 pb-36 overflow-y-auto max-w-md mx-auto"
                 >
                   <CardEditor
                     card={card}
