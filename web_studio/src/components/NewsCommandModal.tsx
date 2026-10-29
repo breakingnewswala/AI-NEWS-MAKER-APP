@@ -1089,7 +1089,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-neutral-200'
                   }`}
                 >
-                  {result.isAiGeneratedPhoto ? 'सक्रिय (ON)' : 'बंद (OFF)'}
+                  {result.isAiGeneratedPhoto ? 'सक्रिय (ON)' : 'बंद'}
                 </button>
               </div>
 

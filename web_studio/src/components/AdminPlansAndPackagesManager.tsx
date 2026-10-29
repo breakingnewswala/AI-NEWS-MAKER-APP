@@ -1625,7 +1625,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <ShieldAlert className="w-8 h-8" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण</h4>
                   <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
                     यह सेक्शन (<strong>5. प्रोमो कोड्स व कूपन मैनेजर</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
                   </p>
@@ -1656,7 +1656,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Plus className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">नया प्रोमो कोड बनाएं (Create Promo Code)</h3>
+                <h3 className="text-base font-bold text-white">नया प्रोमो कोड बनाएं</h3>
               </div>
               <span className="text-xs text-slate-400">एक समय में केवल 1 प्लान एक्टिवेट होगा</span>
             </div>
@@ -1740,7 +1740,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 {/* 4. Validity / Duration in Days */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    4. प्लान वैधता (Validity)
+                    4. प्लान वैधता
                   </label>
                   <select
                     value={newPromoDurationDays}
@@ -1778,7 +1778,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>प्रोमो कोड सुरक्षित करें (Save Promo Code)</span>
+                  <span>प्रोमो कोड सुरक्षित करें</span>
                 </button>
               </div>
             </form>
@@ -1840,13 +1840,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/50">
-                      <th className="p-3">प्रोमो कोड (Promo Code)</th>
-                      <th className="p-3">प्लान (Plan)</th>
-                      <th className="p-3">उपयोग (Usage)</th>
-                      <th className="p-3">स्टेटस (Status)</th>
-                      <th className="p-3">उपयोगकर्ता (Used By)</th>
-                      <th className="p-3">वैधता (Validity)</th>
-                      <th className="p-3 text-right">एक्शन (Actions)</th>
+                      <th className="p-3">प्रोमो कोड</th>
+                      <th className="p-3">प्लान</th>
+                      <th className="p-3">उपयोग</th>
+                      <th className="p-3">स्थिति</th>
+                      <th className="p-3">उपयोगकर्ता</th>
+                      <th className="p-3">वैधता</th>
+                      <th className="p-3 text-right">कार्रवाई</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -2011,7 +2011,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <ShieldAlert className="w-8 h-8" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण</h4>
                   <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
                     यह सेक्शन (<strong>6. यूजर्स मैनेजर व रोल नियंत्रण</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
                   </p>
@@ -2031,7 +2031,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white tracking-wide flex items-center gap-2">
-                    <span>लोगो बदलने के अनुरोध (Logo Change Requests)</span>
+                    <span>लोगो बदलने के अनुरोध</span>
                     {logoRequests.filter((r) => r.status === 'pending').length > 0 && (
                       <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full animate-pulse">
                         {logoRequests.filter((r) => r.status === 'pending').length} नए
@@ -2078,8 +2078,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <th className="p-3">चैनल नाम</th>
                       <th className="p-3">अनुरोध का कारण</th>
                       <th className="p-3">दिनांक</th>
-                      <th className="p-3">स्थिति (Status)</th>
-                      <th className="p-3 text-right">कार्रवाई (Action)</th>
+                      <th className="p-3">स्थिति</th>
+                      <th className="p-3 text-right">कार्रवाई</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
@@ -2142,7 +2142,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <td className="p-3 whitespace-nowrap">
                           {req.status === 'pending' ? (
                             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-black">
-                              ⏳ लंबित (Pending)
+                              ⏳ लंबित
                             </span>
                           ) : req.status === 'approved' ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[10px] font-black">
@@ -2204,7 +2204,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <Users className="w-5 h-5 text-amber-400" />
-              <h3 className="text-base font-bold text-white">यूज़र को मैन्युअल प्लान असाइन करें (Assign Plan to User)</h3>
+              <h3 className="text-base font-bold text-white">यूज़र को मैन्युअल प्लान असाइन करें</h3>
             </div>
 
             {manualAssignMsg && (
@@ -2269,7 +2269,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <div>
                 <h4 className="text-sm sm:text-base font-black text-amber-300 flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-amber-400" />
-                  <span>➕ नया यूज़र या एडमिन जोड़ें (Add User / Admin)</span>
+                  <span>➕ नया यूज़र या एडमिन जोड़ें</span>
                 </h4>
                 <p className="text-xs text-slate-300 mt-0.5">
                   सुपर एडमिन सीधे यहाँ से किसी भी पत्रकार/यूज़र या एडमिन का ईमेल आईडी व पासवर्ड बनाकर अकाउंट जोड़ सकते हैं।
@@ -2302,7 +2302,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">पूरा नाम (Full Name) *</label>
+                    <label className="block text-slate-300 font-bold mb-1">पूरा नाम *</label>
                     <input
                       type="text"
                       required
@@ -2314,7 +2314,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">ईमेल आईडी (Email / Login ID) *</label>
+                    <label className="block text-slate-300 font-bold mb-1">ईमेल आईडी *</label>
                     <input
                       type="email"
                       required
@@ -2326,7 +2326,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">लॉगिन पासवर्ड (Password) *</label>
+                    <label className="block text-slate-300 font-bold mb-1">लॉगिन पासवर्ड *</label>
                     <input
                       type="text"
                       required
@@ -2338,7 +2338,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">रोल चयन (Role) *</label>
+                    <label className="block text-slate-300 font-bold mb-1">रोल चयन *</label>
                     <select
                       value={newUserRole}
                       onChange={(e) => setNewUserRole(e.target.value as any)}
@@ -2350,7 +2350,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1">प्लान (Plan Tier) *</label>
+                    <label className="block text-slate-300 font-bold mb-1">प्लान टियर *</label>
                     <select
                       value={newUserPlan}
                       onChange={(e) => setNewUserPlan(e.target.value as any)}
@@ -2393,7 +2393,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <span>पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स (User Manager)</span>
+                  <span>पंजीकृत यूज़र्स व डेटाबेस रिकॉर्ड्स</span>
                   <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-xs font-black rounded-full">
                     {planUsers.length}
                   </span>
@@ -2488,8 +2488,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 <table className="w-full min-w-[720px] text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/60">
-                      <th className="p-3 w-[36%]">यूज़र व अकाउंट विवरण (User & Role)</th>
-                      <th className="p-3 w-[28%]">वर्तमान प्लान व वैधता (Plan & Validity)</th>
+                      <th className="p-3 w-[36%]">यूज़र व अकाउंट विवरण</th>
+                      <th className="p-3 w-[28%]">वर्तमान प्लान व वैधता</th>
                       <th className="p-3 w-[36%] text-right">खाता स्थिति, कॉइन्स व एक्शन</th>
                     </tr>
                   </thead>
@@ -2837,7 +2837,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल नाम (Channel Name)</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल नाम</label>
                     <input
                       type="text"
                       value={editBrandNameHi}
@@ -2848,7 +2848,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">वेबसाइट URL (Website)</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">वेबसाइट लिंक</label>
                     <input
                       type="text"
                       value={editBrandWebsite}
@@ -2859,7 +2859,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">संपर्क / व्हाट्सऐप नंबर (Mobile)</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">संपर्क / व्हाट्सएप नंबर</label>
                     <input
                       type="text"
                       value={editBrandMobile}
@@ -2898,7 +2898,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">सोशल आइकन्स (Social Icons)</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">सोशल आइकन्स</label>
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs text-slate-200">
                       {['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'].map((s) => (
                         <label key={s} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 cursor-pointer hover:border-slate-700">
@@ -3105,7 +3105,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   {/* 1. Username - Specially Requested by User */}
                   <div>
                     <label className="block text-slate-200 font-bold mb-1 flex items-center justify-between">
-                      <span>1. यूज़रनेम (Username / User ID) *</span>
+                      <span>1. यूज़रनेम *</span>
                       <span className="text-[10px] text-amber-400 font-normal">⚠️ केवल अक्षर, अंक व अंडरस्कोर</span>
                     </label>
                     <div className="relative">
@@ -3127,7 +3127,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   {/* 2. Full Name & Email */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-200 font-bold mb-1">2. पूरा नाम (Full Name) *</label>
+                      <label className="block text-slate-200 font-bold mb-1">2. पूरा नाम *</label>
                       <input
                         type="text"
                         required
@@ -3150,7 +3150,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   {/* 3. Mobile Number & Channel Name */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-200 font-bold mb-1">3. मोबाइल नंबर (Mobile) *</label>
+                      <label className="block text-slate-200 font-bold mb-1">3. मोबाइल नंबर *</label>
                       <input
                         type="tel"
                         value={editMobile}
@@ -3160,7 +3160,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-200 font-bold mb-1">4. चैनल का नाम (Channel)</label>
+                      <label className="block text-slate-200 font-bold mb-1">4. चैनल का नाम</label>
                       <input
                         type="text"
                         value={editChannelName}
@@ -3174,7 +3174,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   {/* 4. Plan Tier & Account Status */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-200 font-bold mb-1">5. प्लान / टियर (Plan Tier) *</label>
+                      <label className="block text-slate-200 font-bold mb-1">5. प्लान / टियर *</label>
                       <select
                         value={editTier}
                         onChange={(e) => setEditTier(e.target.value as UserPlanTier)}
@@ -3187,7 +3187,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       </select>
                     </div>
                     <div>
-                      <label className="block text-slate-200 font-bold mb-1">6. प्रोफाइल लॉक (Profile Lock) *</label>
+                      <label className="block text-slate-200 font-bold mb-1">6. प्रोफाइल लॉक *</label>
                       <select
                         value={editIsLocked ? 'locked' : 'unlocked'}
                         onChange={(e) => setEditIsLocked(e.target.value === 'locked')}
@@ -3868,7 +3868,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल चुनें (Select Channel) *</label>
+                  <label className="block text-slate-300 font-bold mb-1">चैनल चुनें *</label>
                   <select
                     value={newSourceName || (savedChannels[0] || '')}
                     onChange={(e) => setNewSourceName(e.target.value)}
@@ -3891,7 +3891,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी (Category)</label>
+                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी</label>
                   <select
                     value={newSourceCategory}
                     onChange={(e) => setNewSourceCategory(e.target.value)}
@@ -4101,7 +4101,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी (Category)</label>
+                  <label className="block text-slate-300 font-bold mb-1">डिफ़ॉल्ट श्रेणी</label>
                   <select
                     value={converterCategory}
                     onChange={(e) => setConverterCategory(e.target.value)}
@@ -4408,7 +4408,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल / न्यूज़ पोर्टल चुनें (Select Channel) *</label>
+                  <label className="block text-slate-300 font-bold mb-1">चैनल / न्यूज़ पोर्टल चुनें *</label>
                   <select
                     value={newSourceName || (savedChannels[0] || '')}
                     onChange={(e) => setNewSourceName(e.target.value)}
@@ -4431,7 +4431,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">श्रेणी (Category)</label>
+                  <label className="block text-slate-300 font-bold mb-1">श्रेणी</label>
                   <select
                     value={newSourceCategory}
                     onChange={(e) => setNewSourceCategory(e.target.value)}
@@ -4565,7 +4565,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <ShieldAlert className="w-8 h-8" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण (Super Admin Access Only)</h4>
+                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण</h4>
                   <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
                     यह सेक्शन (<strong>9. प्रतिबंधित चैनल सुरक्षा सूची</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
                   </p>

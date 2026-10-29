@@ -1630,7 +1630,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                     <div>
                       <h3 className="text-base font-black text-white flex items-center gap-2">
-                        <span>🎁 प्रोमो कोड रिडीम करें (Redeem Promo Code)</span>
+                        <span>🎁 प्रोमो कोड रिडीम करें</span>
                         <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded uppercase">
                           Instant Activation
                         </span>
@@ -1759,7 +1759,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       key={plan.id}
                       className={`relative rounded-2xl p-4 border flex flex-col justify-between transition-all ${
                         isCurrent
-                          ? 'bg-slate-900 border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40'
+                          ? 'bg-white dark:bg-slate-900 border-amber-500 dark:border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40 text-slate-900 dark:text-white'
                           : plan.popular
                           ? 'bg-slate-950/90 border-blue-500/50 hover:border-blue-400'
                           : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
@@ -1829,7 +1829,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             title="एडमिन मोड: प्लान सेटिंग्स प्रबंधित करें"
                           >
                             <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                            <span>⚙️ प्लान सेटिंग्स (Admin Managed)</span>
+                            <span>⚙️ प्लान सेटिंग्स</span>
                           </button>
                         ) : isCurrent ? (
                           subscription.isPlanExpired || subscription.isTrialExpired ? (
@@ -1839,7 +1839,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               className="w-full py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
                             >
                               <Zap className="w-3.5 h-3.5" />
-                              <span>पुनः सक्रिय करें (Reactivate Plan)</span>
+                              <span>पुनः सक्रिय करें</span>
                             </button>
                           ) : (
                             <div className="w-full py-2 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
@@ -2179,7 +2179,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         {/* 2. New Asset Upload & Preview */}
                         <div className={`p-3 bg-slate-950 rounded-xl border space-y-2 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
                           <span className={`text-[11px] font-bold block flex items-center justify-between ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
-                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload):'}</span>
+                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो:'}</span>
                             {newRequestedLogoUrl && (
                               <button
                                 type="button"
@@ -2230,7 +2230,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
                             : 'bg-rose-950/70 border-rose-500/50 text-rose-300'
                         }`}>
-                          <span>वर्तमान स्थिति (Request Status):</span>
+                          <span>वर्तमान स्थिति:</span>
                           <span>
                             {(logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'pending'
                               ? '⏳ लंबित (Admin Review Underway)'
@@ -2259,7 +2259,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300">
                         <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
                           <AlertCircle className="w-3.5 h-3.5" />
-                          <span>आधिकारिक सहायता व सत्यापन डेस्क (Support Info):</span>
+                          <span>आधिकारिक सहायता व सत्यापन डेस्क:</span>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-300">
                           <div className="flex items-center gap-1.5">
@@ -2350,7 +2350,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             <span>सबमिट हो रहा है...</span>
                           </>
                         ) : (
-                          <span>अनुरोध सबमिट करें (Submit Request)</span>
+                          <span>अनुरोध सबमिट करें</span>
                         )}
                       </button>
                     </div>
@@ -2506,7 +2506,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               {/* Registered Email Address (Gmail / Login ID) */}
               <div className="pt-1">
                 <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
-                  <span>पंजीकृत ईमेल आईडी (Gmail / Login Email)</span>
+                  <span>पंजीकृत ईमेल आईडी (जीमेल)</span>
                   <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>सत्यापित खाता</span>
@@ -2715,9 +2715,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white pb-28">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-28 transition-colors">
       {/* Top Header */}
-      <div className="bg-slate-900 border-b border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-md sticky top-0 z-40">
+      <div className="bg-white/95 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm dark:shadow-md sticky top-0 z-40 text-slate-900 dark:text-white">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
@@ -2822,7 +2822,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : ''));
 
           return (
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="bg-gradient-to-r from-white dark:from-slate-900 via-slate-50 dark:via-slate-800 to-white dark:to-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-900 dark:text-white">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
                 {/* User Avatar / Channel Logo */}
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
@@ -3169,7 +3169,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-700/80 rounded-2xl p-4 shadow-md space-y-3">
                     <h4 className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span>बोनस न्यूज़ शेयर करके कॉइन्स कैसे कमाएं? (How to Earn)</span>
+                      <span>बोनस न्यूज़ शेयर करके कॉइन्स कैसे कमाएं?</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
                       <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
@@ -3328,7 +3328,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div className="space-y-3 border-t border-slate-800/80 pt-4">
                     <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
                       <Coins className="w-4 h-4 text-amber-400" />
-                      <span>वॉलेट लेन-देन विवरण (Transaction Log)</span>
+                      <span>वॉलेट लेन-देन विवरण</span>
                     </h4>
 
                     {walletTransactions.length === 0 ? (
@@ -3464,7 +3464,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-2"
                       >
                         <Crown className="w-4 h-4" />
-                        <span>प्लान अपग्रेड करें (Upgrade Plan)</span>
+                        <span>प्लान अपग्रेड करें</span>
                       </button>
                     </div>
                   ) : (

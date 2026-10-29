@@ -422,9 +422,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   };
 
   return (
-    <div className="w-full max-w-full lg:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-white overflow-x-hidden">
+    <div className="w-full max-w-full lg:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-slate-900 dark:text-white transition-colors overflow-x-hidden">
       {/* 1. Header Banner */}
-      <div className="w-full bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/50 border border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl flex items-center justify-between gap-4">
+      <div className="w-full bg-gradient-to-r from-red-50 dark:from-red-950/70 via-white dark:via-slate-900 to-amber-50 dark:to-amber-950/50 border border-slate-200 dark:border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-sm dark:shadow-2xl flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center shadow-lg text-white shrink-0">
             <Newspaper className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -433,7 +433,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             <h2 className="text-lg sm:text-2xl font-black text-white">
               न्यूज़रूम संपादकीय डेस्क
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1">
               संपादकीय ड्राफ्ट प्रोजेक्ट्स, सहायता केंद्र व ई-पेपर प्रबंधन
             </p>
           </div>
@@ -441,14 +441,14 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       </div>
 
       {/* 2. Four Primary Navigation Tabs per Requirement 4 in exact order */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-lg">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-slate-100 dark:bg-slate-900/90 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-lg">
         <button
           type="button"
           onClick={() => setActiveTab('create_new')}
           className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'create_new'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
           }`}
         >
           <PlusCircle className="w-4 h-4" />
@@ -461,7 +461,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'support'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
           }`}
         >
           <MessageSquare className="w-4 h-4" />
@@ -479,7 +479,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'history'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
           }`}
         >
           <History className="w-4 h-4" />
@@ -497,7 +497,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
             activeTab === 'drafts'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
           }`}
         >
           <FolderOpen className="w-4 h-4" />
@@ -516,7 +516,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div
               onClick={onNavigateToStudio}
-              className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border-2 border-amber-500/50 hover:border-amber-400 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl hover:shadow-amber-500/10 cursor-pointer group flex flex-col justify-between space-y-4"
+              className="bg-gradient-to-br from-amber-50/50 dark:from-amber-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-amber-400/60 dark:border-amber-500/50 hover:border-amber-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl shadow-sm cursor-pointer group flex flex-col justify-between space-y-4"
             >
               <div className="space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
@@ -524,14 +524,14 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base sm:text-lg font-black text-white group-hover:text-amber-300 transition-colors">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
                       नया न्यूज़ ग्राफिक बनाएं (Graphic Studio)
                     </h3>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
                       1080x1350 HD
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                     5 संतुलित AI हेडलाइन्स, टीवी न्यूज़ फ्रेम्स, 1-4 फोटो लेआउट और चैनल हेडर-फुटर के साथ पेशेवर सोशल मीडिया न्यूज़ कार्ड बनाएं।
                   </p>
                 </div>
@@ -544,7 +544,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 
             <div
               onClick={onNavigateToVideos}
-              className="bg-gradient-to-br from-red-950/40 via-slate-900 to-slate-950 border-2 border-red-500/50 hover:border-red-400 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl hover:shadow-red-500/10 cursor-pointer group flex flex-col justify-between space-y-4"
+              className="bg-gradient-to-br from-red-50/50 dark:from-red-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-red-400/60 dark:border-red-500/50 hover:border-red-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl shadow-sm cursor-pointer group flex flex-col justify-between space-y-4"
             >
               <div className="space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
@@ -559,7 +559,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                       रील्स व टीवी
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                     9:16 रील्स/शॉर्ट्स, 16:9 टीवी स्क्रीन या 1:1 स्क्वायर वीडियो न्यूज़ बनाएं। ब्रेकिंग टिकर, न्यूज़ बीट्स ऑडियो व लोगो जोड़ें।
                   </p>
                 </div>
@@ -580,7 +580,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <History className="w-5 h-5 text-amber-400" />
-                <span>प्रोजेक्ट हिस्ट्री (Project History)</span>
+                <span>प्रोजेक्ट हिस्ट्री</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
                   {filteredHistory.length} प्रोजेक्ट्स
                 </span>
@@ -743,7 +743,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स (Drafts & Projects)</h3>
+                  <h3 className="text-sm sm:text-base font-black text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स</h3>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
                     {drafts.length}
                   </span>
@@ -881,7 +881,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">सपोर्ट इनबॉक्स (Support Inbox)</h3>
+                  <h3 className="text-sm sm:text-base font-black text-white">सपोर्ट इनबॉक्स</h3>
                   {pendingCount > 0 && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse">
                       {pendingCount} पेंडिंग
@@ -899,21 +899,21 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           {/* Header Stats Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
-              <span className="text-[11px] text-slate-400 block font-bold">कुल टिकट (Total)</span>
+              <span className="text-[11px] text-slate-400 block font-bold">कुल टिकट</span>
               <span className="text-xl font-black text-white">{inquiries.length}</span>
             </div>
             <div className="p-3 bg-slate-900 border border-amber-500/30 rounded-xl space-y-1">
-              <span className="text-[11px] text-amber-300 block font-bold">लंबित (Pending)</span>
+              <span className="text-[11px] text-amber-300 block font-bold">लंबित</span>
               <span className="text-xl font-black text-amber-400">{pendingCount}</span>
             </div>
             <div className="p-3 bg-slate-900 border border-blue-500/30 rounded-xl space-y-1">
-              <span className="text-[11px] text-blue-300 block font-bold">प्रक्रियाधीन (In Progress)</span>
+              <span className="text-[11px] text-blue-300 block font-bold">प्रक्रियाधीन</span>
               <span className="text-xl font-black text-blue-400">
                 {inquiries.filter((i) => i.status === 'in_progress').length}
               </span>
             </div>
             <div className="p-3 bg-slate-900 border border-emerald-500/30 rounded-xl space-y-1">
-              <span className="text-[11px] text-emerald-300 block font-bold">हल किया गया (Resolved)</span>
+              <span className="text-[11px] text-emerald-300 block font-bold">हल किया गया</span>
               <span className="text-xl font-black text-emerald-400">
                 {inquiries.filter((i) => i.status === 'resolved').length}
               </span>
@@ -1192,7 +1192,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                       <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-1">
                         <div className="flex items-center gap-1.5 text-xs font-black text-emerald-300">
                           <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>एडमिन रिप्लाई (Official Response):</span>
+                          <span>एडमिन रिप्लाई:</span>
                         </div>
                         <p className="text-xs text-emerald-100 leading-relaxed pl-5">
                           {inq.adminResponse}
@@ -1216,9 +1216,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                               }
                               className="px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-amber-400"
                             >
-                              <option value="pending">लंबित (Pending)</option>
-                              <option value="in_progress">प्रक्रियाधीन (In Progress)</option>
-                              <option value="resolved">हल किया गया (Resolved)</option>
+                              <option value="pending">लंबित</option>
+                              <option value="in_progress">प्रक्रियाधीन</option>
+                              <option value="resolved">हल किया गया</option>
                             </select>
                           </div>
                         </div>
@@ -1267,7 +1267,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">ई-पेपर (ePaper)</h3>
+                  <h3 className="text-sm sm:text-base font-black text-white">ई-पेपर</h3>
                   <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 font-black tracking-wider uppercase">
                     COMING SOON
                   </span>
@@ -1282,7 +1282,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
                 <Newspaper className="w-7 h-7" />
               </div>
-              <h4 className="text-base font-black text-white">ई-पेपर पब्लिशिंग डेस्क — जल्द आ रहा है (Coming Soon)</h4>
+              <h4 className="text-base font-black text-white">ई-पेपर पब्लिशिंग डेस्क — जल्द आ रहा है</h4>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 इस मॉड्यूल के माध्यम से आप अपने चैनल का मल्टी-पेज डिजिटल ई-पेपर (PDF & Web View) सीधे लेआउट जनरेटर से बना सकेंगे। यह सुविधा आगामी अपडेट में उपलब्ध होगी।
               </p>
