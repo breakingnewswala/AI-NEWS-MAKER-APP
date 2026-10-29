@@ -316,8 +316,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   const isAutomatedEntry = Boolean(
     card.sourceNewsId ||
-    card.newsPostId ||
-    (autoFillNews && (autoFillNews.newsId || autoFillNews.autoTrigger || autoFillNews.title || autoFillNews.url))
+    (autoFillNews && (autoFillNews.newsId || autoFillNews.autoTrigger))
   );
   const [isManualInputMode, setIsManualInputMode] = useState<boolean>(false);
   const isExecutingRef = React.useRef<boolean>(false);
@@ -1928,23 +1927,38 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       )}
 
-      {/* 3. Automated Entry Top Bar: When entering from a news card, manual input is completely hidden per Part 8 */}
-      {isAutomatedEntry && !loading && result && (
+      {/* 3. Automated Entry Top Bar (when result is present and manual inputs are collapsed) */}
+      {isAutomatedEntry && !loading && result && !isManualInputMode && (
         <div className="flex items-center justify-between text-xs px-3 py-2 bg-neutral-900/80 rounded-xl border border-neutral-800">
           <div className="flex items-center gap-1.5 text-amber-300 font-medium text-xs">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>होम फ़ीड से लोड की गई खबर</span>
           </div>
-          <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>स्वतः लोड व सत्यापित</span>
-          </span>
+          <button
+            type="button"
+            onClick={() => setIsManualInputMode(true)}
+            className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+          >
+            <span>✏️ मैन्युअल इनपुट बॉक्स दिखाएँ</span>
+          </button>
         </div>
       )}
 
-      {/* 4. Normal / Manual Input Workflow (Visible ONLY when NOT entering from a news card) */}
-      {!isAutomatedEntry && !loading && (
+      {/* 4. Normal / Manual Input Workflow (Visible when NOT automated or when manually toggled) */}
+      {(!isAutomatedEntry || isManualInputMode) && !loading && (
         <div className="space-y-3">
+          {isAutomatedEntry && isManualInputMode && (
+            <div className="flex items-center justify-between text-xs pb-1">
+              <span className="text-[11px] text-neutral-400">मैन्युअल इनपुट मोड सक्रिय</span>
+              <button
+                type="button"
+                onClick={() => setIsManualInputMode(false)}
+                className="text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer underline"
+              >
+                ▲ इनपुट बॉक्स छिपाएँ
+              </button>
+            </div>
+          )}
 
           {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
           <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
@@ -1962,7 +1976,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               }`}
             >
               <LinkIcon className="w-3.5 h-3.5" />
-              <span>बॉक्स 1: 'लिंक से खबर बनाएं'</span>
+              <span>लिंक से खबर बनाएं</span>
             </button>
 
             <button
@@ -1979,7 +1993,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>बॉक्स 2: 'कच्ची खबर या वॉइस कमांड से खबर बनाएं'</span>
+              <span>कच्ची खबर / वॉइस कमांड से खबर बनाएं</span>
             </button>
           </div>
 
@@ -1991,7 +2005,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
                     <LinkIcon className="w-3.5 h-3.5 text-blue-400" />
-                    <span>बॉक्स 1: वेबसाइट का न्यूज़ लिंक (URL) डालें (ऑटोमैटिक फोटो एक्सट्रैक्शन):</span>
+                    <span>वेबसाइट का न्यूज़ लिंक (URL) डालें:</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -2030,7 +2044,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   className="w-full bg-neutral-900 border border-neutral-700 focus:border-blue-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="text-[11px] text-neutral-400 leading-snug">
-                  💡 AI लिंक से सीधे ताज़ा समाचार, मुख्य शीर्षक व प्रेस फोटो पढ़कर कार्ड में सेट करेगा।
+                  💡 लिंक से सीधे ताजा समाचार, मुख्य शीर्षक और प्रेस फोटो पढ़कर आपके कार्ड के लिए 5 विकल्प देता है।
                 </p>
               </div>
             ) : (
@@ -2039,7 +2053,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-yellow-300 flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-yellow-400" />
-                    <span>बॉक्स 2: कच्चा समाचार / व्हाट्सएप प्रेस नोट / वॉइस कमांड से खबर बनाएं:</span>
+                    <span>कच्चा समाचार / व्हाट्सएप प्रेस नोट / वॉइस कमांड से खबर बनाएं:</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     <VoiceInputButton
@@ -2097,7 +2111,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 onClick={() => setShowPromptBox(!showPromptBox)}
                 className="text-[11px] font-bold text-neutral-400 hover:text-yellow-400 flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span>{showPromptBox ? '▼' : '▶'} निर्देश / प्रॉम्प्ट बॉक्स (वैकल्पिक)</span>
+                <span>{showPromptBox ? '▼' : '▶'} AI को विशेष निर्देश दें (वैकल्पिक)</span>
               </button>
 
               {showPromptBox && (
@@ -2128,8 +2142,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               onClick={() => handleProcess()}
               disabled={loading}
               className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 ${
-                activeTab === 'link'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
+                activeTab === 'link' ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white'
                   : 'bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950'
               }`}
             >

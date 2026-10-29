@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Layers,
+  Copy,
   CircleDot,
   Upload,
   RotateCcw,
@@ -379,6 +380,21 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   };
 
   // 8 Frame Categories for Step 1
+  
+  const getCategoryLabelHi = (catName: string) => {
+    const map: Record<string, string> = {
+      'Regular Frame': 'रेगुलर फ्रेम',
+      'Package Frame': 'पैकेज फ्रेम',
+      'Super Breaking Frame': 'सुपर ब्रेकिंग',
+      'Text Breaking Frame': 'टेक्स्ट ब्रेकिंग',
+      'बयानबाज़ी फ्रेम': 'बयानबाज़ी',
+      'Special Frame': 'स्पेशल फ्रेम',
+      'Bonus Frame': 'बोनस फ्रेम',
+      'Custom Frame': 'कस्टम फ्रेम',
+    };
+    return map[catName] || catName;
+  };
+
   const frameCategoryItems = React.useMemo(() => {
     return FRAME_CATEGORIES.map((catName) => {
       if (catName === 'Custom Frame') {
@@ -461,6 +477,58 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   const [isPreviewModalOpen, setIsPreviewModalOpen] = React.useState<boolean>(false);
   const [captionCopied, setCaptionCopied] = React.useState<boolean>(false);
+  const [step7CaptionStyle, setStep7CaptionStyle] = React.useState<'detailed' | 'bullet' | 'short'>('detailed');
+  const [step7CaptionText, setStep7CaptionText] = React.useState<string>('');
+
+  const computeCaptionForStyle = React.useCallback(
+    (style: 'detailed' | 'bullet' | 'short') => {
+      try {
+        const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
+        let newsStory = '';
+        if (card.summary && card.summary.trim()) {
+          let rawSummary = stripAllUrlsAndHyperlinks(card.summary.trim());
+          const tagMatch = rawSummary.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
+          let existingTags = '';
+          if (tagMatch) {
+            existingTags = tagMatch[0].trim();
+            rawSummary = rawSummary.substring(0, tagMatch.index).trim();
+          }
+          newsStory = rawSummary || cleanHeadline || 'मुख्य समाचार';
+          const tagsToUse = buildHashtags(card.location, existingTags, card);
+          const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
+          const firstUserTag = getUserFirstHashtag(card);
+          return cleanCaptionParagraphs(combined, style, firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
+        } else {
+          newsStory = cleanHeadline || 'मुख्य समाचार';
+          const tagsToUse = buildHashtags(card.location, undefined, card);
+          const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
+          const firstUserTag = getUserFirstHashtag(card);
+          return cleanCaptionParagraphs(combined, style, firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
+        }
+      } catch (e) {
+        return card.summary || card.headline || '';
+      }
+    },
+    [card.headline, card.summary, card.location, card.channelNameEn, card.brandName]
+  );
+
+  React.useEffect(() => {
+    setStep7CaptionText(computeCaptionForStyle(step7CaptionStyle));
+  }, [computeCaptionForStyle, step7CaptionStyle]);
+
+  const handleCopyStep7Caption = () => {
+    try {
+      navigator.clipboard.writeText(step7CaptionText);
+      setCaptionCopied(true);
+      if ((window as any).showAppToast) {
+        (window as any).showAppToast('सोशल मीडिया कैप्शन सफलतापूर्वक कॉपी हो गया! ✓');
+      }
+      setTimeout(() => setCaptionCopied(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy caption:', err);
+    }
+  };
+
 
   React.useEffect(() => {
     const handleOpenGraphicPreview = () => {
@@ -1211,8 +1279,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-yellow-400" />
-            स्टेप 1: टेम्पलेट्स (Templates)
+            स्टेप 1: टेम्पलेट्स
           </span>
+          <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
           <span className="text-xs text-neutral-400 font-medium">
             {currentFrameOptions.find((f) => (card.frameDesign || 'graphic_001') === f.id)?.name || 'फ्रेम स्टाइल'}
           </span>
@@ -1258,7 +1327,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
                   }`}
                 >
-                  <span>{cat.label}</span>
+                  <span>{getCategoryLabelHi(cat.id)}</span>
                   <span
                     className={`text-[9px] px-1 py-0.2 rounded-full font-bold ${
                       isActive ? 'bg-black/20 text-current' : 'bg-neutral-800 text-neutral-400'
@@ -1503,6 +1572,51 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         )}
 
         {/* Step 1 Mobile Nav Button */}
+        
+        {/* Template Color Palette */}
+        <div className="pt-2.5 border-t border-neutral-800 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-neutral-300 font-bold text-[11px] flex items-center gap-1.5">
+              <span>🎨</span>
+              <span>टेम्पलेट रंग बदलें:</span>
+            </span>
+            <span className="text-[10px] text-neutral-400 font-mono">
+              {card.highlightColor || '#FFE600'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {[
+              { color: '#FFE600', name: 'पीला' },
+              { color: '#EF4444', name: 'लाल' },
+              { color: '#FFFFFF', name: 'सफेद' },
+              { color: '#3B82F6', name: 'नीला' },
+              { color: '#10B981', name: 'हरा' },
+              { color: '#F97316', name: 'नारंगी' },
+              { color: '#A855F7', name: 'बैंगनी' },
+              { color: '#EC4899', name: 'गुलाबी' },
+              { color: '#06B6D4', name: 'स्काई' },
+            ].map((c) => {
+              const isSel = (card.highlightColor || '#FFE600').toUpperCase() === c.color.toUpperCase();
+              return (
+                <button
+                  key={c.color}
+                  type="button"
+                  onClick={() => onChange({ highlightColor: c.color })}
+                  className={`w-7 h-7 rounded-full shrink-0 border-2 transition-all cursor-pointer flex items-center justify-center ${
+                    isSel ? 'border-yellow-400 scale-110 shadow-lg ring-2 ring-yellow-400/50' : 'border-neutral-700 hover:border-neutral-500'
+                  }`}
+                  style={{ backgroundColor: c.color }}
+                  title={c.name}
+                >
+                  {isSel && (
+                    <Check className={`w-3.5 h-3.5 ${c.color === '#FFFFFF' || c.color === '#FFE600' ? 'text-black' : 'text-white'}`} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {renderMobileStepNavigation(1)}
       </div>
 
@@ -1567,7 +1681,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Type className="w-3.5 h-3.5 text-yellow-400" />
-            स्टेप 3: हेडलाइन (मुख्य खबर का शीर्षक)
+            स्टेप 3: हेडलाइन
           </span>
           <div className="flex items-center gap-2">
             {(card.frameDesign as string) !== 'jacket-morning' && (
@@ -1727,7 +1841,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-neutral-400 font-medium">
-              हिंदी समाचार हेडलाइन (आप जहां चाहें वहां <b>Enter</b> दबाकर 3 लाइनें बना सकते हैं):
+              हेडलाइन लिखें:
             </label>
             <VoiceInputButton
               onTranscript={(transcript) => {
@@ -1865,7 +1979,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <Type className="w-3.5 h-3.5 text-yellow-400" />
-              <span>हेडलाइन फ़ॉन्ट (Devanagari Font):</span>
+              <span>हेडलाइन फ़ॉन्ट:</span>
               <span className="text-yellow-400 font-mono text-[11px] font-bold px-2 py-0.5 bg-neutral-900 rounded border border-neutral-800">
                 {currentActiveFont}
               </span>
@@ -1906,7 +2020,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto no-scrollbar py-1">
             {allHeadlineFontChoices.map((f) => {
               const isAllowed = isFontAllowedForTier(f.id, effectiveTier, effectiveAdmin);
               const isSel = currentActiveFont === f.id;
@@ -1955,7 +2069,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold">
               <span className="flex items-center gap-1.5">
                 <Type className="w-3.5 h-3.5 text-yellow-400" />
-                <span>फ़ॉन्ट साइज (Size):</span>
+                <span>फ़ॉन्ट साइज:</span>
               </span>
               <div className="flex items-center gap-1">
                 <button
@@ -2152,7 +2266,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
               <Type className="w-3.5 h-3.5 text-yellow-400" />
-              <span>कस्टम टेक्स्ट व फ़ॉन्ट टूल्स (Custom Text, Fonts & Colors)</span>
+              <span>कस्टम टेक्स्ट व फ़ॉन्ट टूल्स</span>
             </span>
             <button
               type="button"
@@ -2536,7 +2650,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               >
                 <div className="flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-yellow-400" />
-                  <span>1 इमेज (Single)</span>
+                  <span>1 फोटो (सिंगल फ्रेम)</span>
                 </div>
                 <span className="text-[10px] font-normal opacity-80">सिंगल फुल स्क्रीन</span>
               </button>
@@ -2574,7 +2688,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <LayoutGrid className="w-4 h-4 text-yellow-400" />
-                    <span>2 इमेज (Two Photos)</span>
+                    <span>2 फोटो (दो फोटो जोड़ें)</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">2 फोटो अलग स्लॉट</span>
                 </button>
@@ -2618,7 +2732,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-yellow-400" />
-                    <span>मल्टी ग्रिड (3-4)</span>
+                    <span>मल्टी ग्रिड (3-4 तस्वीरें)</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">3 या 4 तस्वीरें</span>
                 </button>
@@ -3091,7 +3205,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
                 <Move className="w-3.5 h-3.5 text-yellow-400" />
-                फोटो क्रॉप व स्थिति (Photo Crop & Move / Position)
+                फोटो क्रॉप व स्थिति
               </span>
               <button
                 type="button"
@@ -3241,7 +3355,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="font-black text-amber-300 flex items-center gap-1.5 text-xs">
               <span>🔤</span>
-              <span>टेक्स्ट वॉटरमार्क (Text Watermark)</span>
+              <span>टेक्स्ट वॉटरमार्क</span>
             </span>
             {(effectiveTier === 'basic' || effectiveTier === 'advanced') && !effectiveAdmin ? (
               <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
@@ -3360,7 +3474,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-red-500" />
-              <span>स्थान / जिला (Location / District):</span>
+              <span>स्थान / जिला:</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3393,12 +3507,34 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             />
           </div>
 
+          {/* Quick District Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {['भोपाल', 'इंदौर', 'जबलपुर', 'ग्वालियर', 'उज्जैन', 'दिल्ली', 'रायपुर', 'लखनऊ', 'पटना'].map((dist) => {
+              const isSel = (card.location || '').trim() === dist;
+              return (
+                <button
+                  key={dist}
+                  type="button"
+                  onClick={() => onChange({ location: dist, showLocation: true })}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
+                    isSel
+                      ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                      : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700'
+                  }`}
+                >
+                  {dist}
+                </button>
+              );
+            })}
+          </div>
+
+
           {/* Location Box Soft Color Selector */}
           <div className="pt-2 border-t border-neutral-800 space-y-2">
             <div className="flex items-center justify-between text-xs">
               <label className="text-neutral-300 font-bold text-[11px] flex items-center gap-1.5">
                 <span>🎨</span>
-                <span>लोकेशन बॉक्स बैकग्राउंड रंग (5 सॉफ्ट शेड्स):</span>
+                <span>लोकेशन बॉक्स बैकग्राउंड रंग:</span>
               </label>
               <span className="text-[10px] text-neutral-400 font-mono">
                 {card.locationBgColor || '#FFFFFF'}
@@ -3446,7 +3582,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <span>📅</span>
-              <span>दिनांक (Date Stamp - कॉम्पैक्ट पोज़ीशन):</span>
+              <span>दिनांक:</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3508,7 +3644,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-            स्टेप 6 : हैडर और फुटर (Header & Footer)
+            स्टेप 6: हेडर और फुटर
           </span>
           <span className="text-xs text-neutral-400 font-medium">
             ब्रांडिंग व फुटर सेटिंग्स
@@ -3673,7 +3809,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-blue-300 font-bold">
             <span className="flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-blue-400" />
-              <span>मास्टर ब्रांडिंग (Master Branding)</span>
+              <span>मास्टर ब्रांडिंग</span>
             </span>
             {canToggleMasterBranding ? (
               <button
@@ -4040,7 +4176,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               {/* Logo Resize Controls */}
               <div className="bg-neutral-900/90 border border-neutral-800 rounded-lg p-2.5 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-300">लोगो का आकार (Logo Size छोटा-बड़ा):</span>
+                  <span className="font-bold text-neutral-300">लोगो का आकार:</span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -4106,7 +4242,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>🎨</span>
-                    <span>फुटर बैकग्राउंड रंग (Footer Background):</span>
+                    <span>फुटर बैकग्राउंड रंग:</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerBgColor || '#FFFFFF'}
@@ -4215,7 +4351,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>✏️</span>
-                    <span>फुटर टेक्स्ट रंग (Footer Text Color - डिफ़ॉल्ट काला):</span>
+                    <span>फुटर टेक्स्ट रंग:</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerTextColor || '#000000'}
@@ -4415,79 +4551,136 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}
-          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 scroll-mt-28"
+          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-4 scroll-mt-28"
         >
-          <div className="flex flex-col sm:flex-row items-center justify-between text-center sm:text-left gap-2 pb-3 border-b border-neutral-800">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
-              <span className="w-7 h-7 rounded-full bg-amber-400 text-neutral-950 font-black flex items-center justify-center text-sm shadow-sm shrink-0">
-                7
-              </span>
-              <h2 className="text-base sm:text-lg font-black text-white font-['Mukta']">
-                डाउनलोड व कैप्शन (HD कार्ड एक्सपोर्ट व सोशल शेयर)
+          {/* Header */}
+          <div className="flex items-center justify-between pb-2.5 border-b border-neutral-800">
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5 font-['Mukta']">
+                <Download className="w-4 h-4 text-amber-400" />
+                <span>स्टेप 7: डाउनलोड व कैप्शन</span>
               </h2>
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                तैयार ग्राफिक डाउनलोड करें और सोशल मीडिया के लिए कैप्शन कॉपी करें
+              </p>
             </div>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30 shrink-0">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30 shrink-0">
               1080×1350 HD
             </span>
           </div>
 
-          {/* 1. Prominent Live 4:5 Card Preview on Mobile & Desktop */}
-          <div className="bg-neutral-950 rounded-xl p-3 border border-neutral-800 flex flex-col items-center justify-center">
-            <div className="w-full max-w-[340px] aspect-[4/5] rounded-lg overflow-hidden shadow-2xl border border-neutral-700 flex items-center justify-center bg-black">
-              <CardPreview card={card} />
-            </div>
-            <span className="text-[11px] text-neutral-400 mt-2 font-medium">
-              सोशल मीडिया (4:5 रेशियो) लाइव कार्ड प्रीव्यू
+          {/* 1. Primary Action Button: सोशल मीडिया रेडी कार्ड डाउनलोड करें */}
+          <button
+            type="button"
+            onClick={() => onDownload?.()}
+            disabled={downloading}
+            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-650 via-red-600 to-red-700 hover:from-red-600 hover:to-red-700 text-white font-black text-xs sm:text-sm shadow-xl border border-red-400/80 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4 text-amber-300" />
+            <span>{downloading ? 'कार्ड तैयार हो रहा है...' : 'सोशल मीडिया रेडी कार्ड डाउनलोड करें'}</span>
+          </button>
+
+          {/* 2. Caption Style Selector: 3 Options in 1 Row */}
+          <div className="space-y-1.5 pt-1">
+            <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-amber-400" />
+              <span>कैप्शन स्टाइल चुनें:</span>
             </span>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep7CaptionStyle('detailed');
+                  setStep7CaptionText(computeCaptionForStyle('detailed'));
+                }}
+                className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  step7CaptionStyle === 'detailed'
+                    ? 'border-yellow-400 bg-yellow-400 text-slate-950 font-black shadow-md ring-1 ring-yellow-400/60'
+                    : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <span>📄</span>
+                <span>विस्तृत</span>
+                {step7CaptionStyle === 'detailed' && <Check className="w-3 h-3 text-red-600 font-black" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStep7CaptionStyle('bullet');
+                  setStep7CaptionText(computeCaptionForStyle('bullet'));
+                }}
+                className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  step7CaptionStyle === 'bullet'
+                    ? 'border-yellow-400 bg-yellow-400 text-slate-950 font-black shadow-md ring-1 ring-yellow-400/60'
+                    : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <span>📌</span>
+                <span>बुलेट पॉइंट्स</span>
+                {step7CaptionStyle === 'bullet' && <Check className="w-3 h-3 text-red-600 font-black" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStep7CaptionStyle('short');
+                  setStep7CaptionText(computeCaptionForStyle('short'));
+                }}
+                className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  step7CaptionStyle === 'short'
+                    ? 'border-yellow-400 bg-yellow-400 text-slate-950 font-black shadow-md ring-1 ring-yellow-400/60'
+                    : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <span>⚡</span>
+                <span>संक्षिप्त</span>
+                {step7CaptionStyle === 'short' && <Check className="w-3 h-3 text-red-600 font-black" />}
+              </button>
+            </div>
           </div>
 
-          {/* 2. Exactly TWO Primary Side-by-Side Equal-Width Action Buttons */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Left Red Button: सोशल मीडिया रेडी कार्ड डाउनलोड करें */}
-            <button
-              type="button"
-              onClick={() => onDownload?.()}
-              disabled={downloading}
-              className="py-3 px-2 sm:px-3 rounded-xl bg-gradient-to-r from-red-650 via-red-600 to-red-700 hover:from-red-600 hover:to-red-700 text-white font-black text-xs sm:text-sm shadow-lg border border-red-400 flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-            >
-              <Download className="w-5 h-5 text-amber-300" />
-              <span className="leading-tight">
-                {downloading ? 'कार्ड तैयार हो रहा है...' : 'सोशल मीडिया रेडी कार्ड डाउनलोड करें'}
+          {/* 3. Ready Caption Box */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-amber-400" />
+                <span>तैयार कैप्शन:</span>
               </span>
-            </button>
-
-            {/* Right Green Button: कैप्शन कॉपी करें */}
-            <button
-              type="button"
-              onClick={handleDirectCopyCaption}
-              className="py-3 px-2 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs sm:text-sm shadow-lg border border-emerald-400 flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer active:scale-95"
-            >
-              {captionCopied ? (
-                <>
-                  <Check className="w-5 h-5 text-yellow-300" />
-                  <span className="text-yellow-200 leading-tight">कैप्शन कॉपी हो गया! ✓</span>
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-5 h-5 text-emerald-200" />
-                  <span className="leading-tight">कैप्शन कॉपी करें</span>
-                </>
-              )}
-            </button>
+              <span className="text-[10px] text-neutral-400 font-mono">
+                {step7CaptionText.length}/2000
+              </span>
+            </div>
+            <textarea
+              rows={5}
+              value={step7CaptionText}
+              onChange={(e) => setStep7CaptionText(e.target.value)}
+              placeholder="यहाँ आपका तैयार सोशल मीडिया कैप्शन प्रदर्शित होगा..."
+              className="w-full bg-neutral-950 border border-neutral-750 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm text-neutral-200 focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed resize-none"
+            />
           </div>
 
-          {/* 3. Secondary link to detailed caption editor modal */}
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              onClick={onOpenCaptionModal}
-              className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-4 flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>विस्तृत कैप्शन एडिटर व AI रीराइट खोलें</span>
-            </button>
-          </div>
+          {/* 4. Single Full-Width Copy Button */}
+          <button
+            type="button"
+            onClick={handleCopyStep7Caption}
+            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:brightness-110 text-white font-black text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer active:scale-98 transition-all"
+          >
+            {captionCopied ? (
+              <>
+                <Check className="w-4 h-4 text-yellow-300" />
+                <span>सोशल मीडिया कैप्शन कॉपी हो गया! ✓</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4 text-white" />
+                <span>सोशल मीडिया कैप्शन कॉपी करें</span>
+              </>
+            )}
+          </button>
 
+          {/* Step 7 Nav Buttons */}
+          {renderMobileStepNavigation(7)}
         </div>
       )}
         </>

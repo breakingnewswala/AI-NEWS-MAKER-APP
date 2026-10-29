@@ -137,12 +137,12 @@ type AppTab =
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स' },
+  { step: 1, id: 'step-frame', label: 'टेम्पलेट्स', name: 'टेम्पलेट्स', icon: '🖼️', title: 'टेम्पलेट्स' },
   { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'एआई ऑटोमेशन टूल्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
   { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
   { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
-  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'हेडर, फुटर व लोगो' },
+  { step: 6, id: 'step-header-footer', label: 'हेडर व फुटर', name: 'हेडर व फुटर', icon: '📜', title: 'हेडर व फुटर' },
   { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
 ];
 
@@ -3146,9 +3146,9 @@ export default function App() {
                           { step: 1, label: 'टेम्पलेट्स' },
                           { step: 2, label: 'एआई टूल्स' },
                           { step: 3, label: 'हेडलाइन' },
-                          { step: 4, label: 'फोटोज एंड वॉटरमार्क' },
+                          { step: 4, label: 'फोटो व वॉटरमार्क' },
                           { step: 5, label: 'स्थान व दिनांक' },
-                          { step: 6, label: 'टेक्स्ट एंड फुटर' },
+                          { step: 6, label: 'हेडर व फुटर' },
                           { step: 7, label: 'डाउनलोड व कैप्शन' },
                         ].map((s) => {
                           const isActive = activeStep === s.step;
