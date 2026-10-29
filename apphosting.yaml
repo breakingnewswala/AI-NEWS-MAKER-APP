@@ -6,6 +6,10 @@ runConfig:
   cpu: 1
   memoryMiB: 1024
 
+scripts:
+  buildCommand: npm run build
+  runCommand: node dev.cjs
+
 env:
   - variable: NODE_ENV
     value: "production"
