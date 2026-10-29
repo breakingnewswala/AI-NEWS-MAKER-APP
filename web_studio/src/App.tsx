@@ -2940,29 +2940,29 @@ export default function App() {
                     />
                   </div>
 
-                  {/* 3. Compact Refresh and Draft controls */}
+                  {/* 3. Compact Refresh and Draft controls (Theme-aware for Light & Dark mode) */}
                   <div className="flex items-center justify-between w-full max-w-[340px] sm:max-w-[400px] py-1.5 px-1">
-                    <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-bold">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-800 dark:text-neutral-300 font-bold">
                       <span className="w-2.5 h-2.5 rounded-full bg-red-600 shadow-sm" />
-                      <span className="text-red-400 font-black">लाइव कैनवास (4:5)</span>
+                      <span className="text-red-600 dark:text-red-400 font-black">लाइव कैनवास (4:5)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleSaveDraft}
-                        className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 text-[11px] font-bold rounded-lg border border-amber-600/50 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/80 dark:hover:bg-amber-900/80 text-amber-900 dark:text-amber-300 text-[11px] font-bold rounded-lg border border-amber-300 dark:border-amber-600/50 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="ड्राफ्ट सेव करें"
                       >
-                        <Bookmark className="w-3.5 h-3.5 text-emerald-400" />
+                        <Bookmark className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>ड्राफ्ट</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleResetCard}
-                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-850 text-slate-800 dark:text-slate-300 text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="नया सत्र / रीसेट"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                        <RefreshCw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                         <span>रिफ्रेश</span>
                       </button>
                     </div>
@@ -3008,25 +3008,22 @@ export default function App() {
                   </div>
 
                   {/* Distinct Horizontal Partition / Divider Line */}
-                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
+                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-200 dark:border-slate-800 shadow-xs" />
                 </div>
 
-                {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}
+                {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider (Theme-aware) */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
+                  className="w-full flex-1 bg-white dark:bg-slate-900/95 p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 overflow-y-auto text-slate-900 dark:text-white"
                 >
                   {/* Step Title Header */}
-                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-200 dark:border-slate-800">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm">
-                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.icon}
-                      </span>
-                      <span className="text-xs font-black text-amber-400">
+                      <span className="text-xs font-black text-amber-600 dark:text-amber-400">
                         {STUDIO_STEPS.find((s) => s.step === activeStep)?.title || `स्टेप ${activeStep} कंट्रोल्स`}
                       </span>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-400/20 border border-amber-300 dark:border-amber-400/40 text-amber-800 dark:text-amber-300 font-bold shrink-0">
                       स्टेप {activeStep} सक्रिय
                     </span>
                   </div>
@@ -3060,9 +3057,9 @@ export default function App() {
                   ================================================== */}
 <div className="hidden lg:flex w-full flex-row items-start gap-4 xl:gap-6">
                 {/* ==================================================
-                    LEFT COLUMN: LOCKED / FREEZE (Larger Live Preview + 3 Action Buttons below)
+                    LEFT COLUMN: ~75% Workspace (Live Canvas/Graphic Preview + Controls)
                     ================================================== */}
-                <div className="w-full lg:w-[420px] xl:w-[460px] 2xl:w-[490px] shrink-0 lg:sticky lg:top-[100px] z-20 flex flex-col gap-3 self-start">
+                <div className="w-full lg:w-[65%] xl:w-[72%] shrink-0 lg:sticky lg:top-[90px] z-20 flex flex-col items-center gap-3 self-start">
                   {/* 1. LARGE LIVE 4:5 GRAPHIC PREVIEW CARD */}
                   <div className="w-full bg-white dark:bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-sm dark:shadow-2xl flex flex-col">
                     {/* Top Status Bar on Preview */}
@@ -3227,8 +3224,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Commands Area (Scrollable internally right beneath selector) */}
-                  <div className="w-full bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-800 shadow-2xl max-h-[calc(100vh-180px)] overflow-y-auto">
+                  {/* Commands Area (Scrollable internally right beneath selector, Theme-aware) */}
+                  <div className="w-full bg-white dark:bg-slate-900/90 p-3.5 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-2xl max-h-[calc(100vh-180px)] overflow-y-auto text-slate-900 dark:text-white">
                     <CardEditor
                       card={card}
                       onChange={handleUpdateCard}
