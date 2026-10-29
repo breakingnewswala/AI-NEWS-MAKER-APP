@@ -6682,8 +6682,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           channelName: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
           channelNameHi: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
           channelNameEn: isSuper ? "AI News Maker" : (isAdmin ? "Breaking News Wala" : (existing?.channelNameEn || "AI News Maker")),
-          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (profileData?.channelLogoUrl || existing?.channelLogoUrl || "")),
-          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || "")),
+          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || existing?.channelLogoUrl || profileData?.channelLogoUrl || "")),
+          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "")),
           channelLogoGifUrl: existing?.channelLogoGifUrl || "",
           channelLogoType: existing?.channelLogoType || "png",
           mobile: profileData?.mobile || existing?.mobileNumber || "9669802408",
@@ -7698,12 +7698,14 @@ app.post("/api/admin/unblock-user", (req, res) => {
 
 app.post("/api/admin/delete-user", (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को डिलीट कर सकते हैं।" });
+    const adminEmail = (req.body?.adminEmail || extractAdminEmail(req) || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL;
+    if (!isMaster) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र्स को डिलीट कर सकते हैं।" });
     }
-    const { userId, userEmail } = req.body;
-    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
-    if (!identifier) return res.status(400).json({ error: "userId is required" });
+    const { userId, userEmail, targetEmail, targetUserId } = req.body;
+    const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
+    if (!identifier) return res.status(400).json({ error: "userId or email is required" });
     if (isProtectedAdminAccount(identifier)) {
       return res.status(403).json({ error: "सुरक्षित एडमिन खाते को डिलीट नहीं किया जा सकता" });
     }
@@ -7718,20 +7720,22 @@ app.post("/api/admin/delete-user", (req, res) => {
       return res.status(403).json({ error: "सुरक्षित सुपर एडमिन खाते को डिलीट नहीं किया जा सकता" });
     }
 
+    // 1. Delete from users_master_database.json
     users = users.filter(u =>
       (u.email && u.email.toLowerCase().trim() !== identifier) &&
-      (u.userId && u.userId.toLowerCase().trim() !== identifier)
+      (u.userId && u.userId.toLowerCase().trim() !== identifier) &&
+      (!targetUser?.email || (u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim()))
     );
     saveUsersMasterDatabase(users);
 
-    // Delete from user_profiles_db.json
+    // 2. Delete from user_profiles_db.json
     const allProfiles = loadProfilesDatabase();
     delete allProfiles[identifier];
     if (targetUser?.email) delete allProfiles[targetUser.email.toLowerCase().trim()];
     if (targetUser?.username) delete allProfiles[targetUser.username.toLowerCase().trim()];
     saveProfilesDatabase(allProfiles);
 
-    // Delete from users_accounts_db.json to prevent resurrection
+    // 3. Delete from users_accounts_db.json
     try {
       let accounts = loadUsersDatabase();
       accounts = accounts.filter(u =>
@@ -7742,7 +7746,49 @@ app.post("/api/admin/delete-user", (req, res) => {
       saveUsersDatabase(accounts);
     } catch {}
 
-    return res.json({ success: true, message: "उपयोगकर्ता सफलतापूर्वक हटा दिया गया" });
+    // 4. Delete from users_sheet_database.json
+    try {
+      const sheetFile = path.join(process.cwd(), "users_sheet_database.json");
+      if (fs.existsSync(sheetFile)) {
+        let sheetUsers = JSON.parse(fs.readFileSync(sheetFile, "utf-8"));
+        if (Array.isArray(sheetUsers)) {
+          sheetUsers = sheetUsers.filter((u: any) =>
+            (u.email && u.email.toLowerCase().trim() !== identifier) &&
+            (u.userId && u.userId.toLowerCase().trim() !== identifier) &&
+            (!targetUser?.email || (u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim()))
+          );
+          fs.writeFileSync(sheetFile, JSON.stringify(sheetUsers, null, 2), "utf-8");
+        }
+      }
+    } catch {}
+
+    // 5. Delete from auth_credentials_db.json
+    try {
+      const creds = loadCredentialsDatabase();
+      delete creds[identifier];
+      if (targetUser?.email) delete creds[targetUser.email.toLowerCase().trim()];
+      if (targetUser?.username) delete creds[targetUser.username.toLowerCase().trim()];
+      saveCredentialsDatabase(creds);
+    } catch {}
+
+    // 6. Record in account_deletion_requests.json so re-login starts fresh onboarding
+    try {
+      const delFile = path.join(process.cwd(), "account_deletion_requests.json");
+      let delReqs: any[] = [];
+      if (fs.existsSync(delFile)) {
+        delReqs = JSON.parse(fs.readFileSync(delFile, "utf-8"));
+      }
+      delReqs.unshift({
+        email: targetUser?.email || identifier,
+        userId: targetUser?.userId || identifier,
+        deletedAt: Date.now(),
+        deletedBy: adminEmail || "MASTER_ADMIN",
+        status: "PURGED_BY_ADMIN"
+      });
+      fs.writeFileSync(delFile, JSON.stringify(delReqs, null, 2), "utf-8");
+    } catch {}
+
+    return res.json({ success: true, message: "उपयोगकर्ता और उससे जुड़े सभी रिकॉर्ड्स सफलतापूर्वक हटा दिए गए।" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -15664,6 +15710,129 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   }
   next(err);
 });
+
+// ==========================================
+// LOGO CHANGE REQUESTS API
+// ==========================================
+
+app.get("/api/logo-requests", (_req, res) => {
+  return res.json({ success: true, requests: loadLogoRequestsDatabase() });
+});
+
+app.post("/api/logo-requests", (req, res) => {
+  try {
+    const { userEmail, userName, username, channelName, currentLogoUrl, newLogoUrl, reason, requestType = "logo" } = req.body || {};
+    if (!userEmail) return res.status(400).json({ error: "userEmail is required" });
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const reqs = loadLogoRequestsDatabase();
+    const newReq = {
+      id: `req_${Date.now()}`,
+      userEmail: cleanEmail,
+      userName: userName || cleanEmail.split("@")[0],
+      username: username || cleanEmail.split("@")[0],
+      channelName: channelName || "न्यूज़ चैनल",
+      currentLogoUrl: currentLogoUrl || "",
+      newLogoUrl: newLogoUrl || "",
+      reason: (reason || "लोगो बदलने का अनुरोध").trim(),
+      status: "pending",
+      createdAt: Date.now(),
+      requestType,
+    };
+    const updated = [newReq, ...reqs.filter((r: any) => r.userEmail !== cleanEmail || r.requestType !== requestType)];
+    saveLogoRequestsDatabase(updated);
+    return res.json({ success: true, request: newReq });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reqs = loadLogoRequestsDatabase();
+    const target = reqs.find((r: any) => r.id === id);
+    if (!target) return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+
+    target.status = "approved";
+    target.approvedAt = Date.now();
+    saveLogoRequestsDatabase(reqs);
+
+    // Apply the approved logo to the user profile
+    const cleanEmail = target.userEmail.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    let profile = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail);
+    if (profile) {
+      if (target.requestType === "gif") {
+        profile.channelLogoGifUrl = target.newLogoUrl;
+        profile.channelLogoType = "gif";
+      } else {
+        profile.channelLogoUrl = target.newLogoUrl;
+        profile.channelLogoPngUrl = target.newLogoUrl;
+        profile.channelLogoType = "png";
+      }
+      profile.updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+    }
+
+    // Also update users_accounts_db.json
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex((a: any) => a.email && a.email.toLowerCase().trim() === cleanEmail);
+      if (aIdx >= 0) {
+        if (target.requestType === "gif") {
+          accounts[aIdx].channelLogoGifUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoType = "gif";
+        } else {
+          accounts[aIdx].channelLogoUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoPngUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoType = "png";
+        }
+        saveUsersDatabase(accounts);
+      }
+    } catch {}
+
+    // Also update users_master_database.json
+    try {
+      let master = loadUsersMasterDatabase();
+      const mIdx = master.findIndex((m: any) => m.email && m.email.toLowerCase().trim() === cleanEmail);
+      if (mIdx >= 0) {
+        if (target.requestType === "gif") {
+          master[mIdx].channelLogoGifUrl = target.newLogoUrl;
+          master[mIdx].channelLogoType = "gif";
+        } else {
+          master[mIdx].channelLogoUrl = target.newLogoUrl;
+          master[mIdx].channelLogoPngUrl = target.newLogoUrl;
+          master[mIdx].channelLogoType = "png";
+        }
+        saveUsersMasterDatabase(master);
+      }
+    } catch {}
+
+    return res.json({ success: true, message: "लोगो अनुरोध स्वीकृत और प्रोफाइल अपडेट हो गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], (req, res) => {
+  try {
+    const { id } = req.params;
+    const reqs = loadLogoRequestsDatabase();
+    const target = reqs.find((r: any) => r.id === id);
+    if (!target) return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+
+    target.status = "rejected";
+    target.rejectedAt = Date.now();
+    saveLogoRequestsDatabase(reqs);
+
+    return res.json({ success: true, message: "लोगो अनुरोध अस्वीकृत कर दिया गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+
+
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

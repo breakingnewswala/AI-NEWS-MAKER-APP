@@ -55,9 +55,9 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-50 dark:from-slate-900/90 via-white dark:via-slate-950/95 to-slate-50 dark:to-slate-900/90 border border-slate-200 dark:border-slate-700/80 p-4 sm:p-6 lg:p-8 shadow-sm dark:shadow-2xl relative"
         >
           {/* Tagline Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90 text-center md:text-left items-center md:items-start">
+            <div className="space-y-2 flex flex-col items-center md:items-start">
+              <div className="flex items-center justify-center md:justify-start gap-2">
                 <span className="p-1.5 rounded-lg bg-amber-400/20 text-amber-400 border border-amber-400/30">
                   <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 animate-pulse" />
                 </span>
@@ -74,7 +74,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 self-start lg:self-center">
+            <div className="flex items-center gap-2 shrink-0 self-center lg:self-center">
               <button
                 type="button"
                 onClick={handleScrollToFeatures}
@@ -89,15 +89,15 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           {/* 12 Features Grid: 4 columns on desktop, 2 on tablet, 1 on mobile */}
           <div
             id="footer-12-features-grid"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-6"
+            className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 pt-6"
           >
-            {CANONICAL_12_FEATURES.map((feat) => {
+            {CANONICAL_12_FEATURES.map((feat, idx) => {
               const IconC = feat.icon;
               return (
                 <div
                   key={feat.id}
                   onClick={() => handleFeatureClick(feat)}
-                  className={`group rounded-xl p-3 sm:p-4 bg-white dark:bg-slate-950/80 hover:bg-slate-50 dark:hover:bg-slate-900 border ${feat.borderColor} transition-all duration-200 flex flex-col justify-between shadow-md hover:shadow-xl hover:-translate-y-0.5 cursor-pointer relative overflow-hidden`}
+                  className={`group rounded-xl p-2.5 sm:p-4 bg-white dark:bg-slate-950/80 hover:bg-slate-50 dark:hover:bg-slate-900 border ${feat.borderColor} transition-all duration-200 flex-col justify-between shadow-md hover:shadow-xl hover:-translate-y-0.5 cursor-pointer relative overflow-hidden ${idx >= 8 ? 'hidden md:flex' : 'flex'}`}
                   title={`${feat.title} - क्लिक कर फीचर खोलें`}
                 >
                   <div className="space-y-2.5">
@@ -165,7 +165,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
         >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             {/* Left Area (Brand & Ownership) - 7 cols on desktop */}
-            <div className="lg:col-span-7 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
+            <div className="lg:col-span-7 flex flex-col sm:flex-row items-center md:items-start text-center md:text-left gap-4 sm:gap-5">
               {/* Circular Logo with Glowing Ring */}
               <div
                 onClick={() => {
@@ -213,7 +213,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
 
             {/* Right Area (Support Inbox Panel) - 5 cols on desktop */}
             <div className="lg:col-span-5 bg-slate-950/90 rounded-2xl border border-slate-800 p-4 sm:p-5 space-y-3 shadow-inner">
-              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center sm:items-start justify-between gap-3 flex-col sm:flex-row text-center sm:text-left">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-slate-800/90 border border-slate-700 flex items-center justify-center text-white shrink-0 shadow-md">
                     <Headphones className="w-5 h-5 text-amber-400" />
@@ -263,13 +263,16 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           aria-label="Legal and Copyright"
           className="border-t border-slate-800/80 pt-5 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400"
         >
-          {/* Left Side: Copyright & Year */}
-          <div className="text-center md:text-left text-slate-400">
-            <span>© {currentYear} AI News Maker</span>
-            <span className="mx-2 text-slate-600">|</span>
-            <span>सर्वाधिकार सुरक्षित</span>
-            <span className="mx-2 text-slate-600">|</span>
-            <span className="text-slate-400">भारत के डिजिटल मीडिया समुदाय के लिए</span>
+          {/* Left Side: Copyright & Year (2-line formatted with emphasis) */}
+          <div className="text-center md:text-left text-xs text-slate-400 space-y-1">
+            <div>
+              <span>© {currentYear} AI News Maker</span>
+              <span className="mx-2 text-slate-600">|</span>
+              <span>सर्वाधिकार सुरक्षित</span>
+            </div>
+            <div className="font-bold text-amber-400/90 tracking-wide">
+              भारत के डिजिटल मीडिया समुदाय के लिए
+            </div>
           </div>
 
           {/* Right Side: Legal Links */}

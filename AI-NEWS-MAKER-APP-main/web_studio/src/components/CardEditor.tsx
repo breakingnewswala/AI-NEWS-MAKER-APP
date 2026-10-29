@@ -506,7 +506,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const renderMobileStepNavigation = (stepNumber: number) => {
     if (mobileViewMode !== 'steps') return null;
     return (
-      <div className="pt-3 border-t border-neutral-800 flex items-center justify-between gap-2 text-xs">
+      <div className="sticky bottom-0 z-30 bg-neutral-950/95 backdrop-blur-md pt-2.5 pb-3 border-t border-neutral-800 flex items-center justify-between gap-2 text-xs shadow-2xl px-1 -mx-1">
         {/* Left: पिछला चरण */}
         {stepNumber > 1 ? (
           <button
@@ -1915,7 +1915,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[135px] sm:auto-cols-auto sm:grid-rows-none sm:grid-flow-row sm:grid-cols-3 lg:grid-cols-4 overflow-x-auto sm:overflow-x-visible overflow-y-hidden sm:overflow-y-auto max-h-24 sm:max-h-48 gap-1.5 pb-1 pr-1 scrollbar-thin">
             {allHeadlineFontChoices.map((f) => {
               const isAllowed = isFontAllowedForTier(f.id, effectiveTier, effectiveAdmin);
               const isSel = currentActiveFont === f.id;
@@ -3161,59 +3161,85 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span>🔒 वॉटरमार्क विकल्प केवल एडवांस, प्रो और वीआईपी डेस्क में उपलब्ध हैं।</span>
               </div>
             ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                {
-                  id: 'none',
-                  label: '1. ऑफ',
-                  desc: 'ऑफ (No Tag)',
-                  icon: '✕',
-                },
-                {
-                  id: 'representative',
-                  label: '2. प्रतीकात्मक फोटो',
-                  desc: 'सांकेतिक तस्वीर',
-                  icon: '📷',
-                },
-                {
-                  id: 'ai',
-                  label: '3. AI जनरेटेड',
-                  desc: 'AI जनरेटेड इमेज',
-                  icon: '✨',
-                },
-              ].map((opt) => {
-                const currentType = card.photoDisclaimerType || (card.showAiGenerated ? 'ai' : 'none');
-                const isSelected = currentType === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      const selId = opt.id as 'none' | 'representative' | 'ai';
-                      onChange({
-                        photoDisclaimerType: selId,
-                        showAiGenerated: selId === 'ai',
-                        photoWatermarkTag: selId === 'ai' ? 'AI जनरेटेड' : selId === 'representative' ? 'प्रतीकात्मक फोटो' : undefined,
-                        representativePhotoText: selId === 'representative' ? (card.representativePhotoText || 'प्रतीकात्मक फोटो') : card.representativePhotoText,
-                        aiGeneratedText: selId === 'ai' ? (card.aiGeneratedText || 'AI जनरेटेड') : card.aiGeneratedText,
-                      });
-                    }}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all cursor-pointer active:scale-95 ${
-                      isSelected
-                        ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
-                        : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
-                    }`}
-                  >
-                    <span className="text-xs font-black flex items-center gap-1">
-                      <span>{opt.icon}</span>
-                      <span>{opt.label}</span>
-                    </span>
-                    <span className={`text-[10px] ${isSelected ? 'text-neutral-900/80 font-bold' : 'text-neutral-400'}`}>
-                      {opt.desc}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="space-y-2">
+              {/* Top row: Compact Off button (Part 11.1) */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-neutral-400">टैग विकल्प:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange({
+                      photoDisclaimerType: 'none',
+                      showAiGenerated: false,
+                      photoWatermarkTag: undefined,
+                    });
+                  }}
+                  className={`px-3 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                    (!card.photoDisclaimerType || card.photoDisclaimerType === 'none') && !card.showAiGenerated
+                      ? 'bg-neutral-800 text-amber-300 border-amber-500/50 shadow-xs ring-1 ring-amber-400/30 font-black'
+                      : 'bg-neutral-900/80 hover:bg-neutral-850 text-neutral-400 border-neutral-800'
+                  }`}
+                  title="वॉटरमार्क ऑफ करें (No Tag)"
+                >
+                  <span className="text-xs">✕</span>
+                  <span>ऑफ (कोई टैग नहीं)</span>
+                </button>
+              </div>
+
+              {/* Bottom row: Balanced 50/50 Option Boxes (Part 11.2) */}
+              <div className="grid grid-cols-2 gap-2 w-full">
+                {/* Option A: प्रतीकात्मक फोटो */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange({
+                      photoDisclaimerType: 'representative',
+                      showAiGenerated: false,
+                      photoWatermarkTag: 'प्रतीकात्मक फोटो',
+                      representativePhotoText: card.representativePhotoText || 'प्रतीकात्मक फोटो',
+                    });
+                  }}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col justify-between gap-1 transition-all cursor-pointer active:scale-95 ${
+                    card.photoDisclaimerType === 'representative'
+                      ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
+                      : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
+                  }`}
+                >
+                  <span className="text-xs font-black flex items-center gap-1.5 truncate">
+                    <span>📷</span>
+                    <span className="truncate">प्रतीकात्मक फोटो</span>
+                  </span>
+                  <span className={`text-[10px] ${card.photoDisclaimerType === 'representative' ? 'text-neutral-900/80 font-bold' : 'text-neutral-400'}`}>
+                    सांकेतिक तस्वीर
+                  </span>
+                </button>
+
+                {/* Option B: AI जनरेटेड */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange({
+                      photoDisclaimerType: 'ai',
+                      showAiGenerated: true,
+                      photoWatermarkTag: 'AI जनरेटेड',
+                      aiGeneratedText: card.aiGeneratedText || 'AI जनरेटेड',
+                    });
+                  }}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col justify-between gap-1 transition-all cursor-pointer active:scale-95 ${
+                    card.photoDisclaimerType === 'ai' || card.showAiGenerated
+                      ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
+                      : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
+                  }`}
+                >
+                  <span className="text-xs font-black flex items-center gap-1.5 truncate">
+                    <span>✨</span>
+                    <span className="truncate">AI जनरेटेड</span>
+                  </span>
+                  <span className={`text-[10px] ${card.photoDisclaimerType === 'ai' || card.showAiGenerated ? 'text-neutral-900/80 font-bold' : 'text-neutral-400'}`}>
+                    AI जनरेटेड इमेज
+                  </span>
+                </button>
+              </div>
             </div>
             )}
 

@@ -1866,6 +1866,9 @@ export async function adminDeleteCloudUser(userEmailOrId: string, userId?: strin
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        adminEmail: 'breakingnewswala.com@gmail.com',
+        targetEmail: userEmailOrId,
+        targetUserId: userId || userEmailOrId,
         userEmail: userEmailOrId,
         userId: userId || userEmailOrId,
       }),

@@ -86,10 +86,12 @@ import { AccountDeletionPage } from './components/AccountDeletionPage';
 import { SupportContactPage } from './components/SupportContactPage';
 import { RefundCancellationPolicyPage } from './components/RefundCancellationPolicyPage';
 import { AppFooterWeb } from './components/AppFooterWeb';
-import { triggerBreakingNewsAlert } from './lib/notificationManager';
+import { triggerBreakingNewsAlert, addNotification } from './lib/notificationManager';
 import {
   isUserAdmin,
   setAdminSystemMode,
+  getAdminSystemMode,
+  getAdminTestPlanTier,
   getUserSubscription,
   fetchAuthoritativeSubscription,
   isUserActionAllowed,
@@ -1239,14 +1241,15 @@ export default function App() {
     };
   }, [posts, videos]);
 
-  const isAdminUser = isUserAdmin(currentUser);
+  const isTestModeActive = isUserAdmin(currentUser) && getAdminSystemMode() === 'test';
+  const isAdminUser = isUserAdmin(currentUser) && !isTestModeActive;
   const actionAllowance = isUserActionAllowed(currentUser, userSubscription);
   const isActionLocked = !isAdminUser && !actionAllowance.allowed;
   const isCurrentCardBonus = Boolean(card?.isBonus);
-  const isExpiredUser = !isAdminUser && !userSubscription?.isBlocked && Boolean(
+  const isExpiredUser = !isAdminUser && !userSubscription?.isBlocked && !userSubscription?.isTrialActive && !userSubscription?.hasActivePaidPlan && Boolean(
     userSubscription?.isPlanExpired ||
     userSubscription?.isTrialExpired ||
-    (userSubscription?.daysRemaining !== undefined && userSubscription.daysRemaining <= 0)
+    (typeof userSubscription?.daysRemaining === 'number' && userSubscription.daysRemaining <= 0)
   );
   const isUserBlocked = !isAdminUser && Boolean(
     userSubscription?.isBlocked ||
@@ -2362,6 +2365,15 @@ export default function App() {
       // ignore
     }
     syncPostsToServer(updated);
+    addNotification({
+      id: `published_${newPost.id}`,
+      title: `📰 नई खबर प्रकाशित: ${newPost.title}`,
+      message: (newPost.summary || newPost.content || '').slice(0, 100) || 'मुख्य होम फ़ीड में नई खबर प्रकाशित हो गई है।',
+      time: 'अभी',
+      type: 'news',
+      linkTab: 'home',
+      unread: true,
+    });
     setToastMessage('खबर सफलतापूर्वक पब्लिश हुई!');
   };
 
@@ -2537,6 +2549,32 @@ export default function App() {
         </div>
       )}
 
+      {/* Persistent Admin Test Mode Banner (Part 6) */}
+      {isTestModeActive && (
+        <div className="w-full bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white border-b-2 border-purple-500 px-3 sm:px-6 py-2 shadow-2xl sticky top-0 z-50 flex items-center justify-between gap-2.5 animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping shrink-0" />
+            <span className="text-xs sm:text-sm font-black text-purple-200 truncate">
+              🧪 टेस्ट मोड सक्रिय: [{(getAdminTestPlanTier() || 'BASIC').toUpperCase()}] का वास्तविक अनुभव
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setAdminSystemMode('admin');
+                window.dispatchEvent(new Event('ai_news_admin_view_mode_changed'));
+                window.location.reload();
+              }}
+              className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer active:scale-95"
+            >
+              <span>⚡</span>
+              <span>एडमिन मोड में लौटें</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar Navigation - Always visible in Home, Video, Newsroom, Control Room. In Studio: visible ONLY on Desktop (hidden md:block), preserving mobile & APK layout unchanged */}
       <div className={`sticky top-0 z-50 bg-white/95 dark:bg-[#0B132B]/95 backdrop-blur-md shadow-sm dark:shadow-md transition-colors ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
         <AppTopBarWeb
@@ -2694,8 +2732,8 @@ export default function App() {
         </>
       )}
 
-      {/* Plan / Trial Expired Warning Banner (Part 7: Centered & Constrained to max-w-5xl) */}
-      {!userSubscription?.isBlocked && (userSubscription?.isPlanExpired || userSubscription?.isTrialExpired || (userSubscription?.daysRemaining !== undefined && userSubscription.daysRemaining <= 0)) && (
+      {/* Plan / Trial Expired Warning Banner (Part 2: Suppressed for Active Plans, Direct Membership Activation) */}
+      {isExpiredUser && !userSubscription?.isBlocked && (
         <div className="w-full px-3 sm:px-4 py-2 flex justify-center z-40">
           <div className="w-full max-w-5xl bg-slate-900/95 text-white border border-red-500/50 rounded-xl py-2 px-3 sm:px-4 shadow-xl flex items-center justify-between gap-2 text-xs font-bold animate-in fade-in">
             <div className="flex items-center gap-2 min-w-0">
@@ -2713,6 +2751,10 @@ export default function App() {
               type="button"
               onClick={() => {
                 navigateToTab('profile');
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('open_plans_packages'));
+                  window.location.hash = '#membership';
+                }
               }}
               className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition animate-pulse flex items-center gap-1"
             >
@@ -2762,6 +2804,10 @@ export default function App() {
                   setIsExpiredModalDismissed(true);
                   try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
                   navigateToTab('profile');
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('open_plans_packages'));
+                    window.location.hash = '#membership';
+                  }
                 }}
                 className="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
               >
@@ -2922,7 +2968,7 @@ export default function App() {
                   </div>
 
                   {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
-                  <div className="sticky top-0 z-30 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-sm dark:shadow-xl my-1">
+                  <div className="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1 ring-1 ring-slate-800">
                     <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
                       <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />

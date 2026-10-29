@@ -342,16 +342,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   };
 
-  // Home Screen Feature Stepper & Mandatory Agreement States
+  // Home Screen Feature Stepper & Mandatory Agreement States (Unchecked by default on every attempt)
   const [homeStep, setHomeStep] = useState<1 | 2 | 3 | 4>(1);
   const [maxUnlockedHomeStep, setMaxUnlockedHomeStep] = useState<number>(1);
-  const [channelRulesAgreed, setChannelRulesAgreed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('user_channel_rules_agreed') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [channelRulesAgreed, setChannelRulesAgreed] = useState<boolean>(false);
   const [viewAllFeaturesMode, setViewAllFeaturesMode] = useState<boolean>(false);
   const [showEmailLoginForm, setShowEmailLoginForm] = useState<boolean>(false);
   const [customLoginEmail, setCustomLoginEmail] = useState<string>('');

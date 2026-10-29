@@ -682,13 +682,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   }, [currentUser?.email]);
 
   useEffect(() => {
-    if (!isAdmin) {
-      if (activeTab !== 'profile') setActiveTab('profile');
-      return;
-    }
-    const handleOpenRss = () => setActiveTab('dashboard');
-    const handleOpenTemplates = () => setActiveTab('templates');
-    const handleOpenPlans = () => setActiveTab('plans_packages');
+    const handleOpenRss = () => {
+      if (isAdmin) setActiveTab('dashboard');
+    };
+    const handleOpenTemplates = () => {
+      if (isAdmin) setActiveTab('templates');
+      setNormalUserTab('templates_manager');
+    };
+    const handleOpenPlans = () => {
+      if (isAdmin) setActiveTab('plans_packages');
+      setNormalUserTab('membership');
+      setTimeout(() => {
+        const el = document.getElementById('user-membership-accordion-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    };
     const handleOpenTemplateManagerCustom = () => setNormalUserTab('templates_manager');
 
     window.addEventListener('open_rss_dashboard', handleOpenRss);
@@ -697,16 +705,18 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     window.addEventListener('ai_news_open_template_manager', handleOpenTemplateManagerCustom);
     const handleHash = () => {
       const h = window.location.hash.toLowerCase();
-      if (h.includes('plan') || h.includes('package') || h.includes('promo')) {
-        setActiveTab('plans_packages');
+      if (h.includes('plan') || h.includes('package') || h.includes('promo') || h.includes('membership')) {
+        if (isAdmin) setActiveTab('plans_packages');
+        setNormalUserTab('membership');
       } else if (h.includes('template')) {
-        setActiveTab('templates');
+        if (isAdmin) setActiveTab('templates');
         setNormalUserTab('templates_manager');
       } else if (h.includes('dashboard') || h.includes('rss') || h.includes('feed')) {
-        setActiveTab('dashboard');
+        if (isAdmin) setActiveTab('dashboard');
       }
     };
     window.addEventListener('hashchange', handleHash);
+    handleHash();
     return () => {
       window.removeEventListener('open_rss_dashboard', handleOpenRss);
       window.removeEventListener('open_template_manager', handleOpenTemplates);
@@ -2742,35 +2752,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Coin balance action / display - Only for non-admin users */}
-            {!isAdmin && (
-              <div
-                className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-black flex items-center gap-1 shadow-xs"
-                title="उपलब्ध कॉइन बैलेंस"
-              >
-                <span>🪙</span>
-                <span>{walletData?.coinBalance ?? 0}</span>
-                <span className="text-[10px] text-amber-400/80 hidden sm:inline">कॉइन</span>
-              </div>
-            )}
-
-            {/* Admin Test Mode Toggle Button (Beside Logout) */}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={handleToggleTestMode}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 ${
-                  testModeEnabled
-                    ? 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-400 ring-2 ring-purple-500/40'
-                    : 'bg-slate-800 hover:bg-purple-950/60 text-purple-300 border border-purple-600/50'
-                }`}
-                title={testModeEnabled ? 'एडमिन टेस्ट मोड सक्रिय है - प्रोडक्शन मोड पर लौटने के लिए क्लिक करें' : 'एडमिन टेस्ट मोड चालू करें'}
-              >
-                <FlaskConical className="w-3.5 h-3.5" />
-                <span>{testModeEnabled ? 'टेस्ट मोड: चालू' : 'टेस्ट मोड'}</span>
-              </button>
-            )}
-
             {/* Logout button */}
             <button
               type="button"
@@ -3040,7 +3021,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
 
             {/* OPTION 2: मेंबरशिप प्लान व अपग्रेड */}
-            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'membership' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+            <div id="user-membership-accordion-section" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'membership' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => setNormalUserTab(normalUserTab === 'membership' ? '' : 'membership')}
