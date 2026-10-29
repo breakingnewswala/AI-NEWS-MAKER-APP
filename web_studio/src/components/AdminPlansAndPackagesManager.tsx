@@ -53,6 +53,7 @@ import {
   Loader2,
   Music,
   User,
+  Bell,
 } from 'lucide-react';
 import {
   isUserMasterAdmin,
@@ -142,8 +143,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onDeleteCategory,
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'policies' | ''>('');
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
+
+  // Admin Notification Panel State (Phase 5)
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
+  const [adminNotifFilter, setAdminNotifFilter] = useState<'all' | 'rss' | 'support' | 'logo' | 'requests'>('all');
+  const [adminNotifCounts, setAdminNotifCounts] = useState({ all: 0, rss: 0, support: 0, logo: 0, requests: 0 });
+  const [isLoadingAdminNotifs, setIsLoadingAdminNotifs] = useState(false);
+  const [adminNotifActionMsg, setAdminNotifActionMsg] = useState<string | null>(null);
 
   // Rewards & Claims Manager State (Part S)
   const [adminRewardsStats, setAdminRewardsStats] = useState({
@@ -191,8 +199,84 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       .finally(() => setIsLoadingRewards(false));
   };
 
+  const fetchAdminNotifications = async () => {
+    setIsLoadingAdminNotifs(true);
+    try {
+      const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
+      const res = await fetch(`/api/admin/notifications?email=${encodeURIComponent(adminEmail)}`, {
+        headers: {
+          'x-admin-key': 'master-admin',
+          'x-admin-email': adminEmail,
+          'x-user-role': 'admin',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.notifications)) {
+          setAdminNotifications(data.notifications);
+          setAdminNotifCounts(data.unreadCounts || { all: 0, rss: 0, support: 0, logo: 0, requests: 0 });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch admin notifications:', err);
+    } finally {
+      setIsLoadingAdminNotifs(false);
+    }
+  };
+
+  const handleMarkAdminNotifRead = async (id?: string, markAll: boolean = false, category?: string) => {
+    try {
+      const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
+      const res = await fetch('/api/admin/notifications/mark-read', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-admin-email': adminEmail,
+          'x-user-role': 'admin',
+        },
+        body: JSON.stringify({
+          id,
+          all: markAll,
+          category,
+          adminEmail,
+        }),
+      });
+      if (res.ok) {
+        if (markAll) {
+          if (category && category !== 'all') {
+            setAdminNotifications((prev) => prev.map((n) => (n.category === category ? { ...n, unread: false } : n)));
+            setAdminNotifCounts((prev) => ({
+              ...prev,
+              [category]: 0,
+              all: Math.max(0, prev.all - (prev[category as keyof typeof prev] || 0)),
+            }));
+          } else {
+            setAdminNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+            setAdminNotifCounts({ all: 0, rss: 0, support: 0, logo: 0, requests: 0 });
+          }
+          setAdminNotifActionMsg('✅ सभी नोटिफिकेशन पढ़े गए मार्क कर दिए गए');
+        } else if (id) {
+          setAdminNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+          const target = adminNotifications.find((n) => n.id === id);
+          if (target && target.unread) {
+            setAdminNotifCounts((prev) => ({
+              ...prev,
+              all: Math.max(0, prev.all - 1),
+              [target.category]: Math.max(0, (prev[target.category as keyof typeof prev] || 1) - 1),
+            }));
+          }
+        }
+        setTimeout(() => setAdminNotifActionMsg(null), 3000);
+      }
+    } catch (err) {
+      console.warn('Failed to mark notification read:', err);
+    }
+  };
+
   useEffect(() => {
     fetchAdminRewards();
+    fetchAdminNotifications();
   }, [subTab]);
 
   const handleApproveRewardClaim = async (claimId: string) => {
@@ -4914,6 +4998,238 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           {subTab === 'api_keys' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
               <AdminApiKeysManager currentUser={currentUser} />
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 11C: एडमिन नोटिफिकेशन पैनल (ADMIN NOTIFICATION PANEL - PHASE 5)         */}
+        {/* ========================================================================= */}
+        {isSuperAdminUser && (
+        <div id="section-notifications" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'notifications' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'notifications' ? '' : 'notifications')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'notifications' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <Bell className="w-5 h-5 text-white" />
+                {adminNotifCounts.all > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 border-2 border-slate-900 text-white rounded-full text-[10px] font-black flex items-center justify-center animate-pulse">
+                    {adminNotifCounts.all > 99 ? '99+' : adminNotifCounts.all}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm sm:text-base font-black text-white block truncate">
+                    एडमिन नोटिफिकेशन पैनल (Admin Notifications)
+                  </span>
+                  {adminNotifCounts.all > 0 && (
+                    <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full uppercase animate-pulse">
+                      {adminNotifCounts.all} नए अलर्ट
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  नई RSS खबरें, सपोर्ट इनबॉक्स, लोगो चेंज रिक्वेस्ट व यूज़र अनुरोध अलर्ट्स
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
+                {adminNotifications.length} कुल अलर्ट
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'notifications' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'notifications' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+              {/* Status Action Banner */}
+              {adminNotifActionMsg && (
+                <div className="p-3 bg-emerald-950/90 border border-emerald-500/50 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{adminNotifActionMsg}</span>
+                </div>
+              )}
+
+              {/* Controls & Filter Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(
+                    [
+                      { key: 'all', label: 'सभी', count: adminNotifCounts.all },
+                      { key: 'rss', label: 'RSS खबरें', count: adminNotifCounts.rss },
+                      { key: 'support', label: 'सपोर्ट इनबॉक्स', count: adminNotifCounts.support },
+                      { key: 'logo', label: 'लोगो चेंज', count: adminNotifCounts.logo },
+                      { key: 'requests', label: 'अन्य अनुरोध', count: adminNotifCounts.requests },
+                    ] as const
+                  ).map((tab) => {
+                    const isActive = adminNotifFilter === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setAdminNotifFilter(tab.key)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          isActive
+                            ? 'bg-amber-400 text-slate-950 font-black shadow-md'
+                            : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        {tab.count > 0 && (
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                              isActive ? 'bg-slate-950 text-amber-300' : 'bg-red-500 text-white'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleMarkAdminNotifRead(undefined, true, adminNotifFilter)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-lg border border-slate-700 transition cursor-pointer flex items-center gap-1.5"
+                    title="सभी को पढ़ा हुआ मार्क करें"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>सभी पढ़े मार्क करें</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchAdminNotifications}
+                    disabled={isLoadingAdminNotifs}
+                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition cursor-pointer disabled:opacity-50"
+                    title="रिफ्रेश करें"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAdminNotifs ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Notification List */}
+              <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
+                {(() => {
+                  const filtered = adminNotifications.filter((n) => {
+                    if (adminNotifFilter === 'all') return true;
+                    return n.category === adminNotifFilter;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-12 bg-slate-900/50 rounded-2xl border border-dashed border-slate-800 text-slate-400 space-y-2">
+                        <div className="text-3xl">🔔</div>
+                        <p className="text-xs font-bold">इस श्रेणी में कोई नोटिफिकेशन नहीं है</p>
+                        <p className="text-[11px] text-slate-500">
+                          नए RSS समाचार या यूज़र रिक्वेस्ट आने पर वे यहाँ तुरंत दिखाई देंगे।
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((n) => {
+                    const badgeStyles: Record<string, string> = {
+                      rss: 'bg-amber-950/80 text-amber-300 border-amber-600/50',
+                      support: 'bg-blue-950/80 text-blue-300 border-blue-600/50',
+                      logo: 'bg-purple-950/80 text-purple-300 border-purple-600/50',
+                      requests: 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50',
+                    };
+                    const badgeLabels: Record<string, string> = {
+                      rss: '📰 RSS समाचार',
+                      support: '🎫 सपोर्ट केस',
+                      logo: '🎨 लोगो चेंज',
+                      requests: '📝 यूज़र रिक्वेस्ट',
+                    };
+
+                    return (
+                      <div
+                        key={n.id}
+                        className={`p-3.5 rounded-xl border transition flex items-start justify-between gap-3 ${
+                          n.unread
+                            ? 'bg-slate-900/95 border-amber-500/40 shadow-md ring-1 ring-amber-500/20'
+                            : 'bg-slate-900/50 border-slate-800/80 opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          {n.unread ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 mt-1.5 shrink-0 animate-pulse ring-2 ring-red-400/30" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
+                                  badgeStyles[n.category] || badgeStyles.requests
+                                }`}
+                              >
+                                {badgeLabels[n.category] || 'अलर्ट'}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {n.timestamp ? new Date(n.timestamp).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <h4 className="text-xs sm:text-sm font-bold text-white leading-snug">
+                              {n.title}
+                            </h4>
+                            {n.message && (
+                              <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-2">
+                                {n.message}
+                              </p>
+                            )}
+                            {n.meta && (
+                              <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5">
+                                {n.meta.email && <span>ईमेल: {n.meta.email}</span>}
+                                {n.meta.source && <span>स्रोत: {n.meta.source}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {n.unread && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkAdminNotifRead(n.id)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg border border-slate-700 transition cursor-pointer"
+                            >
+                              पढ़ा गया
+                            </button>
+                          )}
+                          {n.targetTab && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleMarkAdminNotifRead(n.id);
+                                if (n.targetTab === 'rss') {
+                                  setSubTab('rss');
+                                } else if (n.targetTab === 'support' || n.targetTab === 'requests') {
+                                  setSubTab('users');
+                                } else if (n.targetTab === 'logo') {
+                                  setSubTab('users');
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 text-[10px] font-black rounded-lg border border-amber-400/40 transition cursor-pointer flex items-center gap-1"
+                            >
+                              <span>देखें</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                })()}
+              </div>
             </div>
           )}
         </div>

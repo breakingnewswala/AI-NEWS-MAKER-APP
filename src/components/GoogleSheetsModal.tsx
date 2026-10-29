@@ -363,7 +363,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                   className="w-full bg-slate-900 border border-slate-700 text-white text-xs rounded-xl p-3 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
                 <span className="text-[11px] text-slate-400 block">
-                  कॉलम क्रम: A: ID, B: शीर्षक (Title), C: सारांश (Summary), D: श्रेणी, E: चैनल नाम, F: ज़िला/स्थान, G: दिनांक, H: इमेज लिंक
+                  कॉलम क्रम: A: ID, B: शीर्षक (Title), C: सारांश (Summary), D: श्रेणी (Category), E: चैनल नाम, F: ज़िला/स्थान, G: दिनांक, H: इमेज लिंक
                 </span>
               </div>
 

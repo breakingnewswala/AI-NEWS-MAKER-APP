@@ -966,6 +966,7 @@ __export(server_exports, {
   DISTRICT_STATE_LIST: () => DISTRICT_STATE_LIST,
   GEMINI_NEWS_RESPONSE_SCHEMA: () => GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS: () => HEADLINE_5_TIER_MAX_LIMITS,
+  HEADLINE_5_TIER_RANGES: () => HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT: () => HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES: () => HEADLINE_TIER_RANGES,
   buildMasterNewsEditorialPrompt: () => buildMasterNewsEditorialPrompt,
@@ -4988,6 +4989,192 @@ app.post("/api/notifications/mark-read", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var ADMIN_NOTIFS_READ_FILE = import_path.default.join(process.cwd(), "admin_notifications_read_db.json");
+function loadAdminReadNotificationIds() {
+  try {
+    if (import_fs.default.existsSync(ADMIN_NOTIFS_READ_FILE)) {
+      const raw = import_fs.default.readFileSync(ADMIN_NOTIFS_READ_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch {
+  }
+  return /* @__PURE__ */ new Set();
+}
+function saveAdminReadNotificationIds(ids) {
+  try {
+    const locs = resolveAllDatabaseLocations("admin_notifications_read_db.json");
+    const jsonStr = JSON.stringify(Array.from(ids), null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
+app.get("/api/admin/notifications", (req, res) => {
+  try {
+    const userRes = resolveUserTierAndRole(req);
+    const reqEmail = (req.query.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
+    if (!isAdmin) {
+      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const readIds = loadAdminReadNotificationIds();
+    const newsDb = loadNewsDatabase();
+    const rssItems = [];
+    const oneWeekAgo = Date.now() - 7 * 864e5;
+    for (const p of newsDb) {
+      const isRss = p.source === "rss" || p.category === "RSS" || p.id.startsWith("rss_") || p.sourceUrl?.includes("rss");
+      const timeVal = typeof p.timestamp === "number" ? p.timestamp : new Date(p.timestamp || 0).getTime();
+      if ((isRss || p.status === "PENDING" || !p.status) && timeVal >= oneWeekAgo) {
+        const eventId = `admin_rss_${p.id}`;
+        rssItems.push({
+          id: eventId,
+          rawId: p.id,
+          category: "rss",
+          categoryLabel: "\u0928\u0908 RSS Feed \u0916\u092C\u0930\u0947\u0902",
+          title: p.title || "\u0928\u0908 RSS Feed \u0916\u092C\u0930",
+          message: p.summary ? p.summary.slice(0, 160) : "\u0906\u0930\u090F\u0938\u090F\u0938 \u092B\u093C\u0940\u0921 \u0938\u0947 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0928\u092F\u093E \u0938\u092E\u093E\u091A\u093E\u0930",
+          timestamp: timeVal || Date.now(),
+          time: new Date(timeVal || Date.now()).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+          unread: !readIds.has(eventId),
+          status: p.status || "PENDING",
+          meta: {
+            channelName: p.channelName || p.source,
+            location: p.location,
+            sourceUrl: p.sourceUrl || p.linkUrl
+          }
+        });
+      }
+    }
+    const supportDb = loadSupportRequestsDatabase();
+    const supportItems = [];
+    for (const s of supportDb) {
+      const eventId = `admin_support_${s.id}`;
+      const timeVal = s.timestamp || (s.createdAt ? new Date(s.createdAt).getTime() : Date.now());
+      supportItems.push({
+        id: eventId,
+        rawId: s.id,
+        category: "support",
+        categoryLabel: "\u0938\u092A\u094B\u0930\u094D\u091F \u0907\u0928\u092C\u0949\u0915\u094D\u0938 \u0915\u0947\u0938\u0947\u0938",
+        title: `\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u091F: ${s.subject || s.reportReason || s.category || "\u0938\u0939\u093E\u092F\u0924\u093E \u0905\u0928\u0941\u0930\u094B\u0927"}`,
+        message: s.message ? s.message.slice(0, 160) : s.userEmail || "",
+        timestamp: timeVal,
+        time: new Date(timeVal).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+        unread: !readIds.has(eventId) && s.status !== "resolved",
+        status: s.status || "open",
+        meta: {
+          userEmail: s.userEmail,
+          userId: s.userId,
+          priority: s.priority
+        }
+      });
+    }
+    const logoDb = loadLogoRequestsDatabase();
+    const logoItems = [];
+    for (const l of logoDb) {
+      const eventId = `admin_logo_${l.id}`;
+      const timeVal = l.timestamp || (l.createdAt ? new Date(l.createdAt).getTime() : Date.now());
+      logoItems.push({
+        id: eventId,
+        rawId: l.id,
+        category: "logo",
+        categoryLabel: "\u0932\u094B\u0917\u094B \u091A\u0947\u0902\u091C \u0930\u093F\u0915\u094D\u0935\u0947\u0938\u094D\u091F",
+        title: `\u0932\u094B\u0917\u094B \u0905\u0928\u0941\u0930\u094B\u0927: ${l.channelName || l.userEmail}`,
+        message: l.adminNotes || `\u0932\u094B\u0917\u094B \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u0938\u094D\u0925\u093F\u0924\u093F: ${l.status === "approved" ? "\u0938\u094D\u0935\u0940\u0915\u0943\u0924" : l.status === "rejected" ? "\u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924" : "\u0932\u0902\u092C\u093F\u0924"}`,
+        timestamp: timeVal,
+        time: new Date(timeVal).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+        unread: !readIds.has(eventId) && l.status === "pending",
+        status: l.status || "pending",
+        meta: {
+          userEmail: l.userEmail,
+          channelName: l.channelName,
+          newLogoUrl: l.newLogoUrl
+        }
+      });
+    }
+    const limitDb = loadLimitIncreaseRequests();
+    const reqItems = [];
+    for (const r of limitDb) {
+      const eventId = `admin_req_${r.id || `${r.email}_${r.timestamp}`}`;
+      const timeVal = r.timestamp || (r.createdAt ? new Date(r.createdAt).getTime() : Date.now());
+      reqItems.push({
+        id: eventId,
+        rawId: r.id || eventId,
+        category: "requests",
+        categoryLabel: "\u0905\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930 \u0930\u093F\u0915\u094D\u0935\u0947\u0938\u094D\u091F",
+        title: `\u0932\u093F\u092E\u093F\u091F \u0935\u093F\u0938\u094D\u0924\u093E\u0930 \u0905\u0928\u0941\u0930\u094B\u0927: ${r.email || r.userId}`,
+        message: r.reason || `\u092A\u094D\u0932\u093E\u0928: ${r.tier || "Standard"}, \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u0938\u0940\u092E\u093E: ${r.currentLimit || 0}`,
+        timestamp: timeVal,
+        time: new Date(timeVal).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+        unread: !readIds.has(eventId) && r.status !== "approved" && r.status !== "rejected",
+        status: r.status || "pending",
+        meta: {
+          email: r.email,
+          tier: r.tier,
+          reason: r.reason
+        }
+      });
+    }
+    const allItems = [...rssItems, ...supportItems, ...logoItems, ...reqItems].sort((a, b) => b.timestamp - a.timestamp);
+    const counts = {
+      rss: { total: rssItems.length, unread: rssItems.filter((i) => i.unread).length, label: "\u0928\u0908 RSS Feed \u0916\u092C\u0930\u0947\u0902" },
+      support: { total: supportItems.length, unread: supportItems.filter((i) => i.unread).length, label: "\u0938\u092A\u094B\u0930\u094D\u091F \u0907\u0928\u092C\u0949\u0915\u094D\u0938 \u0915\u0947\u0938\u0947\u0938" },
+      logo: { total: logoItems.length, unread: logoItems.filter((i) => i.unread).length, label: "\u0932\u094B\u0917\u094B \u091A\u0947\u0902\u091C \u0930\u093F\u0915\u094D\u0935\u0947\u0938\u094D\u091F" },
+      requests: { total: reqItems.length, unread: reqItems.filter((i) => i.unread).length, label: "\u0905\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930 \u0930\u093F\u0915\u094D\u0935\u0947\u0938\u094D\u091F" }
+    };
+    const totalUnread = counts.rss.unread + counts.support.unread + counts.logo.unread + counts.requests.unread;
+    return res.json({
+      success: true,
+      totalUnread,
+      categories: counts,
+      notifications: allItems.slice(0, 100)
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/notifications/mark-read", (req, res) => {
+  try {
+    const userRes = resolveUserTierAndRole(req);
+    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
+    if (!isAdmin) {
+      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const { id, all, ids, category } = req.body || {};
+    const readIds = loadAdminReadNotificationIds();
+    if (id) {
+      readIds.add(String(id));
+    }
+    if (Array.isArray(ids)) {
+      ids.forEach((i) => readIds.add(String(i)));
+    }
+    if (all) {
+      if (category === "rss" || !category) {
+        loadNewsDatabase().forEach((p) => readIds.add(`admin_rss_${p.id}`));
+      }
+      if (category === "support" || !category) {
+        loadSupportRequestsDatabase().forEach((s) => readIds.add(`admin_support_${s.id}`));
+      }
+      if (category === "logo" || !category) {
+        loadLogoRequestsDatabase().forEach((l) => readIds.add(`admin_logo_${l.id}`));
+      }
+      if (category === "requests" || !category) {
+        loadLimitIncreaseRequests().forEach((r) => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
+      }
+    }
+    saveAdminReadNotificationIds(readIds);
+    return res.json({ success: true, totalRead: readIds.size });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.get("/api/gemini-quota-status", (_req, res) => {
   return res.json({
     hasKey: Boolean(process.env.GEMINI_API_KEY),
@@ -8177,20 +8364,28 @@ function resolveUserTierAndRole(req) {
   return { tier: reqTier, role: reqRole };
 }
 var DEFAULT_FALLBACK_MODELS = [
+  "gemini-3.1-flash-lite",
   "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite"
+  "gemini-flash-latest"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
   for (const model of models) {
     for (let attempt = 0; attempt < maxRetriesPerModel; attempt++) {
       try {
-        const res = await ai.models.generateContent({
+        const effectiveConfig = { ...reqOptions.config || {} };
+        if (model.includes("3.8-flash") && !effectiveConfig.thinkingConfig) {
+          effectiveConfig.thinkingConfig = { thinkingLevel: "low" };
+        }
+        const callPromise = ai.models.generateContent({
           model,
           contents: reqOptions.contents,
-          config: reqOptions.config
+          config: effectiveConfig
         });
+        const timeoutPromise = new Promise(
+          (_, reject) => setTimeout(() => reject(new Error(`Model ${model} timeout after 14s`)), 14e3)
+        );
+        const res = await Promise.race([callPromise, timeoutPromise]);
         quotaExceededInfo.isExceeded = false;
         quotaExceededInfo.lastChecked = (/* @__PURE__ */ new Date()).toISOString();
         return res;
@@ -10317,20 +10512,42 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
 function generate4BalancedHeadlineOptions(primaryTitle, factSentences = [], location = "") {
   return generate5BalancedHeadlineOptions(primaryTitle, factSentences, location).slice(0, 4);
 }
-var HEADLINE_MAX_CHARACTER_LIMIT = 150;
-var HEADLINE_5_TIER_MAX_LIMITS = [150, 150, 150, 150, 150];
-function fitSingleHeadlineToTier(text, maxLimit = HEADLINE_MAX_CHARACTER_LIMIT) {
+var HEADLINE_5_TIER_RANGES = [
+  { min: 80, max: 110, label: "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (80-110 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 100, max: 130, label: "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (100-130 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 125, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (125-150 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 130, max: 160, label: "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (130-160 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 150, max: 200, label: "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0935\u093F\u0938\u094D\u0924\u0943\u0924/\u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 (150-200 \u0905\u0915\u094D\u0937\u0930)" }
+];
+var HEADLINE_MAX_CHARACTER_LIMIT = 200;
+var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+function fitSingleHeadlineToTier(text, maxLimit = 150, minLimit = 0, factSentence) {
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
+  cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
   if (visibleLength <= maxLimit) {
-    return cleaned;
+    if (minLimit > 0 && visibleLength < minLimit && factSentence) {
+      const candidates = Array.isArray(factSentence) ? factSentence : [factSentence];
+      for (const rawFact of candidates) {
+        const cleanFact = sanitizePressNoteFlattery(cleanHeadlineText(rawFact), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+        if (cleanFact && cleanFact.length >= 15 && !cleaned.includes(cleanFact.slice(0, 20))) {
+          const combined = `${cleaned}: ${cleanFact}`;
+          if (combined.length <= maxLimit) {
+            cleaned = combined;
+            break;
+          }
+        }
+      }
+    }
+    return cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   }
   const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
   if (plainText.length <= maxLimit) {
-    return plainText;
+    return plainText.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   }
   const sliced = plainText.substring(0, maxLimit);
   const lastDelim = Math.max(
@@ -10341,7 +10558,7 @@ function fitSingleHeadlineToTier(text, maxLimit = HEADLINE_MAX_CHARACTER_LIMIT) 
   );
   const lastSpace = sliced.lastIndexOf(" ");
   let result = sliced;
-  if (lastDelim > 40) {
+  if (lastDelim > Math.max(35, minLimit)) {
     result = sliced.substring(0, lastDelim);
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
@@ -10354,8 +10571,9 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
   const result = [];
   for (let i = 0; i < 5; i++) {
     const raw = safeHeadlines[i];
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: "" };
     if (raw) {
-      const fitted = fitSingleHeadlineToTier(raw, 150);
+      const fitted = fitSingleHeadlineToTier(raw, tier.max, tier.min, contextOrBase);
       if (fitted && !result.includes(fitted)) {
         result.push(fitted);
       }
@@ -10367,25 +10585,30 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
     const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
     for (const cand of supp) {
       if (result.length >= 5) break;
-      const fitted = fitSingleHeadlineToTier(cand, 150);
+      const tierIndex = result.length;
+      const tier = HEADLINE_5_TIER_RANGES[tierIndex] || { min: 80, max: 150, label: "" };
+      const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
       if (fitted && !result.includes(fitted)) {
         result.push(fitted);
       }
     }
   }
-  return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
+  return result.slice(0, 5).map((h, idx) => {
+    const tier = HEADLINE_5_TIER_RANGES[idx] || { min: 80, max: 150, label: "" };
+    return fitSingleHeadlineToTier(h, tier.max, tier.min);
+  });
 }
 var GEMINI_NEWS_RESPONSE_SCHEMA = {
   type: import_genai.Type.OBJECT,
   properties: {
     headline: {
       type: import_genai.Type.STRING,
-      description: "Primary journalistic headline in Devanagari Hindi (target 100-150 visible characters, max 150, concise, active, no trailing period or punctuation)"
+      description: "Primary journalistic headline in Devanagari Hindi (target 80-110 visible characters, concise, active, no trailing period or punctuation)"
     },
     headlineOptions: {
       type: import_genai.Type.ARRAY,
       items: { type: import_genai.Type.STRING },
-      description: "Exactly 5 distinct, factual headline options for the SAME central news event (BREAKING NEWS WALA style, each targeting 100-150 visible characters, absolute maximum 150 visible characters, concise, active Devanagari Hindi without ending punctuation)"
+      description: "Exactly 5 distinct, factual headline options for the SAME central news event (Option 1: 80-110 chars, Option 2: 100-130 chars, Option 3: 125-150 chars, Option 4: 130-160 chars, Option 5: 150-200 chars; pure Hindi, no trailing periods or punctuation)"
     },
     highlightWords: {
       type: import_genai.Type.ARRAY,
@@ -10454,7 +10677,7 @@ function buildMasterNewsEditorialPrompt(params) {
   const cleanUser = (channelUsername || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
   const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
   const userTagInstruction = cleanUser && !isGeneric ? `\u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917: #${cleanUser}` : `(\u092F\u0926\u093F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u0928 \u0939\u094B \u0924\u094B \u0915\u094B\u0908 \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0928 \u0932\u0917\u093E\u090F\u0902)`;
-  const systemInstruction = `\u0906\u092A BREAKING NEWS WALA \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u092E\u093E\u0928\u0915\u094B\u0902 \u0915\u0947 \u0924\u0939\u0924 \u090F\u0915 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u0915\u0947 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor) \u0939\u0948\u0902\u0964 \u0926\u0940 \u0917\u0908 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0915\u093E \u0917\u0939\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0915\u0947 \u0915\u0947\u0935\u0932 \u092E\u0941\u0916\u094D\u092F \u092A\u0941\u0937\u094D\u091F \u0918\u091F\u0928\u093E \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0938\u091F\u0940\u0915, \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928, \u0909\u0938\u0940 \u090F\u0915 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u0947 5 \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, \u0905\u0927\u093F\u0915\u0924\u092E 150 \u0935\u0930\u094D\u0923) \u0914\u0930 3 \u0905\u0932\u0917-\u0905\u0932\u0917 \u0936\u0948\u0932\u093F\u092F\u094B\u0902 \u0915\u0947 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u0932\u094C\u091F\u093E\u090F\u0902\u0964`;
+  const systemInstruction = `\u0906\u092A BREAKING NEWS WALA \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u092E\u093E\u0928\u0915\u094B\u0902 \u0915\u0947 \u0924\u0939\u0924 \u090F\u0915 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u0915\u0947 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor) \u0939\u0948\u0902\u0964 \u0926\u0940 \u0917\u0908 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0915\u093E \u0917\u0939\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0915\u0947 \u0915\u0947\u0935\u0932 \u092E\u0941\u0916\u094D\u092F \u092A\u0941\u0937\u094D\u091F \u0918\u091F\u0928\u093E \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0938\u091F\u0940\u0915, \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928, \u0909\u0938\u0940 \u090F\u0915 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u0947 5 \u0905\u0932\u0917-\u0905\u0932\u0917 \u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0932\u0902\u092C\u093E\u0908 \u0935\u093E\u0932\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0935\u0930\u094D\u0923) \u0914\u0930 3 \u0905\u0932\u0917-\u0905\u0932\u0917 \u0936\u0948\u0932\u093F\u092F\u094B\u0902 \u0915\u0947 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u0932\u094C\u091F\u093E\u090F\u0902\u0964`;
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
   const prompt = `\u0906\u092A BREAKING NEWS WALA \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u092E\u093E\u0928\u0915\u094B\u0902 \u0915\u0947 \u0924\u0939\u0924 \u090F\u0915 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u0915\u0947 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
@@ -10475,29 +10698,25 @@ ${customPrompt}
 1. \u0915\u0947\u0935\u0932 \u090F\u0915 \u0939\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u092A\u0930 \u0915\u0947\u0902\u0926\u094D\u0930\u093F\u0924 (STRICT SINGLE-STORY GROUNDING):
    - \u0906\u0932\u0947\u0916 \u0915\u0947 \u0915\u093F\u0938\u0940 \u0905\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u092F\u093E \u0917\u094C\u0923 \u092C\u093F\u0902\u0926\u0941 \u0915\u094B \u0905\u0932\u0917 \u0915\u0939\u093E\u0928\u0940 \u092C\u0928\u093E\u0915\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0928 \u0932\u093E\u090F\u0902\u0964
    - \u0938\u092D\u0940 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0938\u094D\u0930\u094B\u0924 \u0915\u0940 \u0909\u0938\u0940 \u090F\u0915 \u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0918\u091F\u0928\u093E (Primary Event) \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u094B\u0928\u0947 \u091A\u093E\u0939\u093F\u090F\u0964
+   - \u0916\u092C\u0930 \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0924\u0925\u094D\u092F\u094B\u0902 \u0938\u0947 \u092C\u093E\u0939\u0930 \u0915\u094B\u0908 \u0924\u0925\u094D\u092F, \u0938\u0902\u0916\u094D\u092F\u093E, \u092C\u092F\u093E\u0928, \u0906\u0930\u094B\u092A \u092F\u093E \u0918\u091F\u0928\u093E \u0905\u092A\u0928\u0940 \u0913\u0930 \u0938\u0947 \u0915\u092D\u0940 \u0928 \u0917\u0922\u093C\u0947\u0902\u0964
    - \u0906\u0932\u0947\u0916 \u0915\u0947 \u092C\u0949\u0921\u0940 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u094B \u091C\u094D\u092F\u094B\u0902-\u0915\u093E-\u0924\u094D\u092F\u094B\u0902 \u0915\u0949\u092A\u0940-\u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0915\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u092D\u0940 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964
-   - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E (NO UNRELATED FILLER PHRASES): \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u092F\u093E \u0905\u0938\u0902\u092C\u0926\u094D\u0927 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u091C\u0941\u092E\u0932\u0947 (\u091C\u0948\u0938\u0947 '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0936\u093E\u0938\u0928 \u0915\u0940 \u0938\u0916\u094D\u0924 \u0928\u091C\u0930') \u0915\u092D\u0940 \u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902 \u091C\u092C \u0924\u0915 \u0915\u093F \u092E\u0942\u0932 \u0916\u092C\u0930 \u092E\u0947\u0902 \u0935\u093E\u0938\u094D\u0924\u0935 \u092E\u0947\u0902 \u0910\u0938\u093E \u0928 \u0932\u093F\u0916\u093E \u0939\u094B! \u092E\u0928\u094B\u0930\u0902\u091C\u0928, \u0916\u0947\u0932, \u0915\u093E\u0930\u094B\u092C\u093E\u0930 \u092F\u093E \u0938\u0902\u0938\u094D\u0915\u0943\u0924\u093F \u0915\u0940 \u0916\u092C\u0930\u094B\u0902 \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0936\u092C\u094D\u0926 \u0915\u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964 \u0915\u0947\u0935\u0932 \u0906\u0932\u0947\u0916 \u0915\u0947 \u092E\u0942\u0932 \u0935\u093F\u0937\u092F \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u093E \u0939\u0940 \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964
-2. 5 \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0926\u0943\u0937\u094D\u091F\u093F\u0915\u094B\u0923 (5 EDITORIAL ANGLES OF THE SAME EVENT):
-   - \u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E (Core Event) \u2014 \u0915\u093F\u0938\u0928\u0947 \u0915\u094D\u092F\u093E \u0915\u093F\u092F\u093E, \u0915\u0939\u093E\u0901 \u0939\u0941\u0906, \u0938\u0940\u0927\u093E, \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0914\u0930 \u092A\u0942\u0930\u093E \u0935\u093F\u0935\u0930\u0923\u0964
-   - \u0935\u093F\u0915\u0932\u094D\u092A 2: \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u092F\u093E \u092E\u0941\u0916\u094D\u092F \u092A\u093E\u0924\u094D\u0930 \u0915\u094B\u0923 (Actor/Person Focus) \u2014 \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F, \u092D\u0942\u092E\u093F\u0915\u093E \u092F\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0928\u093F\u0930\u094D\u0923\u092F\u0964
-   - \u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u092F\u093E \u092A\u0930\u093F\u0923\u093E\u092E (Action/Consequence) \u2014 \u0918\u091F\u0928\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908, \u0905\u0938\u0930 \u092F\u093E \u0935\u093F\u0915\u093E\u0938\u0964
-   - \u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941 \u092F\u093E \u0926\u093E\u0935\u093E (Key Development/Quote) \u2014 \u0916\u092C\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F, \u0938\u0902\u0926\u0930\u094D\u092D \u092F\u093E \u092C\u092F\u093E\u0928\u0964
-   - \u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 (High-Impact Angle) \u2014 \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u093E \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u0927\u093E\u0930\u0926\u093E\u0930 \u0930\u0942\u092A\u0964
-3. \u090F\u0915\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u0902\u092C\u093E\u0908 \u0928\u093F\u092F\u092E \u2014 100 \u0938\u0947 150 \u0935\u0930\u094D\u0923 (SINGLE HEADLINE LENGTH RULE \u2014 100 TO 150 CHARACTERS):
-   - \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u0947 \u0932\u093F\u090F \u0932\u0915\u094D\u0937\u094D\u092F \u0932\u0902\u092C\u093E\u0908: 100 \u0938\u0947 150 \u0926\u0943\u0936\u094D\u092F\u092E\u093E\u0928 \u0935\u0930\u094D\u0923 (visible characters), \u0905\u0902\u0924\u093F\u092E \u0938\u0940\u092E\u093E: \u0905\u0927\u093F\u0915\u0924\u092E 150 \u0935\u0930\u094D\u0923\u0964
-   - \u091F\u0940\u0935\u0940 \u0928\u094D\u092F\u0942\u091C \u0915\u093E\u0930\u094D\u0921, \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0930\u093F\u092C\u0928 \u0914\u0930 4:5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921 \u092A\u0930 \u0938\u0940\u0927\u0947 \u092A\u094D\u0930\u0926\u0930\u094D\u0936\u093F\u0924 \u0939\u094B\u0928\u0947 \u092F\u094B\u0917\u094D\u092F \u091A\u0941\u0938\u094D\u0924, \u0938\u094D\u092A\u0937\u094D\u091F, \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0914\u0930 \u0905\u0938\u0930\u0926\u093E\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u093F\u0916\u0947\u0902\u0964
-   - \u092C\u0928\u093E\u0935\u091F\u0940 \u0935\u093F\u0938\u094D\u0924\u093E\u0930, \u0926\u094B\u0939\u0930\u093E\u0935 \u092F\u093E \u0905\u0935\u093E\u0902\u091B\u093F\u0924 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u091C\u0941\u092E\u0932\u0947 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964
-   - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E: \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u092D\u0940 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 (Roman script) \u0936\u092C\u094D\u0926 \u0928 \u0930\u0916\u0947\u0902\u0964 \u0938\u092D\u0940 \u0935\u093F\u0926\u0947\u0936\u0940 \u0928\u093E\u092E\u094B\u0902 \u0935 \u0938\u0902\u0938\u094D\u0925\u093E\u0913\u0902 (\u091C\u0948\u0938\u0947 BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) \u0915\u094B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947 \u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908, \u0906\u0908\u092A\u0940\u090F\u0932, \u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F, \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A, \u091F\u094D\u0935\u093F\u091F\u0930, \u0926\u093F\u0932\u094D\u0932\u0940, \u0915\u093E\u0902\u0917\u094D\u0930\u0947\u0938)\u0964
-   - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964 \u092F\u093E ?) \u0915\u092D\u0940 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
+   - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E (NO UNRELATED FILLER PHRASES): \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u092F\u093E \u0905\u0938\u0902\u092C\u0926\u094D\u0927 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u091C\u0941\u092E\u0932\u0947 (\u091C\u0948\u0938\u0947 '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0936\u093E\u0938\u0928 \u0915\u0940 \u0938\u0916\u094D\u0924 \u0928\u091C\u0930') \u0915\u092D\u0940 \u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902 \u091C\u092C \u0924\u0915 \u0915\u093F \u092E\u0942\u0932 \u0916\u092C\u0930 \u092E\u0947\u0902 \u0935\u093E\u0938\u094D\u0924\u0935 \u092E\u0947\u0902 \u0910\u0938\u093E \u0928 \u0932\u093F\u0916\u093E \u0939\u094B!
+2. 5 \u0936\u094D\u0930\u0947\u0923\u0940\u092C\u0926\u094D\u0927 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u0902\u092C\u093E\u0908 \u0928\u093F\u092F\u092E (5-TIER GRADUATED HEADLINE LENGTH RULES):
+   - \u0935\u093F\u0915\u0932\u094D\u092A 1: 80\u2013110 \u0905\u0915\u094D\u0937\u0930 (\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u2014 \u0915\u093F\u0938\u0928\u0947 \u0915\u094D\u092F\u093E \u0915\u093F\u092F\u093E, \u0915\u0939\u093E\u0901 \u0939\u0941\u0906, \u0938\u0940\u0927\u093E, \u0924\u0925\u094D\u092F\u092A\u0930\u0915)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 2: 100\u2013130 \u0905\u0915\u094D\u0937\u0930 (\u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940 \u092F\u093E \u092E\u0941\u0916\u094D\u092F \u092A\u093E\u0924\u094D\u0930 \u0915\u094B\u0923 \u2014 \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F, \u092D\u0942\u092E\u093F\u0915\u093E \u092F\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0928\u093F\u0930\u094D\u0923\u092F)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 3: 125\u2013150 \u0905\u0915\u094D\u0937\u0930 (\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u092F\u093E \u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 \u2014 \u0918\u091F\u0928\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908, \u0905\u0938\u0930 \u092F\u093E \u0935\u093F\u0915\u093E\u0938)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 4: 130\u2013160 \u0905\u0915\u094D\u0937\u0930 (\u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941 \u092F\u093E \u0926\u093E\u0935\u093E \u2014 \u0916\u092C\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F, \u0938\u0902\u0926\u0930\u094D\u092D \u092F\u093E \u092C\u092F\u093E\u0928)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 5: 150\u2013200 \u0905\u0915\u094D\u0937\u0930 (\u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0935 \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 \u2014 \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u093E \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u092A\u0942\u0930\u094D\u0923 \u0935 \u0927\u093E\u0930\u0926\u093E\u0930 \u0930\u0942\u092A)
+   - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E: \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964 \u092F\u093E ?) \u0915\u092D\u0940 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
+   - Headlines \u0936\u0941\u0926\u094D\u0927, \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0914\u0930 \u0935\u094D\u092F\u093E\u0915\u0930\u0923\u0938\u092E\u094D\u092E\u0924 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0939\u094B\u0902\u0964 \u0938\u094D\u0925\u093E\u0928\u094B\u0902 \u0915\u0947 \u0928\u093E\u092E \u0914\u0930 \u0939\u093F\u0902\u0926\u0940 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947 \u092C\u0940\u091A \u0938\u0939\u0940 \u0938\u094D\u092A\u0947\u0938\u093F\u0902\u0917 \u0939\u094B\u0964
+   - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u092D\u0940 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 (Roman script) \u0936\u092C\u094D\u0926 \u0928 \u0930\u0916\u0947\u0902\u0964 \u0938\u092D\u0940 \u0935\u093F\u0926\u0947\u0936\u0940 \u0928\u093E\u092E\u094B\u0902 \u0935 \u0938\u0902\u0938\u094D\u0925\u093E\u0913\u0902 (\u091C\u0948\u0938\u0947 BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) \u0915\u094B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947 \u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908, \u0906\u0908\u092A\u0940\u090F\u0932, \u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F, \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A, \u091F\u094D\u0935\u093F\u091F\u0930, \u0926\u093F\u0932\u094D\u0932\u0940, \u0915\u093E\u0902\u0917\u094D\u0930\u0947\u0938)\u0964
    - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0938\u094D\u091F\u094D\u0930\u093F\u0902\u0917 \u092E\u0947\u0902 \u0915\u092D\u0940 \u092D\u0940 '[120/150]' \u092F\u093E '(\u0935\u093F\u0915\u0932\u094D\u092A 1)' \u091C\u0948\u0938\u0947 \u0935\u0930\u094D\u0923-\u0917\u0923\u0928\u093E \u092F\u093E \u0932\u0947\u092C\u0932 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964
-4. \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0915\u0940 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937\u0924\u093E \u0935 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0915\u093E \u092A\u0942\u0930\u094D\u0923 \u0928\u093F\u0937\u094D\u0915\u093E\u0938\u0928:
+3. \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0915\u0940 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937\u0924\u093E \u0935 \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0915\u093E \u092A\u0942\u0930\u094D\u0923 \u0928\u093F\u0937\u094D\u0915\u093E\u0938\u0928:
    - '\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940' \u091C\u0948\u0938\u0947 \u092A\u0940\u0906\u0930/\u0938\u0930\u0915\u093E\u0930\u0940 \u0936\u092C\u094D\u0926 \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E \u0926\u0947\u0902\u0964
    - "\u092C\u0921\u093C\u093E \u0916\u0941\u0932\u093E\u0938\u093E", "\u092E\u091A\u093E \u0939\u0921\u093C\u0915\u0902\u092A", "\u0938\u0928\u094D\u0928 \u0930\u0939 \u091C\u093E\u090F\u0902\u0917\u0947", "\u0907\u0938\u0938\u0947 \u0932\u094B\u0917\u094B\u0902 \u0915\u094B \u092E\u0926\u0926 \u092E\u093F\u0932\u0947\u0917\u0940" \u091C\u0948\u0938\u0947 \u0915\u094D\u0932\u093F\u0915\u092C\u0948\u091F \u0914\u0930 \u092B\u093F\u0932\u0930 \u0936\u092C\u094D\u0926 \u0915\u092D\u0940 \u0928 \u0932\u093F\u0916\u0947\u0902\u0964
-5. \u092D\u093E\u0937\u093E \u0935 \u092A\u0902\u091A\u0941\u090F\u0936\u0928:
-   - \u0936\u0941\u0926\u094D\u0927, \u092E\u093E\u0928\u0915 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940\u0964 \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964 \u092F\u093E ?) \u0915\u092D\u0940 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
-6. \u0938\u094D\u0925\u093E\u0928 (Location):
+4. \u0938\u094D\u0925\u093E\u0928 (Location):
    - \u0915\u0947\u0935\u0932 \u0936\u0941\u0926\u094D\u0927 \u0936\u0939\u0930, \u091C\u093F\u0932\u093E \u092F\u093E \u0930\u093E\u091C\u094D\u092F (\u091C\u0948\u0938\u0947 "\u0917\u094D\u0935\u093E\u0932\u093F\u092F\u0930, \u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936" \u092F\u093E "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940")\u0964 \u0938\u094D\u0925\u093E\u0928 \u092E\u0947\u0902 \u0915\u092D\u0940 \u0915\u094B\u0908 URL \u092F\u093E \u0935\u093E\u0915\u094D\u092F \u0928 \u0921\u093E\u0932\u0947\u0902\u0964
-7. \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0928\u093F\u092F\u092E (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs, FULL JOURNALISTIC DETAILS):
+5. \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0928\u093F\u092F\u092E (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs, FULL JOURNALISTIC DETAILS):
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0932\u093F\u0902\u0915, URL \u092F\u093E "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u092A\u0922\u093C\u0947\u0902" \u0915\u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u0915\u0940 \u0936\u0941\u0930\u0941\u0906\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928, 'Title:', '\u0936\u0940\u0930\u094D\u0937\u0915:', '\u0939\u0947\u0921\u0932\u093E\u0907\u0928:' \u092F\u093E \u0915\u093F\u0938\u0940 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u092A\u0930\u093F\u091A\u092F \u0935\u093E\u0915\u094D\u092F \u0938\u0947 \u0928 \u0915\u0930\u0947\u0902\u0964
    - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094B \u092A\u0939\u0932\u0947 \u0935\u093E\u0915\u094D\u092F \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0915\u092D\u0940 \u0928 \u0926\u094B\u0939\u0930\u093E\u090F\u0902\u0964 \u0938\u0940\u0927\u0947 \u0918\u091F\u0928\u093E \u0915\u0947 \u092A\u0941\u0937\u094D\u091F \u0924\u0925\u094D\u092F\u094B\u0902, \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u092F\u094B\u0902, \u0938\u094D\u0925\u093E\u0928 \u0914\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u0936\u0941\u0930\u0941\u0906\u0924 \u0915\u0930\u0947\u0902\u0964
@@ -10508,19 +10727,18 @@ ${customPrompt}
      * \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917: ${userTagInstruction}
      * \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (#BreakingNews #HindiNews #LatestNews #CityNews)
      * \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #AINewsMaker
-     * \u0928\u094B\u091F: #breakingnewswala \u092F\u093E #BNWTV \u0915\u094B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964
-8. suggestedImagePrompt:
+6. suggestedImagePrompt:
    - \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092E\u0947\u0902 \u0930\u093F\u092F\u0932\u093F\u0938\u094D\u091F\u093F\u0915 \u092A\u094D\u0930\u0947\u0938 \u092B\u094B\u091F\u094B \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F (35mm lens, natural lighting, Indian news photojournalism style, no text or watermark).
 
 Strictly return a valid JSON object matching these exact keys:
 {
-  "headline": "\u092E\u0941\u0916\u094D\u092F \u0935 \u0938\u091F\u0940\u0915 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u092C\u093F\u0928\u093E \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E, \u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
+  "headline": "\u092E\u0941\u0916\u094D\u092F \u0935 \u0938\u091F\u0940\u0915 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (\u092C\u093F\u0928\u093E \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E, 80-110 \u0935\u0930\u094D\u0923)",
   "headlineOptions": [
-    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)"
+    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (80-110 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (100-130 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (125-150 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (130-160 \u0935\u0930\u094D\u0923)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0935 \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 (150-200 \u0935\u0930\u094D\u0923)"
   ],
   "highlightWords": ["\u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 1", "\u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 2"],
   "formattedHeadline": "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u093F\u0938\u092E\u0947\u0902 \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 [yellow]\u0936\u092C\u094D\u0926[/yellow] \u0938\u0947 \u091A\u093F\u0939\u094D\u0928\u093F\u0924 \u0939\u094B\u0902",
@@ -13911,6 +14129,7 @@ startServer().catch((err) => {
   DISTRICT_STATE_LIST,
   GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS,
+  HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES,
   buildMasterNewsEditorialPrompt,

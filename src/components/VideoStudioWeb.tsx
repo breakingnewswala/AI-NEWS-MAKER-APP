@@ -2311,7 +2311,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         <div className="flex items-center justify-between text-xs">
           <span className="font-bold text-slate-300 flex items-center gap-1.5">
             <Film className="w-3.5 h-3.5 text-amber-400" />
-            <span>आस्पेक्ट रेशियो:</span>
+            <span>आस्पेक्ट रेशियो (Aspect Ratio):</span>
           </span>
           {isRatioLocked && (
             <span className="text-[10px] text-amber-400 font-bold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
@@ -2938,7 +2938,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     title="एक्सपोर्ट रद्द करें"
                   >
                     <X className="w-3.5 h-3.5 text-red-300" />
-                    <span>रद्द करें</span>
+                    <span>रद्द करें (Cancel)</span>
                   </button>
                 </div>
               </div>
@@ -3211,7 +3211,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Film className="w-4 h-4 text-amber-400" />
-                      1. वीडियो जोड़ें व ट्रिम (Add Video & Clips)
+                      1. वीडियो जोड़ें और ट्रिम करें
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-300">
                       क्लिप्स: {clips.length}/3
@@ -3332,7 +3332,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <div className="flex justify-between text-[11px] text-slate-400">
-                            <span>शुरुआत:</span>
+                            <span>शुरुआत (Start):</span>
                             <span className="font-mono text-amber-300">{Math.round(trimStart)}s</span>
                           </div>
                           <input
@@ -3355,7 +3355,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                         <div className="space-y-1">
                           <div className="flex justify-between text-[11px] text-slate-400">
-                            <span>अंत:</span>
+                            <span>अंत (End):</span>
                             <span className="font-mono text-amber-300">{Math.round(trimEnd)}s</span>
                           </div>
                           <input
@@ -3383,7 +3383,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           <div className="flex justify-between text-xs font-bold text-slate-300">
                             <span className="flex items-center gap-1 text-amber-300">
                               <ZoomIn className="w-3.5 h-3.5" />
-                              <span>ज़ूम:</span>
+                              <span>ज़ूम (स्केल):</span>
                             </span>
                             <span className="text-amber-400 font-mono">{zoomScale.toFixed(2)}x</span>
                           </div>
@@ -3546,7 +3546,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         <div className="flex justify-between text-xs font-bold text-slate-300">
                           <span className="flex items-center gap-1.5 text-amber-300">
                             <Volume2 className="w-3.5 h-3.5" />
-                            <span>मूल वीडियो आवाज़:</span>
+                            <span>मूल वीडियो आवाज़ (Original Video Audio):</span>
                           </span>
                           <span className="text-amber-400 font-mono">{videoVolume}%</span>
                         </div>
@@ -3629,7 +3629,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                         <div className="p-2 bg-emerald-950/40 border border-emerald-800/40 rounded-lg text-[10px] text-emerald-300 flex items-center gap-1.5">
                           <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                          <span>✅ सत्यापित कॉपीराइट-मुक्त संगीत</span>
+                          <span>✅ सत्यापित कॉपीराइट-मुक्त संगीत (Verified Royalty-Free Audio)</span>
                         </div>
                       </div>
                     )}
@@ -3821,14 +3821,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      5. लोगो व वॉटरमार्क (Logo & Watermark)
+                      5. लोगो और वॉटरमार्क
                     </span>
                   </div>
 
                   {/* Logo Controls (Section 12: Uses profile logo, scale, task GIF fallback) */}
                   <div className="space-y-3 pt-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-300">चैनल लोगो:</span>
+                      <span className="text-xs font-bold text-slate-300">चैनल लोगो (Profile Logo):</span>
                       {hasBothLogos && (
                         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-[10px]">
                           <button
@@ -3909,7 +3909,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   {/* Watermark Controls with Vertical Offset Control (Section 13) */}
                   <div className="space-y-3 pt-3 border-t border-slate-800">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-300">वॉटरमार्क:</span>
+                      <span className="text-xs font-bold text-slate-300">वॉटरमार्क (Watermark):</span>
                       <button
                         type="button"
                         onClick={() => setShowWatermark(!showWatermark)}
@@ -3929,7 +3929,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           {/* Opacity Slider */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs font-bold text-slate-300">
-                              <span>पारदर्शिता:</span>
+                              <span>पारदर्शिता (Opacity):</span>
                               <span className="text-amber-400 font-mono">{Math.round(watermarkOpacity * 100)}%</span>
                             </div>
                             <input
@@ -3946,7 +3946,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           {/* Vertical Movement Slider (Section 13) */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs font-bold text-slate-300">
-                              <span>ऊर्ध्वाधर स्थिति:</span>
+                              <span>ऊर्ध्वाधर स्थिति (Vertical Position):</span>
                               <span className="text-amber-400 font-mono">{watermarkOffsetY}px</span>
                             </div>
                             <input
@@ -4181,7 +4181,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           className="px-3 py-1 bg-red-950 hover:bg-red-900 text-red-200 border border-red-700 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition active:scale-95"
                         >
                           <X className="w-3.5 h-3.5 text-red-400" />
-                          <span>✕ एक्सपोर्ट रद्द करें</span>
+                          <span>✕ एक्सपोर्ट रद्द करें (Cancel)</span>
                         </button>
                       </div>
                     </div>
@@ -4238,7 +4238,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Film className="w-4 h-4 text-amber-400" />
-                        1. वीडियो टाइमलाइन व क्लिप्स (Multi-Clip Timeline)
+                        1. वीडियो टाइमलाइन और क्लिप्स
                       </span>
                       <button
                         type="button"
@@ -4483,7 +4483,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       {headlineScheduleMode === 'scheduled' && (
                         <div className="pt-2 border-t border-slate-800/80 space-y-3">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-amber-300">बदलने का अंतराल:</span>
+                            <span className="text-xs font-bold text-amber-300">बदलने का अंतराल (Interval):</span>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
@@ -4731,7 +4731,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                           <Mic className="w-4 h-4 text-amber-400" />
-                          <span>ट्रैक 2: वॉइसओवर / वॉयस ट्रैक:</span>
+                          <span>ट्रैक 2: वॉइसओवर / वॉयस ट्रैक (Voiceover Audio):</span>
                         </span>
                         {voiceoverUrl && (
                           <button
@@ -4788,7 +4788,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs font-bold text-slate-300">
-                              <span>शुरुआती देरी:</span>
+                              <span>शुरुआती देरी (Delay):</span>
                               <span className="text-amber-400 font-mono">{voiceoverStartTime}s</span>
                             </div>
                             <input
@@ -5075,7 +5075,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Tag className="w-4 h-4 text-amber-400" />
-                        8. चैनल लोगो व वॉटरमार्क (Logo & Watermark)
+                        8. चैनल लोगो और वॉटरमार्क
                       </span>
                     </div>
 
@@ -5215,7 +5215,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-lg active:scale-95"
               >
                 <Check className="w-4 h-4" />
-                <span>कॉपी करें</span>
+                <span>कॉपी करें (Copy Caption)</span>
               </button>
               {isProjectCompleted && onNavigateHome && (
                 <button

@@ -21,6 +21,7 @@ import { CloudSettingsModal } from './components/CloudSettingsModal';
 import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModal';
 import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
+import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
@@ -65,6 +66,8 @@ import {
   Eye,
   EyeOff,
   Bookmark,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { VideoStudioWeb } from './components/VideoStudioWeb'; 
 import { RemotionTestStudio } from './components/RemotionTestStudio'; 
@@ -86,7 +89,16 @@ import { AccountDeletionPage } from './components/AccountDeletionPage';
 import { SupportContactPage } from './components/SupportContactPage';
 import { RefundCancellationPolicyPage } from './components/RefundCancellationPolicyPage';
 import { AppFooterWeb } from './components/AppFooterWeb';
-import { triggerBreakingNewsAlert, addNotification } from './lib/notificationManager';
+import {
+  triggerBreakingNewsAlert,
+  addNotification,
+  playNormalNotificationSound,
+  playBreakingNewsAlertSound,
+  playVideoFeedNotificationSound,
+  unlockAudioPlayback,
+  isSoundNoticeDismissed,
+  dismissSoundNotice,
+} from './lib/notificationManager';
 import {
   isUserAdmin,
   setAdminSystemMode,
@@ -465,6 +477,7 @@ export default function App() {
   });
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Cloud Live Data URLs (Firebase Storage for ai-news-maker-app)
   const CLOUD_STORAGE_NEWS_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o/news_database.json?alt=media';
@@ -514,6 +527,35 @@ export default function App() {
               }
               return String(b.id).localeCompare(String(a.id));
             });
+            if (isInitialNewsLoadRef.current) {
+              seenNewsIdsRef.current = new Set(cleanApi.map((p: any) => String(p.id)));
+              isInitialNewsLoadRef.current = false;
+            } else {
+              const newItems = cleanApi.filter((p: any) => !seenNewsIdsRef.current.has(String(p.id)));
+              if (newItems.length > 0) {
+                newItems.forEach((p: any) => {
+                  seenNewsIdsRef.current.add(String(p.id));
+                  addNotification({
+                    id: `approved_news_${p.id}`,
+                    title: p.breaking ? `🚨 ब्रेकिंग न्यूज़: ${p.title}` : `📰 ताज़ा खबर: ${p.title}`,
+                    message: p.summary || p.title,
+                    time: 'अभी-अभी',
+                    type: 'news',
+                    linkTab: 'home',
+                  });
+                });
+                const hasBreaking = newItems.some((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़'));
+                if (hasBreaking) {
+                  playBreakingNewsAlertSound();
+                } else {
+                  playNormalNotificationSound();
+                }
+                if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                  try { navigator.vibrate([120, 60, 120]); } catch {}
+                }
+                setToastMessage(hasBreaking ? '🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!' : '📰 नई खबर स्वीकृत और होम फ़ीड में जोड़ी गई!');
+              }
+            }
             setPosts(cleanApi);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
@@ -542,6 +584,32 @@ export default function App() {
               }
               return String(b.id).localeCompare(String(a.id));
             });
+            if (isInitialNewsLoadRef.current) {
+              seenNewsIdsRef.current = new Set(clean.map((p: any) => String(p.id)));
+              isInitialNewsLoadRef.current = false;
+            } else {
+              const newItems = clean.filter((p: any) => !seenNewsIdsRef.current.has(String(p.id)));
+              if (newItems.length > 0) {
+                newItems.forEach((p: any) => {
+                  seenNewsIdsRef.current.add(String(p.id));
+                  addNotification({
+                    id: `approved_news_${p.id}`,
+                    title: p.breaking ? `🚨 ब्रेकिंग न्यूज़: ${p.title}` : `📰 ताज़ा खबर: ${p.title}`,
+                    message: p.summary || p.title,
+                    time: 'अभी-अभी',
+                    type: 'news',
+                    linkTab: 'home',
+                  });
+                });
+                const hasBreaking = newItems.some((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़'));
+                if (hasBreaking) playBreakingNewsAlertSound();
+                else playNormalNotificationSound();
+                if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                  try { navigator.vibrate([120, 60, 120]); } catch {}
+                }
+                setToastMessage(hasBreaking ? '🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!' : '📰 नई खबर स्वीकृत और होम फ़ीड में जोड़ी गई!');
+              }
+            }
             setPosts(clean);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));
@@ -585,10 +653,12 @@ export default function App() {
   };
 
   const isFetchingNewsRef = useRef(false);
+  const seenNewsIdsRef = useRef<Set<string>>(new Set());
+  const isInitialNewsLoadRef = useRef(true);
 
   useEffect(() => {
     fetchLiveNews();
-    // Silent background auto-refresh every 3 minutes (180,000ms) without disrupting editor or scroll
+    // Silent background auto-refresh every 15 seconds (15,000ms) without disrupting editor or scroll
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       if (isFetchingNewsRef.current) return;
@@ -596,7 +666,7 @@ export default function App() {
       fetchLiveNews().finally(() => {
         isFetchingNewsRef.current = false;
       });
-    }, 180000);
+    }, 15000);
     const handleNewsApproved = () => {
       fetchLiveNews();
     };
@@ -671,6 +741,30 @@ export default function App() {
           const deletedRaw = localStorage.getItem('app_deleted_video_ids');
           const deletedSet = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
           const cleanList = data.videos.filter((v: any) => !deletedSet.has(v.id) && !isDummyVideo(v));
+          if (isInitialVideosLoadRef.current) {
+            seenVideoIdsRef.current = new Set(cleanList.map((v: any) => String(v.id)));
+            isInitialVideosLoadRef.current = false;
+          } else {
+            const newVids = cleanList.filter((v: any) => !seenVideoIdsRef.current.has(String(v.id)));
+            if (newVids.length > 0) {
+              newVids.forEach((v: any) => {
+                seenVideoIdsRef.current.add(String(v.id));
+                addNotification({
+                  id: `video_${v.id}`,
+                  title: `🎬 नया वीडियो: ${v.title}`,
+                  message: v.caption || v.title,
+                  time: 'अभी-अभी',
+                  type: 'video',
+                  linkTab: 'videos',
+                });
+              });
+              playVideoFeedNotificationSound();
+              if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                try { navigator.vibrate(80); } catch {}
+              }
+              setToastMessage('🎬 नया वीडियो फ़ीड में जारी हुआ!');
+            }
+          }
           setVideos((prev) => {
             const map = new Map<string, any>();
             cleanList.forEach((v: any) => map.set(v.id, v));
@@ -693,10 +787,12 @@ export default function App() {
   };
 
   const isFetchingVideosRef = useRef(false);
+  const seenVideoIdsRef = useRef<Set<string>>(new Set());
+  const isInitialVideosLoadRef = useRef(true);
 
   useEffect(() => {
     fetchLiveVideos();
-    // Silent background auto-refresh every 3 minutes (180,000ms)
+    // Silent background auto-refresh every 15 seconds (15,000ms)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       if (isFetchingVideosRef.current) return;
@@ -704,7 +800,7 @@ export default function App() {
       fetchLiveVideos().finally(() => {
         isFetchingVideosRef.current = false;
       });
-    }, 180000);
+    }, 15000);
     const handleVideoEvent = () => {
       fetchLiveVideos();
     };
@@ -717,6 +813,35 @@ export default function App() {
     };
   }, []);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+
+  // Mobile AudioContext unlock listener on first user interaction
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      unlockAudioPlayback();
+    };
+    window.addEventListener('click', handleUserInteraction, { passive: true, once: true });
+    window.addEventListener('touchstart', handleUserInteraction, { passive: true, once: true });
+    window.addEventListener('pointerdown', handleUserInteraction, { passive: true, once: true });
+    return () => {
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('touchstart', handleUserInteraction);
+      window.removeEventListener('pointerdown', handleUserInteraction);
+    };
+  }, []);
+
+  const [showSoundNoticeBanner, setShowSoundNoticeBanner] = useState<boolean>(() => !isSoundNoticeDismissed());
+
+  const handleEnableSound = () => {
+    unlockAudioPlayback();
+    playNormalNotificationSound();
+    dismissSoundNotice();
+    setShowSoundNoticeBanner(false);
+  };
+
+  const handleDismissSoundNotice = () => {
+    dismissSoundNotice();
+    setShowSoundNoticeBanner(false);
+  };
 
   // Authentication session - loads from localStorage, Android native bridge, or defaults to Master Admin (breakingnewswala.com@gmail.com)
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
@@ -1170,7 +1295,6 @@ export default function App() {
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(() => getActiveDraftId() || undefined);
   const [downloading, setDownloading] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Authoritative Subscription & Trial Lock Management
@@ -2847,7 +2971,43 @@ export default function App() {
 
       {/* 1. Home Feed Tab */}
       {currentTab === 'home' && (
-        <HomeScreenWeb
+        <div className="w-full">
+          {showSoundNoticeBanner && (
+            <div className="max-w-4xl mx-auto my-3 px-3">
+              <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-400/40 text-slate-900 dark:text-slate-100 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-amber-400/20 text-amber-500 shrink-0 mt-0.5">
+                    <Volume2 className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs sm:text-sm font-semibold leading-relaxed">
+                      नई खबर आने पर आपको मोबाइल पर साउंड नोटिफिकेशन सुनाई देगा। ब्रेकिंग न्यूज़ और सामान्य खबरों के लिए अलग-अलग साउंड हो सकती हैं। साउंड सुनने के लिए आवश्यक अनुमति दें।
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      हर 15 सेकंड में लाइव फ़ीड स्वतः अपडेट होता है।
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    onClick={handleEnableSound}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>साउंड चालू करें / अनुमति दें</span>
+                  </button>
+                  <button
+                    onClick={handleDismissSoundNotice}
+                    className="px-2 py-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold transition cursor-pointer"
+                    title="बंद करें"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          <HomeScreenWeb
           posts={posts}
           currentUser={currentUser}
           onOpenStudioWithNews={handleOpenStudioWithNews}
@@ -2869,6 +3029,7 @@ export default function App() {
           }}
           onNavigateToTab={navigateToTab}
         />
+        </div>
       )}
 
       {/* 2. News Generator / Studio Tab */}
@@ -3554,6 +3715,9 @@ export default function App() {
         onRetry={brandedLoader.onRetry}
         onCancel={() => setBrandedLoader((prev) => ({ ...prev, isOpen: false, error: null }))}
       />
+
+      {/* 13. Mobile Audio & Live News Notification Permission Modal */}
+      <NotificationPermissionModal />
     </div>
   );
 }

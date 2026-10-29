@@ -342,10 +342,16 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
   };
 
-  // Home Screen Feature Stepper & Mandatory Agreement States (Unchecked by default on every attempt)
+  // Home Screen Feature Stepper & Mandatory Agreement States
   const [homeStep, setHomeStep] = useState<1 | 2 | 3 | 4>(1);
   const [maxUnlockedHomeStep, setMaxUnlockedHomeStep] = useState<number>(1);
-  const [channelRulesAgreed, setChannelRulesAgreed] = useState<boolean>(false);
+  const [channelRulesAgreed, setChannelRulesAgreed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('user_channel_rules_agreed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [viewAllFeaturesMode, setViewAllFeaturesMode] = useState<boolean>(false);
   const [showEmailLoginForm, setShowEmailLoginForm] = useState<boolean>(false);
   const [customLoginEmail, setCustomLoginEmail] = useState<string>('');
@@ -579,29 +585,18 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     // 0. Check Server Database for Existing Profile Across Devices (Part N Fix for PC vs Mobile)
     const userProfileKey = `user_profile_${cleanEmail}`;
     let serverProfile: any = null;
-    let isDeletedOrUnregistered = false;
     try {
       const res = await fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`));
       if (res.ok) {
         const data = await res.json();
-        if (data?.profile === null || data?.isDeleted === true) {
-          isDeletedOrUnregistered = true;
-          try {
-            localStorage.removeItem(userProfileKey);
-            localStorage.removeItem(`onboarding_completed_${cleanEmail}`);
-            sessionStorage.removeItem(userProfileKey);
-          } catch {}
-          serverProfile = null;
-        } else {
-          const prof = (data?.profile || data);
-          if (prof && (prof.channelNameHi || prof.channelLogoUrl || prof.district || prof.fullName)) {
-            serverProfile = prof;
-          }
+        const prof = (data?.profile || data);
+        if (prof && (prof.channelNameHi || prof.channelLogoUrl || prof.district || prof.fullName)) {
+          serverProfile = prof;
         }
       }
     } catch {}
 
-    if (!serverProfile && !isDeletedOrUnregistered) {
+    if (!serverProfile) {
       try {
         const uRes = await fetch(getApiUrl('/api/users'));
         if (uRes.ok) {
@@ -631,7 +626,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       } catch {}
     }
 
-    if (serverProfile && !isDeletedOrUnregistered) {
+    if (serverProfile) {
       try {
         localStorage.setItem(userProfileKey, JSON.stringify(serverProfile));
         localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
@@ -642,8 +637,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const knownProfile = KNOWN_REGISTERED_USERS[cleanEmail];
 
     // 2. Check local storage for user profile & onboarding flag
-    const isCompletedFlag = !isDeletedOrUnregistered && localStorage.getItem(`onboarding_completed_${cleanEmail}`) === 'true';
-    const userSpecificProfileStr = isDeletedOrUnregistered ? null : localStorage.getItem(userProfileKey);
+    const isCompletedFlag = localStorage.getItem(`onboarding_completed_${cleanEmail}`) === 'true';
+    const userSpecificProfileStr = localStorage.getItem(userProfileKey);
     let parsedProfile: any = null;
     if (userSpecificProfileStr) {
       try {
@@ -653,7 +648,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    const hasCompletedProfile = !isDeletedOrUnregistered && Boolean(
+    const hasCompletedProfile = Boolean(
       (serverProfile && (serverProfile.channelLogoUrl || serverProfile.channelNameHi)) ||
       (knownProfile && knownProfile.channelLogoUrl) ||
       (parsedProfile && parsedProfile.channelLogoUrl && parsedProfile.channelNameHi && parsedProfile.mobileNumber)
@@ -1708,7 +1703,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      1. पूरा नाम *
+                      1. पूरा नाम (Full Name) *
                     </label>
                     <input
                       type="text"

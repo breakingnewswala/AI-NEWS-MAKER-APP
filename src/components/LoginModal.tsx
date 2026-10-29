@@ -572,7 +572,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-neutral-950/90 backdrop-blur-md overflow-y-auto">
-      <div className="w-full max-w-md bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto text-slate-900 dark:text-white">
+      <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto">
         {/* Top Header Banner */}
         <div className="relative bg-gradient-to-r from-red-700 via-red-600 to-amber-600 p-5 text-white text-center">
           <div className="w-14 h-14 mx-auto mb-2 rounded-2xl overflow-hidden bg-neutral-950/60 border border-yellow-400/40 p-1 flex items-center justify-center shadow-xl">
@@ -601,7 +601,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             className={`flex-1 py-3 text-xs sm:text-sm font-black flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
               authMode === 'login'
                 ? 'border-yellow-400 text-yellow-400 bg-neutral-900/50'
-                : 'border-transparent text-slate-500 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-white'
+                : 'border-transparent text-neutral-400 hover:text-white'
             }`}
           >
             <LogIn className="w-4 h-4" />
@@ -617,7 +617,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             className={`flex-1 py-3 text-xs sm:text-sm font-black flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
               authMode === 'signup'
                 ? 'border-yellow-400 text-yellow-400 bg-neutral-900/50'
-                : 'border-transparent text-slate-500 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-white'
+                : 'border-transparent text-neutral-400 hover:text-white'
             }`}
           >
             <UserPlus className="w-4 h-4" />
@@ -644,14 +644,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           {/* SIGN IN FORM (Google Login Sole User-Facing Auth per Part B) */}
           {authMode === 'login' && (
             <div className="space-y-4 py-2">
-              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-slate-50 dark:via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl text-center space-y-2">
+              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl text-center space-y-2">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center text-slate-950 mx-auto shadow-lg">
                   <Lock className="w-6 h-6 text-slate-950" />
                 </div>
-                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                <h3 className="text-sm font-black text-white">
                   Google खाते से सुरक्षित लॉगिन करें
                 </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-300 max-w-sm mx-auto leading-relaxed">
+                <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
                   एडमिन एवं यूज़र्स के लिए त्वरित व सुरक्षित 1-क्लिक एक्सेस। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।
                 </p>
               </div>

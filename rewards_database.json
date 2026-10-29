@@ -99,55 +99,6 @@
   ],
   "transactions": [
     {
-      "id": "tx-frame-1793259471827-p7fl",
-      "transactionId": "tx-frame-1793259471827-p7fl",
-      "userId": "coin_test_1793259471768@example.com",
-      "userEmail": "coin_test_1793259471768@example.com",
-      "newsItemId": "graphic_002",
-      "newsTitle": "Package Standard Frame",
-      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
-      "transactionType": "debit",
-      "type": "debit",
-      "coinAmount": -15,
-      "amount": -15,
-      "balanceAfter": 35,
-      "status": "completed",
-      "createdAt": 1793259471827,
-      "createdBy": "system"
-    },
-    {
-      "id": "tx-credit-1793259471771-iqic",
-      "transactionId": "tx-credit-1793259471771-iqic",
-      "userId": "coin_test_1793259471768@example.com",
-      "userEmail": "coin_test_1793259471768@example.com",
-      "description": "test credit",
-      "transactionType": "credit",
-      "type": "credit",
-      "coinAmount": 50,
-      "amount": 50,
-      "balanceAfter": 50,
-      "status": "completed",
-      "createdAt": 1793259471771,
-      "createdBy": "admin"
-    },
-    {
-      "id": "tx-regen-hl-1793257307074-t6fc",
-      "transactionId": "tx-regen-hl-1793257307074-t6fc",
-      "userId": "newuser-01",
-      "userEmail": "newuser.test@gmail.com",
-      "newsItemId": "",
-      "newsTitle": "सुप्रीम कोर्ट का चुनाव आयोग से सवाल",
-      "description": "5 नई हेडलाइन्स जनरेशन (BASIC): -50 कॉइन्स",
-      "transactionType": "debit",
-      "type": "debit",
-      "coins": 50,
-      "coinCost": 50,
-      "amount": 50,
-      "timestamp": 1793257307074,
-      "createdAt": "2026-10-29T07:01:47.074Z",
-      "status": "completed"
-    },
-    {
       "id": "tx-frame-1793165970036-cv0b",
       "transactionId": "tx-frame-1793165970036-cv0b",
       "userId": "coin_test_1793165970002@example.com",
@@ -2381,11 +2332,6 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
-    },
-    "coin_test_1793259471768@example.com": {
-      "coinBalance": 35,
-      "pendingCoins": 0,
-      "totalEarnedCoins": 50
     }
   },
   "welcomeRewards": {
@@ -2795,13 +2741,6 @@
         "unlockedAt": 1793165970036,
         "expiresAt": 1793212199999,
         "dateStr": "2026-10-28"
-      }
-    },
-    "coin_test_1793259471768@example.com": {
-      "graphic_002": {
-        "unlockedAt": 1793259471827,
-        "expiresAt": 1793298599999,
-        "dateStr": "2026-10-29"
       }
     }
   }

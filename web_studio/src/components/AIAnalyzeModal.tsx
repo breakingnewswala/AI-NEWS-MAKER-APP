@@ -250,7 +250,7 @@ export const AIAnalyzeModal: React.FC<AIAnalyzeModalProps> = ({
                       : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-neutral-200'
                   }`}
                 >
-                  {analysisResult.isAiGeneratedPhoto ? 'सक्रिय (ON)' : 'बंद'}
+                  {analysisResult.isAiGeneratedPhoto ? 'सक्रिय (ON)' : 'बंद (OFF)'}
                 </button>
               </div>
 

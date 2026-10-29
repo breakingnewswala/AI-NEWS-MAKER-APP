@@ -682,21 +682,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   }, [currentUser?.email]);
 
   useEffect(() => {
-    const handleOpenRss = () => {
-      if (isAdmin) setActiveTab('dashboard');
-    };
-    const handleOpenTemplates = () => {
-      if (isAdmin) setActiveTab('templates');
-      setNormalUserTab('templates_manager');
-    };
-    const handleOpenPlans = () => {
-      if (isAdmin) setActiveTab('plans_packages');
-      setNormalUserTab('membership');
-      setTimeout(() => {
-        const el = document.getElementById('user-membership-accordion-section');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    };
+    if (!isAdmin) {
+      if (activeTab !== 'profile') setActiveTab('profile');
+      return;
+    }
+    const handleOpenRss = () => setActiveTab('dashboard');
+    const handleOpenTemplates = () => setActiveTab('templates');
+    const handleOpenPlans = () => setActiveTab('plans_packages');
     const handleOpenTemplateManagerCustom = () => setNormalUserTab('templates_manager');
 
     window.addEventListener('open_rss_dashboard', handleOpenRss);
@@ -705,18 +697,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     window.addEventListener('ai_news_open_template_manager', handleOpenTemplateManagerCustom);
     const handleHash = () => {
       const h = window.location.hash.toLowerCase();
-      if (h.includes('plan') || h.includes('package') || h.includes('promo') || h.includes('membership')) {
-        if (isAdmin) setActiveTab('plans_packages');
-        setNormalUserTab('membership');
+      if (h.includes('plan') || h.includes('package') || h.includes('promo')) {
+        setActiveTab('plans_packages');
       } else if (h.includes('template')) {
-        if (isAdmin) setActiveTab('templates');
+        setActiveTab('templates');
         setNormalUserTab('templates_manager');
       } else if (h.includes('dashboard') || h.includes('rss') || h.includes('feed')) {
-        if (isAdmin) setActiveTab('dashboard');
+        setActiveTab('dashboard');
       }
     };
     window.addEventListener('hashchange', handleHash);
-    handleHash();
     return () => {
       window.removeEventListener('open_rss_dashboard', handleOpenRss);
       window.removeEventListener('open_template_manager', handleOpenTemplates);
@@ -1640,7 +1630,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                     <div>
                       <h3 className="text-base font-black text-white flex items-center gap-2">
-                        <span>🎁 प्रोमो कोड रिडीम करें</span>
+                        <span>🎁 प्रोमो कोड रिडीम करें (Redeem Promo Code)</span>
                         <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded uppercase">
                           Instant Activation
                         </span>
@@ -1769,7 +1759,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       key={plan.id}
                       className={`relative rounded-2xl p-4 border flex flex-col justify-between transition-all ${
                         isCurrent
-                          ? 'bg-white dark:bg-slate-900 border-amber-500 dark:border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40 text-slate-900 dark:text-white'
+                          ? 'bg-slate-900 border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40'
                           : plan.popular
                           ? 'bg-slate-950/90 border-blue-500/50 hover:border-blue-400'
                           : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
@@ -1839,7 +1829,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             title="एडमिन मोड: प्लान सेटिंग्स प्रबंधित करें"
                           >
                             <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                            <span>⚙️ प्लान सेटिंग्स</span>
+                            <span>⚙️ प्लान सेटिंग्स (Admin Managed)</span>
                           </button>
                         ) : isCurrent ? (
                           subscription.isPlanExpired || subscription.isTrialExpired ? (
@@ -1849,7 +1839,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               className="w-full py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
                             >
                               <Zap className="w-3.5 h-3.5" />
-                              <span>पुनः सक्रिय करें</span>
+                              <span>पुनः सक्रिय करें (Reactivate Plan)</span>
                             </button>
                           ) : (
                             <div className="w-full py-2 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
@@ -2189,7 +2179,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         {/* 2. New Asset Upload & Preview */}
                         <div className={`p-3 bg-slate-950 rounded-xl border space-y-2 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
                           <span className={`text-[11px] font-bold block flex items-center justify-between ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
-                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो:'}</span>
+                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload):'}</span>
                             {newRequestedLogoUrl && (
                               <button
                                 type="button"
@@ -2240,7 +2230,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
                             : 'bg-rose-950/70 border-rose-500/50 text-rose-300'
                         }`}>
-                          <span>वर्तमान स्थिति:</span>
+                          <span>वर्तमान स्थिति (Request Status):</span>
                           <span>
                             {(logoReqType === 'gif' ? gifReqStatus : logoReqStatus) === 'pending'
                               ? '⏳ लंबित (Admin Review Underway)'
@@ -2269,7 +2259,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300">
                         <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
                           <AlertCircle className="w-3.5 h-3.5" />
-                          <span>आधिकारिक सहायता व सत्यापन डेस्क:</span>
+                          <span>आधिकारिक सहायता व सत्यापन डेस्क (Support Info):</span>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-300">
                           <div className="flex items-center gap-1.5">
@@ -2360,7 +2350,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             <span>सबमिट हो रहा है...</span>
                           </>
                         ) : (
-                          <span>अनुरोध सबमिट करें</span>
+                          <span>अनुरोध सबमिट करें (Submit Request)</span>
                         )}
                       </button>
                     </div>
@@ -2516,7 +2506,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               {/* Registered Email Address (Gmail / Login ID) */}
               <div className="pt-1">
                 <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
-                  <span>पंजीकृत ईमेल आईडी (जीमेल)</span>
+                  <span>पंजीकृत ईमेल आईडी (Gmail / Login Email)</span>
                   <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>सत्यापित खाता</span>
@@ -2725,9 +2715,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-28 transition-colors">
+    <div className="min-h-screen bg-slate-950 text-white pb-28">
       {/* Top Header */}
-      <div className="bg-white/95 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm dark:shadow-md sticky top-0 z-40 text-slate-900 dark:text-white">
+      <div className="bg-slate-900 border-b border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
@@ -2752,6 +2742,35 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Coin balance action / display - Only for non-admin users */}
+            {!isAdmin && (
+              <div
+                className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-black flex items-center gap-1 shadow-xs"
+                title="उपलब्ध कॉइन बैलेंस"
+              >
+                <span>🪙</span>
+                <span>{walletData?.coinBalance ?? 0}</span>
+                <span className="text-[10px] text-amber-400/80 hidden sm:inline">कॉइन</span>
+              </div>
+            )}
+
+            {/* Admin Test Mode Toggle Button (Beside Logout) */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleToggleTestMode}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 ${
+                  testModeEnabled
+                    ? 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-400 ring-2 ring-purple-500/40'
+                    : 'bg-slate-800 hover:bg-purple-950/60 text-purple-300 border border-purple-600/50'
+                }`}
+                title={testModeEnabled ? 'एडमिन टेस्ट मोड सक्रिय है - प्रोडक्शन मोड पर लौटने के लिए क्लिक करें' : 'एडमिन टेस्ट मोड चालू करें'}
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                <span>{testModeEnabled ? 'टेस्ट मोड: चालू' : 'टेस्ट मोड'}</span>
+              </button>
+            )}
+
             {/* Logout button */}
             <button
               type="button"
@@ -2803,7 +2822,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : ''));
 
           return (
-            <div className="bg-gradient-to-r from-white dark:from-slate-900 via-slate-50 dark:via-slate-800 to-white dark:to-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-900 dark:text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
                 {/* User Avatar / Channel Logo */}
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
@@ -2819,9 +2838,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
 
                 <div className="space-y-1.5 flex flex-col items-center sm:items-start">
-                  {/* User Name & Admin Identity Icon (Theme-aware for Light & Dark mode) */}
+                  {/* User Name & Admin Identity Icon */}
                   <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                    <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">{displayUserName}</h2>
+                    <h2 className="text-lg sm:text-xl font-black text-white">{displayUserName}</h2>
                     {isAdmin && (
                       <span className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-300 border border-amber-300 flex items-center justify-center text-slate-950 font-black text-sm shadow-md" title="व्यवस्थापक">
                         👑
@@ -2830,37 +2849,37 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     {/* Active Plan Tier Badge */}
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-xs ${
                       subscription.tier === 'basic'
-                        ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-400 dark:border-amber-500/60 text-amber-800 dark:text-amber-300'
+                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
                         : subscription.tier === 'advanced'
-                        ? 'bg-blue-100 dark:bg-blue-950/80 border-blue-400 dark:border-blue-500/60 text-blue-800 dark:text-blue-300'
+                        ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
                         : subscription.tier === 'professional'
-                        ? 'bg-purple-100 dark:bg-purple-950/80 border-purple-400 dark:border-purple-500/60 text-purple-800 dark:text-purple-300'
-                        : 'bg-emerald-100 dark:bg-emerald-950/80 border-emerald-400 dark:border-emerald-500/60 text-emerald-800 dark:text-emerald-300'
+                        ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
+                        : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
                     }`}>
                       <Crown className="w-3 h-3" />
                       <span>{activePlanDetail.nameHi}</span>
                     </span>
                   </div>
 
-                  {/* Clean Email Display (Theme-aware for Light & Dark mode) */}
+                  {/* Clean Email Display (No boxed container/border) */}
                   {displayEmail && (
-                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-600 dark:text-slate-300 pt-0.5">
+                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-300 pt-0.5">
                       <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-slate-700 dark:text-slate-200 font-mono font-medium">{displayEmail}</span>
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 font-bold ml-1">
+                      <span className="text-slate-200 font-mono">{displayEmail}</span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold ml-1">
                         सत्यापित ID
                       </span>
                     </div>
                   )}
 
-                  {/* Primary Mobile Status (Theme-aware for Light & Dark mode) */}
+                  {/* Primary Mobile Status - Strictly Locked & Inline with Primary Number */}
                   <div className="pt-1.5 flex items-center flex-wrap gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 font-mono text-emerald-700 dark:text-emerald-400 font-bold text-xs sm:text-sm">
-                      <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
+                      <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span>प्राइमरी नंबर: +91 {subscription.primaryMobile || channelProfile.mobileNumber || '9876543210'}</span>
                     </div>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                      <Lock className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
+                      <Lock className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
                       <span>स्थायी लॉक</span>
                     </span>
                   </div>
@@ -3021,7 +3040,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
 
             {/* OPTION 2: मेंबरशिप प्लान व अपग्रेड */}
-            <div id="user-membership-accordion-section" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'membership' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${normalUserTab === 'membership' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => setNormalUserTab(normalUserTab === 'membership' ? '' : 'membership')}
@@ -3150,7 +3169,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-700/80 rounded-2xl p-4 shadow-md space-y-3">
                     <h4 className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span>बोनस न्यूज़ शेयर करके कॉइन्स कैसे कमाएं?</span>
+                      <span>बोनस न्यूज़ शेयर करके कॉइन्स कैसे कमाएं? (How to Earn)</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
                       <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-1">
@@ -3309,7 +3328,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div className="space-y-3 border-t border-slate-800/80 pt-4">
                     <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
                       <Coins className="w-4 h-4 text-amber-400" />
-                      <span>वॉलेट लेन-देन विवरण</span>
+                      <span>वॉलेट लेन-देन विवरण (Transaction Log)</span>
                     </h4>
 
                     {walletTransactions.length === 0 ? (
@@ -3445,7 +3464,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-2"
                       >
                         <Crown className="w-4 h-4" />
-                        <span>प्लान अपग्रेड करें</span>
+                        <span>प्लान अपग्रेड करें (Upgrade Plan)</span>
                       </button>
                     </div>
                   ) : (

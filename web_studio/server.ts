@@ -5016,6 +5016,210 @@ app.post("/api/notifications/mark-read", (req, res) => {
   }
 });
 
+// --- Dedicated Admin Notification Engine & Categories ---
+const ADMIN_NOTIFS_READ_FILE = path.join(process.cwd(), "admin_notifications_read_db.json");
+
+function loadAdminReadNotificationIds(): Set<string> {
+  try {
+    if (fs.existsSync(ADMIN_NOTIFS_READ_FILE)) {
+      const raw = fs.readFileSync(ADMIN_NOTIFS_READ_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch {}
+  return new Set();
+}
+
+function saveAdminReadNotificationIds(ids: Set<string>): void {
+  try {
+    const locs = resolveAllDatabaseLocations("admin_notifications_read_db.json");
+    const jsonStr = JSON.stringify(Array.from(ids), null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
+  } catch {}
+}
+
+app.get("/api/admin/notifications", (req, res) => {
+  try {
+    const userRes = resolveUserTierAndRole(req);
+    const reqEmail = (req.query.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
+    if (!isAdmin) {
+      return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
+    }
+
+    const readIds = loadAdminReadNotificationIds();
+
+    // 1. Category: RSS Feed News (New RSS News)
+    const newsDb = loadNewsDatabase();
+    const rssItems: any[] = [];
+    const oneWeekAgo = Date.now() - 7 * 86400000;
+    for (const p of newsDb) {
+      const isRss = p.source === 'rss' || p.category === 'RSS' || p.id.startsWith('rss_') || (p as any).sourceUrl?.includes('rss');
+      const timeVal = typeof p.timestamp === 'number' ? p.timestamp : new Date(p.timestamp || 0).getTime();
+      if ((isRss || p.status === 'PENDING' || !p.status) && timeVal >= oneWeekAgo) {
+        const eventId = `admin_rss_${p.id}`;
+        rssItems.push({
+          id: eventId,
+          rawId: p.id,
+          category: 'rss',
+          categoryLabel: 'नई RSS Feed खबरें',
+          title: p.title || 'नई RSS Feed खबर',
+          message: p.summary ? p.summary.slice(0, 160) : 'आरएसएस फ़ीड से प्राप्त नया समाचार',
+          timestamp: timeVal || Date.now(),
+          time: new Date(timeVal || Date.now()).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
+          unread: !readIds.has(eventId),
+          status: p.status || 'PENDING',
+          meta: {
+            channelName: p.channelName || p.source,
+            location: p.location,
+            sourceUrl: (p as any).sourceUrl || (p as any).linkUrl,
+          }
+        });
+      }
+    }
+
+    // 2. Category: Support Inbox Cases
+    const supportDb = loadSupportRequestsDatabase();
+    const supportItems: any[] = [];
+    for (const s of supportDb) {
+      const eventId = `admin_support_${s.id}`;
+      const timeVal = s.timestamp || (s.createdAt ? new Date(s.createdAt).getTime() : Date.now());
+      supportItems.push({
+        id: eventId,
+        rawId: s.id,
+        category: 'support',
+        categoryLabel: 'सपोर्ट इनबॉक्स केसेस',
+        title: `सपोर्ट टिकट: ${s.subject || s.reportReason || s.category || 'सहायता अनुरोध'}`,
+        message: s.message ? s.message.slice(0, 160) : (s.userEmail || ''),
+        timestamp: timeVal,
+        time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
+        unread: !readIds.has(eventId) && s.status !== 'resolved',
+        status: s.status || 'open',
+        meta: {
+          userEmail: s.userEmail,
+          userId: s.userId,
+          priority: s.priority,
+        }
+      });
+    }
+
+    // 3. Category: Logo Change Requests
+    const logoDb = loadLogoRequestsDatabase();
+    const logoItems: any[] = [];
+    for (const l of logoDb) {
+      const eventId = `admin_logo_${l.id}`;
+      const timeVal = l.timestamp || (l.createdAt ? new Date(l.createdAt).getTime() : Date.now());
+      logoItems.push({
+        id: eventId,
+        rawId: l.id,
+        category: 'logo',
+        categoryLabel: 'लोगो चेंज रिक्वेस्ट',
+        title: `लोगो अनुरोध: ${l.channelName || l.userEmail}`,
+        message: l.adminNotes || `लोगो परिवर्तन स्थिति: ${l.status === 'approved' ? 'स्वीकृत' : l.status === 'rejected' ? 'अस्वीकृत' : 'लंबित'}`,
+        timestamp: timeVal,
+        time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
+        unread: !readIds.has(eventId) && l.status === 'pending',
+        status: l.status || 'pending',
+        meta: {
+          userEmail: l.userEmail,
+          channelName: l.channelName,
+          newLogoUrl: l.newLogoUrl,
+        }
+      });
+    }
+
+    // 4. Category: Other User Requests / Limit Increases
+    const limitDb = loadLimitIncreaseRequests();
+    const reqItems: any[] = [];
+    for (const r of limitDb) {
+      const eventId = `admin_req_${r.id || `${r.email}_${r.timestamp}`}`;
+      const timeVal = r.timestamp || (r.createdAt ? new Date(r.createdAt).getTime() : Date.now());
+      reqItems.push({
+        id: eventId,
+        rawId: r.id || eventId,
+        category: 'requests',
+        categoryLabel: 'अन्य यूज़र रिक्वेस्ट',
+        title: `लिमिट विस्तार अनुरोध: ${r.email || r.userId}`,
+        message: r.reason || `प्लान: ${r.tier || 'Standard'}, वर्तमान सीमा: ${r.currentLimit || 0}`,
+        timestamp: timeVal,
+        time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
+        unread: !readIds.has(eventId) && r.status !== 'approved' && r.status !== 'rejected',
+        status: r.status || 'pending',
+        meta: {
+          email: r.email,
+          tier: r.tier,
+          reason: r.reason,
+        }
+      });
+    }
+
+    const allItems = [...rssItems, ...supportItems, ...logoItems, ...reqItems].sort((a, b) => b.timestamp - a.timestamp);
+
+    const counts = {
+      rss: { total: rssItems.length, unread: rssItems.filter(i => i.unread).length, label: 'नई RSS Feed खबरें' },
+      support: { total: supportItems.length, unread: supportItems.filter(i => i.unread).length, label: 'सपोर्ट इनबॉक्स केसेस' },
+      logo: { total: logoItems.length, unread: logoItems.filter(i => i.unread).length, label: 'लोगो चेंज रिक्वेस्ट' },
+      requests: { total: reqItems.length, unread: reqItems.filter(i => i.unread).length, label: 'अन्य यूज़र रिक्वेस्ट' },
+    };
+
+    const totalUnread = counts.rss.unread + counts.support.unread + counts.logo.unread + counts.requests.unread;
+
+    return res.json({
+      success: true,
+      totalUnread,
+      categories: counts,
+      notifications: allItems.slice(0, 100),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/admin/notifications/mark-read", (req, res) => {
+  try {
+    const userRes = resolveUserTierAndRole(req);
+    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
+    if (!isAdmin) {
+      return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
+    }
+
+    const { id, all, ids, category } = req.body || {};
+    const readIds = loadAdminReadNotificationIds();
+
+    if (id) {
+      readIds.add(String(id));
+    }
+    if (Array.isArray(ids)) {
+      ids.forEach((i: string) => readIds.add(String(i)));
+    }
+    if (all) {
+      if (category === 'rss' || !category) {
+        loadNewsDatabase().forEach(p => readIds.add(`admin_rss_${p.id}`));
+      }
+      if (category === 'support' || !category) {
+        loadSupportRequestsDatabase().forEach(s => readIds.add(`admin_support_${s.id}`));
+      }
+      if (category === 'logo' || !category) {
+        loadLogoRequestsDatabase().forEach(l => readIds.add(`admin_logo_${l.id}`));
+      }
+      if (category === 'requests' || !category) {
+        loadLimitIncreaseRequests().forEach(r => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
+      }
+    }
+
+    saveAdminReadNotificationIds(readIds);
+    return res.json({ success: true, totalRead: readIds.size });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 
 // 9. GET Gemini API quota and status
 app.get("/api/gemini-quota-status", (_req, res) => {
@@ -8948,9 +9152,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
+  "gemini-3.1-flash-lite",
   "gemini-3.8-flash",
   "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -8967,11 +9171,22 @@ async function generateWithFallbackAndRetry(
   for (const model of models) {
     for (let attempt = 0; attempt < maxRetriesPerModel; attempt++) {
       try {
-        const res = await ai.models.generateContent({
+        const effectiveConfig = { ...(reqOptions.config || {}) };
+        if (model.includes("3.8-flash") && !effectiveConfig.thinkingConfig) {
+          effectiveConfig.thinkingConfig = { thinkingLevel: "low" };
+        }
+
+        const callPromise = ai.models.generateContent({
           model,
           contents: reqOptions.contents,
-          config: reqOptions.config,
+          config: effectiveConfig,
         });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Model ${model} timeout after 14s`)), 14000)
+        );
+
+        const res = await Promise.race([callPromise, timeoutPromise]);
         quotaExceededInfo.isExceeded = false;
         quotaExceededInfo.lastChecked = new Date().toISOString();
         return res;
@@ -12045,28 +12260,63 @@ export function generate4BalancedHeadlineOptions(
   return generate5BalancedHeadlineOptions(primaryTitle, factSentences, location).slice(0, 4);
 }
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 150;
-export const HEADLINE_5_TIER_MAX_LIMITS = [150, 150, 150, 150, 150];
+export interface HeadlineTierRange {
+  min: number;
+  max: number;
+  label: string;
+}
+
+export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
+  { min: 80, max: 110, label: 'विकल्प 1: मुख्य घटनाक्रम (80-110 अक्षर)' },
+  { min: 100, max: 130, label: 'विकल्प 2: प्राधिकारी/व्यक्ति कोण (100-130 अक्षर)' },
+  { min: 125, max: 150, label: 'विकल्प 3: कार्रवाई/परिणाम कोण (125-150 अक्षर)' },
+  { min: 130, max: 160, label: 'विकल्प 4: मुख्य बिंदु/तथ्य कोण (130-160 अक्षर)' },
+  { min: 150, max: 200, label: 'विकल्प 5: विस्तृत/सारगर्भित कोण (150-200 अक्षर)' },
+];
+
+export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
+export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
 
 /**
- * Enforces single 150-character maximum limit (ceiling, not target) without padding or mid-word cutoffs
+ * Enforces character limits without padding or mid-word cutoffs
  */
-export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLINE_MAX_CHARACTER_LIMIT): string {
+export function fitSingleHeadlineToTier(
+  text: string,
+  maxLimit: number = 150,
+  minLimit: number = 0,
+  factSentence?: string | string[]
+): string {
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
+  // Ensure proper spacing between Hindi words and location names
+  cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 
   // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
   if (visibleLength <= maxLimit) {
-    return cleaned;
+    if (minLimit > 0 && visibleLength < minLimit && factSentence) {
+      const candidates = Array.isArray(factSentence) ? factSentence : [factSentence];
+      for (const rawFact of candidates) {
+        const cleanFact = sanitizePressNoteFlattery(cleanHeadlineText(rawFact), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+        if (cleanFact && cleanFact.length >= 15 && !cleaned.includes(cleanFact.slice(0, 20))) {
+          const combined = `${cleaned}: ${cleanFact}`;
+          if (combined.length <= maxLimit) {
+            cleaned = combined;
+            break;
+          }
+        }
+      }
+    }
+    return cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   }
 
   // If text exceeds maxLimit, strip markup before truncating so tags are never broken mid-tag
   const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
   if (plainText.length <= maxLimit) {
-    return plainText;
+    return plainText.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   }
 
   // Trim to maximum limit cleanly at whole word boundary without slicing mid-word or mid-quote
@@ -12079,7 +12329,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   );
   const lastSpace = sliced.lastIndexOf(" ");
   let result = sliced;
-  if (lastDelim > 40) {
+  if (lastDelim > Math.max(35, minLimit)) {
     result = sliced.substring(0, lastDelim);
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
@@ -12089,8 +12339,13 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
 }
 
 /**
- * Ensures headline options strictly enforce single 150-character maximum limit:
- * All 5 options capped at 150 characters (ceiling, not target; no ending punctuation; no filler phrases)
+ * Ensures headline options strictly enforce 5-tier graduated character limits:
+ * Option 1: 80–110 characters
+ * Option 2: 100–130 characters
+ * Option 3: 125–150 characters
+ * Option 4: 130–160 characters
+ * Option 5: 150–200 characters
+ * All options terminate cleanly with zero trailing full stops or punctuation.
  */
 export function fitHeadlinesTo5TierRanges(
   headlines: string[],
@@ -12103,8 +12358,9 @@ export function fitHeadlinesTo5TierRanges(
 
   for (let i = 0; i < 5; i++) {
     const raw = safeHeadlines[i];
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: '' };
     if (raw) {
-      const fitted = fitSingleHeadlineToTier(raw, 150);
+      const fitted = fitSingleHeadlineToTier(raw, tier.max, tier.min, contextOrBase);
       if (fitted && !result.includes(fitted)) {
         result.push(fitted);
       }
@@ -12120,14 +12376,19 @@ export function fitHeadlinesTo5TierRanges(
 
     for (const cand of supp) {
       if (result.length >= 5) break;
-      const fitted = fitSingleHeadlineToTier(cand, 150);
+      const tierIndex = result.length;
+      const tier = HEADLINE_5_TIER_RANGES[tierIndex] || { min: 80, max: 150, label: '' };
+      const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
       if (fitted && !result.includes(fitted)) {
         result.push(fitted);
       }
     }
   }
 
-  return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
+  return result.slice(0, 5).map((h, idx) => {
+    const tier = HEADLINE_5_TIER_RANGES[idx] || { min: 80, max: 150, label: '' };
+    return fitSingleHeadlineToTier(h, tier.max, tier.min);
+  });
 }
 
 /**
@@ -12139,12 +12400,12 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
   properties: {
     headline: {
       type: Type.STRING,
-      description: "Primary journalistic headline in Devanagari Hindi (target 100-150 visible characters, max 150, concise, active, no trailing period or punctuation)",
+      description: "Primary journalistic headline in Devanagari Hindi (target 80-110 visible characters, concise, active, no trailing period or punctuation)",
     },
     headlineOptions: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Exactly 5 distinct, factual headline options for the SAME central news event (BREAKING NEWS WALA style, each targeting 100-150 visible characters, absolute maximum 150 visible characters, concise, active Devanagari Hindi without ending punctuation)",
+      description: "Exactly 5 distinct, factual headline options for the SAME central news event (Option 1: 80-110 chars, Option 2: 100-130 chars, Option 3: 125-150 chars, Option 4: 130-160 chars, Option 5: 150-200 chars; pure Hindi, no trailing periods or punctuation)",
     },
     highlightWords: {
       type: Type.ARRAY,
@@ -12217,7 +12478,7 @@ export interface MasterNewsPromptParams {
 /**
  * 3. Master Editorial Prompt Generator (MASTER EDITORIAL PROMPT)
  * Transforms raw scripts, press notes, speeches, government releases, and web articles
- * into publication-ready news graphic data and social media captions.
+ * into publication-ready news graphic data and social media captions with 5 graduated headline tiers.
  */
 export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): {
   systemInstruction: string;
@@ -12242,7 +12503,7 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     ? `पहला हैशटैग: #${cleanUser}`
     : `(यदि यूज़रनेम न हो तो कोई यूज़रनेम हैशटैग न लगाएं)`;
 
-  const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मुख्य पुष्ट घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी एक मुख्य घटना के 5 संतुलित हेडलाइन विकल्प (लक्ष्य 100-150 वर्ण, अधिकतम 150 वर्ण) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
+  const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मुख्य पुष्ट घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी एक मुख्य घटना के 5 अलग-अलग निर्धारित लंबाई वाले हेडलाइन विकल्प (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 वर्ण) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
@@ -12260,29 +12521,25 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
 1. केवल एक ही मुख्य घटना पर केंद्रित (STRICT SINGLE-STORY GROUNDING):
    - आलेख के किसी असंबंधित पैराग्राफ या गौण बिंदु को अलग कहानी बनाकर हेडलाइन में न लाएं।
    - सभी 5 हेडलाइन विकल्प स्रोत की उसी एक मुख्य समाचार घटना (Primary Event) पर आधारित होने चाहिए।
+   - खबर में उपलब्ध तथ्यों से बाहर कोई तथ्य, संख्या, बयान, आरोप या घटना अपनी ओर से कभी न गढ़ें।
    - आलेख के बॉडी वाक्यों को ज्यों-का-त्यों कॉपी-पेस्ट करके हेडलाइन कभी न बनाएं।
-   - कड़ा नियम (NO UNRELATED FILLER PHRASES): मनगढ़ंत या असंबद्ध प्रशासनिक जुमले (जैसे 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'स्थिति पर अधिकारियों की लगातार निगरानी', 'पूरे घटनाक्रम पर शासन की सख्त नजर') कभी भी न जोड़ें जब तक कि मूल खबर में वास्तव में ऐसा न लिखा हो! मनोरंजन, खेल, कारोबार या संस्कृति की खबरों में प्रशासनिक शब्द कभी न जोड़ें। केवल आलेख के मूल विषय से जुड़े शब्दों का ही प्रयोग करें।
-2. 5 संतुलित हेडलाइन दृष्टिकोण (5 EDITORIAL ANGLES OF THE SAME EVENT):
-   - विकल्प 1: मुख्य घटना (Core Event) — किसने क्या किया, कहाँ हुआ, सीधा, तथ्यपरक और पूरा विवरण।
-   - विकल्प 2: व्यक्ति या मुख्य पात्र कोण (Actor/Person Focus) — मुख्य व्यक्ति, भूमिका या आधिकारिक निर्णय।
-   - विकल्प 3: कार्रवाई या परिणाम (Action/Consequence) — घटना से जुड़ी कार्रवाई, असर या विकास।
-   - विकल्प 4: मुख्य बिंदु या दावा (Key Development/Quote) — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान।
-   - विकल्प 5: सारगर्भित व प्रभावशाली (High-Impact Angle) — उसी मुख्य घटना का संतुलित, धारदार रूप।
-3. एकल हेडलाइन लंबाई नियम — 100 से 150 वर्ण (SINGLE HEADLINE LENGTH RULE — 100 TO 150 CHARACTERS):
-   - प्रत्येक हेडलाइन विकल्प के लिए लक्ष्य लंबाई: 100 से 150 दृश्यमान वर्ण (visible characters), अंतिम सीमा: अधिकतम 150 वर्ण।
-   - टीवी न्यूज कार्ड, ब्रेकिंग रिबन और 4:5 ग्राफिक कार्ड पर सीधे प्रदर्शित होने योग्य चुस्त, स्पष्ट, तथ्यपरक और असरदार हेडलाइन लिखें।
-   - बनावटी विस्तार, दोहराव या अवांछित प्रशासनिक जुमले न जोड़ें।
-   - कड़ा नियम: हेडलाइन में कोई भी अंग्रेजी (Roman script) शब्द न रखें। सभी विदेशी नामों व संस्थाओं (जैसे BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) को अनिवार्य रूप से शुद्ध देवनागरी हिंदी में लिखें (जैसे बीसीसीआई, आईपीएल, सुप्रीम कोर्ट, व्हाट्सएप, ट्विटर, दिल्ली, कांग्रेस)।
-   - किसी भी हेडलाइन के अंत में पूर्णविराम (. या । या ?) कभी न लगाएं।
+   - कड़ा नियम (NO UNRELATED FILLER PHRASES): मनगढ़ंत या असंबद्ध प्रशासनिक जुमले (जैसे 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'स्थिति पर अधिकारियों की लगातार निगरानी', 'पूरे घटनाक्रम पर शासन की सख्त नजर') कभी भी न जोड़ें जब तक कि मूल खबर में वास्तव में ऐसा न लिखा हो!
+2. 5 श्रेणीबद्ध हेडलाइन लंबाई नियम (5-TIER GRADUATED HEADLINE LENGTH RULES):
+   - विकल्प 1: 80–110 अक्षर (मुख्य घटनाक्रम — किसने क्या किया, कहाँ हुआ, सीधा, तथ्यपरक)
+   - विकल्प 2: 100–130 अक्षर (प्राधिकारी या मुख्य पात्र कोण — मुख्य व्यक्ति, भूमिका या आधिकारिक निर्णय)
+   - विकल्प 3: 125–150 अक्षर (कार्रवाई या परिणाम कोण — घटना से जुड़ी कार्रवाई, असर या विकास)
+   - विकल्प 4: 130–160 अक्षर (मुख्य बिंदु या दावा — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान)
+   - विकल्प 5: 150–200 अक्षर (विस्तृत व सारगर्भित कोण — उसी मुख्य घटना का संतुलित, पूर्ण व धारदार रूप)
+   - कड़ा नियम: किसी भी हेडलाइन के अंत में पूर्णविराम (. या । या ?) कभी न लगाएं।
+   - Headlines शुद्ध, स्वाभाविक और व्याकरणसम्मत देवनागरी हिंदी में हों। स्थानों के नाम और हिंदी शब्दों के बीच सही स्पेसिंग हो।
+   - हेडलाइन में कोई भी अंग्रेजी (Roman script) शब्द न रखें। सभी विदेशी नामों व संस्थाओं (जैसे BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) को अनिवार्य रूप से शुद्ध देवनागरी हिंदी में लिखें (जैसे बीसीसीआई, आईपीएल, सुप्रीम कोर्ट, व्हाट्सएप, ट्विटर, दिल्ली, कांग्रेस)।
    - हेडलाइन स्ट्रिंग में कभी भी '[120/150]' या '(विकल्प 1)' जैसे वर्ण-गणना या लेबल न जोड़ें।
-4. पत्रकारिता की निष्पक्षता व चाटुकारिता का पूर्ण निष्कासन:
+3. पत्रकारिता की निष्पक्षता व चाटुकारिता का पूर्ण निष्कासन:
    - 'श्री', 'माननीय', 'सम्माननीय', 'आदरणीय', 'महोदय', 'जी' जैसे पीआर/सरकारी शब्द पूरी तरह हटा दें।
    - "बड़ा खुलासा", "मचा हड़कंप", "सन्न रह जाएंगे", "इससे लोगों को मदद मिलेगी" जैसे क्लिकबैट और फिलर शब्द कभी न लिखें।
-5. भाषा व पंचुएशन:
-   - शुद्ध, मानक देवनागरी हिंदी। किसी भी हेडलाइन के अंत में पूर्णविराम (. या । या ?) कभी न लगाएं।
-6. स्थान (Location):
+4. स्थान (Location):
    - केवल शुद्ध शहर, जिला या राज्य (जैसे "ग्वालियर, मध्य प्रदेश" या "नई दिल्ली")। स्थान में कभी कोई URL या वाक्य न डालें।
-7. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs, FULL JOURNALISTIC DETAILS):
+5. सोशल मीडिया कैप्शन नियम (MANDATORY CAPTION RULES - NO HEADLINE OPENINGS, ZERO URLs, FULL JOURNALISTIC DETAILS):
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या "पूरी खबर पढ़ें" कभी न जोड़ें।
    - किसी भी कैप्शन की शुरुआत हेडलाइन, 'Title:', 'शीर्षक:', 'हेडलाइन:' या किसी सामान्य परिचय वाक्य से न करें।
    - हेडलाइन को पहले वाक्य के रूप में कभी न दोहराएं। सीधे घटना के पुष्ट तथ्यों, मुख्य व्यक्तियों, स्थान और घटनाक्रम से शुरुआत करें।
@@ -12293,19 +12550,18 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
      * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
-     * नोट: #breakingnewswala या #BNWTV को अनिवार्य रूप से न जोड़ें।
-8. suggestedImagePrompt:
+6. suggestedImagePrompt:
    - अंग्रेजी में रियलिस्टिक प्रेस फोटो प्रॉम्प्ट (35mm lens, natural lighting, Indian news photojournalism style, no text or watermark).
 
 Strictly return a valid JSON object matching these exact keys:
 {
-  "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम, लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
+  "headline": "मुख्य व सटीक हिंदी हेडलाइन (बिना पूर्णविराम, 80-110 वर्ण)",
   "headlineOptions": [
-    "विकल्प 1: मुख्य घटनाक्रम (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
+    "विकल्प 1: मुख्य घटनाक्रम (80-110 वर्ण)",
+    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (100-130 वर्ण)",
+    "विकल्प 3: कार्रवाई/परिणाम कोण (125-150 वर्ण)",
+    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (130-160 वर्ण)",
+    "विकल्प 5: विस्तृत व सारगर्भित कोण (150-200 वर्ण)"
   ],
   "highlightWords": ["मुख्य शब्द 1", "मुख्य शब्द 2"],
   "formattedHeadline": "हेडलाइन जिसमें मुख्य शब्द [yellow]शब्द[/yellow] से चिह्नित हों",

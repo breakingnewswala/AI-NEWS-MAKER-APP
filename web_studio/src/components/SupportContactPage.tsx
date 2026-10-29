@@ -266,7 +266,7 @@ export const SupportContactPage: React.FC<SupportContactPageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    समस्या की श्रेणी
+                    समस्या की श्रेणी (Category)
                   </label>
                   <select
                     value={reportType}

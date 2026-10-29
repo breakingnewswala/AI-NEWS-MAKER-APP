@@ -221,6 +221,8 @@ export function saveSoundSettings(settings: Partial<AppSoundSettings>): AppSound
 
 // Web Audio API Audio Context Helper
 let audioCtx: AudioContext | null = null;
+let isAudioHardwareUnlocked = false;
+
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -239,68 +241,253 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
- * Standard notification ping (subtle, clean 880Hz -> 1320Hz bell)
+ * Mobile-resilient HTML5 WAV Sound Synthesizer.
+ * Bypasses mobile Web Audio suspension by synthesizing a standards-compliant WAV Blob
+ * and playing it through an HTML5 <audio> element.
  */
-export function playNormalNotificationSound(): void {
-  const settings = getSoundSettings();
-  if (!settings.soundEnabled || settings.normalVolume <= 0) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
+function playWavChime(tones: { freq: number; dur: number }[], volume = 0.5): void {
+  if (typeof window === 'undefined') return;
   try {
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const sampleRate = 11025;
+    const totalDurationSec = tones.reduce((acc, t) => acc + t.dur, 0);
+    const numSamples = Math.floor(sampleRate * totalDurationSec);
+    const buffer = new ArrayBuffer(44 + numSamples);
+    const view = new DataView(buffer);
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
 
-    gain.gain.setValueAtTime(settings.normalVolume * 0.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + numSamples, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // Mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate, true);
+    view.setUint16(32, 1, true);
+    view.setUint16(34, 8, true); // 8-bit
+    writeStr(36, 'data');
+    view.setUint32(40, numSamples, true);
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    let sampleIdx = 0;
+    tones.forEach((tone) => {
+      const toneSamples = Math.floor(sampleRate * tone.dur);
+      for (let i = 0; i < toneSamples && sampleIdx < numSamples; i++, sampleIdx++) {
+        const t = i / sampleRate;
+        const decay = Math.max(0, 1 - (i / toneSamples));
+        const s = Math.sin(2 * Math.PI * tone.freq * t);
+        const val = Math.floor(128 + 127 * s * decay * Math.max(0.1, Math.min(1, volume)));
+        view.setUint8(44 + sampleIdx, Math.max(0, Math.min(255, val)));
+      }
+    });
 
-    osc.start(now);
-    osc.stop(now + 0.25);
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = Math.max(0.1, Math.min(1, volume));
+    const p = audio.play();
+    if (p && typeof p.then === 'function') {
+      p.catch(() => {});
+    }
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch {}
+    }, 3000);
   } catch {}
 }
 
 /**
- * Louder Breaking News Alert Tone (Multi-tone urgent newsroom chime)
+ * Standard notification ping (subtle, clean 880Hz -> 1320Hz bell)
+ * Dual-engine: Web Audio API oscillator + HTML5 Audio WAV fallback for mobile browsers
  */
-export function playBreakingNewsAlertSound(): void {
+export function playNormalNotificationSound(): void {
   const settings = getSoundSettings();
-  if (!settings.soundEnabled || settings.breakingVolume <= 0) return;
+  if (!settings.soundEnabled || settings.normalVolume <= 0) return;
+
+  // 1. Web Audio API attempt
   const ctx = getAudioContext();
-  if (!ctx) return;
-
-  try {
-    const now = ctx.currentTime;
-    const notes = [
-      { freq: 587.33, start: 0.00, dur: 0.14 }, // D5
-      { freq: 880.00, start: 0.12, dur: 0.16 }, // A5
-      { freq: 1174.66, start: 0.26, dur: 0.35 }, // D6
-    ];
-
-    notes.forEach((n) => {
+  let webAudioStarted = false;
+  if (ctx) {
+    try {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(n.freq, now + n.start);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1320, now + 0.14);
 
-      const targetGain = settings.breakingVolume * 0.35;
-      gain.gain.setValueAtTime(targetGain, now + n.start);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + n.start + n.dur);
+      gain.gain.setValueAtTime(settings.normalVolume * 0.28, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.start(now + n.start);
-      osc.stop(now + n.start + n.dur);
-    });
+      osc.start(now);
+      osc.stop(now + 0.25);
+      webAudioStarted = true;
+    } catch {}
+  }
+
+  // 2. Mobile HTML5 Audio fallback
+  if (!webAudioStarted || (typeof window !== 'undefined' && 'ontouchstart' in window)) {
+    playWavChime([
+      { freq: 880, dur: 0.12 },
+      { freq: 1320, dur: 0.14 },
+    ], settings.normalVolume);
+  }
+}
+
+/**
+ * Louder Breaking News Alert Tone (Multi-tone urgent newsroom chime)
+ * Dual-engine: Web Audio API + HTML5 Audio WAV fallback
+ */
+export function playBreakingNewsAlertSound(): void {
+  const settings = getSoundSettings();
+  if (!settings.soundEnabled || settings.breakingVolume <= 0) return;
+
+  const ctx = getAudioContext();
+  let webAudioStarted = false;
+  if (ctx) {
+    try {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 587.33, start: 0.00, dur: 0.14 }, // D5
+        { freq: 880.00, start: 0.12, dur: 0.16 }, // A5
+        { freq: 1174.66, start: 0.26, dur: 0.35 }, // D6
+      ];
+
+      notes.forEach((n) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.freq, now + n.start);
+
+        const targetGain = settings.breakingVolume * 0.35;
+        gain.gain.setValueAtTime(targetGain, now + n.start);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + n.start + n.dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + n.start);
+        osc.stop(now + n.start + n.dur);
+      });
+      webAudioStarted = true;
+    } catch {}
+  }
+
+  if (!webAudioStarted || (typeof window !== 'undefined' && 'ontouchstart' in window)) {
+    playWavChime([
+      { freq: 587.33, dur: 0.12 },
+      { freq: 880.00, dur: 0.14 },
+      { freq: 1174.66, dur: 0.28 },
+    ], settings.breakingVolume);
+  }
+}
+
+/**
+ * Distinctive Video Feed Media Notification Sound (Harmonious two-tone C5 -> G5 media chime)
+ */
+export function playVideoFeedNotificationSound(): void {
+  const settings = getSoundSettings();
+  if (!settings.soundEnabled || settings.normalVolume <= 0) return;
+
+  const ctx = getAudioContext();
+  let webAudioStarted = false;
+  if (ctx) {
+    try {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 523.25, start: 0.00, dur: 0.12 }, // C5
+        { freq: 783.99, start: 0.10, dur: 0.24 }, // G5
+      ];
+
+      notes.forEach((n) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(n.freq, now + n.start);
+
+        const targetGain = settings.normalVolume * 0.28;
+        gain.gain.setValueAtTime(targetGain, now + n.start);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + n.start + n.dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + n.start);
+        osc.stop(now + n.start + n.dur);
+      });
+      webAudioStarted = true;
+    } catch {}
+  }
+
+  if (!webAudioStarted || (typeof window !== 'undefined' && 'ontouchstart' in window)) {
+    playWavChime([
+      { freq: 523.25, dur: 0.12 },
+      { freq: 783.99, dur: 0.20 },
+    ], settings.normalVolume);
+  }
+}
+
+/**
+ * Unlocks AudioContext and primes mobile audio hardware
+ * Plays a 1-sample silent buffer to awaken hardware audio output on iOS & Android
+ */
+export function unlockAudioPlayback(playSound = false): void {
+  if (typeof window === 'undefined') return;
+  const ctx = getAudioContext();
+  if (ctx) {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    try {
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      isAudioHardwareUnlocked = true;
+    } catch {}
+  }
+  if (playSound) {
+    playNormalNotificationSound();
+  }
+}
+
+// ==========================================
+// EDUCATIONAL SOUND NOTICE HELPERS
+// ==========================================
+const SOUND_NOTICE_KEY = 'ai_news_sound_notice_dismissed_v1';
+
+export function isSoundNoticeDismissed(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return localStorage.getItem(SOUND_NOTICE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function dismissSoundNotice(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SOUND_NOTICE_KEY, 'true');
+    unlockAudioPlayback();
   } catch {}
 }
 
@@ -359,4 +546,5 @@ export function triggerBreakingNewsAlert(story: { id: string; title: string; sum
 
   return true;
 }
+
 

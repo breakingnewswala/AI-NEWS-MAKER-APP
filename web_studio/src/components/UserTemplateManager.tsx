@@ -1159,7 +1159,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                           <td className="p-3 text-center whitespace-nowrap">
                             {item.isPending ? (
                               <span className="px-2 py-0.5 bg-amber-950 text-amber-300 border border-amber-500 rounded text-[10px] font-bold">
-                                ⏳ लंबित
+                                ⏳ लंबित (Pending)
                               </span>
                             ) : item.active ? (
                               <span className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-500 rounded text-[10px] font-bold">

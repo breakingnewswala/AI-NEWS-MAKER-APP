@@ -3,17 +3,14 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import {ErrorBoundary} from './components/ErrorBoundary.tsx';
 import {LanguageProvider} from './lib/languageContext.tsx';
-import {ThemeProvider} from './lib/themeContext.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary fallbackTitle="एप्लिकेशन लोड करने में त्रुटि">
-      <ThemeProvider>
-        <LanguageProvider>
-          <App />
-        </LanguageProvider>
-      </ThemeProvider>
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
     </ErrorBoundary>
   </StrictMode>,
 );
@@ -81,3 +78,4 @@ if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('pwa_install_prompt_ready'));
   });
 }
+

@@ -814,34 +814,6 @@ export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
     activatedVia: 'Admin Preset',
     hasActivePaidPlan: true,
   },
-  {
-    userId: 'usr_admin_reviewer_888',
-    email: 'admin@ainewsmaker.online',
-    name: 'मास्टर एडमिन परीक्षक',
-    fullName: 'मास्टर एडमिन परीक्षक',
-    username: 'admin_reviewer',
-    role: 'superadmin',
-    tier: 'ultra',
-    planName: 'VIP DESK',
-    channelName: 'एआई न्यूज़ मेकर',
-    channelNameHi: 'एआई न्यूज़ मेकर',
-    channelNameEn: 'AI News Maker',
-    channelLogoUrl: '/assets/ai_news_maker_logo.png',
-    channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
-    mobile: '9669802408',
-    mobileNumber: '9669802408',
-    district: 'हेडक्वार्टर सेंट्रल डेस्क',
-    websiteUrl: 'ainewsmaker.online',
-    isBlocked: false,
-    isProfileLocked: true,
-    isLocked: true,
-    createdAt: 1793169712890,
-    trialStartedAt: 1793169712890,
-    trialEndsAt: 2107057518060,
-    expiresAt: 2107057518060,
-    activatedVia: 'Admin Preset',
-    hasActivePaidPlan: true,
-  },
 ];
 
 export function getPlanUsers(): PlanUserRecord[] {
@@ -992,14 +964,17 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     };
   }
 
-  // Resolve current active user email and role from session or targetEmail
-  let sessionUser: any = null;
-  try {
-    const sess = localStorage.getItem('reporter_auth_session');
-    if (sess) sessionUser = JSON.parse(sess);
-  } catch {}
-
-  const activeEmail = (targetEmail || sessionUser?.email || sessionUser?.username || '').toLowerCase().trim();
+  // Resolve current active user email
+  const activeEmail = (targetEmail || (() => {
+    try {
+      const sess = localStorage.getItem('reporter_auth_session');
+      if (sess) {
+        const u = JSON.parse(sess);
+        return u?.email || '';
+      }
+    } catch {}
+    return '';
+  })()).toLowerCase().trim();
 
   const planUsers = getPlanUsers();
   const matchedUser = planUsers.find(u =>
@@ -1012,22 +987,7 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     (activeEmail && localStorage.getItem(`user_blocked_${activeEmail}`) === 'true')
   );
 
-  const isAdminAccount = Boolean(
-    (sessionUser && (sessionUser.role === 'admin' || sessionUser.role === 'superadmin' || sessionUser.isAdmin === true)) ||
-    (activeEmail && (
-      isUserMasterAdmin(activeEmail) ||
-      isUserRegularAdmin(activeEmail) ||
-      activeEmail === 'admin@ainewsmaker.online' ||
-      ALL_ADMIN_EMAILS.includes(activeEmail) ||
-      activeEmail === 'admin' ||
-      activeEmail === 'superadmin'
-    ))
-  );
-
-  let storedTier = (isAdminAccount ? 'ultra' : (matchedUser?.tier || localStorage.getItem(STORAGE_KEY_TIER) as UserPlanTier)) || 'basic';
-  if (matchedUser?.planName === 'VIP DESK' || matchedUser?.role === 'superadmin' || matchedUser?.role === 'admin') {
-    storedTier = 'ultra';
-  }
+  let storedTier = (matchedUser?.tier || localStorage.getItem(STORAGE_KEY_TIER) as UserPlanTier) || 'basic';
   const now = Date.now();
 
   let startTime = matchedUser?.trialStartedAt || (() => {
@@ -1045,19 +1005,15 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
         return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
       })());
 
-  if (isAdminAccount && expiresAt < now + 365 * 24 * 60 * 60 * 1000) {
-    expiresAt = 2107057518060;
-  }
-
   const msRemaining = Math.max(0, expiresAt - now);
-  const isExpired = !isAdminAccount && msRemaining <= 0;
+  const isExpired = msRemaining <= 0;
   const daysRemaining = isExpired ? 0 : Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
   const hoursRemaining = isExpired ? 0 : Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
   const minutesRemaining = isExpired ? 0 : Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
 
   const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
-  const hasPaidPlan = isAdminAccount || storedTier !== 'basic' || Boolean(promoUsed) || Boolean(matchedUser?.expiresAt && matchedUser.expiresAt > now);
-  const isTrialActive = !isAdminAccount && !isExpired && !hasPaidPlan;
+  const hasPaidPlan = storedTier !== 'basic' || Boolean(promoUsed) || Boolean(matchedUser?.expiresAt && matchedUser.expiresAt > now);
+  const isTrialActive = !isExpired && !hasPaidPlan;
 
   const effectiveTier: UserPlanTier = storedTier;
   const effectivePlanName: PlanKeyName = storedTier === 'ultra'
@@ -1070,16 +1026,15 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   return {
     tier: effectiveTier,
     planName: effectivePlanName,
-    planKey: effectivePlanName,
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isTrialExpired: !isAdminAccount && isExpired && !hasPaidPlan,
-    isPlanExpired: !isAdminAccount && isExpired,
+    isTrialExpired: isExpired && !hasPaidPlan,
+    isPlanExpired: isExpired,
     daysRemaining,
     hoursRemaining,
     minutesRemaining,
-    hasActivePaidPlan: hasPaidPlan && (isAdminAccount || !isExpired),
+    hasActivePaidPlan: hasPaidPlan && !isExpired,
     isBlocked,
     blockedAt: matchedUser?.blockedAt,
     blockedBy: matchedUser?.blockedBy,
@@ -1089,20 +1044,6 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     expiresAt,
     activatedViaPromoCode: promoUsed,
   };
-}
-
-export function getHeadlineRegenerationCoinCost(planNameOrTier?: string): number {
-  const norm = (planNameOrTier || '').toLowerCase().trim();
-  if (norm.includes('vip') || norm.includes('ultra') || norm.includes('admin') || norm.includes('desk')) {
-    return 0;
-  }
-  if (norm.includes('pro') || norm.includes('professional')) {
-    return 25;
-  }
-  if (norm.includes('adv') || norm.includes('plus')) {
-    return 35;
-  }
-  return 50;
 }
 
 export function setUserPlanTier(newTier: UserPlanTier, durationDays?: number): void {
@@ -1209,12 +1150,9 @@ export function isUserAdmin(user: any): boolean {
     email = user.replace(/\s+/g, '').toLowerCase().trim();
   } else {
     email = (user.email || user.username || '').replace(/\s+/g, '').toLowerCase().trim();
-    if (user.role === 'admin' || user.role === 'superadmin' || user.isAdmin === true) {
-      return true;
-    }
   }
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL || email === 'admin@ainewsmaker.online' || ALL_ADMIN_EMAILS.includes(email) || email === 'admin' || email === 'superadmin';
+  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL;
 }
 
 /**
@@ -1928,9 +1866,6 @@ export async function adminDeleteCloudUser(userEmailOrId: string, userId?: strin
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        adminEmail: 'breakingnewswala.com@gmail.com',
-        targetEmail: userEmailOrId,
-        targetUserId: userId || userEmailOrId,
         userEmail: userEmailOrId,
         userId: userId || userEmailOrId,
       }),
@@ -1968,7 +1903,6 @@ export function adminDeleteUserRecord(emailOrUserId: string): boolean {
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(filtered));
     try {
       localStorage.removeItem(`user_profile_${clean}`);
-      localStorage.removeItem(`onboarding_completed_${clean}`);
     } catch {}
     window.dispatchEvent(new Event('ai_news_plan_users_changed'));
     return true;

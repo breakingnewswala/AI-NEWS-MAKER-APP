@@ -899,25 +899,61 @@ export function fitHeadlineToRange(
   return h;
 }
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 150;
-export const HEADLINE_5_TIER_MAX_LIMITS = [150, 150, 150, 150, 150];
+export interface HeadlineTierRange {
+  min: number;
+  max: number;
+  label: string;
+}
 
-export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLINE_MAX_CHARACTER_LIMIT): string {
+export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
+  { min: 80, max: 110, label: 'विकल्प 1: मुख्य घटनाक्रम (80-110 अक्षर)' },
+  { min: 100, max: 130, label: 'विकल्प 2: प्राधिकारी/व्यक्ति कोण (100-130 अक्षर)' },
+  { min: 125, max: 150, label: 'विकल्प 3: कार्रवाई/परिणाम कोण (125-150 अक्षर)' },
+  { min: 130, max: 160, label: 'विकल्प 4: मुख्य बिंदु/तथ्य कोण (130-160 अक्षर)' },
+  { min: 150, max: 200, label: 'विकल्प 5: विस्तृत/सारगर्भित कोण (150-200 अक्षर)' },
+];
+
+export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
+export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+
+export function fitSingleHeadlineToTier(
+  text: string,
+  maxLimit: number = 150,
+  minLimit: number = 0,
+  factSentence?: string | string[]
+): string {
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
+  // Ensure proper spacing between Hindi words and location names
+  cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
 
   // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
   if (visibleLength <= maxLimit) {
-    return cleaned;
+    // If under minLimit and we have authentic facts, we can enrich gently
+    if (minLimit > 0 && visibleLength < minLimit && factSentence) {
+      const candidates = Array.isArray(factSentence) ? factSentence : [factSentence];
+      for (const rawFact of candidates) {
+        const cleanFact = sanitizePressNoteFlattery(cleanHeadlineText(rawFact), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+        if (cleanFact && cleanFact.length >= 15 && !cleaned.includes(cleanFact.slice(0, 20))) {
+          const combined = `${cleaned}: ${cleanFact}`;
+          if (combined.length <= maxLimit) {
+            cleaned = combined;
+            break;
+          }
+        }
+      }
+    }
+    return cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   }
 
   // If text exceeds maxLimit, strip markup before truncating so tags are never broken mid-tag
   const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
   if (plainText.length <= maxLimit) {
-    return plainText;
+    return plainText.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
   }
 
   // Trim to maximum limit cleanly at whole word boundary without slicing mid-word or mid-quote
@@ -930,7 +966,7 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
   );
   const lastSpace = sliced.lastIndexOf(" ");
   let result = sliced;
-  if (lastDelim > 40) {
+  if (lastDelim > Math.max(35, minLimit)) {
     result = sliced.substring(0, lastDelim);
   } else if (lastSpace > 25) {
     result = sliced.substring(0, lastSpace);
@@ -940,8 +976,13 @@ export function fitSingleHeadlineToTier(text: string, maxLimit: number = HEADLIN
 }
 
 /**
- * Ensures headline options strictly enforce single 150-character maximum limit:
- * All 5 options capped at 150 characters (ceiling, not target; no ending punctuation; no filler phrases)
+ * Ensures headline options strictly enforce 5-tier graduated character limits:
+ * Option 1: 80–110 characters
+ * Option 2: 100–130 characters
+ * Option 3: 125–150 characters
+ * Option 4: 130–160 characters
+ * Option 5: 150–200 characters
+ * All options terminate cleanly with zero trailing full stops or punctuation.
  */
 export function fitHeadlinesTo5TierRanges(
   headlines: string[],
@@ -954,8 +995,9 @@ export function fitHeadlinesTo5TierRanges(
 
   for (let i = 0; i < 5; i++) {
     const raw = safeHeadlines[i];
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: '' };
     if (raw) {
-      const fitted = fitSingleHeadlineToTier(raw, 150);
+      const fitted = fitSingleHeadlineToTier(raw, tier.max, tier.min, contextOrBase);
       if (fitted && !result.includes(fitted)) {
         result.push(fitted);
       }
@@ -972,15 +1014,20 @@ export function fitHeadlinesTo5TierRanges(
 
     for (const cand of supp) {
       if (result.length >= 5) break;
-      const fitted = fitSingleHeadlineToTier(cand, 150);
+      const tierIndex = result.length;
+      const tier = HEADLINE_5_TIER_RANGES[tierIndex] || { min: 80, max: 150, label: '' };
+      const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
       if (fitted && !result.includes(fitted)) {
         result.push(fitted);
       }
     }
   }
 
-  // Ensure all 5 slots conform strictly to 150 max ceiling
-  return result.slice(0, 5).map((h) => fitSingleHeadlineToTier(h, 150));
+  // Ensure each slot strictly conforms to its respective graduated tier range
+  return result.slice(0, 5).map((h, idx) => {
+    const tier = HEADLINE_5_TIER_RANGES[idx] || { min: 80, max: 150, label: '' };
+    return fitSingleHeadlineToTier(h, tier.max, tier.min);
+  });
 }
 
 export function fitHeadlineNaturally(

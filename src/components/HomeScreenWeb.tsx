@@ -261,70 +261,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
 
-  // Wallet Coin Balance for Authenticated Users (Real-time sync)
-  const [walletCoins, setWalletCoins] = useState<number | null>(() => {
-    try {
-      const saved = localStorage.getItem('ai_news_user_wallet_coins');
-      return saved ? parseInt(saved, 10) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    const email = (currentUser?.email || '').toLowerCase().trim();
-    const userId = (currentUser?.userId || (currentUser as any)?.uid || email).trim();
-    if (!email && !userId) return;
-
-    const fetchBalance = () => {
-      fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(userId)}`))
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.success && data?.wallet) {
-            const bal = typeof data.wallet.coinBalance === 'number'
-              ? data.wallet.coinBalance
-              : (typeof data.wallet.balance === 'number' ? data.wallet.balance : 0);
-            setWalletCoins(bal);
-            try {
-              localStorage.setItem('ai_news_user_wallet_coins', String(bal));
-            } catch {}
-          }
-        })
-        .catch(() => {});
-    };
-
-    fetchBalance();
-    const handleWalletUpdated = (e: any) => {
-      const b = typeof e?.detail?.coinBalance === 'number'
-        ? e.detail.coinBalance
-        : (typeof e?.detail?.balance === 'number' ? e.detail.balance : null);
-      if (b !== null) {
-        setWalletCoins(b);
-      } else {
-        fetchBalance();
-      }
-    };
-    window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
-    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
-    window.addEventListener('storage', fetchBalance);
-    return () => {
-      window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
-      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
-      window.removeEventListener('storage', fetchBalance);
-    };
-  }, [currentUser?.email]);
-
-  // Part 6: Auto-refresh data every 15s when page is active, tab is visible, and online, without resetting scroll
-  useEffect(() => {
-    if (!onRefreshLiveNews) return;
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine && !isSyncingNews) {
-        onRefreshLiveNews();
-      }
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [onRefreshLiveNews, isSyncingNews]);
-
   useEffect(() => {
     fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
     const handleQuotaUpdate = (e: any) => {
@@ -390,71 +326,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [editorialError, setEditorialError] = useState<string | null>(null);
   const [editorialSuccess, setEditorialSuccess] = useState<string | null>(null);
 
-  // Dedicated Open News Editor function per Part 1.3: Loads all approved and saved content without loss
-  const openNewsEditModal = async (post: NewsFeedPost) => {
-    const rawHeadlines = (post.approvedHeadlines && post.approvedHeadlines.length > 0)
-      ? post.approvedHeadlines
-      : (post.headlineOptions && post.headlineOptions.length > 0)
-      ? post.headlineOptions
-      : [post.title];
-    const initialPhotos = post.approvedPhotos && post.approvedPhotos.length > 0
-      ? post.approvedPhotos
-      : (Array.isArray(post.additionalPhotos) && post.additionalPhotos.length > 0
-        ? post.additionalPhotos
-        : (post.imageUrl ? [post.imageUrl] : []));
-
-    const initialEditPost: NewsFeedPost = {
-      ...post,
-      title: decodeHtmlEntities(post.title),
-      summary: decodeHtmlEntities(post.summary || ''),
-      approvedHeadlines: rawHeadlines.map(h => decodeHtmlEntities(h)),
-      approvedHeadline: decodeHtmlEntities(post.approvedHeadline || rawHeadlines[0] || post.title),
-      approvedCaptionDetailed: decodeHtmlEntities(post.approvedCaptionDetailed || (post as any).captionDetailed || post.summary || ''),
-      approvedCaptionBullets: decodeHtmlEntities(post.approvedCaptionBullets || (post as any).captionBullets || ''),
-      approvedCaptionShort: decodeHtmlEntities(post.approvedCaptionShort || (post as any).captionShort || ''),
-      approvedPhotos: initialPhotos,
-      approvedPhotoLayout: post.approvedPhotoLayout || (initialPhotos.length >= 2 ? 'two_vertical' : 'single'),
-      editorialApproved: post.editorialApproved !== undefined ? post.editorialApproved : Boolean((post as any).isPrePublished || (post as any).isApproved),
-      isPrePublished: Boolean((post as any).isPrePublished || (post as any).isApproved),
-      sourceUrl: post.sourceUrl || '',
-    };
-
-    setEditingPost(initialEditPost);
-    setEditorialError(null);
-    setEditorialSuccess(null);
-
-    // Fetch persistent approved editorial database record from server to ensure 100% data completeness
-    try {
-      const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(post.id)}`));
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.isApproved && json.data) {
-          const ed = json.data;
-          setEditingPost((prev) => {
-            if (!prev || prev.id !== post.id) return prev;
-            const edHeadlines = (Array.isArray(ed.headlines) && ed.headlines.length > 0)
-              ? ed.headlines
-              : (Array.isArray(ed.headlineOptions) && ed.headlineOptions.length > 0 ? ed.headlineOptions : prev.approvedHeadlines);
-            return {
-              ...prev,
-              approvedHeadlines: edHeadlines.map((h: string) => decodeHtmlEntities(h)),
-              approvedHeadline: decodeHtmlEntities(ed.approvedHeadline || edHeadlines[0] || prev.approvedHeadline),
-              approvedCaptionDetailed: decodeHtmlEntities(ed.captionDetailed || prev.approvedCaptionDetailed),
-              approvedCaptionBullets: decodeHtmlEntities(ed.captionBullets || prev.approvedCaptionBullets),
-              approvedCaptionShort: decodeHtmlEntities(ed.captionShort || prev.approvedCaptionShort),
-              approvedPhotos: (Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0) ? ed.additionalPhotos : prev.approvedPhotos,
-              sourceUrl: ed.sourceUrl || prev.sourceUrl,
-              editorialApproved: true,
-              isPrePublished: ed.isPrePublished !== undefined ? ed.isPrePublished : prev.isPrePublished,
-            };
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('Could not fetch approved editorial record:', e);
-    }
-  };
-
   const handleGenerateEditorialData = async () => {
     if (!editingPost) return;
     setIsGeneratingEditorial(true);
@@ -501,8 +372,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       }
       setEditingPost({
         ...editingPost,
-        title: primaryH,
-        summary: decodeHtmlEntities(aiData.summary || detailedCap).slice(0, 320),
         approvedHeadlines: generatedHeadlines,
         approvedHeadline: primaryH,
         approvedCaptionDetailed: detailedCap,
@@ -511,7 +380,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         approvedPhotos: photos,
         approvedPhotoLayout: photos.length >= 2 ? 'two_vertical' : 'single',
       });
-      setEditorialSuccess('AI हेडलाइन (5 विकल्प), 3 कैप्शन और फ़ोटो तैयार हो गए! ऊपर शीर्षक/विवरण अपडेट हो चुके हैं।');
+      setEditorialSuccess('AI हेडलाइन (5 विकल्प), 3 कैप्शन और फ़ोटो तैयार हो गए! समीक्षा कर स्वीकृति दें।');
     } catch (err: any) {
       setEditorialError(err?.message || 'हेडलाइन व कैप्शन जनरेट करने में त्रुटि');
     } finally {
@@ -1397,10 +1266,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const currentTickerPost = breakingPosts[currentTickerIndex] || breakingPosts[0];
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-24 transition-colors">
+    <div className="min-h-screen bg-slate-950 text-white pb-24">
       {/* Admin Filter Bar (Unfreezed - Scrolls naturally with content) */}
       {canModerate && (
-        <div className="relative z-20 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 text-slate-800 dark:text-white px-3 sm:px-6 lg:px-8 py-2.5 shadow-sm dark:shadow-xl backdrop-blur-md">
+        <div className="relative z-20 bg-slate-900 border-b border-amber-500/30 px-3 sm:px-6 lg:px-8 py-2.5 shadow-xl">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1412,12 +1281,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
 
               {/* 2. Channel Filter */}
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
-                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">चैनल:</span>
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                <span className="text-[11px] font-bold text-slate-300">चैनल:</span>
                 <select
                   value={adminFilterChannel}
                   onChange={(e) => setAdminFilterChannel(e.target.value)}
-                  className="bg-transparent text-amber-700 dark:text-amber-300 text-xs font-bold outline-none cursor-pointer max-w-[130px]"
+                  className="bg-transparent text-amber-300 text-xs font-bold outline-none cursor-pointer max-w-[130px]"
                 >
                   <option value="" className="bg-slate-900 text-white">सभी चैनल</option>
                   {savedChannels.map((c: any, idx) => {
@@ -1451,7 +1320,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                   adminPublishedOnly
                     ? 'bg-emerald-600 text-white font-black shadow-md'
-                    : 'bg-slate-100 dark:bg-slate-950 text-emerald-700 dark:text-emerald-300 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    : 'bg-slate-950 text-emerald-300 border border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <span>✅ प्रकाशित खबरें ({publishedCount})</span>
@@ -1464,7 +1333,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                   adminBonusOnly
                     ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                    : 'bg-slate-100 dark:bg-slate-950 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    : 'bg-slate-950 text-amber-300 border border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <Coins className="w-3.5 h-3.5 text-amber-400" />
@@ -1504,60 +1373,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       {/* Centered Container: All boxes share the exact same width and alignment */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-6">
 
-        {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Graphics, Refresh with Part 7 tactile motion) */}
-        <div className="grid grid-cols-3 gap-2 md:hidden w-full">
-          {/* Card 1: Coins */}
-          <button
-            type="button"
-            onClick={() => {
-              if (onNavigateToTab) onNavigateToTab('profile');
-              window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
-            }}
-            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 active:scale-95 transition-all duration-150 motion-reduce:transform-none cursor-pointer text-center"
-            title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
-          >
-            <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-black text-sm">
-              <Coins className="w-4 h-4 shrink-0 text-amber-500" />
-              <span>{typeof walletCoins === 'number' ? walletCoins : 0}</span>
-            </div>
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
-          </button>
-
-          {/* Card 2: Remaining Graphics */}
-          <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
-            <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
-              <Palette className="w-4 h-4 shrink-0 text-red-500" />
-              <span>{canModerate || dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday ?? 10)}</span>
-            </div>
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष ग्राफ़िक्स</span>
-          </div>
-
-          {/* Card 3: Refresh Button */}
-          <button
-            type="button"
-            disabled={isSyncingNews}
-            onClick={() => {
-              if (onRefreshLiveNews && !isSyncingNews) {
-                onRefreshLiveNews();
-              }
-            }}
-            className={`flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-95 transition-all duration-150 motion-reduce:transform-none text-center cursor-pointer ${isSyncingNews ? 'opacity-70 cursor-not-allowed' : ''}`}
-            title="लाइव फ़ीड रीफ्रेश करें"
-          >
-            <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-black text-sm">
-              <RefreshCw className={`w-4 h-4 shrink-0 ${isSyncingNews ? 'animate-spin text-amber-500' : ''}`} />
-              <span>{isSyncingNews ? 'रिफ्रेश...' : 'रिफ्रेश'}</span>
-            </div>
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">लाइव फ़ीड</span>
-          </button>
-        </div>
-
         {/* 1. Live Breaking News Ticker (Centered Box, 1 news at a time, auto-changes every 4 seconds) */}
         {breakingPosts.length > 0 && currentTickerPost && (
           <div
             onMouseEnter={() => setIsTickerHovered(true)}
             onMouseLeave={() => setIsTickerHovered(false)}
-            className="w-full bg-white dark:bg-slate-900 border border-red-400/40 dark:border-red-700/50 rounded-2xl px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3 shadow-sm dark:shadow-lg hover:border-red-500 dark:hover:border-red-600 transition-colors"
+            className="w-full bg-slate-900 border border-red-700/50 rounded-2xl px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3 shadow-lg hover:border-red-600 transition-colors"
           >
             {/* Left: LIVE Badge with Pulsing Ping Dot */}
             <div className="flex items-center gap-2 shrink-0">
@@ -1571,7 +1392,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             <div className="flex-1 min-w-0 flex items-center justify-between gap-3 overflow-hidden">
               <div
                 key={currentTickerPost.id}
-                className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-amber-300 truncate animate-in fade-in slide-in-from-bottom-2 duration-300 cursor-pointer hover:text-red-600 dark:hover:text-white"
+                className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-300 truncate animate-in fade-in slide-in-from-bottom-2 duration-300 cursor-pointer hover:text-white"
                 onClick={() => onOpenStudioWithNews(currentTickerPost)}
                 title="क्लिक करके स्टूडियो में कार्ड बनाएं"
               >
@@ -1672,7 +1493,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           <div
             onMouseEnter={() => setIsHighlightHovered(true)}
             onMouseLeave={() => setIsHighlightHovered(false)}
-            className="w-full bg-white dark:bg-slate-900 border-2 border-amber-400/80 dark:border-amber-500/80 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden transition-all"
+            className="w-full bg-slate-900 border-2 border-amber-500/80 rounded-2xl p-4 sm:p-5 shadow-2xl relative overflow-hidden transition-all"
           >
             {/* Header: Title + Tag (Single line, full size) + Navigation (Removed 1 2 3 counter) */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 mb-4">
@@ -1746,12 +1567,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   ? 'border-2 border-amber-500/90 ring-1 ring-amber-400/50 shadow-lg shadow-amber-500/10'
                   : isBonus
                   ? 'border-2 border-emerald-500/90 ring-1 ring-emerald-400/50 shadow-lg shadow-emerald-500/10'
-                  : 'border border-slate-200/90 dark:border-slate-800/90 hover:border-amber-400/80 dark:hover:border-slate-600/80 shadow-sm hover:shadow-xl';
+                  : 'border border-slate-700/90 hover:border-slate-500/80 shadow-md';
 
                 return (
                 <div
                   key={post.id}
-                  className={`bg-slate-50 dark:bg-slate-950/80 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500/60 shadow-sm hover:shadow-md ${cardBorderClass}`}
+                  className={`bg-slate-950/80 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group ${cardBorderClass}`}
                 >
                   <div>
                     {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
@@ -1818,7 +1639,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             setConfirmRemoveHighlightPost(post);
                           }}
                           className="absolute top-2 left-2 p-1 bg-black/80 hover:bg-red-600 text-slate-300 hover:text-white rounded-md transition-colors border border-slate-700 shadow z-10 cursor-pointer"
-                          title="प्रमुख खबरों से हटाएं"
+                          title="प्रमुख खबरों (Highlights) से हटाएं"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1886,7 +1707,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             onOpenStudioWithNews(post);
                           }
                         }}
-                        className="text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
+                        className="text-sm sm:text-base font-bold text-white hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
                         title="क्लिक करके स्टूडियो में कार्ड बनाएं"
                       >
                         {cleanViewerHeadline(post.title)}
@@ -1908,7 +1729,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                     {/* Summary - In-place expansion per Part F */}
                     <p
-                      className={`text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-2.5 transition-all ${
+                      className={`text-xs text-slate-300 leading-relaxed mb-2.5 transition-all ${
                         expandedCardId === `highlight-${post.id}`
                           ? 'whitespace-pre-line text-slate-200'
                           : 'line-clamp-2'
@@ -2080,8 +1901,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             onClick={() => setSelectedCategory('all')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
               selectedCategory === 'all'
-                ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-400/25 font-black scale-105'
-                : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
             }`}
           >
             <span>सभी</span>
@@ -2095,8 +1916,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                   active
-                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-400/25 font-black scale-105'
-                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 font-black scale-105'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
                 }`}
               >
                 <span>{cat.name}</span>
@@ -2108,7 +1929,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         {/* 5. Main News Grid */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-200 flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-slate-200 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-amber-500" />
               प्रमुख खबरें एवं अपडेट्स ({filteredPosts.length})
             </h3>
@@ -2159,7 +1980,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               return (
                 <React.Fragment key={post.id}>
                   <div
-                    className={`bg-white dark:bg-slate-900 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 flex flex-col justify-between group relative ${cardBorderClass} ${
+                    className={`bg-slate-900 rounded-2xl overflow-hidden transition-all hover:shadow-xl flex flex-col justify-between group relative ${cardBorderClass} ${
                       isCardExhausted ? 'opacity-40 hover:opacity-70' : ''
                     }`}
                   >
@@ -2177,8 +1998,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   )}
                   {/* Admin Moderation Bar (Visible strictly to authenticated Admin in Admin Mode) */}
                   {canModerate && (
-                    <div className="bg-slate-50 dark:bg-slate-950/95 border-b border-slate-200 dark:border-slate-800/80 px-3 py-1.5 flex items-center justify-between gap-2 z-10">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white select-none">
+                    <div className="bg-slate-950/95 border-b border-slate-800/80 px-3 py-1.5 flex items-center justify-between gap-2 z-10">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-300 hover:text-white select-none">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -2201,7 +2022,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
                         >
                           <Check className="w-3 h-3 text-white" />
-                          <span>स्वीकृत करें</span>
+                          <span>स्वीकृत करें (Approve)</span>
                         </button>
                       )}
                     </div>
@@ -2259,8 +2080,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.categoryName}
                         </span>
 
-                        {/* Pre-Published Approved Editorial Badge (Admin-only per Part 2.2) */}
-                        {canModerate && Boolean((post as any).isPrePublished || (post as any).isApproved) && (
+                        {/* Pre-Published Approved Editorial Badge */}
+                        {Boolean((post as any).isPrePublished || (post as any).isApproved) && (
                           <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
                             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
                             <span>प्री-पब्लिश</span>
@@ -2295,7 +2116,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               handleOpenStudioSafe(post);
                             }
                           }}
-                          className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
+                          className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 leading-snug"
                           title="क्लिक करके स्टूडियो में कार्ड बनाएं"
                         >
                           {cleanViewerHeadline(post.title)}
@@ -2317,7 +2138,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                       {/* Summary - In-place expansion per Part F */}
                       <p
-                        className={`text-xs text-slate-600 dark:text-slate-400 leading-relaxed transition-all ${
+                        className={`text-xs text-slate-400 leading-relaxed transition-all ${
                           expandedCardId === post.id
                             ? 'whitespace-pre-line text-slate-200'
                             : 'line-clamp-3'
@@ -2361,7 +2182,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
                       >
                         <Check className="w-4 h-4 text-white" />
-                        <span>स्वीकृत करें व प्रकाशित करें</span>
+                        <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
                       </button>
                     </div>
                   )}
@@ -2444,7 +2265,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             href={post.sourceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                            className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                             title="मूल वेबसाइट पर खबर देखें"
                           >
                             <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -2466,7 +2287,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <button
                           type="button"
                           onClick={() => setReportingPost(post)}
-                          className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-slate-800/90 dark:hover:bg-rose-950/80 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                          className="py-2 px-3 rounded-xl bg-slate-800/90 hover:bg-rose-950/80 text-slate-300 hover:text-rose-300 border border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                           title="इस खबर की रिपोर्ट करें"
                         >
                           <Flag className="w-3.5 h-3.5 text-rose-400 shrink-0" />
@@ -2476,7 +2297,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
 
                     {/* Social Media Story Section (Part H: UI Only, Full Width) */}
-                    <div className="w-full mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-slate-950/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="w-full mt-1 pt-1.5 border-t border-slate-800/70 flex items-center justify-between gap-1.5 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="p-1 rounded-md bg-blue-500/10 border border-blue-500/20" title="Facebook Story">
                           <FacebookIcon />
@@ -2491,7 +2312,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       <button
                         type="button"
                         disabled
-                        className="flex-1 py-1 px-2 bg-slate-200/70 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
+                        className="flex-1 py-1 px-2 bg-slate-800/80 text-slate-400 border border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
                         title="सोशल मीडिया स्टोरी बनाएँ (शीघ्र आ रहा है)"
                       >
                         <Film className="w-3 h-3 text-slate-400 shrink-0" />
@@ -2502,7 +2323,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                     {/* Administrator-only controls: Arranged in two neat rows of three below Social Media Story action */}
                     {canModerate && (
-                      <div className="w-full mt-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+                      <div className="w-full mt-1.5 pt-2 border-t border-slate-800/80 space-y-1.5">
                         {/* First Row: 3 controls (Source, Highlight, Bonus) */}
                         <div className="grid grid-cols-3 gap-1.5">
                           {/* 1. Thumbnail Source Toggle */}
@@ -2518,7 +2339,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                 if (post.manualThumbnailUrl) {
                                   next = 'manual';
                                 } else {
-                                  openNewsEditModal(post);
+                                  setEditingPost({
+                                    ...post,
+                                    title: decodeHtmlEntities(post.title),
+                                    summary: decodeHtmlEntities(post.summary),
+                                  });
+                                  setEditorialError(null);
+                                  setEditorialSuccess(null);
                                   return;
                                 }
                               } else {
@@ -2533,7 +2360,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                 ? 'bg-purple-500/30 text-purple-300 border border-purple-500/60'
                                 : (post.imageSource === 'default' || defaultThumbnailIds.has(post.id))
                                 ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60'
-                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
                             }`}
                             title="थंबनेल स्रोत बदलें (सोर्स / डिफ़ॉल्ट / मैन्युअल)"
                           >
@@ -2553,7 +2380,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
                               isHighlighted
                                 ? 'bg-amber-400 text-slate-950 shadow-sm'
-                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700'
+                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700'
                             }`}
                             title="खबर को हाइलाइट करें"
                           >
@@ -2576,7 +2403,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             className={`py-1.5 px-1.5 rounded-lg text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer truncate ${
                               post.isBonus
                                 ? 'bg-yellow-400 text-slate-950 shadow-sm'
-                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-yellow-700 dark:text-yellow-300 border border-slate-200 dark:border-slate-700'
+                                : 'bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700'
                             }`}
                             title="बोनस खबर टॉगल करें"
                           >
@@ -2609,8 +2436,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {/* 5. Edit Button */}
                           <button
                             type="button"
-                            onClick={() => openNewsEditModal(post)}
-                            className="py-1.5 px-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/60 dark:hover:bg-blue-800 border border-blue-200 dark:border-blue-600 text-blue-700 dark:text-blue-200 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
+                            onClick={() => {
+                              setEditingPost({
+                                ...post,
+                                title: decodeHtmlEntities(post.title),
+                                summary: decodeHtmlEntities(post.summary),
+                              });
+                              setEditorialError(null);
+                              setEditorialSuccess(null);
+                            }}
+                            className="py-1.5 px-1.5 bg-blue-900/60 hover:bg-blue-800 border border-blue-600 text-blue-200 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
                             title="खबर एडिट करें"
                           >
                             <Edit className="w-3 h-3 shrink-0" />
@@ -2660,17 +2495,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
       {/* Admin Edit News Modal */}
       {editingPost && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 my-auto overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 p-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/40">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <Edit className="w-5 h-5 text-blue-500 dark:text-blue-400" />
-                <h3 className="text-base font-black text-slate-900 dark:text-white">खबर संपादित करें</h3>
+                <Edit className="w-5 h-5 text-blue-400" />
+                <h3 className="text-base font-black text-white">खबर संपादित करें (Edit News)</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingPost(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2681,13 +2516,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 e.preventDefault();
                 if (editingPost) {
                   try {
-                    await fetch(getApiUrl(`/api/admin/approve-news/${encodeURIComponent(editingPost.id)}`), {
+                    fetch(getApiUrl(`/api/admin/approve-news/${encodeURIComponent(editingPost.id)}`), {
                       method: 'POST',
-                      headers: getAuthHeaders(),
-                      body: JSON.stringify(editingPost),
-                    }).catch(() => {});
-                    await fetch(getApiUrl(`/api/news-posts/${encodeURIComponent(editingPost.id)}`), {
-                      method: 'PUT',
                       headers: getAuthHeaders(),
                       body: JSON.stringify(editingPost),
                     }).catch(() => {});
@@ -2698,12 +2528,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 }
                 setEditingPost(null);
               }}
-              className="flex-1 flex flex-col min-h-0 overflow-hidden"
+              className="space-y-3.5"
             >
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    खबर का मुख्य शीर्षक *
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  खबर का मुख्य शीर्षक (Headline) *
                 </label>
                 <input
                   type="text"
@@ -2718,7 +2547,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-300">
-                    न्यूज़ आर्टिकल लिंक
+                    न्यूज़ आर्टिकल लिंक (News Article URL)
                   </label>
                   {editingPost.sourceUrl && (
                     <a
@@ -2747,44 +2576,20 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  संक्षिप्त विवरण / रॉ न्यूज़ स्क्रिप्ट
+                  संक्षिप्त विवरण (Summary)
                 </label>
                 <textarea
                   rows={3}
                   value={editingPost.summary}
                   onChange={(e) => setEditingPost({ ...editingPost, summary: e.target.value })}
-                  placeholder="खबर का विवरण या रॉ स्क्रिप्ट दर्ज करें..."
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden resize-none"
                 />
-              </div>
-
-              {/* Part 1.1: AI Headline & Caption Generation Button placed directly below URL & Short Description */}
-              <div className="pt-0.5 pb-1">
-                <button
-                  type="button"
-                  disabled={isGeneratingEditorial}
-                  onClick={handleGenerateEditorialData}
-                  className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer"
-                  title="पेस्ट किए गए URL या रॉ स्क्रिप्ट से AI हेडलाइन, कैप्शन और संक्षिप्त विवरण तैयार करें"
-                >
-                  {isGeneratingEditorial ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-white" />
-                      <span>AI से हेडलाइन व कैप्शन तैयार हो रहे हैं...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 text-white" />
-                      <span>AI Headline व Caption तैयार करें</span>
-                    </>
-                  )}
-                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    स्रोत / चैनल
+                    स्रोत / चैनल (Channel)
                   </label>
                   <input
                     type="text"
@@ -2796,7 +2601,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    कैटेगरी
+                    कैटेगरी (Category)
                   </label>
                   <select
                     value={editingPost.category}
@@ -2822,7 +2627,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               {/* 1. Image Source & Manual Thumbnail Management (Parts 11, 12, 13) */}
               <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-300">📷 थंबनेल इमेज स्रोत</span>
+                  <span className="text-xs font-bold text-amber-300">📷 थंबनेल इमेज स्रोत (Thumbnail Source)</span>
                   <span className="text-[10px] text-slate-400 font-semibold">
                     {editingPost.imageSource === 'manual'
                       ? 'मैन्युअल अपलोड'
@@ -2842,7 +2647,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
                     }`}
                   >
-                    सोर्स
+                    सोर्स (Source)
                   </button>
                   <button
                     type="button"
@@ -2976,7 +2781,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     onChange={(e) => setEditingPost({ ...editingPost, breaking: e.target.checked })}
                     className="w-4 h-4 accent-red-600 rounded"
                   />
-                  <span>ब्रेकिंग न्यूज़</span>
+                  <span>ब्रेकिंग न्यूज़ (Breaking)</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-300">
@@ -3000,7 +2805,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       onChange={(e) => setEditingPost({ ...editingPost, isBonus: e.target.checked, rewardCoins: editingPost.rewardCoins || 100 })}
                       className="w-4 h-4 accent-amber-400 rounded"
                     />
-                    <span>🪙 बोनस खबर बनाएं</span>
+                    <span>🪙 बोनस खबर बनाएं (Bonus News)</span>
                   </label>
                   {editingPost.isBonus && (
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-500 text-slate-950 rounded-md">सक्रिय</span>
@@ -3031,7 +2836,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-black text-amber-300">
-                      संपादकीय प्री-अप्रूवल
+                      संपादकीय प्री-अप्रूवल (Pre-Approved News Workflow)
                     </span>
                   </div>
                   {editingPost.editorialApproved ? (
@@ -3083,103 +2888,102 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     ) : (
                       <>
                         <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                        <span>एआई संपादकीय प्री-अप्रूवल (5 हेडलाइन व 3 कैप्शन)</span>
+                        <span>AI एडिटोरियल प्री-अप्रूवल (5 हेडलाइन & 3 कैप्शन)</span>
                       </>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    disabled={isGeneratingEditorial}
+                    onClick={handleGenerateEditorialData}
+                    className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-white" />
+                    <span>AI हेडलाइन व कैप्शन तैयार करें</span>
+                  </button>
                 </div>
 
-                {/* 5 Headline Options Inputs - Always visible and editable per Part 1.3 */}
-                {(() => {
-                  const existingList = Array.isArray(editingPost.approvedHeadlines) && editingPost.approvedHeadlines.length > 0
-                    ? [...editingPost.approvedHeadlines]
-                    : [editingPost.title];
-                  while (existingList.length < 5) {
-                    existingList.push('');
-                  }
-                  return (
-                    <div className="space-y-2 pt-2">
-                      <label className="block text-xs font-black text-yellow-300">
-                        5 संतुलित हेडलाइन विकल्प (प्राथमिक हेडलाइन चुनने के लिए रेडियो बटन दबाएं):
-                      </label>
-                      <div className="space-y-1.5">
-                        {existingList.slice(0, 5).map((h, hIdx) => {
-                          const isSelected = (editingPost.approvedHeadline || existingList[0] || editingPost.title) === h;
-                          return (
-                            <div key={hIdx} className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="admin_approved_headline_radio"
-                                checked={isSelected}
-                                onChange={() => setEditingPost({ ...editingPost, approvedHeadline: h })}
-                                className="w-4 h-4 accent-amber-400 cursor-pointer shrink-0"
-                                title="इस हेडलाइन को प्राथमिक चुनें"
-                              />
-                              <span className="text-[11px] font-bold text-amber-400 shrink-0 w-14">
-                                विकल्प {hIdx + 1}:
-                              </span>
-                              <input
-                                type="text"
-                                value={h}
-                                placeholder={`हेडलाइन विकल्प ${hIdx + 1}...`}
-                                onChange={(e) => {
-                                  const updated = [...existingList];
-                                  updated[hIdx] = e.target.value;
-                                  setEditingPost({
-                                    ...editingPost,
-                                    approvedHeadlines: updated,
-                                    approvedHeadline: isSelected ? e.target.value : editingPost.approvedHeadline,
-                                  });
-                                }}
-                                className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-bold focus:border-amber-400 focus:outline-hidden"
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
+                {/* 5 Headline Options Inputs */}
+                {editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-xs font-black text-yellow-300">
+                      5 संतुलित हेडलाइन विकल्प (प्राथमिक हेडलाइन चुनने के लिए रेडियो बटन दबाएं):
+                    </label>
+                    <div className="space-y-1.5">
+                      {editingPost.approvedHeadlines.map((h, hIdx) => {
+                        const isSelected = (editingPost.approvedHeadline || editingPost.approvedHeadlines?.[0]) === h;
+                        return (
+                          <div key={hIdx} className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="admin_approved_headline_radio"
+                              checked={isSelected}
+                              onChange={() => setEditingPost({ ...editingPost, approvedHeadline: h })}
+                              className="w-4 h-4 accent-amber-400 cursor-pointer shrink-0"
+                              title="इस हेडलाइन को प्राथमिक चुनें"
+                            />
+                            <span className="text-[11px] font-bold text-amber-400 shrink-0 w-14">
+                              विकल्प {hIdx + 1}:
+                            </span>
+                            <input
+                              type="text"
+                              value={h}
+                              onChange={(e) => {
+                                const updated = [...(editingPost.approvedHeadlines || [])];
+                                updated[hIdx] = e.target.value;
+                                setEditingPost({
+                                  ...editingPost,
+                                  approvedHeadlines: updated,
+                                  approvedHeadline: isSelected ? e.target.value : editingPost.approvedHeadline,
+                                });
+                              }}
+                              className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs font-bold focus:border-amber-400 focus:outline-hidden"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
 
-                {/* 3 Caption Textareas (Detailed, Bullets, Short) - Always visible per Part 1.3 */}
-                <div className="space-y-2.5 pt-2 border-t border-slate-800">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                      1. विस्तृत सोशल मीडिया कैप्शन:
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={editingPost.approvedCaptionDetailed || ''}
-                      placeholder="विस्तृत समाचार कैप्शन..."
-                      onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionDetailed: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
-                    />
+                {/* 3 Caption Textareas (Detailed, Bullets, Short) */}
+                {(editingPost.approvedCaptionDetailed || editingPost.approvedCaptionBullets || editingPost.approvedCaptionShort) && (
+                  <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        1. विस्तृत कैप्शन (Detailed Social Media Caption):
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={editingPost.approvedCaptionDetailed || ''}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionDetailed: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        2. बुलेट पॉइंट्स कैप्शन (Key Bullet Highlights):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editingPost.approvedCaptionBullets || ''}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionBullets: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        3. संक्षिप्त कैप्शन (Short 2-Sentence Caption):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editingPost.approvedCaptionShort || ''}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionShort: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                      2. मुख्य बुलेट पॉइंट्स कैप्शन:
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={editingPost.approvedCaptionBullets || ''}
-                      placeholder="• बिंदु 1&#10;• बिंदु 2"
-                      onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionBullets: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                      3. संक्षिप्त कैप्शन:
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={editingPost.approvedCaptionShort || ''}
-                      placeholder="संक्षिप्त मुख्य बिंदु कैप्शन..."
-                      onChange={(e) => setEditingPost({ ...editingPost, approvedCaptionShort: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Photos & Layout Selection */}
                 {editingPost.approvedPhotos && editingPost.approvedPhotos.length > 0 && (
@@ -3195,8 +2999,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           onChange={(e) => setEditingPost({ ...editingPost, approvedPhotoLayout: e.target.value as any })}
                           className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-amber-300 text-[11px] font-bold focus:outline-hidden"
                         >
-                          <option value="single">1 फोटो</option>
-                          <option value="two_vertical">2 फोटो (लंबवत)</option>
+                          <option value="single">सिंगल फोटो (1)</option>
+                          <option value="two_vertical">2 फोटो (वर्टिकल)</option>
                           <option value="three_grid">3 फोटो (ग्रिड)</option>
                         </select>
                       </div>
@@ -3215,14 +3019,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 )}
               </div>
 
-              </div>
-
-              {/* Sticky Fixed Action Footer */}
-              <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/90 shrink-0 flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingPost(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   रद्द करें
                 </button>
@@ -3233,10 +3034,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   onClick={async () => {
                     if (!editingPost) return;
                     try {
-                      const headlineList = (editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0)
-                        ? editingPost.approvedHeadlines
-                        : ((editingPost as any).headlineOptions || [editingPost.title]);
-                      const chosenH = editingPost.approvedHeadline || headlineList[0] || editingPost.title;
+                      const headlineList = (editingPost as any).headlineOptions || (editingPost as any).approvedHeadlines || [editingPost.title];
                       const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(editingPost.id)}`), {
                         method: 'POST',
                         headers: {
@@ -3246,19 +3044,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         body: JSON.stringify({
                           title: editingPost.title,
                           headlines: headlineList.slice(0, 5),
-                          headlineOptions: headlineList.slice(0, 5),
-                          approvedHeadline: chosenH,
-                          captionDetailed: editingPost.approvedCaptionDetailed || editingPost.summary || '',
-                          captionBullets: editingPost.approvedCaptionBullets || '',
-                          captionShort: editingPost.approvedCaptionShort || '',
+                          captionDetailed: editingPost.summary,
                           sourceUrl: editingPost.sourceUrl || '',
                           sourceChannel: editingPost.sourceChannel || '',
                           location: editingPost.location || '',
                           category: editingPost.categoryName || editingPost.category || '',
-                          imageUrl: editingPost.imageSource === 'manual' ? (editingPost.manualThumbnailUrl || editingPost.imageUrl || editingPost.image) : (editingPost.imageUrl || editingPost.image),
+                          imageUrl: editingPost.imageSource === 'manual' ? (editingPost.manualThumbnailUrl || editingPost.image) : editingPost.image,
                           additionalPhotos: editingPost.additionalPhotos || [],
                           isPrePublished: true,
-                          status: 'APPROVED',
                         }),
                       });
                       if (res.ok) {
@@ -3277,7 +3070,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   title="इस खबर को 5 स्वीकृत हेडलाइन व फोटो के साथ प्री-पब्लिश करें"
                 >
                   <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                  <span>प्री-पब्लिश करें</span>
+                  <span>प्री-पब्लिश (Pre-Publish)</span>
                 </button>
 
                 <button
@@ -3301,7 +3094,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
                 <h3 className="text-base sm:text-lg font-black text-white">
-                  रॉ न्यूज़ जोड़ें
+                  रॉ न्यूज़ जोड़ें (Add / Publish Raw News)
                 </h3>
               </div>
               <button
@@ -3327,7 +3120,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     title="टेक्स्ट से हेडलाइन व विवरण ऑटो-भरें"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>ऑटो-भरें</span>
+                    <span>ऑटो-भरें (Auto-Fill)</span>
                   </button>
                 </div>
                 <textarea

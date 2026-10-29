@@ -604,7 +604,7 @@ export const EPaperJacketEditor: React.FC<EPaperJacketEditorProps> = ({
                     <span>पहला अक्षर बड़ा (अखबार ड्रॉप कैप)</span>
                   </span>
                   <span className="text-[10px] uppercase font-mono font-bold">
-                    {(card.epaperDropCap ?? true) ? 'सक्रिय (ON)' : 'बंद'}
+                    {(card.epaperDropCap ?? true) ? 'सक्रिय (ON)' : 'बंद (OFF)'}
                   </span>
                 </button>
               </div>

@@ -3307,7 +3307,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           >
             {/* Action Safe Tag */}
             <div className="absolute -top-3 left-3 bg-amber-500 text-neutral-950 font-black text-[9px] px-1.5 py-0.5 rounded shadow">
-              🛡️ 90% ACTION SAFE (लोगो व विजुअल)
+              🛡️ 90% ACTION SAFE (हेडलाइन व विजुअल)
             </div>
             {/* Corner brackets */}
             <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-amber-400" />

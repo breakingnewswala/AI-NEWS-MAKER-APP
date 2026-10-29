@@ -462,6 +462,27 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                       </div>
                     </div>
 
+                    {isAdminUser && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNotifications(false);
+                          onNavigateToTab('profile');
+                          setTimeout(() => {
+                            const el = document.getElementById('section-notifications');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }, 300);
+                        }}
+                        className="w-full py-2 px-3 bg-gradient-to-r from-red-600/20 via-amber-600/20 to-orange-600/20 border border-amber-500/40 rounded-xl flex items-center justify-between text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Bell className="w-3.5 h-3.5 text-amber-400" />
+                          <span>एडमिन अलर्ट सेंटर (Admin Panel)</span>
+                        </span>
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+                      </button>
+                    )}
+
                     {/* Sound Settings & Controls */}
                     <div className="p-2.5 bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-[11px]">
                       <div className="flex items-center justify-between">
