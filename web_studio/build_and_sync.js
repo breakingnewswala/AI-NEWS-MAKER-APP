@@ -55,9 +55,13 @@ try {
   });
 } catch (buildErr) {
   const existingDistIndex = path.join(rootDir, 'dist', 'index.html');
+  const existingPublicIndex = path.join(rootDir, 'public', 'index.html');
   const existingServerCjs = path.join(rootDir, 'server.cjs');
-  if (fs.existsSync(existingDistIndex) && fs.existsSync(existingServerCjs)) {
+  if ((fs.existsSync(existingDistIndex) || fs.existsSync(existingPublicIndex)) && fs.existsSync(existingServerCjs)) {
     console.warn('⚠️ Web studio build skipped in cloud container, using pre-built distribution assets:', buildErr.message);
+    if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
+    const sourceDir = fs.existsSync(existingDistIndex) ? path.join(rootDir, 'dist') : path.join(rootDir, 'public');
+    fs.cpSync(sourceDir, distDir, { recursive: true });
   } else {
     throw buildErr;
   }

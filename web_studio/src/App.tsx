@@ -3090,7 +3090,7 @@ export default function App() {
                   id="mobile-studio-workspace"
                   className="w-full bg-white/95 dark:bg-slate-950/95 p-2 shadow-sm dark:shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
                 >
-                  {/* 2. Preview canvas (4:5 or selected ratio) near top */}
+                  {/* 1. Preview canvas (4:5 aspect ratio) near top - ~70% screen */}
                   <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
                     <CardPreview
                       card={card}
@@ -3100,48 +3100,49 @@ export default function App() {
                     />
                   </div>
 
-                  {/* 3. Compact Refresh and Draft controls */}
-                  <div className="flex items-center justify-between w-full max-w-[340px] sm:max-w-[400px] py-1.5 px-1">
-                    <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-bold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 shadow-sm" />
-                      <span className="text-red-400 font-black">लाइव कैनवास (4:5)</span>
+                  {/* 2. Action strip directly below Preview */}
+                  <div className="flex items-center justify-between w-full max-w-[340px] sm:max-w-[400px] py-2 px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-xs font-black tracking-wider uppercase text-slate-800 dark:text-slate-200">LIVE CANVAS</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleSaveDraft}
-                        className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 text-[11px] font-bold rounded-lg border border-amber-600/50 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-400 text-xs font-bold rounded-lg border border-amber-500/30 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="ड्राफ्ट सेव करें"
                       >
-                        <Bookmark className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>ड्राफ्ट</span>
+                        <Bookmark className="w-3.5 h-3.5" />
+                        <span>DRAFT</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleResetCard}
-                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-3 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="नया सत्र / रीसेट"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-                        <span>रिफ्रेश</span>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>REFRESH</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
+                  {/* 3. Editor Steps section directly below Action strip */}
                   <div className="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1 ring-1 ring-slate-800">
-                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
-                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>स्टेप {activeStep}/7</span>
-                      </span>
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
-                        <span>👉</span>
-                        <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
-                      </span>
+                    <div className="text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5 px-1">
+                      STEPS
                     </div>
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
-                      {STUDIO_STEPS.map((s) => {
+                      {[
+                        { step: 1, label: 'टेम्पलेट्स' },
+                        { step: 2, label: 'एआई टूल्स' },
+                        { step: 3, label: 'हेडलाइन' },
+                        { step: 4, label: 'फोटो व वाटरमार्क' },
+                        { step: 5, label: 'स्थान व दिनांक' },
+                        { step: 6, label: 'टैग्स और फुटर' },
+                        { step: 7, label: 'डाउनलोड व कैप्शन' }
+                      ].map((s) => {
                         const isActive = activeStep === s.step;
                         return (
                           <button
@@ -3154,23 +3155,13 @@ export default function App() {
                                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                               }
                             }}
-                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-xl transition-all cursor-pointer text-xs whitespace-nowrap ${
                               isActive
                                 ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
+                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60 font-semibold'
                             }`}
                           >
-                            <span
-                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                                isActive
-                                  ? 'bg-slate-950 text-amber-300'
-                                  : 'bg-amber-400 text-slate-950'
-                              }`}
-                            >
-                              {s.step}
-                            </span>
-                            <span className="text-sm shrink-0">{s.icon}</span>
-                            <span className="whitespace-nowrap font-bold">{s.name}</span>
+                            <span>{s.label}</span>
                           </button>
                         );
                       })}
@@ -3181,26 +3172,11 @@ export default function App() {
                   <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
                 </div>
 
-                {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}
+                {/* 4. Editor Content Panel - Opens directly below Steps navigation */}
                 <div
                   id="mobile-active-step-commands"
                   className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
                 >
-                  {/* Step Title Header */}
-                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm">
-                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.icon}
-                      </span>
-                      <span className="text-xs font-black text-amber-400">
-                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.title || `स्टेप ${activeStep} कंट्रोल्स`}
-                      </span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold shrink-0">
-                      स्टेप {activeStep} सक्रिय
-                    </span>
-                  </div>
-
                   <CardEditor
                     card={card}
                     onChange={handleUpdateCard}

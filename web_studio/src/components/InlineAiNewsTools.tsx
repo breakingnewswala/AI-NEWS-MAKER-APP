@@ -2278,13 +2278,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                   const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
                   const charCount = cleanDisplay.length;
-                  const angleNames = [
-                    'मुख्य घटना (Core Event)',
-                    'पात्र/व्यक्ति कोण (Actor/Authority)',
-                    'कार्रवाई/परिणाम (Action/Consequence)',
-                    'मुख्य बिंदु/तथ्य (Key Detail/Quote)',
-                    'सारगर्भित (High-Impact)',
-                  ];
 
                   return (
                     <label
@@ -2307,9 +2300,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
                             विकल्प {idx + 1}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-400 border border-neutral-800">
-                            {angleNames[idx] || `कोण ${idx + 1}`}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">

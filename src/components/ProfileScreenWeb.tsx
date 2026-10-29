@@ -470,7 +470,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          if (data.wallet) setWalletData(data.wallet);
+          if (data.wallet) {
+            setWalletData(data.wallet);
+            if (typeof window !== 'undefined' && data.wallet.coinBalance !== undefined) {
+              window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { balance: data.wallet.coinBalance } }));
+            }
+          }
           if (Array.isArray(data.claims)) setWalletClaims(data.claims);
           if (Array.isArray(data.eligibleDownloads)) setEligibleDownloads(data.eligibleDownloads);
           if (Array.isArray(data.transactions)) setWalletTransactions(data.transactions);
@@ -2742,18 +2747,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Coin balance action / display - Only for non-admin users */}
-            {!isAdmin && (
-              <div
-                className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-black flex items-center gap-1 shadow-xs"
-                title="उपलब्ध कॉइन बैलेंस"
-              >
-                <span>🪙</span>
-                <span>{walletData?.coinBalance ?? 0}</span>
-                <span className="text-[10px] text-amber-400/80 hidden sm:inline">कॉइन</span>
-              </div>
-            )}
-
             {/* Admin Test Mode Toggle Button (Beside Logout) */}
             {isAdmin && (
               <button
