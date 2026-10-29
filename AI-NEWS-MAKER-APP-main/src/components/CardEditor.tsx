@@ -108,33 +108,33 @@ import { ReporterUser } from './LoginModal';
 import { scrollToStepById } from './StepNavigator';
 
 export const HEADLINE_FONTS = [
-  { id: 'Hind', label: 'हिंद (Hind - न्यूज़पेपर)', minTier: 'BASIC', badge: 'बेसिक' },
-  { id: 'Baloo 2', label: 'बालू २ (Baloo 2 - बोल्ड)', minTier: 'ADVANCE', badge: 'एडवांस' },
-  { id: 'Khand', label: 'खंड (Khand - कड़क बोल्ड)', minTier: 'ADVANCE', badge: 'एडवांस' },
-  { id: 'Sahitya', label: 'साहित्य (Sahitya - क्लासिक)', minTier: 'ADVANCE', badge: 'एडवांस' },
-  { id: 'Anek Devanagari', label: 'अनेक देवनागरी (Anek - मॉडर्न)', minTier: 'ADVANCE', badge: 'एडवांस' },
-  { id: 'Noto Sans Devanagari', label: 'नोटो सैंस (Noto Sans - साफ़)', minTier: 'PRO', badge: 'प्रो' },
-  { id: 'Poppins', label: 'पॉपिन्स (Poppins - स्टाइलिश)', minTier: 'PRO', badge: 'प्रो' },
-  { id: 'Rozha One', label: 'रोज़्हा वन (Rozha One - हेडिंग)', minTier: 'PRO', badge: 'प्रो' },
-  { id: 'Mukta', label: 'मुक्ता (Mukta - क्रिस्प)', minTier: 'PRO', badge: 'प्रो' },
-  { id: 'Rajdhani', label: 'राजधानी (Rajdhani - स्क्वेयर्ड)', minTier: 'PRO', badge: 'प्रो' },
-  { id: 'Tiro Devanagari Hindi', label: 'टीरो देवनागरी (Tiro Serif)', minTier: 'VIP DESK', badge: 'VIP' },
-  { id: 'Kalam', label: 'कलाम (Kalam - हैंडराइटिंग)', minTier: 'VIP DESK', badge: 'VIP' },
-  { id: 'Gotu', label: 'गोटू (Gotu - कर्व्ड)', minTier: 'VIP DESK', badge: 'VIP' },
-  { id: 'Yatra One', label: 'यात्रा वन (Yatra One - हेरिटेज)', minTier: 'VIP DESK', badge: 'VIP' },
-  { id: 'Martel', label: 'मार्तेल (Martel - संपादकीय)', minTier: 'VIP DESK', badge: 'VIP' },
+  { id: 'Hind', label: 'हिंद (न्यूज़पेपर)', minTier: 'BASIC', badge: 'बेसिक' },
+  { id: 'Baloo 2', label: 'बालू २ (बोल्ड)', minTier: 'ADVANCE', badge: 'एडवांस' },
+  { id: 'Khand', label: 'खंड (कड़क बोल्ड)', minTier: 'ADVANCE', badge: 'एडवांस' },
+  { id: 'Sahitya', label: 'साहित्य (क्लासिक)', minTier: 'ADVANCE', badge: 'एडवांस' },
+  { id: 'Anek Devanagari', label: 'अनेक देवनागरी (आधुनिक)', minTier: 'ADVANCE', badge: 'एडवांस' },
+  { id: 'Noto Sans Devanagari', label: 'नोटो सैंस (साफ़)', minTier: 'PRO', badge: 'प्रो' },
+  { id: 'Poppins', label: 'पॉपिन्स (स्टाइलिश)', minTier: 'PRO', badge: 'प्रो' },
+  { id: 'Rozha One', label: 'रोज़्हा वन (हेडिंग)', minTier: 'PRO', badge: 'प्रो' },
+  { id: 'Mukta', label: 'मुक्ता (क्रिस्प)', minTier: 'PRO', badge: 'प्रो' },
+  { id: 'Rajdhani', label: 'राजधानी (स्क्वेयर्ड)', minTier: 'PRO', badge: 'प्रो' },
+  { id: 'Tiro Devanagari Hindi', label: 'टीरो देवनागरी', minTier: 'VIP DESK', badge: 'VIP' },
+  { id: 'Kalam', label: 'कलाम (हस्तलेख)', minTier: 'VIP DESK', badge: 'VIP' },
+  { id: 'Gotu', label: 'गोटू (कर्व्ड)', minTier: 'VIP DESK', badge: 'VIP' },
+  { id: 'Yatra One', label: 'यात्रा वन (हेरिटेज)', minTier: 'VIP DESK', badge: 'VIP' },
+  { id: 'Martel', label: 'मार्तेल (संपादकीय)', minTier: 'VIP DESK', badge: 'VIP' },
 ];
 
 export const HIGHLIGHT_COLOR_PRESETS = [
-  { color: '#FFE600', label: 'पीला (Default)', bg: 'bg-[#FFE600]', text: 'text-neutral-900' },
-  { color: '#EF4444', label: 'लाल (Red)', bg: 'bg-red-500', text: 'text-white' },
-  { color: '#FFFFFF', label: 'सफ़ेद (White)', bg: 'bg-white', text: 'text-neutral-900' },
-  { color: '#06B6D4', label: 'आसमानी (Cyan)', bg: 'bg-cyan-500', text: 'text-white' },
-  { color: '#84CC16', label: 'हरा (Lime)', bg: 'bg-lime-500', text: 'text-neutral-900' },
-  { color: '#F97316', label: 'नारंगी (Orange)', bg: 'bg-orange-500', text: 'text-white' },
-  { color: '#A855F7', label: 'बैंगनी (Purple)', bg: 'bg-purple-500', text: 'text-white' },
-  { color: '#EC4899', label: 'गुलाबी (Pink)', bg: 'bg-pink-500', text: 'text-white' },
-  { color: '#10B981', label: 'पन्ना (Emerald)', bg: 'bg-emerald-500', text: 'text-white' },
+  { color: '#FFE600', label: 'पीला (डिफ़ॉल्ट)', bg: 'bg-[#FFE600]', text: 'text-neutral-900' },
+  { color: '#EF4444', label: 'लाल', bg: 'bg-red-500', text: 'text-white' },
+  { color: '#FFFFFF', label: 'सफ़ेद', bg: 'bg-white', text: 'text-neutral-900' },
+  { color: '#06B6D4', label: 'आसमानी', bg: 'bg-cyan-500', text: 'text-white' },
+  { color: '#84CC16', label: 'हरा', bg: 'bg-lime-500', text: 'text-neutral-900' },
+  { color: '#F97316', label: 'नारंगी', bg: 'bg-orange-500', text: 'text-white' },
+  { color: '#A855F7', label: 'बैंगनी', bg: 'bg-purple-500', text: 'text-white' },
+  { color: '#EC4899', label: 'गुलाबी', bg: 'bg-pink-500', text: 'text-white' },
+  { color: '#10B981', label: 'पन्ना हरा', bg: 'bg-emerald-500', text: 'text-white' },
 ];
 
 export const FOOTER_BG_PRIMARY_PRESETS = [
@@ -160,8 +160,8 @@ export const FOOTER_BG_SECONDARY_PRESETS = [
 ];
 
 export const FOOTER_BG_PRESETS = [
-  ...FOOTER_BG_PRIMARY_PRESETS.map((p) => ({ color: p.color, label: `${p.nameHi} (${p.name})`, border: p.border })),
-  ...FOOTER_BG_SECONDARY_PRESETS.map((p) => ({ color: p.color, label: `${p.nameHi} (${p.name})`, border: p.border })),
+  ...FOOTER_BG_PRIMARY_PRESETS.map((p) => ({ color: p.color, label: p.nameHi, border: p.border })),
+  ...FOOTER_BG_SECONDARY_PRESETS.map((p) => ({ color: p.color, label: p.nameHi, border: p.border })),
 ];
 
 export const FOOTER_TEXT_COLOR_PRESETS = [
@@ -1258,7 +1258,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
                   }`}
                 >
-                  <span>{cat.label}</span>
+                  <span>{
+                    cat.id === 'Regular Frame' ? 'रेगुलर फ्रेम' :
+                    cat.id === 'Package Frame' ? 'पैकेज फ्रेम' :
+                    cat.id === 'Super Breaking Frame' ? 'सुपर ब्रेकिंग' :
+                    cat.id === 'Text Breaking Frame' ? 'टेक्स्ट ब्रेकिंग' :
+                    cat.id === 'बयानबाज़ी फ्रेम' ? 'बयानबाज़ी' :
+                    cat.id === 'Special Frame' ? 'स्पेशल फ्रेम' :
+                    cat.id === 'Bonus Frame' ? 'बोनस फ्रेम' :
+                    cat.id === 'Custom Frame' ? 'कस्टम फ्रेम' : cat.label
+                  }</span>
                   <span
                     className={`text-[9px] px-1 py-0.2 rounded-full font-bold ${
                       isActive ? 'bg-black/20 text-current' : 'bg-neutral-800 text-neutral-400'
@@ -1418,7 +1427,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xs font-black tracking-wide truncate text-white flex items-center gap-1.5">
                       <span>✨</span>
-                      <span>CUSTOM FRAMES (कस्टम फ्रेम PNG)</span>
+                      <span>कस्टम फ्रेम</span>
                     </span>
                     <span className="text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 bg-purple-500/20 text-purple-300 border-purple-500/40">
                       PRO / VIP DESK
@@ -1823,7 +1832,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
               {/* Quick leader preset chips */}
               <div className="space-y-1">
-                <span className="text-[10px] text-neutral-400 block font-medium">त्वरित चयन (Quick Pick):</span>
+                <span className="text-[10px] text-neutral-400 block font-medium">त्वरित चयन:</span>
                 <div className="flex flex-wrap gap-1">
                   {[
                     { name: 'दिग्विजय सिंह', title: 'पूर्व मुख्यमंत्री' },
@@ -1865,7 +1874,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <Type className="w-3.5 h-3.5 text-yellow-400" />
-              <span>हेडलाइन फ़ॉन्ट (Devanagari Font):</span>
+              <span>हेडलाइन फ़ॉन्ट:</span>
               <span className="text-yellow-400 font-mono text-[11px] font-bold px-2 py-0.5 bg-neutral-900 rounded border border-neutral-800">
                 {currentActiveFont}
               </span>
@@ -1875,7 +1884,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {canUploadCustomFont ? (
               <label className="text-[10px] bg-yellow-400/20 hover:bg-yellow-400/30 text-yellow-300 border border-yellow-400/50 hover:border-yellow-400 px-2.5 py-1 rounded-md font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm">
                 <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                <span>+ कस्टम फ़ॉन्ट (VIP Desk)</span>
+                <span>+ कस्टम फ़ॉन्ट (वीआईपी)</span>
                 <input
                   type="file"
                   accept=".ttf,.otf,.woff,.woff2,font/*"
@@ -1901,7 +1910,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 title="कस्टम फ़ॉन्ट अपलोड केवल VIP Desk पैकेज में उपलब्ध है"
               >
                 <Lock className="w-3 h-3 text-neutral-500" />
-                <span>+ कस्टम फ़ॉन्ट (🔒 केवल VIP Desk)</span>
+                <span>+ कस्टम फ़ॉन्ट (🔒 केवल वीआईपी)</span>
               </div>
             )}
           </div>
@@ -1955,7 +1964,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold">
               <span className="flex items-center gap-1.5">
                 <Type className="w-3.5 h-3.5 text-yellow-400" />
-                <span>फ़ॉन्ट साइज (Size):</span>
+                <span>फ़ॉन्ट साइज़:</span>
               </span>
               <div className="flex items-center gap-1">
                 <button
@@ -2152,7 +2161,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
               <Type className="w-3.5 h-3.5 text-yellow-400" />
-              <span>कस्टम टेक्स्ट व फ़ॉन्ट टूल्स (Custom Text, Fonts & Colors)</span>
+              <span>कस्टम टेक्स्ट व फ़ॉन्ट टूल्स</span>
             </span>
             <button
               type="button"
@@ -2224,7 +2233,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   {/* Font Family Dropdown */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div>
-                      <label className="text-[10px] text-neutral-400 font-semibold block mb-0.5">फ़ॉन्ट (Font):</label>
+                      <label className="text-[10px] text-neutral-400 font-semibold block mb-0.5">फ़ॉन्ट:</label>
                       <select
                         value={item.fontFamily || (isBasicUser ? 'Hind' : 'Baloo 2')}
                         onChange={(e) => {
@@ -2270,7 +2279,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             }}
                             className="accent-yellow-400 w-3 h-3"
                           />
-                          <span>बोल्ड (Bold)</span>
+                          <span>बोल्ड</span>
                         </label>
                       </div>
                       <input
@@ -2536,7 +2545,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               >
                 <div className="flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-yellow-400" />
-                  <span>1 इमेज (Single)</span>
+                  <span>1 फोटो</span>
                 </div>
                 <span className="text-[10px] font-normal opacity-80">सिंगल फुल स्क्रीन</span>
               </button>
@@ -2545,7 +2554,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="py-2.5 px-3 rounded-xl text-xs font-bold border border-neutral-800 bg-neutral-950/60 text-neutral-500 flex flex-col items-center justify-center gap-1 cursor-not-allowed select-none">
                   <div className="flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-500/80" />
-                    <span>2 इमेज (Locked)</span>
+                    <span>2 फोटो (लॉक्ड)</span>
                   </div>
                   <span className="text-[9px] text-amber-500/80">एडवांस/प्रो में उपलब्ध</span>
                 </div>
@@ -2574,7 +2583,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <LayoutGrid className="w-4 h-4 text-yellow-400" />
-                    <span>2 इमेज (Two Photos)</span>
+                    <span>2 फोटो</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">2 फोटो अलग स्लॉट</span>
                 </button>
@@ -2584,7 +2593,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="py-2.5 px-3 rounded-xl text-xs font-bold border border-neutral-800 bg-neutral-950/60 text-neutral-500 flex flex-col items-center justify-center gap-1 cursor-not-allowed select-none col-span-2 sm:col-span-1">
                   <div className="flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-500/80" />
-                    <span>मल्टी ग्रिड (Locked)</span>
+                    <span>मल्टी ग्रिड (लॉक्ड)</span>
                   </div>
                   <span className="text-[9px] text-amber-500/80">प्रो/वीआईपी में उपलब्ध</span>
                 </div>
@@ -2629,14 +2638,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {(card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h') && (
               <div className="p-2.5 bg-neutral-950 rounded-xl border border-yellow-500/30 space-y-2">
                 <div className="text-[11px] font-bold text-yellow-300 flex items-center justify-between">
-                  <span>2 इमेज स्टाइल चुनें:</span>
+                  <span>2 फोटो स्टाइल चुनें:</span>
                   <span className="text-[10px] text-neutral-400">नीचे 2 अलग फोटो स्लॉट सक्रिय हैं</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
                     { id: 'split-v' as CardLayout, label: '35-65 अप-डाउन', desc: '35% ऊपर, 65% नीचे' },
                     { id: 'double' as CardLayout, label: '50-50 अप-डाउन', desc: '50% ऊपर, 50% नीचे' },
-                    { id: 'double-h' as CardLayout, label: '50-50 L-R', desc: 'लेफ्ट-राइट' },
+                    { id: 'double-h' as CardLayout, label: '50-50 बाएँ-दाएँ', desc: 'लेफ्ट-राइट' },
                   ].map((l) => {
                     const isSelected = card.layout === l.id || (l.id === 'double-h' && card.layout === 'split-h');
                     return (
@@ -2674,9 +2683,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { id: 'grid-3' as CardLayout, label: '3 इमेज (2-1)', desc: '2 ऊपर, 1 नीचे' },
-                    { id: 'grid-3-bottom' as CardLayout, label: '3 इमेज (1-2)', desc: '1 ऊपर, 2 नीचे' },
-                    { id: 'grid-4' as CardLayout, label: '4 इमेज (2x2)', desc: '4 फोटो ग्रिड' },
+                    { id: 'grid-3' as CardLayout, label: '3 फोटो (2-1)', desc: '2 ऊपर, 1 नीचे' },
+                    { id: 'grid-3-bottom' as CardLayout, label: '3 फोटो (1-2)', desc: '1 ऊपर, 2 नीचे' },
+                    { id: 'grid-4' as CardLayout, label: '4 फोटो (2x2)', desc: '4 फोटो ग्रिड' },
                   ].map((l) => {
                     const isSelected = card.layout === l.id;
                     return (
@@ -2789,7 +2798,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-neutral-200 flex items-center gap-1.5">
                       <ImageIcon className="w-3.5 h-3.5 text-yellow-400" />
-                      <span>मुख्य फोटो (Photo Slot 1)</span>
+                      <span>मुख्य फोटो (स्लॉट 1)</span>
                     </span>
                     <span className="text-yellow-400 text-[10px] font-bold bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded">
                       सिंगल फोटो
@@ -2841,7 +2850,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-neutral-200 flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5 text-yellow-400" />
-                        <span>पहली फोटो (Slot 1)</span>
+                        <span>पहली फोटो (स्लॉट 1)</span>
                       </span>
                       <span className="text-[10px] text-yellow-400 font-bold bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20">
                         {card.layout === 'split-v' ? '35% ऊपर' : card.layout === 'double' ? '50% ऊपर' : '50% बाईं'}
@@ -2888,7 +2897,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-neutral-200 flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-                        <span>दूसरी फोटो (Slot 2)</span>
+                        <span>दूसरी फोटो (स्लॉट 2)</span>
                       </span>
                       <span className="text-[10px] text-blue-400 font-bold bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
                         {card.layout === 'split-v' ? '65% नीचे' : card.layout === 'double' ? '50% नीचे' : '50% दाईं'}
@@ -3024,7 +3033,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <Lock className="w-4 h-4 text-amber-500/80" />
                       <span>इंटरनेट समाचार फोटो खोजें (गूगल इमेज सर्च)</span>
                     </span>
-                    <span className="text-[10px] text-amber-400 font-bold">🔒 केवल PRO / VIP DESK</span>
+                    <span className="text-[10px] text-amber-400 font-bold">🔒 केवल प्रो / वीआईपी</span>
                   </div>
                 ) : (
                   <button
@@ -3102,7 +3111,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 title="डिफ़ॉल्ट सेंटर पर रीसेट करें"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>रीसेट (Center)</span>
+                <span>मध्य में सेट करें</span>
               </button>
             </div>
 
@@ -3139,7 +3148,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between">
               <label className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
                 <span>🏷️</span>
-                <span>वॉटरमार्क व प्रतीकात्मक फोटो (Watermark):</span>
+                <span>वॉटरमार्क व प्रतीकात्मक फोटो:</span>
               </label>
               <span className="text-[10px] text-neutral-400">
                 ऑफ • प्रतीकात्मक फोटो • AI जनरेटेड
@@ -3241,12 +3250,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="font-black text-amber-300 flex items-center gap-1.5 text-xs">
               <span>🔤</span>
-              <span>टेक्स्ट वॉटरमार्क (Text Watermark)</span>
+              <span>टेक्स्ट वॉटरमार्क</span>
             </span>
             {(effectiveTier === 'basic' || effectiveTier === 'advanced') && !effectiveAdmin ? (
               <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
                 <Lock className="w-3 h-3" />
-                <span>केवल PRO / VIP DESK</span>
+                <span>केवल प्रो / वीआईपी DESK</span>
               </span>
             ) : (
               <button
@@ -3266,7 +3275,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                 }`}
               >
-                <span>{card.showTextWatermark ? 'चालू (ON)' : 'बंद (OFF)'}</span>
+                <span>{card.showTextWatermark ? 'चालू' : 'बंद'}</span>
               </button>
             )}
           </div>
@@ -3293,7 +3302,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               {/* Opacity Slider */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-neutral-400">
-                  <span>पारदर्शिता (Opacity):</span>
+                  <span>पारदर्शिता:</span>
                   <span className="font-bold text-amber-300">
                     {Math.round((card.textWatermarkOpacity ?? 0.15) * 100)}%
                   </span>
@@ -3360,7 +3369,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-red-500" />
-              <span>स्थान / जिला (Location / District):</span>
+              <span>स्थान / जिला:</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3446,7 +3455,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <span>📅</span>
-              <span>दिनांक (Date Stamp - कॉम्पैक्ट पोज़ीशन):</span>
+              <span>दिनांक:</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3521,7 +3530,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-purple-300 font-black">
                 <Sparkles className="w-4 h-4 text-purple-400" />
-                <span>🧪 टेस्ट मोड (Admin Sample Identity Preview)</span>
+                <span>🧪 टेस्ट मोड</span>
               </span>
               <button
                 type="button"
@@ -3539,7 +3548,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
                 }`}
               >
-                <span>{card.isTestMode ? '✓ टेस्ट मोड चालू (ON)' : '✕ बंद (OFF)'}</span>
+                <span>{card.isTestMode ? '✓ टेस्ट मोड चालू' : '✕ बंद'}</span>
               </button>
             </div>
 
@@ -3580,7 +3589,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 {/* 3. Test Logo Upload */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-purple-200">3. टेस्ट लोगो अपलोड (Test Logo):</span>
+                    <span className="font-bold text-purple-200">3. टेस्ट लोगो अपलोड:</span>
                     {card.testLogoUrl && (
                       <button
                         type="button"
@@ -3627,7 +3636,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 {/* 4. Sample User Photo (Optional for Test Preview) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-purple-200">4. सैंपल यूज़र फोटो (Sample Photo):</span>
+                    <span className="font-bold text-purple-200">4. सैंपल यूज़र फोटो:</span>
                     {card.testSamplePhotoUrl && (
                       <button
                         type="button"
@@ -3673,7 +3682,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-blue-300 font-bold">
             <span className="flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-blue-400" />
-              <span>मास्टर ब्रांडिंग (Master Branding)</span>
+              <span>मास्टर ब्रांडिंग</span>
             </span>
             {canToggleMasterBranding ? (
               <button
@@ -3701,12 +3710,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 }`}
               >
                 {card.showMasterBranding !== false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                <span>{card.showMasterBranding !== false ? 'चालू (ON)' : 'बंद (OFF)'}</span>
+                <span>{card.showMasterBranding !== false ? 'चालू' : 'बंद'}</span>
               </button>
             ) : (
               <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
                 <Lock className="w-3 h-3" />
-                <span>केवल PRO / VIP DESK</span>
+                <span>केवल प्रो / वीआईपी DESK</span>
               </span>
             )}
           </div>
@@ -3760,7 +3769,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   {/* 1. Header PNG */}
                   <div className="p-2 bg-neutral-950 border border-neutral-800 rounded space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-neutral-200">हेडर PNG (Header)</span>
+                      <span className="font-bold text-neutral-200">हेडर पीएनजी</span>
                       {activeHeaderPng && (
                         <button
                           type="button"
@@ -3795,7 +3804,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   {/* 2. Footer PNG */}
                   <div className="p-2 bg-neutral-950 border border-neutral-800 rounded space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-neutral-200">फुटर PNG (Footer)</span>
+                      <span className="font-bold text-neutral-200">फुटर पीएनजी</span>
                       {activeFooterPng && (
                         <button
                           type="button"
@@ -3834,7 +3843,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-lg shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
                   >
                     <span>💾</span>
-                    <span>हेडर + फुटर कॉम्बो सहेजें (Save Preset)</span>
+                    <span>हेडर + फुटर कॉम्बो सहेजें</span>
                   </button>
                 </div>
               )}
@@ -4012,10 +4021,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
           ) : (
             <div className="p-2.5 bg-neutral-900 rounded-lg border border-neutral-800 text-neutral-400 text-xs flex items-center justify-between">
-              <span>लोगो सुरक्षित (Basic Plan):</span>
+              <span>लोगो सुरक्षित:</span>
               <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
                 <Lock className="w-3 h-3" />
-                <span>लोगो बदलने हेतु Pro/VIP आवश्यक</span>
+                <span>लोगो बदलने हेतु प्रो/वीआईपी आवश्यक</span>
               </span>
             </div>
           )}
@@ -4040,7 +4049,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               {/* Logo Resize Controls */}
               <div className="bg-neutral-900/90 border border-neutral-800 rounded-lg p-2.5 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-300">लोगो का आकार (Logo Size छोटा-बड़ा):</span>
+                  <span className="font-bold text-neutral-300">लोगो का आकार (छोटा-बड़ा):</span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -4106,7 +4115,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>🎨</span>
-                    <span>फुटर बैकग्राउंड रंग (Footer Background):</span>
+                    <span>फुटर बैकग्राउंड रंग:</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerBgColor || '#FFFFFF'}
@@ -4181,7 +4190,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <div className="flex items-center justify-between p-2 bg-neutral-900 rounded-lg border border-neutral-800">
                         <span className="text-[11px] text-neutral-300 font-semibold flex items-center gap-1.5">
                           <span>🖌️</span>
-                          <span>कस्टम बैकग्राउंड रंग (VIP Desk):</span>
+                          <span>कस्टम बैकग्राउंड रंग:</span>
                         </span>
                         <div className="flex items-center gap-2">
                           <input
@@ -4215,7 +4224,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>✏️</span>
-                    <span>फुटर टेक्स्ट रंग (Footer Text Color - डिफ़ॉल्ट काला):</span>
+                    <span>फुटर टेक्स्ट रंग (डिफ़ॉल्ट काला):</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerTextColor || '#000000'}
@@ -4318,7 +4327,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="space-y-0.5">
                     <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Footer में WhatsApp नंबर दिखाएँ</span>
+                      <span>फुटर में व्हाट्सएप नंबर दिखाएँ</span>
                     </span>
                     <span className="text-[10.5px] text-neutral-400 block">
                       नंबर सीधे आपकी प्रोफ़ाइल के वाट्सएप सेक्शन से प्राप्त होता है।
@@ -4327,7 +4336,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   {(effectiveTier === 'basic' || effectiveTier === 'advanced') && !effectiveAdmin ? (
                     <span className="px-2.5 py-1 text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 rounded-lg flex items-center gap-1">
                       <Lock className="w-3 h-3" />
-                      <span>केवल PRO / VIP</span>
+                      <span>केवल प्रो / वीआईपी</span>
                     </span>
                   ) : (
                     <button
@@ -4350,7 +4359,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5 text-amber-400" />
-                        <span>WhatsApp नंबर बदलें (केवल इस ग्राफिक के लिए):</span>
+                        <span>व्हाट्सएप नंबर बदलें (केवल इस ग्राफिक के लिए):</span>
                       </span>
                       <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                         VIP DESK
@@ -4374,7 +4383,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <div className="space-y-0.5">
                     <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
                       <Globe className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Footer में वेबसाइट (Website) दिखाएँ</span>
+                      <span>फुटर में वेबसाइट दिखाएँ</span>
                     </span>
                     <span className="text-[10.5px] text-neutral-400 block">
                       वेबसाइट लिंक सीधे आपकी प्रोफ़ाइल से प्राप्त होती है।
@@ -4383,7 +4392,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   {effectiveTier === 'basic' && !effectiveAdmin ? (
                     <span className="px-2.5 py-1 text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 rounded-lg flex items-center gap-1">
                       <Lock className="w-3 h-3" />
-                      <span>केवल ADVANCE/PRO/VIP</span>
+                      <span>केवल एडवांस/प्रो/वीआईपी</span>
                     </span>
                   ) : (
                     <button

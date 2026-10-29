@@ -467,7 +467,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                           {soundSettings.soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-500" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
-                          <span>ध्वनि अलर्ट (Sound Alerts)</span>
+                          <span>ध्वनि अलर्ट</span>
                         </span>
                         <button
                           type="button"
@@ -482,7 +482,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                               : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'
                           }`}
                         >
-                          {soundSettings.soundEnabled ? 'चालू (ON)' : 'बंद (OFF)'}
+                          {soundSettings.soundEnabled ? 'चालू' : 'बंद'}
                         </button>
                       </div>
 

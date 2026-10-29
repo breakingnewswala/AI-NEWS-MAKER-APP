@@ -2607,7 +2607,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-emerald-300 font-black text-xs">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>संपादकीय प्री-पब्लिश डेस्क (Admin Pre-Publish Desk)</span>
+                  <span>संपादकीय प्री-पब्लिश डेस्क</span>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
                   एडमिन अधिकार
@@ -2639,7 +2639,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                    <span>🚀 प्री-पब्लिश करें (Pre-Publish to All Users)</span>
+                    <span>🚀 प्री-पब्लिश करें</span>
                   </>
                 )}
               </button>

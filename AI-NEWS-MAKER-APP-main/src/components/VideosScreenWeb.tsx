@@ -1238,7 +1238,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                       1
                     </span>
-                    <span>वीडियो फाइल चयन एवं अपलोड (MP4 / WebM / MOV):*</span>
+                    <span>वीडियो फाइल चयन एवं अपलोड:*</span>
                   </label>
                   {adminVideoUrl ? (
                     <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
@@ -1308,7 +1308,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                     2
                   </span>
-                  <span>वीडियो आस्पेक्ट रेशियो (Project Display Ratio):*</span>
+                  <span>वीडियो आस्पेक्ट रेशियो:*</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                   {[
@@ -1341,7 +1341,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                       3
                     </span>
-                    <span>वीडियो शीर्षक / मुख्य हेडलाइन (Title):*</span>
+                    <span>वीडियो शीर्षक / मुख्य हेडलाइन:*</span>
                   </span>
                   <span className="text-[10px] text-slate-400 font-normal">
                     {adminTitle.length}/120 अक्षर
@@ -1365,7 +1365,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                       4
                     </span>
-                    <span>वीडियो कैप्शन एवं संदर्भ (Video Studio ट्रांसफर हेतु):*</span>
+                    <span>वीडियो कैप्शन एवं संदर्भ:</span>
                   </span>
                   <span className="text-[10px] text-slate-400 font-normal">
                     AI हेडलाइन व स्क्रिप्ट तैयार करने हेतु
@@ -1540,7 +1540,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[11px] text-slate-400">
-                              <span>वर्टिकल अलाइनमेंट (Vertical Offset):</span>
+                              <span>वर्टिकल अलाइनमेंट:</span>
                               <span className="text-amber-400 font-mono font-bold">{adminCropY}%</span>
                             </div>
                             <input
@@ -1616,7 +1616,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <div className="flex items-center justify-between">
                   <label htmlFor="admin-is-bonus" className="text-xs font-black text-amber-400 flex items-center gap-2 cursor-pointer">
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>बोनस वीडियो के रूप में प्रकाशित करें (Bonus Video):</span>
+                    <span>बोनस वीडियो के रूप में प्रकाशित करें:</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1637,7 +1637,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                     9
                   </span>
-                  <span>सत्यापन चेकलिस्ट (Live Validation):</span>
+                  <span>सत्यापन चेकलिस्ट:</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
@@ -1912,7 +1912,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
                 <Edit3 className="w-4 h-4" />
-                <span>वीडियो विवरण व रेशियो एडिट करें (Admin Edit)</span>
+                <span>वीडियो विवरण व रेशियो एडिट करें</span>
               </div>
               <button
                 type="button"
@@ -1925,7 +1925,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
             <form onSubmit={handleSaveVideoEdit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">वीडियो शीर्षक (Title):</label>
+                <label className="text-xs font-bold text-slate-300 block">वीडियो शीर्षक:</label>
                 <input
                   type="text"
                   value={editTitle}
@@ -1936,7 +1936,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">वीडियो कैप्शन (Caption):</label>
+                <label className="text-xs font-bold text-slate-300 block">वीडियो कैप्शन:</label>
                 <textarea
                   value={editCaption}
                   onChange={(e) => setEditCaption(e.target.value)}
@@ -1947,7 +1947,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">आस्पेक्ट रेशियो बदलें (Aspect Ratio):</label>
+                <label className="text-xs font-bold text-slate-300 block">आस्पेक्ट रेशियो बदलें:</label>
                 <div className="grid grid-cols-4 gap-2">
                   {(['9:16', '16:9', '1:1', '4:5'] as const).map((r) => (
                     <button
@@ -1969,7 +1969,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
                 <label htmlFor="edit-is-bonus" className="text-xs font-bold text-amber-300 flex items-center gap-2 cursor-pointer">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>बोनस वीडियो स्थिति (Bonus Video):</span>
+                  <span>बोनस वीडियो स्थिति:</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input

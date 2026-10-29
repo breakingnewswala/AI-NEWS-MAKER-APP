@@ -580,7 +580,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <History className="w-5 h-5 text-amber-400" />
-                <span>प्रोजेक्ट हिस्ट्री (Project History)</span>
+                <span>प्रोजेक्ट हिस्ट्री</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
                   {filteredHistory.length} प्रोजेक्ट्स
                 </span>
@@ -743,7 +743,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स (Drafts & Projects)</h3>
+                  <h3 className="text-sm sm:text-base font-black text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स</h3>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
                     {drafts.length}
                   </span>
@@ -881,7 +881,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">सपोर्ट इनबॉक्स (Support Inbox)</h3>
+                  <h3 className="text-sm sm:text-base font-black text-white">सपोर्ट इनबॉक्स</h3>
                   {pendingCount > 0 && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse">
                       {pendingCount} पेंडिंग
@@ -899,21 +899,21 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           {/* Header Stats Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
-              <span className="text-[11px] text-slate-400 block font-bold">कुल टिकट (Total)</span>
+              <span className="text-[11px] text-slate-400 block font-bold">कुल टिकट</span>
               <span className="text-xl font-black text-white">{inquiries.length}</span>
             </div>
             <div className="p-3 bg-slate-900 border border-amber-500/30 rounded-xl space-y-1">
-              <span className="text-[11px] text-amber-300 block font-bold">लंबित (Pending)</span>
+              <span className="text-[11px] text-amber-300 block font-bold">लंबित</span>
               <span className="text-xl font-black text-amber-400">{pendingCount}</span>
             </div>
             <div className="p-3 bg-slate-900 border border-blue-500/30 rounded-xl space-y-1">
-              <span className="text-[11px] text-blue-300 block font-bold">प्रक्रियाधीन (In Progress)</span>
+              <span className="text-[11px] text-blue-300 block font-bold">प्रक्रियाधीन</span>
               <span className="text-xl font-black text-blue-400">
                 {inquiries.filter((i) => i.status === 'in_progress').length}
               </span>
             </div>
             <div className="p-3 bg-slate-900 border border-emerald-500/30 rounded-xl space-y-1">
-              <span className="text-[11px] text-emerald-300 block font-bold">हल किया गया (Resolved)</span>
+              <span className="text-[11px] text-emerald-300 block font-bold">हल किया गया</span>
               <span className="text-xl font-black text-emerald-400">
                 {inquiries.filter((i) => i.status === 'resolved').length}
               </span>
@@ -1192,7 +1192,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                       <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-1">
                         <div className="flex items-center gap-1.5 text-xs font-black text-emerald-300">
                           <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>एडमिन रिप्लाई (Official Response):</span>
+                          <span>एडमिन रिप्लाई:</span>
                         </div>
                         <p className="text-xs text-emerald-100 leading-relaxed pl-5">
                           {inq.adminResponse}
@@ -1216,9 +1216,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                               }
                               className="px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-amber-400"
                             >
-                              <option value="pending">लंबित (Pending)</option>
-                              <option value="in_progress">प्रक्रियाधीन (In Progress)</option>
-                              <option value="resolved">हल किया गया (Resolved)</option>
+                              <option value="pending">लंबित</option>
+                              <option value="in_progress">प्रक्रियाधीन</option>
+                              <option value="resolved">हल किया गया</option>
                             </select>
                           </div>
                         </div>
@@ -1267,7 +1267,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">ई-पेपर (ePaper)</h3>
+                  <h3 className="text-sm sm:text-base font-black text-white">ई-पेपर</h3>
                   <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 font-black tracking-wider uppercase">
                     COMING SOON
                   </span>
@@ -1282,7 +1282,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
                 <Newspaper className="w-7 h-7" />
               </div>
-              <h4 className="text-base font-black text-white">ई-पेपर पब्लिशिंग डेस्क — जल्द आ रहा है (Coming Soon)</h4>
+              <h4 className="text-base font-black text-white">ई-पेपर पब्लिशिंग डेस्क — जल्द आ रहा है</h4>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 इस मॉड्यूल के माध्यम से आप अपने चैनल का मल्टी-पेज डिजिटल ई-पेपर (PDF & Web View) सीधे लेआउट जनरेटर से बना सकेंगे। यह सुविधा आगामी अपडेट में उपलब्ध होगी।
               </p>

@@ -1639,7 +1639,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             setConfirmRemoveHighlightPost(post);
                           }}
                           className="absolute top-2 left-2 p-1 bg-black/80 hover:bg-red-600 text-slate-300 hover:text-white rounded-md transition-colors border border-slate-700 shadow z-10 cursor-pointer"
-                          title="प्रमुख खबरों (Highlights) से हटाएं"
+                          title="प्रमुख खबरों से हटाएं"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -2022,7 +2022,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
                         >
                           <Check className="w-3 h-3 text-white" />
-                          <span>स्वीकृत करें (Approve)</span>
+                          <span>स्वीकृत करें</span>
                         </button>
                       )}
                     </div>
@@ -2182,7 +2182,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
                       >
                         <Check className="w-4 h-4 text-white" />
-                        <span>स्वीकृत करें व होम फ़ीड पर प्रकाशित करें (Approve)</span>
+                        <span>स्वीकृत करें व प्रकाशित करें</span>
                       </button>
                     </div>
                   )}
@@ -2495,17 +2495,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
       {/* Admin Edit News Modal */}
       {editingPost && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 my-auto overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 p-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/40">
               <div className="flex items-center gap-2">
-                <Edit className="w-5 h-5 text-blue-400" />
-                <h3 className="text-base font-black text-white">खबर संपादित करें (Edit News)</h3>
+                <Edit className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+                <h3 className="text-base font-black text-slate-900 dark:text-white">खबर संपादित करें</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingPost(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2528,11 +2528,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 }
                 setEditingPost(null);
               }}
-              className="space-y-3.5"
+              className="flex-1 flex flex-col min-h-0 overflow-hidden"
             >
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  खबर का मुख्य शीर्षक (Headline) *
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    खबर का मुख्य शीर्षक *
                 </label>
                 <input
                   type="text"
@@ -2547,7 +2548,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-300">
-                    न्यूज़ आर्टिकल लिंक (News Article URL)
+                    न्यूज़ आर्टिकल लिंक
                   </label>
                   {editingPost.sourceUrl && (
                     <a
@@ -2576,7 +2577,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  संक्षिप्त विवरण (Summary)
+                  संक्षिप्त विवरण
                 </label>
                 <textarea
                   rows={3}
@@ -2589,7 +2590,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    स्रोत / चैनल (Channel)
+                    स्रोत / चैनल
                   </label>
                   <input
                     type="text"
@@ -2601,7 +2602,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    कैटेगरी (Category)
+                    कैटेगरी
                   </label>
                   <select
                     value={editingPost.category}
@@ -2627,7 +2628,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               {/* 1. Image Source & Manual Thumbnail Management (Parts 11, 12, 13) */}
               <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-300">📷 थंबनेल इमेज स्रोत (Thumbnail Source)</span>
+                  <span className="text-xs font-bold text-amber-300">📷 थंबनेल इमेज स्रोत</span>
                   <span className="text-[10px] text-slate-400 font-semibold">
                     {editingPost.imageSource === 'manual'
                       ? 'मैन्युअल अपलोड'
@@ -2647,7 +2648,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
                     }`}
                   >
-                    सोर्स (Source)
+                    सोर्स
                   </button>
                   <button
                     type="button"
@@ -2781,7 +2782,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     onChange={(e) => setEditingPost({ ...editingPost, breaking: e.target.checked })}
                     className="w-4 h-4 accent-red-600 rounded"
                   />
-                  <span>ब्रेकिंग न्यूज़ (Breaking)</span>
+                  <span>ब्रेकिंग न्यूज़</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-amber-300">
@@ -2805,7 +2806,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       onChange={(e) => setEditingPost({ ...editingPost, isBonus: e.target.checked, rewardCoins: editingPost.rewardCoins || 100 })}
                       className="w-4 h-4 accent-amber-400 rounded"
                     />
-                    <span>🪙 बोनस खबर बनाएं (Bonus News)</span>
+                    <span>🪙 बोनस खबर बनाएं</span>
                   </label>
                   {editingPost.isBonus && (
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-500 text-slate-950 rounded-md">सक्रिय</span>
@@ -2836,7 +2837,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-black text-amber-300">
-                      संपादकीय प्री-अप्रूवल (Pre-Approved News Workflow)
+                      संपादकीय प्री-अप्रूवल
                     </span>
                   </div>
                   {editingPost.editorialApproved ? (
@@ -2888,7 +2889,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     ) : (
                       <>
                         <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                        <span>AI एडिटोरियल प्री-अप्रूवल (5 हेडलाइन & 3 कैप्शन)</span>
+                        <span>एआई संपादकीय प्री-अप्रूवल (5 हेडलाइन व 3 कैप्शन)</span>
                       </>
                     )}
                   </button>
@@ -2951,7 +2952,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div className="space-y-2.5 pt-2 border-t border-slate-800">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        1. विस्तृत कैप्शन (Detailed Social Media Caption):
+                        1. विस्तृत सोशल मीडिया कैप्शन:
                       </label>
                       <textarea
                         rows={3}
@@ -2962,7 +2963,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        2. बुलेट पॉइंट्स कैप्शन (Key Bullet Highlights):
+                        2. मुख्य बुलेट पॉइंट्स कैप्शन:
                       </label>
                       <textarea
                         rows={2}
@@ -2973,7 +2974,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        3. संक्षिप्त कैप्शन (Short 2-Sentence Caption):
+                        3. संक्षिप्त कैप्शन:
                       </label>
                       <textarea
                         rows={2}
@@ -2999,8 +3000,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           onChange={(e) => setEditingPost({ ...editingPost, approvedPhotoLayout: e.target.value as any })}
                           className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-amber-300 text-[11px] font-bold focus:outline-hidden"
                         >
-                          <option value="single">सिंगल फोटो (1)</option>
-                          <option value="two_vertical">2 फोटो (वर्टिकल)</option>
+                          <option value="single">1 फोटो</option>
+                          <option value="two_vertical">2 फोटो (लंबवत)</option>
                           <option value="three_grid">3 फोटो (ग्रिड)</option>
                         </select>
                       </div>
@@ -3019,11 +3020,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              </div>
+
+              {/* Sticky Fixed Action Footer */}
+              <div className="p-3 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/90 shrink-0 flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setEditingPost(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
                 >
                   रद्द करें
                 </button>
@@ -3070,7 +3074,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   title="इस खबर को 5 स्वीकृत हेडलाइन व फोटो के साथ प्री-पब्लिश करें"
                 >
                   <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                  <span>प्री-पब्लिश (Pre-Publish)</span>
+                  <span>प्री-पब्लिश करें</span>
                 </button>
 
                 <button
@@ -3094,7 +3098,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
                 <h3 className="text-base sm:text-lg font-black text-white">
-                  रॉ न्यूज़ जोड़ें (Add / Publish Raw News)
+                  रॉ न्यूज़ जोड़ें
                 </h3>
               </div>
               <button
@@ -3120,7 +3124,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     title="टेक्स्ट से हेडलाइन व विवरण ऑटो-भरें"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>ऑटो-भरें (Auto-Fill)</span>
+                    <span>ऑटो-भरें</span>
                   </button>
                 </div>
                 <textarea

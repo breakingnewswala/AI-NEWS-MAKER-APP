@@ -123,13 +123,13 @@ type AppTab =
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें)' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'AI ऑटोमेशन टूल्स (Automated News & Photo)' },
+  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स' },
+  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'एआई ऑटोमेशन टूल्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क (फोटो चयन व वॉटरमार्क)' },
-  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक (लोकेशन व डेट स्टैम्प)' },
-  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'लोगो, हेडर व फुटर PNG' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन (HD कार्ड डाउनलोड व सोशल कैप्शन)' },
+  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
+  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
+  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'हेडर, फुटर व लोगो' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
 ];
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
@@ -2598,7 +2598,7 @@ export default function App() {
                 </div>
                 <div className="flex justify-between items-center text-slate-400">
                   <span>स्थिति:</span>
-                  <span className="text-rose-400 font-black">अस्थाई रूप से निलंबित (Blocked)</span>
+                  <span className="text-rose-400 font-black">अस्थाई रूप से निलंबित</span>
                 </div>
               </div>
 
@@ -2744,7 +2744,7 @@ export default function App() {
                 🔒
               </div>
               <div>
-                <h3 className="text-base font-black text-white">सदस्यता समाप्त (Plan Expired)</h3>
+                <h3 className="text-base font-black text-white">सदस्यता समाप्त</h3>
                 <span className="text-xs text-amber-400 font-bold">
                   {userSubscription?.tier === 'basic' ? '7-दिवसीय फ्री ट्रायल समाप्त' : 'आपका वर्तमान प्लान समाप्त हो गया है'}
                 </span>
