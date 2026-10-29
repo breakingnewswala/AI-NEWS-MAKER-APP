@@ -2594,7 +2594,7 @@ export default function App() {
   // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
   if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
-      <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
+      <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-slate-950 px-4 py-2 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
             <Sparkles className="w-4 h-4 text-slate-950" />
@@ -2664,7 +2664,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-neutral-950 px-4 py-2.5 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
@@ -2969,40 +2969,45 @@ export default function App() {
         </div>
       )}
 
-      {/* Feed Sound Notification Educational Banner (one-time dismissible) */}
-      {showSoundNoticeBanner && (
-        <div className="w-full max-w-7xl mx-auto px-4 pt-2">
-          <div className="bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border border-amber-500/40 rounded-xl p-3 flex items-center justify-between gap-3 shadow-lg backdrop-blur-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
-                <Volume2 className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs sm:text-sm font-bold text-amber-200">
-                  🔔 फ़ीड साउंड नोटिफ़िकेशन सक्रिय है (15 सेकंड ऑटो-रिफ़्रेश)
-                </p>
-                <p className="text-[11px] text-slate-300">
-                  नई सामान्य खबर आने पर बीप, ब्रेकिंग न्यूज़ पर अलर्ट टोन, और वीडियो फ़ीड पर मीडिया चाइम सुनाई देगा। किसी भी बटन पर क्लिक करने से ब्राउज़र ऑडियो अनलॉक हो जाता है।
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                dismissSoundNotice();
-                setShowSoundNoticeBanner(false);
-              }}
-              className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs whitespace-nowrap transition cursor-pointer shadow-sm"
-            >
-              समझ गया (Dismiss)
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 1. Home Feed Tab */}
       {currentTab === 'home' && (
-        <HomeScreenWeb
+        <div className="w-full">
+          {showSoundNoticeBanner && (
+            <div className="max-w-4xl mx-auto my-3 px-3">
+              <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-400/40 text-slate-900 dark:text-slate-100 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-amber-400/20 text-amber-500 shrink-0 mt-0.5">
+                    <Volume2 className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs sm:text-sm font-semibold leading-relaxed">
+                      नई खबर आने पर आपको मोबाइल पर साउंड नोटिफिकेशन सुनाई देगा। ब्रेकिंग न्यूज़ और सामान्य खबरों के लिए अलग-अलग साउंड हो सकती हैं। साउंड सुनने के लिए आवश्यक अनुमति दें।
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      हर 15 सेकंड में लाइव फ़ीड स्वतः अपडेट होता है।
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    onClick={handleEnableSound}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>साउंड चालू करें / अनुमति दें</span>
+                  </button>
+                  <button
+                    onClick={handleDismissSoundNotice}
+                    className="px-2 py-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold transition cursor-pointer"
+                    title="बंद करें"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          <HomeScreenWeb
           posts={posts}
           currentUser={currentUser}
           onOpenStudioWithNews={handleOpenStudioWithNews}
@@ -3024,6 +3029,7 @@ export default function App() {
           }}
           onNavigateToTab={navigateToTab}
         />
+        </div>
       )}
 
       {/* 2. News Generator / Studio Tab */}

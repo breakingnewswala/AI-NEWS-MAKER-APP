@@ -17,7 +17,8 @@ if (!fs.existsSync(webStudioNodeModules)) {
   const rootNodeModules = path.resolve(rootDir, 'node_modules');
   if (fs.existsSync(rootNodeModules)) {
     try {
-      fs.symlinkSync('../node_modules', webStudioNodeModules, 'junction');
+      const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+      fs.symlinkSync(rootNodeModules, webStudioNodeModules, symlinkType);
       console.log('📦 Linked web_studio/node_modules to root node_modules.');
     } catch (e) {}
   }

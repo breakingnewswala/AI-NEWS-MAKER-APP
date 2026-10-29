@@ -99,6 +99,38 @@
   ],
   "transactions": [
     {
+      "id": "tx-frame-1793292712902-oawu",
+      "transactionId": "tx-frame-1793292712902-oawu",
+      "userId": "coin_test_1793292712873@example.com",
+      "userEmail": "coin_test_1793292712873@example.com",
+      "newsItemId": "graphic_002",
+      "newsTitle": "Package Standard Frame",
+      "description": "फ्रेम अनलॉक (आज 11:59 PM तक): Package Standard Frame (-15 कॉइन्स)",
+      "transactionType": "debit",
+      "type": "debit",
+      "coinAmount": -15,
+      "amount": -15,
+      "balanceAfter": 35,
+      "status": "completed",
+      "createdAt": 1793292712902,
+      "createdBy": "system"
+    },
+    {
+      "id": "tx-credit-1793292712877-qhbx",
+      "transactionId": "tx-credit-1793292712877-qhbx",
+      "userId": "coin_test_1793292712873@example.com",
+      "userEmail": "coin_test_1793292712873@example.com",
+      "description": "test credit",
+      "transactionType": "credit",
+      "type": "credit",
+      "coinAmount": 50,
+      "amount": 50,
+      "balanceAfter": 50,
+      "status": "completed",
+      "createdAt": 1793292712877,
+      "createdBy": "admin"
+    },
+    {
       "id": "tx-frame-1793288381541-v58a",
       "transactionId": "tx-frame-1793288381541-v58a",
       "userId": "coin_test_1793288381508@example.com",
@@ -2443,6 +2475,11 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
+    },
+    "coin_test_1793292712873@example.com": {
+      "coinBalance": 35,
+      "pendingCoins": 0,
+      "totalEarnedCoins": 50
     }
   },
   "welcomeRewards": {
@@ -2871,6 +2908,13 @@
     "coin_test_1793288381508@example.com": {
       "graphic_002": {
         "unlockedAt": 1793288381541,
+        "expiresAt": 1793298599999,
+        "dateStr": "2026-10-29"
+      }
+    },
+    "coin_test_1793292712873@example.com": {
+      "graphic_002": {
+        "unlockedAt": 1793292712902,
         "expiresAt": 1793298599999,
         "dateStr": "2026-10-29"
       }

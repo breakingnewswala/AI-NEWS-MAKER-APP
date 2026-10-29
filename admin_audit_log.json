@@ -1,5 +1,21 @@
 [
   {
+    "id": "audit_1793292802116_6caj",
+    "timestamp": 1793292802116,
+    "adminEmail": "breakingnewswala.com@gmail.com",
+    "action": "REJECT_NEWS",
+    "target": "rss-src_aajtak_live-1793292802083",
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1793292802105_1jmx",
+    "timestamp": 1793292802105,
+    "adminEmail": "breakingnewswala.com@gmail.com",
+    "action": "APPROVE_NEWS",
+    "target": "rss-src_aajtak_live-1793292802083",
+    "ip": "internal"
+  },
+  {
     "id": "audit_1793288466203_w9m5",
     "timestamp": 1793288466203,
     "adminEmail": "breakingnewswala.com@gmail.com",

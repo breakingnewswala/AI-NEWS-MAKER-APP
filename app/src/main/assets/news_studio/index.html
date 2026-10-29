@@ -26,15 +26,38 @@
       @keyframes studio-spin {
         to { transform: rotate(360deg); }
       }
-      html, body { background-color: #0F172A; margin: 0; padding: 0; }
-      #root { min-height: 100vh; background-color: #0F172A; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: clip;
+      }
+      #root {
+        min-height: 100vh;
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: clip;
+      }
     </style>
-    <meta name="color-scheme" content="dark" />
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <meta name="color-scheme" content="dark light" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Devanagari:wght@500;600;700;800&family=Baloo+2:wght@500;600;700;800;900&family=Gotu&family=Hind:wght@500;600;700&family=Kalam:wght@700&family=Khand:wght@500;600;700&family=Martel:wght@400;600;700;800;900&family=Mukta:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@500;600;700;800;900&family=Noto+Serif+Devanagari:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Poppins:wght@500;600;700;800;900&family=Rajdhani:wght@600;700&family=Rozha+One&family=Sahitya:wght@400;700&family=Sarala:wght@700&family=Tiro+Devanagari+Hindi&family=Yatra+One&display=swap" />
-    <script type="module" crossorigin src="./assets/index-CGMw2fC9.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BbfE_REv.css">
+    <script type="module" crossorigin src="./assets/index-DZt-ewC8.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CYAJ2fD1.css">
   </head>
   <body class="bg-[#0F172A] text-slate-100 antialiased font-sans">
     <div id="root">

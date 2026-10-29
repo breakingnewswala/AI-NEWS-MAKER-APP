@@ -18,7 +18,20 @@ export const ThemeToggle: React.FC = () => {
       root.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app_theme_changed', { detail: { isDark } }));
+    }
   }, [isDark]);
+
+  useEffect(() => {
+    const handleThemeSync = (e: any) => {
+      if (e?.detail && typeof e.detail.isDark === 'boolean') {
+        setIsDark(e.detail.isDark);
+      }
+    };
+    window.addEventListener('app_theme_changed', handleThemeSync);
+    return () => window.removeEventListener('app_theme_changed', handleThemeSync);
+  }, []);
 
   const toggleTheme = (e: React.MouseEvent) => {
     e.stopPropagation();

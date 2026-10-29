@@ -1,5 +1,38 @@
 [
   {
+    "id": "notif_news_rss-src_aajtak_live-1793292802083",
+    "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
+    "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",
+    "time": "अभी",
+    "timestamp": 1793292802103,
+    "unread": true,
+    "type": "news",
+    "targetUserEmail": "all",
+    "linkTab": "home"
+  },
+  {
+    "id": "notif_video_vid-test-45-1793292714321",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "विशेष 4:5 ग्राउंड रिपोर्ट",
+    "time": "अभी",
+    "timestamp": 1793292714330,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
+    "id": "notif_video_vid-test-1793292714292",
+    "title": "🎬 नया वीडियो व रील्स जारी",
+    "message": "संसद में ऐतिहासिक डिजिटल मीडिया बिल पास",
+    "time": "अभी",
+    "timestamp": 1793292714312,
+    "unread": true,
+    "type": "video",
+    "targetUserEmail": "all",
+    "linkTab": "videos"
+  },
+  {
     "id": "notif_news_rss-src_aajtak_live-1793288466174",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",

@@ -69,8 +69,8 @@
     "district": "ग्वालियर",
     "websiteUrl": "https://khabridasnews.com",
     "role": "reporter",
-    "tier": "basic",
-    "planName": "BASIC",
+    "tier": "ultra",
+    "planName": "VIP DESK",
     "isBlocked": false,
     "createdAt": 1792849821694,
     "trialStartedAt": 1792849821694,
@@ -78,8 +78,9 @@
     "lastLoginAt": 1792873722495,
     "isTrialExpired": false,
     "activatedAt": 1792849821694,
-    "expiresAt": 1793454621694,
-    "activatedVia": "Google Registration"
+    "expiresAt": 2107057518060,
+    "activatedVia": "Google Registration",
+    "hasActivePaidPlan": true
   },
   {
     "userId": "usr_rituraj_102",

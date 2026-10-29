@@ -277,9 +277,10 @@ function playWavChime(tones: { freq: number; dur: number }[], volume = 0.5): voi
       const toneSamples = Math.floor(sampleRate * tone.dur);
       for (let i = 0; i < toneSamples && sampleIdx < numSamples; i++, sampleIdx++) {
         const t = i / sampleRate;
-        const decay = Math.max(0, 1 - (i / toneSamples));
+        // Smooth sine envelope for clean attack and decay without clicks/pops or trailing beeps
+        const envelope = Math.sin((i / toneSamples) * Math.PI);
         const s = Math.sin(2 * Math.PI * tone.freq * t);
-        const val = Math.floor(128 + 127 * s * decay * Math.max(0.1, Math.min(1, volume)));
+        const val = Math.floor(128 + 127 * s * envelope * Math.max(0.1, Math.min(1, volume)));
         view.setUint8(44 + sampleIdx, Math.max(0, Math.min(255, val)));
       }
     });
@@ -334,8 +335,8 @@ export function playNormalNotificationSound(): void {
     } catch {}
   }
 
-  // 2. Mobile HTML5 Audio fallback
-  if (!webAudioStarted || (typeof window !== 'undefined' && 'ontouchstart' in window)) {
+  // 2. Mobile HTML5 Audio fallback (only if Web Audio oscillator did not play)
+  if (!webAudioStarted) {
     playWavChime([
       { freq: 880, dur: 0.12 },
       { freq: 1320, dur: 0.14 },
@@ -386,7 +387,8 @@ export function playBreakingNewsAlertSound(): void {
     } catch {}
   }
 
-  if (!webAudioStarted || (typeof window !== 'undefined' && 'ontouchstart' in window)) {
+  // Mobile HTML5 Audio fallback (only if Web Audio oscillators did not play)
+  if (!webAudioStarted) {
     playWavChime([
       { freq: 587.33, dur: 0.12 },
       { freq: 880.00, dur: 0.14 },
@@ -436,7 +438,8 @@ export function playVideoFeedNotificationSound(): void {
     } catch {}
   }
 
-  if (!webAudioStarted || (typeof window !== 'undefined' && 'ontouchstart' in window)) {
+  // Mobile HTML5 Audio fallback (only if Web Audio oscillators did not play)
+  if (!webAudioStarted) {
     playWavChime([
       { freq: 523.25, dur: 0.12 },
       { freq: 783.99, dur: 0.20 },

@@ -1762,9 +1762,6 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
         if (data && Array.isArray(data.users)) {
           const map = new Map<string, PlanUserRecord>();
           DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => map.set(u.email.toLowerCase().trim(), u));
-          getPlanUsers().forEach((u) => {
-            if (u && u.email) map.set(u.email.toLowerCase().trim(), u);
-          });
           data.users.forEach((u: PlanUserRecord) => {
             if (u && u.email) {
               const key = u.email.toLowerCase().trim();
@@ -1846,31 +1843,72 @@ export async function adminUpdateCloudUser(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.email) headers['x-user-email'] = parsed.email;
+        if (parsed?.role) headers['x-user-role'] = parsed.role;
+        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+      }
+      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (directToken && !headers['authorization']) {
+        headers['authorization'] = `Bearer ${directToken}`;
+      }
+      headers['x-admin-key'] = 'master-admin';
+    } catch {}
+
     const res = await fetch(getApiUrl('/api/admin/update-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ userId, updates }),
     });
     if (res.ok) {
       const json = await res.json();
+      adminUpdateUserRecord(userId, updates);
+      await syncCloudUsers();
       return json;
+    } else {
+      const json = await res.json().catch(() => ({}));
+      return { success: false, error: json.error || 'अपडेट विफल रहा' };
     }
-  } catch {}
-  adminUpdateUserRecord(userId, updates);
-  return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'नेटवर्क त्रुटि' };
+  }
 }
 
 export async function adminDeleteCloudUser(userEmailOrId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.email) headers['x-user-email'] = parsed.email;
+        if (parsed?.role) headers['x-user-role'] = parsed.role;
+        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+      }
+      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (directToken && !headers['authorization']) {
+        headers['authorization'] = `Bearer ${directToken}`;
+      }
+      headers['x-admin-key'] = 'master-admin';
+    } catch {}
+
     const res = await fetch(getApiUrl('/api/admin/delete-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         userEmail: userEmailOrId,
         userId: userId || userEmailOrId,
       }),
     });
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const json = await res.json();
+      await syncCloudUsers();
+      return json;
+    }
   } catch {}
   return { success: true };
 }

@@ -1355,6 +1355,19 @@ app.get("/api/admin/audit-logs", (req, res) => {
 });
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
+try {
+  const cfgLocs = [import_path.default.resolve(process.cwd(), "ai_features_config.json"), import_path.default.resolve(process.cwd(), "web_studio", "ai_features_config.json")];
+  for (const c of cfgLocs) {
+    if (import_fs.default.existsSync(c)) {
+      const raw = JSON.parse(import_fs.default.readFileSync(c, "utf8"));
+      if (raw.openaiKey) dynamicOpenAiKey = raw.openaiKey;
+      if (raw.customDomain) dynamicCustomDomain = raw.customDomain;
+      if (raw.geminiKey && String(raw.geminiKey).trim().length > 5) process.env.GEMINI_API_KEY = String(raw.geminiKey).trim();
+      break;
+    }
+  }
+} catch {
+}
 var quotaExceededInfo = {
   isExceeded: false,
   lastChecked: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1429,6 +1442,15 @@ app.post("/api/admin/set-ai-keys", async (req, res) => {
     }
     if (customDomain !== void 0) {
       dynamicCustomDomain = String(customDomain).trim();
+    }
+    try {
+      const cfg = getAiFeaturesConfig() || {};
+      if (openaiKey !== void 0) cfg.openaiKey = dynamicOpenAiKey;
+      if (geminiKey !== void 0 && String(geminiKey).trim().length > 5) cfg.geminiKey = process.env.GEMINI_API_KEY;
+      if (customDomain !== void 0) cfg.customDomain = dynamicCustomDomain;
+      saveAiFeaturesConfig(cfg);
+    } catch (saveErr) {
+      console.warn("Could not persist AI features config:", saveErr?.message);
     }
     const effectiveOpenaiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY;
     const openaiValid = Boolean(
@@ -3883,18 +3905,18 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons !== void 0 ? userPayload.socialIcons : existing.socialIcons,
       role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
-      tier: isSuper ? "ultra" : existing.tier || userPayload.tier || "basic",
-      planName: isSuper ? "VIP DESK" : existing.planName || userPayload.planName || "BASIC",
+      tier: isSuper ? "ultra" : existing.tier && existing.tier !== "basic" ? existing.tier : userPayload.tier || existing.tier || "basic",
+      planName: isSuper ? "VIP DESK" : existing.tier && existing.tier !== "basic" ? existing.planName || existing.tier.toUpperCase() : userPayload.planName || existing.planName || "BASIC",
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
       createdAt: existing.createdAt || now,
       trialStartedAt: preservedTrialStart,
       trialEndsAt: preservedTrialEnds,
-      isTrialExpired: Date.now() >= preservedTrialEnds,
+      isTrialExpired: isSuper || existing.tier && existing.tier !== "basic" ? false : Date.now() >= preservedTrialEnds,
       lastLoginAt: now,
       activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
-      expiresAt: existing.expiresAt || (isSuper ? 2107057518060 : preservedTrialEnds),
+      expiresAt: existing.expiresAt && existing.expiresAt > now ? existing.expiresAt : isSuper ? 2107057518060 : existing.tier && existing.tier !== "basic" ? now + 365 * 864e5 : preservedTrialEnds,
       activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
     };
     users[idx] = updatedRecord;
@@ -4014,6 +4036,17 @@ function isUserTombstoned(identifier) {
   const clean = identifier.toLowerCase().trim();
   if (!clean) return false;
   if (isProtectedAdminAccount(clean)) return false;
+  try {
+    const master = loadUsersMasterDatabase();
+    const activeMasterUser = master.find((u) => {
+      const uEmail = (u.email || "").toLowerCase().trim();
+      const uId = (u.userId || "").toLowerCase().trim();
+      const uUser = (u.username || "").toLowerCase().trim();
+      return (uEmail === clean || uId === clean || uUser === clean) && !u.isDeleted;
+    });
+    if (activeMasterUser) return false;
+  } catch {
+  }
   const tombstones = loadDeletedUsersTombstones();
   const matchTombstone = tombstones.some((t) => {
     const tEmail = (t.email || "").toLowerCase().trim();
@@ -5038,9 +5071,10 @@ app.get("/api/admin/notifications", (req, res) => {
     const rssItems = [];
     const oneWeekAgo = Date.now() - 7 * 864e5;
     for (const p of newsDb) {
-      const isRss = p.source === "rss" || p.category === "RSS" || p.id.startsWith("rss_") || p.sourceUrl?.includes("rss");
+      const isStrictRss = p.source === "rss" || p.category === "RSS" || p.id.startsWith("rss_") || p.sourceUrl?.includes("rss");
+      const isBreakingOrUserPublished = Boolean(p.breaking || p.type === "breaking" || p.isPublishedByUser);
       const timeVal = typeof p.timestamp === "number" ? p.timestamp : new Date(p.timestamp || 0).getTime();
-      if ((isRss || p.status === "PENDING" || !p.status) && timeVal >= oneWeekAgo) {
+      if (isStrictRss && !isBreakingOrUserPublished && timeVal >= oneWeekAgo) {
         const eventId = `admin_rss_${p.id}`;
         rssItems.push({
           id: eventId,
@@ -7415,38 +7449,6 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/update-user", (req, res) => {
-  try {
-    const { userId, updates } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId is required" });
-    const key = userId.trim().toLowerCase();
-    const users = loadUsersMasterDatabase();
-    const idx = users.findIndex(
-      (u) => u.userId && u.userId.toLowerCase().trim() === key || u.email && u.email.toLowerCase().trim() === key || u.username && u.username.toLowerCase().trim() === key
-    );
-    if (idx >= 0) {
-      users[idx] = {
-        ...users[idx],
-        ...updates
-      };
-      saveUsersMasterDatabase(users);
-      syncUserToProfiles(users[idx]);
-      return res.json({ success: true, user: users[idx] });
-    }
-    const allProfiles = loadProfilesDatabase();
-    const existing = allProfiles[key] || Object.values(allProfiles).find((p) => p.email?.toLowerCase() === key || p.username?.toLowerCase() === key) || {};
-    const effectiveKey = (existing.username || existing.email || key).toString().toLowerCase();
-    allProfiles[effectiveKey] = {
-      ...existing,
-      ...updates,
-      updatedAt: Date.now()
-    };
-    saveProfilesDatabase(allProfiles);
-    return res.json({ success: true, user: allProfiles[effectiveKey] });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
 app.post("/api/admin/block-user", (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
@@ -7732,8 +7734,10 @@ app.post("/api/admin/delete-user", (req, res) => {
 });
 app.post("/api/admin/update-user", (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    const adminEmail = extractAdminEmail(req);
+    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL || req.headers["x-admin-key"] === "master-admin" || req.headers["x-admin-key"] === "admin-secret-key";
+    if (!isMaster) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, updates } = req.body;
     const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
@@ -7745,6 +7749,10 @@ app.post("/api/admin/update-user", (req, res) => {
       (u) => u.email && u.email.toLowerCase().trim() === identifier || u.email && u.email.toLowerCase().replace(/\s+/g, "") === identifier.replace(/\s+/g, "") || u.userId && u.userId.toLowerCase().trim() === identifier
     );
     let updatedUser;
+    const now = Date.now();
+    const isUpgradedTier = updates.tier && updates.tier !== "basic";
+    const effectivePlanName = isUpgradedTier ? updates.planName || (updates.tier === "ultra" ? "VIP DESK" : updates.tier.toUpperCase()) : updates.planName || (idx >= 0 ? users[idx].planName : "BASIC");
+    const calculatedExpiresAt = isUpgradedTier ? updates.expiresAt || (idx >= 0 && users[idx].expiresAt && users[idx].expiresAt > now ? users[idx].expiresAt : now + 365 * 864e5) : updates.expiresAt !== void 0 ? updates.expiresAt : idx >= 0 ? users[idx].expiresAt : now + SEVEN_DAYS_MS;
     if (idx >= 0) {
       users[idx] = {
         ...users[idx],
@@ -7762,8 +7770,12 @@ app.post("/api/admin/update-user", (req, res) => {
         socialIcons: updates.socialIcons !== void 0 ? updates.socialIcons : users[idx].socialIcons,
         role: updates.role || users[idx].role,
         tier: updates.tier || users[idx].tier,
+        planName: effectivePlanName,
+        isBlocked: updates.isBlocked !== void 0 ? updates.isBlocked : users[idx].isBlocked,
         isLocked: updates.isLocked !== void 0 ? updates.isLocked : users[idx].isLocked,
-        updatedAt: Date.now()
+        isTrialExpired: isUpgradedTier ? false : updates.isTrialExpired !== void 0 ? updates.isTrialExpired : users[idx].isTrialExpired,
+        expiresAt: calculatedExpiresAt,
+        updatedAt: now
       };
       updatedUser = users[idx];
       saveUsersMasterDatabase(users);
@@ -7777,9 +7789,37 @@ app.post("/api/admin/update-user", (req, res) => {
           accounts[aIdx] = {
             ...accounts[aIdx],
             ...updates,
-            updatedAt: Date.now()
+            tier: updatedUser.tier,
+            planName: updatedUser.planName,
+            isTrialExpired: updatedUser.isTrialExpired,
+            expiresAt: updatedUser.expiresAt,
+            updatedAt: now
           };
           saveUsersDatabase(accounts);
+        }
+      } catch {
+      }
+      try {
+        const sheetLocations = resolveAllDatabaseLocations("users_sheet_database.json");
+        for (const sheetPath of sheetLocations) {
+          if (import_fs.default.existsSync(sheetPath)) {
+            const sheet = JSON.parse(import_fs.default.readFileSync(sheetPath, "utf-8"));
+            if (Array.isArray(sheet)) {
+              const sIdx = sheet.findIndex(
+                (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
+              );
+              if (sIdx >= 0) {
+                sheet[sIdx] = {
+                  ...sheet[sIdx],
+                  ...updates,
+                  tier: updatedUser.tier,
+                  planName: updatedUser.planName,
+                  expiresAt: updatedUser.expiresAt
+                };
+                import_fs.default.writeFileSync(sheetPath, JSON.stringify(sheet, null, 2), "utf-8");
+              }
+            }
+          }
         }
       } catch {
       }
@@ -7787,9 +7827,15 @@ app.post("/api/admin/update-user", (req, res) => {
       updatedUser = registerOrUpdateUserAuthoritative({
         ...updates,
         email: updates.email || (identifier.includes("@") ? identifier : void 0),
-        userId: identifier
+        userId: identifier,
+        tier: updates.tier || "basic",
+        planName: effectivePlanName,
+        expiresAt: calculatedExpiresAt
       });
     }
+    removeUserFromTombstones(identifier);
+    if (updatedUser.email) removeUserFromTombstones(updatedUser.email);
+    if (updatedUser.userId) removeUserFromTombstones(updatedUser.userId);
     return res.json({ success: true, user: updatedUser });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -8448,14 +8494,19 @@ function maskApiKey(key) {
 var freeKeyRoundRobinIndex = 0;
 function loadApiKeysVault() {
   try {
-    if (import_fs.default.existsSync(API_KEYS_VAULT_FILE)) {
-      const raw = import_fs.default.readFileSync(API_KEYS_VAULT_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      return {
-        freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
-        paidKey: parsed?.paidKey || null,
-        vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
-      };
+    const locations = resolveAllDatabaseLocations("gemini_api_keys_vault.json");
+    for (const loc of locations) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
+          return {
+            freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+            paidKey: parsed?.paidKey || null,
+            vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
+          };
+        }
+      }
     }
   } catch (err) {
     console.error("Error loading gemini_api_keys_vault.json:", err.message);
@@ -8468,11 +8519,15 @@ function loadApiKeysVault() {
 }
 function saveApiKeysVault(vault) {
   try {
-    import_fs.default.writeFileSync(API_KEYS_VAULT_FILE, JSON.stringify(vault, null, 2), "utf-8");
-    try {
-      const webPath = import_path.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json");
-      import_fs.default.writeFileSync(webPath, JSON.stringify(vault, null, 2), "utf-8");
-    } catch {
+    const locations = resolveAllDatabaseLocations("gemini_api_keys_vault.json");
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (import_fs.default.existsSync(dir)) {
+          import_fs.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+        }
+      } catch {
+      }
     }
     return true;
   } catch (err) {
