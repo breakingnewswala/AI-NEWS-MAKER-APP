@@ -1150,11 +1150,15 @@ function loadCredentialsDatabase() {
 }
 function saveCredentialsDatabase(db) {
   try {
-    import_fs.default.writeFileSync(CREDENTIALS_DB_FILE, JSON.stringify(db, null, 2), "utf-8");
-    try {
-      const webCredPath = import_path.default.join(process.cwd(), "web_studio", "auth_credentials_db.json");
-      import_fs.default.writeFileSync(webCredPath, JSON.stringify(db, null, 2), "utf-8");
-    } catch {
+    const locations = resolveAllDatabaseLocations("auth_credentials_db.json");
+    const jsonStr = JSON.stringify(db, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
     }
     return true;
   } catch (err) {
@@ -1501,7 +1505,16 @@ function loadRewardsDatabase() {
 }
 function saveRewardsDatabase(db) {
   try {
-    import_fs.default.writeFileSync(REWARDS_DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+    const locations = resolveAllDatabaseLocations("rewards_database.json");
+    const jsonStr = JSON.stringify(db, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
     return true;
   } catch (err) {
     console.error("Error saving rewards_database.json:", err.message);
@@ -1523,7 +1536,16 @@ function loadSubUsersDatabase() {
 }
 function saveSubUsersDatabase(data) {
   try {
-    import_fs.default.writeFileSync(SUB_USERS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    const locations = resolveAllDatabaseLocations("sub_users_db.json");
+    const jsonStr = JSON.stringify(data, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
     return true;
   } catch (err) {
     console.error("Error saving sub_users_db.json:", err.message);
@@ -3933,7 +3955,88 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   }
   saveUsersMasterDatabase(deduplicatedUsers);
   syncUserToProfiles(updatedRecord);
+  removeUserFromTombstones(cleanEmail);
   return updatedRecord;
+}
+function loadDeletedUsersTombstones() {
+  const map = /* @__PURE__ */ new Map();
+  try {
+    const locations = resolveAllDatabaseLocations("deleted_users_tombstones.json");
+    for (const loc of locations) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8").replace(/^\uFEFF/, "").trim();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              const k = (item.email || item.userId || item.username || "").toLowerCase().trim();
+              if (k) map.set(k, item);
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading deleted_users_tombstones:", err?.message);
+  }
+  return Array.from(map.values());
+}
+function saveDeletedUsersTombstones(records) {
+  try {
+    const locations = resolveAllDatabaseLocations("deleted_users_tombstones.json");
+    const jsonStr = JSON.stringify(records, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("Error saving deleted_users_tombstones:", err?.message);
+    return false;
+  }
+}
+function isUserTombstoned(identifier) {
+  if (!identifier) return false;
+  const clean = identifier.toLowerCase().trim();
+  if (!clean) return false;
+  if (isProtectedAdminAccount(clean)) return false;
+  const tombstones = loadDeletedUsersTombstones();
+  const matchTombstone = tombstones.some((t) => {
+    const tEmail = (t.email || "").toLowerCase().trim();
+    const tId = (t.userId || "").toLowerCase().trim();
+    const tUser = (t.username || "").toLowerCase().trim();
+    return tEmail && (tEmail === clean || tEmail.replace(/\s+/g, "") === clean.replace(/\s+/g, "")) || tId && tId === clean || tUser && tUser === clean;
+  });
+  if (matchTombstone) return true;
+  try {
+    const delReqs = loadAccountDeletionRequests();
+    return delReqs.some((r) => {
+      const rEmail = (r.email || "").toLowerCase().trim();
+      const rId = (r.id || "").toLowerCase().trim();
+      return rEmail && (rEmail === clean || rEmail.replace(/\s+/g, "") === clean.replace(/\s+/g, "")) || rId && rId === clean;
+    });
+  } catch {
+    return false;
+  }
+}
+function removeUserFromTombstones(identifier) {
+  if (!identifier) return;
+  const clean = identifier.toLowerCase().trim();
+  if (!clean) return;
+  try {
+    const tombstones = loadDeletedUsersTombstones().filter((t) => {
+      const tEmail = (t.email || "").toLowerCase().trim();
+      const tId = (t.userId || "").toLowerCase().trim();
+      const tUser = (t.username || "").toLowerCase().trim();
+      return tEmail !== clean && tId !== clean && tUser !== clean;
+    });
+    saveDeletedUsersTombstones(tombstones);
+  } catch {
+  }
 }
 function reconcileAllUsers() {
   try {
@@ -3943,7 +4046,9 @@ function reconcileAllUsers() {
       if (u.email) {
         const cleanE = u.email.toLowerCase().trim();
         if (cleanE !== "breakingnewswala@gmail.com" && cleanE !== "admin@breakingnewswala.com") {
-          userMap.set(cleanE, u);
+          if (!isUserTombstoned(cleanE) && !isUserTombstoned(u.userId)) {
+            userMap.set(cleanE, u);
+          }
         }
       }
     }
@@ -3951,6 +4056,9 @@ function reconcileAllUsers() {
     for (const [k, p] of Object.entries(profiles)) {
       const email = (p.email || k).toLowerCase().trim();
       if (email === "breakingnewswala@gmail.com" || email === "admin@breakingnewswala.com") {
+        continue;
+      }
+      if (isUserTombstoned(email) || isUserTombstoned(p.userId) || isUserTombstoned(p.uid) || isUserTombstoned(k)) {
         continue;
       }
       if (!email.includes("@")) {
@@ -4067,7 +4175,7 @@ function reconcileAllUsers() {
       lastLoginAt: existingAdmin?.lastLoginAt || Date.now()
     });
     const seedUser1 = "khabridasnews@gmail.com";
-    if (!userMap.has(seedUser1)) {
+    if (!isUserTombstoned(seedUser1) && !userMap.has(seedUser1)) {
       const p1 = profiles[seedUser1];
       userMap.set(seedUser1, {
         userId: p1?.userId || "usr_khabridas_101",
@@ -4101,7 +4209,7 @@ function reconcileAllUsers() {
       });
     }
     const seedUser2 = "riturajtomarorchha@gmail.com";
-    if (!userMap.has(seedUser2)) {
+    if (!isUserTombstoned(seedUser2) && !userMap.has(seedUser2)) {
       const p2 = profiles[seedUser2];
       userMap.set(seedUser2, {
         userId: p2?.userId || "usr_rituraj_102",
@@ -4135,7 +4243,7 @@ function reconcileAllUsers() {
       });
     }
     const seedUser3 = "digital.anmolsandesh@gmail.com";
-    if (!userMap.has(seedUser3)) {
+    if (!isUserTombstoned(seedUser3) && !userMap.has(seedUser3)) {
       const p3 = profiles[seedUser3];
       userMap.set(seedUser3, {
         userId: p3?.userId || "usr_anmolsandesh_103",
@@ -4168,7 +4276,7 @@ function reconcileAllUsers() {
         lastLoginAt: 1791892712618
       });
     }
-    const reconciledList = Array.from(userMap.values());
+    const reconciledList = Array.from(userMap.values()).filter((u) => !isUserTombstoned(u.email) && !isUserTombstoned(u.userId));
     saveUsersMasterDatabase(reconciledList);
     saveUsersDatabase(reconciledList);
     for (const u of reconciledList) {
@@ -5861,7 +5969,16 @@ function loadAccountDeletionRequests() {
 }
 function saveAccountDeletionRequests(records) {
   try {
-    import_fs.default.writeFileSync(ACCOUNT_DELETIONS_FILE, JSON.stringify(records, null, 2), "utf-8");
+    const locations = resolveAllDatabaseLocations("account_deletion_requests.json");
+    const jsonStr = JSON.stringify(records, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
     return true;
   } catch (err) {
     console.error("Error writing account_deletion_requests.json:", err);
@@ -6044,7 +6161,16 @@ function loadProfilesDatabase() {
 }
 function saveProfilesDatabase(data) {
   try {
-    import_fs.default.writeFileSync(PROFILES_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    const locations = resolveAllDatabaseLocations("user_profiles_db.json");
+    const jsonStr = JSON.stringify(data, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
     try {
       const adapter = require_server_firestore_adapter();
       if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
@@ -6069,6 +6195,9 @@ app.get("/api/user-profile", (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
   const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const rawMobile = (req.query.mobile || req.query.phone || "").toString().replace(/[^0-9]/g, "").slice(-10);
+  if (idOrEmail && isUserTombstoned(idOrEmail) || username && isUserTombstoned(username)) {
+    return res.json({ success: true, profile: null, isDeleted: true });
+  }
   const allProfiles = loadProfilesDatabase();
   let match = null;
   if (idOrEmail) {
@@ -6092,13 +6221,16 @@ app.get("/api/user-profile", (req, res) => {
     const masterMatch = masterUsers.find(
       (u) => u.userId && u.userId.toLowerCase() === idOrEmail || u.email && u.email.toLowerCase().trim() === idOrEmail || u.email && u.email.toLowerCase().replace(/\s+/g, "") === idOrEmail.replace(/\s+/g, "") || u.username && u.username.toLowerCase() === idOrEmail
     );
-    if (masterMatch) {
+    if (masterMatch && !isUserTombstoned(masterMatch.email) && !isUserTombstoned(masterMatch.userId)) {
       syncUserToProfiles(masterMatch);
       const reloaded = loadProfilesDatabase();
       match = reloaded[masterMatch.email ? masterMatch.email.toLowerCase().trim() : masterMatch.userId] || Object.values(reloaded).find((p) => p.email === masterMatch.email);
     }
   }
   if (match) {
+    if (isUserTombstoned(match.email) || isUserTombstoned(match.userId) || isUserTombstoned(match.username)) {
+      return res.json({ success: true, profile: null, isDeleted: true });
+    }
     return res.json({ success: true, profile: match });
   }
   return res.json({ success: true, profile: null });
@@ -7230,61 +7362,174 @@ app.post("/api/admin/delete-user", (req, res) => {
     if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === "superadmin")) {
       return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
     }
-    users = users.filter(
-      (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier) && (!targetUser?.email || u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim())
-    );
+    const targetEmailClean = (targetUser?.email || (identifier.includes("@") ? identifier : "")).toLowerCase().trim();
+    const targetUserIdClean = (targetUser?.userId || (!identifier.includes("@") ? identifier : "")).toLowerCase().trim();
+    const targetUsernameClean = (targetUser?.username || "").toLowerCase().trim();
+    users = users.filter((u) => {
+      const uEmail = (u.email || "").toLowerCase().trim();
+      const uId = (u.userId || "").toLowerCase().trim();
+      if (targetEmailClean && uEmail === targetEmailClean) return false;
+      if (targetUserIdClean && uId === targetUserIdClean) return false;
+      if (identifier && (uEmail === identifier || uId === identifier)) return false;
+      return true;
+    });
     saveUsersMasterDatabase(users);
     const allProfiles = loadProfilesDatabase();
     delete allProfiles[identifier];
-    if (targetUser?.email) delete allProfiles[targetUser.email.toLowerCase().trim()];
-    if (targetUser?.username) delete allProfiles[targetUser.username.toLowerCase().trim()];
+    if (targetEmailClean) delete allProfiles[targetEmailClean];
+    if (targetUserIdClean) delete allProfiles[targetUserIdClean];
+    if (targetUsernameClean) delete allProfiles[targetUsernameClean];
+    for (const [pk, pv] of Object.entries(allProfiles)) {
+      const pEmail = (pv?.email || pk).toLowerCase().trim();
+      const pId = (pv?.userId || pv?.uid || "").toLowerCase().trim();
+      const pUser = (pv?.username || "").toLowerCase().trim();
+      if (targetEmailClean && pEmail === targetEmailClean) delete allProfiles[pk];
+      else if (targetUserIdClean && pId === targetUserIdClean) delete allProfiles[pk];
+      else if (targetUsernameClean && pUser === targetUsernameClean) delete allProfiles[pk];
+    }
     saveProfilesDatabase(allProfiles);
     try {
       let accounts = loadUsersDatabase();
-      accounts = accounts.filter(
-        (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier) && (!targetUser?.email || u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim())
-      );
+      accounts = accounts.filter((u) => {
+        const uEmail = (u.email || "").toLowerCase().trim();
+        const uId = (u.userId || "").toLowerCase().trim();
+        if (targetEmailClean && uEmail === targetEmailClean) return false;
+        if (targetUserIdClean && uId === targetUserIdClean) return false;
+        if (identifier && (uEmail === identifier || uId === identifier)) return false;
+        return true;
+      });
       saveUsersDatabase(accounts);
-    } catch {
-    }
-    try {
-      const sheetFile = import_path.default.join(process.cwd(), "users_sheet_database.json");
-      if (import_fs.default.existsSync(sheetFile)) {
-        let sheetUsers = JSON.parse(import_fs.default.readFileSync(sheetFile, "utf-8"));
-        if (Array.isArray(sheetUsers)) {
-          sheetUsers = sheetUsers.filter(
-            (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier) && (!targetUser?.email || u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim())
-          );
-          import_fs.default.writeFileSync(sheetFile, JSON.stringify(sheetUsers, null, 2), "utf-8");
-        }
-      }
     } catch {
     }
     try {
       const creds = loadCredentialsDatabase();
       delete creds[identifier];
-      if (targetUser?.email) delete creds[targetUser.email.toLowerCase().trim()];
-      if (targetUser?.username) delete creds[targetUser.username.toLowerCase().trim()];
+      if (targetEmailClean) delete creds[targetEmailClean];
+      if (targetUserIdClean) delete creds[targetUserIdClean];
+      if (targetUsernameClean) delete creds[targetUsernameClean];
       saveCredentialsDatabase(creds);
     } catch {
     }
     try {
-      const delFile = import_path.default.join(process.cwd(), "account_deletion_requests.json");
-      let delReqs = [];
-      if (import_fs.default.existsSync(delFile)) {
-        delReqs = JSON.parse(import_fs.default.readFileSync(delFile, "utf-8"));
+      const rDb = loadRewardsDatabase();
+      if (targetEmailClean) {
+        delete rDb.wallets[targetEmailClean];
+        if (rDb.welcomeRewards) delete rDb.welcomeRewards[targetEmailClean];
+        if (rDb.unlockedItems) delete rDb.unlockedItems[targetEmailClean];
+        if (rDb.frameUnlocks) delete rDb.frameUnlocks[targetEmailClean];
       }
-      delReqs.unshift({
-        email: targetUser?.email || identifier,
-        userId: targetUser?.userId || identifier,
-        deletedAt: Date.now(),
-        deletedBy: adminEmail || "MASTER_ADMIN",
-        status: "PURGED_BY_ADMIN"
+      if (targetUserIdClean) {
+        delete rDb.wallets[targetUserIdClean];
+        if (rDb.welcomeRewards) delete rDb.welcomeRewards[targetUserIdClean];
+        if (rDb.unlockedItems) delete rDb.unlockedItems[targetUserIdClean];
+        if (rDb.frameUnlocks) delete rDb.frameUnlocks[targetUserIdClean];
+      }
+      delete rDb.wallets[identifier];
+      rDb.claims = (rDb.claims || []).filter((c) => {
+        const cEmail = (c.userEmail || "").toLowerCase().trim();
+        const cId = (c.userId || "").toLowerCase().trim();
+        return cEmail !== targetEmailClean && cId !== targetUserIdClean && cEmail !== identifier && cId !== identifier;
       });
-      import_fs.default.writeFileSync(delFile, JSON.stringify(delReqs, null, 2), "utf-8");
+      rDb.transactions = (rDb.transactions || []).filter((t) => {
+        const tEmail = (t.userEmail || "").toLowerCase().trim();
+        const tId = (t.userId || "").toLowerCase().trim();
+        return tEmail !== targetEmailClean && tId !== targetUserIdClean && tEmail !== identifier && tId !== identifier;
+      });
+      rDb.downloadEvents = (rDb.downloadEvents || []).filter((d) => {
+        const dEmail = (d.userEmail || "").toLowerCase().trim();
+        const dId = (d.userId || "").toLowerCase().trim();
+        return dEmail !== targetEmailClean && dId !== targetUserIdClean && dEmail !== identifier && dId !== identifier;
+      });
+      saveRewardsDatabase(rDb);
+    } catch (e) {
+      console.warn("[Rewards Cleanup Error]:", e.message);
+    }
+    try {
+      let subUsers = loadSubUsersDatabase();
+      subUsers = subUsers.filter((s) => {
+        const pEmail = (s.primaryEmail || "").toLowerCase().trim();
+        const sEmail = (s.subUserEmail || "").toLowerCase().trim();
+        return pEmail !== targetEmailClean && sEmail !== targetEmailClean && pEmail !== identifier && sEmail !== identifier;
+      });
+      saveSubUsersDatabase(subUsers);
+    } catch (e) {
+      console.warn("[SubUsers Cleanup Error]:", e.message);
+    }
+    try {
+      const sheetLocations = resolveAllDatabaseLocations("users_sheet_database.json");
+      for (const loc of sheetLocations) {
+        if (import_fs.default.existsSync(loc)) {
+          let sheetUsers = JSON.parse(import_fs.default.readFileSync(loc, "utf-8"));
+          if (Array.isArray(sheetUsers)) {
+            sheetUsers = sheetUsers.filter((u) => {
+              const uEmail = (u.email || "").toLowerCase().trim();
+              const uId = (u.userId || "").toLowerCase().trim();
+              return uEmail !== targetEmailClean && uId !== targetUserIdClean && uEmail !== identifier && uId !== identifier;
+            });
+            import_fs.default.writeFileSync(loc, JSON.stringify(sheetUsers, null, 2), "utf-8");
+          }
+        }
+      }
     } catch {
     }
-    return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0914\u0930 \u0909\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0938\u092D\u0940 \u0930\u093F\u0915\u0949\u0930\u094D\u0921\u094D\u0938 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u090F \u0917\u090F\u0964" });
+    try {
+      const logoUrl = targetUser?.channelLogoUrl || targetUser?.channelLogoPngUrl || targetUser?.channelLogoGifUrl;
+      if (logoUrl && (logoUrl.includes("/uploads/logos/") || logoUrl.startsWith("/uploads/"))) {
+        const filename = import_path.default.basename(logoUrl);
+        const p1 = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
+        const p2 = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
+        if (import_fs.default.existsSync(p1)) import_fs.default.unlinkSync(p1);
+        if (import_fs.default.existsSync(p2)) import_fs.default.unlinkSync(p2);
+      }
+    } catch {
+    }
+    try {
+      const adapter = require_server_firestore_adapter();
+      if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE || typeof adapter.firestoreDeleteDoc === "function")) {
+        const docKeys = [targetEmailClean, targetUserIdClean, identifier].filter(Boolean);
+        for (const k of docKeys) {
+          adapter.firestoreDeleteDoc("users", k).catch(() => {
+          });
+          adapter.firestoreDeleteDoc("user_profiles", k).catch(() => {
+          });
+        }
+      }
+    } catch {
+    }
+    try {
+      const tombstones = loadDeletedUsersTombstones();
+      tombstones.unshift({
+        email: targetEmailClean || identifier,
+        userId: targetUserIdClean || identifier,
+        username: targetUsernameClean,
+        deletedAt: Date.now(),
+        deletedBy: adminEmail || "MASTER_ADMIN",
+        reason: "Admin permanently deleted user account and purged all associated data"
+      });
+      saveDeletedUsersTombstones(tombstones);
+      const delReqs = loadAccountDeletionRequests();
+      delReqs.unshift({
+        id: `DEL-ADMIN-${Date.now()}`,
+        email: targetEmailClean || identifier,
+        mobile: targetUser?.mobile || targetUser?.mobileNumber,
+        channelName: targetUser?.channelName || targetUser?.channelNameHi,
+        reason: "Permanent admin user deletion",
+        requestedAt: Date.now(),
+        status: "PURGED",
+        clearedPostsCount: 0
+      });
+      saveAccountDeletionRequests(delReqs);
+    } catch (e) {
+      console.warn("[Tombstone Record Error]:", e.message);
+    }
+    try {
+      reconcileAllUsers();
+    } catch {
+    }
+    return res.json({
+      success: true,
+      message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0914\u0930 \u0909\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0938\u092D\u0940 \u0921\u0947\u091F\u093E\u092C\u0947\u0938, \u0935\u0949\u0932\u0947\u091F, \u0915\u094D\u0930\u0947\u0921\u0947\u0902\u0936\u093F\u092F\u0932\u094D\u0938 \u0914\u0930 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0930\u093F\u0915\u0949\u0930\u094D\u0921\u094D\u0938 \u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0939\u091F\u093E \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902\u0964"
+    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

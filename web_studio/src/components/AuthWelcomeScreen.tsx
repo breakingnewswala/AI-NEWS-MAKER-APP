@@ -579,18 +579,29 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     // 0. Check Server Database for Existing Profile Across Devices (Part N Fix for PC vs Mobile)
     const userProfileKey = `user_profile_${cleanEmail}`;
     let serverProfile: any = null;
+    let isDeletedOrUnregistered = false;
     try {
       const res = await fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`));
       if (res.ok) {
         const data = await res.json();
-        const prof = (data?.profile || data);
-        if (prof && (prof.channelNameHi || prof.channelLogoUrl || prof.district || prof.fullName)) {
-          serverProfile = prof;
+        if (data?.profile === null || data?.isDeleted === true) {
+          isDeletedOrUnregistered = true;
+          try {
+            localStorage.removeItem(userProfileKey);
+            localStorage.removeItem(`onboarding_completed_${cleanEmail}`);
+            sessionStorage.removeItem(userProfileKey);
+          } catch {}
+          serverProfile = null;
+        } else {
+          const prof = (data?.profile || data);
+          if (prof && (prof.channelNameHi || prof.channelLogoUrl || prof.district || prof.fullName)) {
+            serverProfile = prof;
+          }
         }
       }
     } catch {}
 
-    if (!serverProfile) {
+    if (!serverProfile && !isDeletedOrUnregistered) {
       try {
         const uRes = await fetch(getApiUrl('/api/users'));
         if (uRes.ok) {
@@ -620,7 +631,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       } catch {}
     }
 
-    if (serverProfile) {
+    if (serverProfile && !isDeletedOrUnregistered) {
       try {
         localStorage.setItem(userProfileKey, JSON.stringify(serverProfile));
         localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
@@ -631,8 +642,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const knownProfile = KNOWN_REGISTERED_USERS[cleanEmail];
 
     // 2. Check local storage for user profile & onboarding flag
-    const isCompletedFlag = localStorage.getItem(`onboarding_completed_${cleanEmail}`) === 'true';
-    const userSpecificProfileStr = localStorage.getItem(userProfileKey);
+    const isCompletedFlag = !isDeletedOrUnregistered && localStorage.getItem(`onboarding_completed_${cleanEmail}`) === 'true';
+    const userSpecificProfileStr = isDeletedOrUnregistered ? null : localStorage.getItem(userProfileKey);
     let parsedProfile: any = null;
     if (userSpecificProfileStr) {
       try {
@@ -642,7 +653,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    const hasCompletedProfile = Boolean(
+    const hasCompletedProfile = !isDeletedOrUnregistered && Boolean(
       (serverProfile && (serverProfile.channelLogoUrl || serverProfile.channelNameHi)) ||
       (knownProfile && knownProfile.channelLogoUrl) ||
       (parsedProfile && parsedProfile.channelLogoUrl && parsedProfile.channelNameHi && parsedProfile.mobileNumber)

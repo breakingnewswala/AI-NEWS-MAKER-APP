@@ -1968,6 +1968,7 @@ export function adminDeleteUserRecord(emailOrUserId: string): boolean {
     localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(filtered));
     try {
       localStorage.removeItem(`user_profile_${clean}`);
+      localStorage.removeItem(`onboarding_completed_${clean}`);
     } catch {}
     window.dispatchEvent(new Event('ai_news_plan_users_changed'));
     return true;
