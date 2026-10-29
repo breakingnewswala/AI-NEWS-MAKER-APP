@@ -988,6 +988,7 @@ __export(server_exports, {
   generate5BalancedHeadlineOptions: () => generate5BalancedHeadlineOptions,
   generate5JournalisticHeadlines: () => generate5JournalisticHeadlines,
   getAiFeaturesConfig: () => getAiFeaturesConfig,
+  getHeadlineRegenCoinCost: () => getHeadlineRegenCoinCost,
   isRegenerateAllowed: () => isRegenerateAllowed,
   isTierAllowedForOpenAI: () => isTierAllowedForOpenAI,
   matchDistrictAlias: () => matchDistrictAlias,
@@ -1892,12 +1893,17 @@ function formatRelativeTime(timestamp) {
 app.get("/api/news-posts", (req, res) => {
   const { role, includePending } = req.query;
   const posts = loadNewsDatabase();
+  const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
   const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
   const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
   const activePosts = posts.filter((p) => {
     if (String(p.id).startsWith("live-post-")) return false;
+    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    if (isApprovedStory) {
+      return true;
+    }
     const postTime = p.timestamp || now;
     const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
     if (now > expiresAt) return false;
@@ -1928,6 +1934,8 @@ app.get("/api/news-posts", (req, res) => {
     const backfillCandidates = posts.filter((p) => {
       if (String(p.id).startsWith("live-post-")) return false;
       if (activeIds.has(p.id)) return false;
+      const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      if (isApprovedStory) return true;
       if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
         return false;
       }
@@ -1960,10 +1968,40 @@ app.get("/api/news-posts", (req, res) => {
     if (timeB !== timeA) return timeB - timeA;
     return String(b.id).localeCompare(String(a.id));
   });
-  const dynamicPosts = activePosts.map((p) => ({
-    ...p,
-    publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime
-  }));
+  const dynamicPosts = activePosts.map((p) => {
+    const ed = editorialDb[p.id];
+    const headlines = ed && Array.isArray(ed.headlines) && ed.headlines.length > 0 ? ed.headlines : p.headlineOptions && Array.isArray(p.headlineOptions) && p.headlineOptions.length > 0 ? p.headlineOptions : p.approvedHeadlines && Array.isArray(p.approvedHeadlines) && p.approvedHeadlines.length > 0 ? p.approvedHeadlines : p.title ? [p.title] : [];
+    const rawTitle = p.title || (headlines[0] || "\u0938\u092E\u093E\u091A\u093E\u0930");
+    const rawSummary = (ed?.captionDetailed || p.summary || p.fullContent || rawTitle).trim();
+    const defaultBullets = `\u2022 ${rawTitle}\u0964
+\u2022 ${rawSummary.slice(0, 140)}\u0964
+
+#BreakingNews #HindiNews #AINewsMaker`;
+    const defaultShort = `${rawTitle}
+
+#BreakingNews #AINewsMaker`;
+    const capDetailed = ed?.captionDetailed || p.captionDetailed || p.approvedCaptionDetailed || rawSummary;
+    const capBullets = ed?.captionBullets || p.captionBullets || p.approvedCaptionBullets || defaultBullets;
+    const capShort = ed?.captionShort || p.captionShort || p.approvedCaptionShort || defaultShort;
+    return {
+      ...p,
+      publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
+      headlineOptions: headlines,
+      approvedHeadlines: headlines,
+      approvedHeadline: ed?.approvedHeadline || headlines[0] || rawTitle,
+      captionDetailed: capDetailed,
+      captionBullets: capBullets,
+      captionShort: capShort,
+      approvedCaptionDetailed: capDetailed,
+      approvedCaptionBullets: capBullets,
+      approvedCaptionShort: capShort,
+      summary: capDetailed || p.summary,
+      isPrePublished: ed ? Boolean(ed.isPrePublished) : Boolean(p.isPrePublished),
+      editorialApproved: ed ? ed.status === "APPROVED" || ed.isPrePublished : Boolean(p.editorialApproved),
+      approvedPhotos: ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0 ? ed.additionalPhotos : p.approvedPhotos || p.additionalPhotos || [],
+      sourceUrl: ed?.sourceUrl || p.sourceUrl || ""
+    };
+  });
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
 });
 app.post("/api/news-posts", (req, res) => {
@@ -2071,18 +2109,68 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
         const postData = req.body || {};
         const updatedTitle = postData.title || p.title;
         approvedTitle = updatedTitle;
+        const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0 ? postData.approvedHeadlines : Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : p.headlineOptions || [updatedTitle];
+        const cDetailed = postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || p.summary;
+        const cBullets = postData.captionBullets || postData.approvedCaptionBullets || p.captionBullets || "";
+        const cShort = postData.captionShort || postData.approvedCaptionShort || p.captionShort || "";
         return {
           ...p,
+          ...postData,
           title: updatedTitle,
-          summary: postData.summary || p.summary,
+          summary: cDetailed || p.summary,
+          captionDetailed: cDetailed,
+          captionBullets: cBullets,
+          captionShort: cShort,
+          approvedCaptionDetailed: cDetailed,
+          approvedCaptionBullets: cBullets,
+          approvedCaptionShort: cShort,
+          headlineOptions: hList,
+          approvedHeadlines: hList,
+          approvedHeadline: postData.approvedHeadline || hList[0] || updatedTitle,
           imageUrl: postData.imageUrl || p.imageUrl,
+          imageSource: postData.imageSource || p.imageSource || "source",
+          manualThumbnailUrl: postData.manualThumbnailUrl !== void 0 ? postData.manualThumbnailUrl : p.manualThumbnailUrl,
           sourceChannel: postData.sourceChannel || p.sourceChannel,
+          sourceUrl: postData.sourceUrl !== void 0 ? postData.sourceUrl : p.sourceUrl,
+          additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : p.additionalPhotos || [],
+          approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : p.approvedPhotos || p.additionalPhotos || [],
           status: "APPROVED",
+          editorialApproved: postData.editorialApproved !== void 0 ? postData.editorialApproved : true,
+          isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : Boolean(p.isPrePublished),
+          breaking: postData.breaking !== void 0 ? postData.breaking : p.breaking,
+          isExclusive: postData.isExclusive !== void 0 ? postData.isExclusive : p.isExclusive,
+          isBonus: postData.isBonus !== void 0 ? postData.isBonus : p.isBonus,
+          rewardCoins: postData.rewardCoins || p.rewardCoins || 100,
           timestamp: Date.now()
         };
       }
       return p;
     });
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      const postData = req.body || {};
+      const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0 ? postData.approvedHeadlines : Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : [approvedTitle];
+      edDb[id] = {
+        ...edDb[id] || {},
+        newsId: id,
+        title: approvedTitle,
+        headlines: hList.slice(0, 5),
+        headlineOptions: hList.slice(0, 5),
+        approvedHeadline: postData.approvedHeadline || hList[0] || approvedTitle,
+        captionDetailed: postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || "",
+        captionBullets: postData.captionBullets || postData.approvedCaptionBullets || "",
+        captionShort: postData.captionShort || postData.approvedCaptionShort || "",
+        sourceUrl: postData.sourceUrl !== void 0 ? postData.sourceUrl : edDb[id]?.sourceUrl || "",
+        additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : edDb[id]?.additionalPhotos || [],
+        status: "APPROVED",
+        isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : true,
+        approvedAt: Date.now(),
+        approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString()
+      };
+      saveApprovedEditorialDatabase(edDb);
+    } catch (e) {
+      console.warn("Could not sync editorial db:", e);
+    }
     if (!found) {
       const postData = req.body || {};
       approvedTitle = postData.title || postData.headline || "\u0938\u092E\u093E\u091A\u093E\u0930";
@@ -2243,14 +2331,52 @@ app.post("/api/editorial/approved/:id", (req, res) => {
             isPrePublished,
             headlineOptions: updated.headlines,
             approvedHeadlines: updated.headlines,
+            approvedHeadline: body.approvedHeadline || updated.headlines[0] || p.title,
+            captionDetailed: updated.captionDetailed || p.summary,
+            captionBullets: updated.captionBullets || "",
+            captionShort: updated.captionShort || "",
+            approvedCaptionDetailed: updated.captionDetailed || p.summary,
+            approvedCaptionBullets: updated.captionBullets || "",
+            approvedCaptionShort: updated.captionShort || "",
             summary: updated.captionDetailed || p.summary,
+            sourceUrl: updated.sourceUrl || p.sourceUrl,
             image: updated.imageUrl || p.image,
-            additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos
+            imageUrl: updated.imageUrl || p.imageUrl,
+            additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos,
+            approvedPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.approvedPhotos
           };
         }
         return p;
       });
       if (modified) {
+        saveNewsDatabase(newsDb);
+      } else {
+        const newApprovedPost = {
+          id,
+          title: updated.title || body.title || "\u0938\u092E\u093E\u091A\u093E\u0930",
+          summary: updated.captionDetailed || body.summary || "",
+          sourceChannel: body.sourceChannel || body.channel || "\u0906\u0930\u090F\u0938\u090F\u0938 / \u0935\u0947\u092C",
+          sourceUrl: body.sourceUrl || body.url || "",
+          category: updated.category || body.category || "breaking",
+          categoryName: body.categoryName || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+          publishedTime: body.publishedTime || "\u0905\u092D\u0940-\u0905\u092D\u0940",
+          imageUrl: updated.imageUrl || body.imageUrl || body.image || getCategoryFallbackImage("general"),
+          additionalPhotos: updated.additionalPhotos || [],
+          breaking: body.breaking !== void 0 ? body.breaking : true,
+          isExclusive: body.isExclusive || false,
+          fullContent: body.fullContent || updated.captionDetailed || "",
+          location: updated.location || body.location || "",
+          district: updated.location || body.location || "",
+          timestamp: Date.now(),
+          status: "APPROVED",
+          isApproved: true,
+          isPrePublished,
+          headlineOptions: updated.headlines,
+          approvedHeadlines: updated.headlines,
+          isBonus: body.isBonus || false,
+          rewardCoins: body.rewardCoins || 100
+        };
+        newsDb.unshift(newApprovedPost);
         saveNewsDatabase(newsDb);
       }
     } catch (syncErr) {
@@ -2410,7 +2536,12 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
     }
     const rDb = loadRewardsDatabase();
     const walletKey = email || userId;
-    const wallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const rawWallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const wallet = {
+      ...rawWallet,
+      coinBalance: typeof rawWallet.coinBalance === "number" ? rawWallet.coinBalance : 0,
+      balance: typeof rawWallet.coinBalance === "number" ? rawWallet.coinBalance : 0
+    };
     const userClaims = rDb.claims.filter(
       (c) => email && c.userEmail && c.userEmail.toLowerCase() === email || userId && c.userId && c.userId === userId
     );
@@ -6257,8 +6388,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           channelName: isSuper ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : profileData?.channelName || existing?.channelNameHi || existing?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
           channelNameHi: isSuper ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : profileData?.channelName || existing?.channelNameHi || existing?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
           channelNameEn: isSuper ? "AI News Maker" : isAdmin ? "Breaking News Wala" : existing?.channelNameEn || "AI News Maker",
-          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : profileData?.channelLogoUrl || existing?.channelLogoUrl || "",
-          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : existing?.channelLogoPngUrl || "",
+          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : existing?.channelLogoPngUrl || existing?.channelLogoUrl || profileData?.channelLogoUrl || "",
+          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : existing?.channelLogoPngUrl || existing?.channelLogoUrl || "",
           channelLogoGifUrl: existing?.channelLogoGifUrl || "",
           channelLogoType: existing?.channelLogoType || "png",
           mobile: profileData?.mobile || existing?.mobileNumber || "9669802408",
@@ -7081,12 +7212,14 @@ app.post("/api/admin/unblock-user", (req, res) => {
 });
 app.post("/api/admin/delete-user", (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    const adminEmail = (req.body?.adminEmail || extractAdminEmail(req) || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL;
+    if (!isMaster) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
-    const { userId, userEmail } = req.body;
-    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
-    if (!identifier) return res.status(400).json({ error: "userId is required" });
+    const { userId, userEmail, targetEmail, targetUserId } = req.body;
+    const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
+    if (!identifier) return res.status(400).json({ error: "userId or email is required" });
     if (isProtectedAdminAccount(identifier)) {
       return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
     }
@@ -7098,7 +7231,7 @@ app.post("/api/admin/delete-user", (req, res) => {
       return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
     }
     users = users.filter(
-      (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier)
+      (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier) && (!targetUser?.email || u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim())
     );
     saveUsersMasterDatabase(users);
     const allProfiles = loadProfilesDatabase();
@@ -7114,7 +7247,44 @@ app.post("/api/admin/delete-user", (req, res) => {
       saveUsersDatabase(accounts);
     } catch {
     }
-    return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E" });
+    try {
+      const sheetFile = import_path.default.join(process.cwd(), "users_sheet_database.json");
+      if (import_fs.default.existsSync(sheetFile)) {
+        let sheetUsers = JSON.parse(import_fs.default.readFileSync(sheetFile, "utf-8"));
+        if (Array.isArray(sheetUsers)) {
+          sheetUsers = sheetUsers.filter(
+            (u) => u.email && u.email.toLowerCase().trim() !== identifier && (u.userId && u.userId.toLowerCase().trim() !== identifier) && (!targetUser?.email || u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim())
+          );
+          import_fs.default.writeFileSync(sheetFile, JSON.stringify(sheetUsers, null, 2), "utf-8");
+        }
+      }
+    } catch {
+    }
+    try {
+      const creds = loadCredentialsDatabase();
+      delete creds[identifier];
+      if (targetUser?.email) delete creds[targetUser.email.toLowerCase().trim()];
+      if (targetUser?.username) delete creds[targetUser.username.toLowerCase().trim()];
+      saveCredentialsDatabase(creds);
+    } catch {
+    }
+    try {
+      const delFile = import_path.default.join(process.cwd(), "account_deletion_requests.json");
+      let delReqs = [];
+      if (import_fs.default.existsSync(delFile)) {
+        delReqs = JSON.parse(import_fs.default.readFileSync(delFile, "utf-8"));
+      }
+      delReqs.unshift({
+        email: targetUser?.email || identifier,
+        userId: targetUser?.userId || identifier,
+        deletedAt: Date.now(),
+        deletedBy: adminEmail || "MASTER_ADMIN",
+        status: "PURGED_BY_ADMIN"
+      });
+      import_fs.default.writeFileSync(delFile, JSON.stringify(delReqs, null, 2), "utf-8");
+    } catch {
+    }
+    return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0914\u0930 \u0909\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0938\u092D\u0940 \u0930\u093F\u0915\u0949\u0930\u094D\u0921\u094D\u0938 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u090F \u0917\u090F\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -7708,12 +7878,19 @@ function saveAiFeaturesConfig(cfg) {
     return false;
   }
 }
-function isRegenerateAllowed(config, effectiveTier) {
+function getHeadlineRegenCoinCost(tier, role) {
+  const cleanRole = (role || "").toLowerCase().trim();
+  if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
+  const t = (tier || "basic").toLowerCase().trim();
+  if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
+  if (t === "professional" || t === "pro") return 25;
+  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 35;
+  return 50;
+}
+function isRegenerateAllowed(config, _effectiveTier) {
   if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
-  const lowerTier = (effectiveTier || "basic").toLowerCase().trim();
-  const isVipOrAdmin = lowerTier === "ultra" || lowerTier === "vip desk" || lowerTier === "vip_desk" || lowerTier === "vip_dash" || lowerTier === "vip-dash" || lowerTier === "vip" || lowerTier === "admin" || lowerTier === "superadmin";
-  return isVipOrAdmin;
+  return true;
 }
 function isTierAllowedForOpenAI(tier, role) {
   const cleanRole = (role || "").toLowerCase().trim();
@@ -10791,14 +10968,22 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
         });
       }
     }
-    const isAllowed = isRegenerateAllowed(aiConfig, userTier);
-    if (!isAllowed) {
-      const allowedList = aiConfig.permissions?.regenerateHeadlines?.allowedTiers || regenConfig.allowedTiers || [];
-      return res.status(403).json({
+    const userEmail = (req.body.email || req.user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.body.userId || req.user?.userId || req.headers["x-user-id"] || userEmail).toString().trim();
+    const walletKey = userEmail || userId;
+    const requiredCoins = getHeadlineRegenCoinCost(userTier, userResolution.role);
+    const rDb = loadRewardsDatabase();
+    if (walletKey && !rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    const currentBalance = walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey].coinBalance : 0;
+    if (requiredCoins > 0 && currentBalance < requiredCoins) {
+      return res.status(400).json({
         success: false,
-        error: `\u0906\u092A\u0915\u0940 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092F\u094B\u091C\u0928\u093E (${userTier}) \u092E\u0947\u0902 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 (Regenerate Headlines) \u0915\u0940 \u0938\u0941\u0935\u093F\u0927\u093E \u0905\u0928\u0941\u092E\u0924 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092F\u094B\u091C\u0928\u093E \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
-        requiredTiers: allowedList,
-        currentTier: userTier
+        insufficientCoins: true,
+        error: `\u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0915\u0949\u0907\u0928 \u092C\u0948\u0932\u0947\u0902\u0938! 5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092C\u0928\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F ${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902, \u091C\u092C\u0915\u093F \u0906\u092A\u0915\u0947 \u092A\u093E\u0938 \u0915\u0947\u0935\u0932 ${currentBalance} \u0915\u0949\u0907\u0928\u094D\u0938 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964`,
+        requiredCoins,
+        currentBalance
       });
     }
     const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
@@ -10964,6 +11149,36 @@ JSON Output Schema:
       sourceTitle || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F",
       sourceLoc
     );
+    let coinsDeducted = 0;
+    let remainingCoins = currentBalance;
+    if (requiredCoins > 0 && walletKey) {
+      rDb.wallets[walletKey].coinBalance = Math.max(0, (rDb.wallets[walletKey].coinBalance || 0) - requiredCoins);
+      coinsDeducted = requiredCoins;
+      remainingCoins = rDb.wallets[walletKey].coinBalance;
+      const txId = `tx-regen-hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const tx = {
+        id: txId,
+        transactionId: txId,
+        userId: userId || walletKey,
+        userEmail: userEmail || walletKey,
+        newsItemId: (req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
+        newsTitle: sourceTitle || "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
+        description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928 (${userTier.toUpperCase()}): -${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
+        transactionType: "debit",
+        type: "debit",
+        coins: requiredCoins,
+        coinCost: requiredCoins,
+        amount: requiredCoins,
+        timestamp: Date.now(),
+        createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+        status: "completed"
+      };
+      if (!Array.isArray(rDb.transactions)) rDb.transactions = [];
+      rDb.transactions.unshift(tx);
+      saveRewardsDatabase(rDb);
+    } else if (walletKey && rDb.wallets[walletKey]) {
+      remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
+    }
     return res.json({
       success: true,
       actualProvider,
@@ -10971,6 +11186,9 @@ JSON Output Schema:
       headlineOptions: finalOptions,
       options: finalOptions,
       headline: finalOptions[0] || "",
+      coinsDeducted,
+      remainingCoins,
+      wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : void 0,
       canonicalContext: {
         ...canonicalContext,
         lastRegeneratedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -13259,6 +13477,110 @@ app.use((err, req, res, next) => {
   }
   next(err);
 });
+app.get("/api/logo-requests", (_req, res) => {
+  return res.json({ success: true, requests: loadLogoRequestsDatabase() });
+});
+app.post("/api/logo-requests", (req, res) => {
+  try {
+    const { userEmail, userName, username, channelName, currentLogoUrl, newLogoUrl, reason, requestType = "logo" } = req.body || {};
+    if (!userEmail) return res.status(400).json({ error: "userEmail is required" });
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const reqs = loadLogoRequestsDatabase();
+    const newReq = {
+      id: `req_${Date.now()}`,
+      userEmail: cleanEmail,
+      userName: userName || cleanEmail.split("@")[0],
+      username: username || cleanEmail.split("@")[0],
+      channelName: channelName || "\u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932",
+      currentLogoUrl: currentLogoUrl || "",
+      newLogoUrl: newLogoUrl || "",
+      reason: (reason || "\u0932\u094B\u0917\u094B \u092C\u0926\u0932\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927").trim(),
+      status: "pending",
+      createdAt: Date.now(),
+      requestType
+    };
+    const updated = [newReq, ...reqs.filter((r) => r.userEmail !== cleanEmail || r.requestType !== requestType)];
+    saveLogoRequestsDatabase(updated);
+    return res.json({ success: true, request: newReq });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reqs = loadLogoRequestsDatabase();
+    const target = reqs.find((r) => r.id === id);
+    if (!target) return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    target.status = "approved";
+    target.approvedAt = Date.now();
+    saveLogoRequestsDatabase(reqs);
+    const cleanEmail = target.userEmail.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    let profile = allProfiles[cleanEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanEmail);
+    if (profile) {
+      if (target.requestType === "gif") {
+        profile.channelLogoGifUrl = target.newLogoUrl;
+        profile.channelLogoType = "gif";
+      } else {
+        profile.channelLogoUrl = target.newLogoUrl;
+        profile.channelLogoPngUrl = target.newLogoUrl;
+        profile.channelLogoType = "png";
+      }
+      profile.updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+    }
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex((a) => a.email && a.email.toLowerCase().trim() === cleanEmail);
+      if (aIdx >= 0) {
+        if (target.requestType === "gif") {
+          accounts[aIdx].channelLogoGifUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoType = "gif";
+        } else {
+          accounts[aIdx].channelLogoUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoPngUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoType = "png";
+        }
+        saveUsersDatabase(accounts);
+      }
+    } catch {
+    }
+    try {
+      let master = loadUsersMasterDatabase();
+      const mIdx = master.findIndex((m) => m.email && m.email.toLowerCase().trim() === cleanEmail);
+      if (mIdx >= 0) {
+        if (target.requestType === "gif") {
+          master[mIdx].channelLogoGifUrl = target.newLogoUrl;
+          master[mIdx].channelLogoType = "gif";
+        } else {
+          master[mIdx].channelLogoUrl = target.newLogoUrl;
+          master[mIdx].channelLogoPngUrl = target.newLogoUrl;
+          master[mIdx].channelLogoType = "png";
+        }
+        saveUsersMasterDatabase(master);
+      }
+    } catch {
+    }
+    return res.json({ success: true, message: "\u0932\u094B\u0917\u094B \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0914\u0930 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0905\u092A\u0921\u0947\u091F \u0939\u094B \u0917\u092F\u093E\u0964" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], (req, res) => {
+  try {
+    const { id } = req.params;
+    const reqs = loadLogoRequestsDatabase();
+    const target = reqs.find((r) => r.id === id);
+    if (!target) return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    target.status = "rejected";
+    target.rejectedAt = Date.now();
+    saveLogoRequestsDatabase(reqs);
+    return res.json({ success: true, message: "\u0932\u094B\u0917\u094B \u0905\u0928\u0941\u0930\u094B\u0927 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
@@ -13366,6 +13688,7 @@ startServer().catch((err) => {
   generate5BalancedHeadlineOptions,
   generate5JournalisticHeadlines,
   getAiFeaturesConfig,
+  getHeadlineRegenCoinCost,
   isRegenerateAllowed,
   isTierAllowedForOpenAI,
   matchDistrictAlias,

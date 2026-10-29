@@ -34,6 +34,7 @@ import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfi
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
 import {
   FolderOpen,
+  LayoutGrid,
   Download,
   Copy,
   Check,
@@ -125,13 +126,13 @@ type AppTab =
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'एआई ऑटोमेशन टूल्स' },
-  { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
-  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
-  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'हेडर, फुटर व लोगो' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
+  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', title: 'फ्रेम टेम्पलेट्स' },
+  { step: 2, id: 'step-ai', label: 'AI', name: 'AI', title: 'AI ऑटोमेशन टूल्स' },
+  { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', title: 'मुख्य हेडलाइन व टेक्स्ट' },
+  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', title: 'फोटो व वॉटरमार्क' },
+  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', title: 'स्थान व दिनांक' },
+  { step: 6, id: 'step-header-footer', label: 'हेडर और फुटर', name: 'हेडर और फुटर', title: 'हेडर, फुटर व लोगो' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', title: 'डाउनलोड व कैप्शन' },
 ];
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
@@ -2967,14 +2968,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
-                  <div className="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1 ring-1 ring-slate-800">
-                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
-                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>स्टेप {activeStep}/7</span>
+                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance (Part 5) */}
+                  <div className="sticky top-0 z-40 w-full bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-md dark:shadow-xl my-1 ring-1 ring-slate-200 dark:ring-slate-800">
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-200 dark:border-slate-800 px-1 gap-2">
+                      <span className="text-xs font-black text-slate-900 dark:text-amber-300 flex items-center gap-1.5 shrink-0">
+                        <LayoutGrid className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Editor Steps 1–7</span>
                       </span>
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-700 dark:text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
                         <span>👉</span>
                         <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
                       </span>
@@ -2993,22 +2994,12 @@ export default function App() {
                                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                               }
                             }}
-                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-xl transition-all flex items-center justify-center cursor-pointer text-xs ${
                               isActive
                                 ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
+                                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60'
                             }`}
                           >
-                            <span
-                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                                isActive
-                                  ? 'bg-slate-950 text-amber-300'
-                                  : 'bg-amber-400 text-slate-950'
-                              }`}
-                            >
-                              {s.step}
-                            </span>
-                            <span className="text-sm shrink-0">{s.icon}</span>
                             <span className="whitespace-nowrap font-bold">{s.name}</span>
                           </button>
                         );
@@ -3195,9 +3186,9 @@ export default function App() {
                     {/* Top Bar Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5">
-                          <span>🎛️</span>
-                          <span>एडिटर स्टेप्स (स्टेप {activeStep} / {STUDIO_STEPS.length})</span>
+                        <span className="text-sm sm:text-base font-black text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
+                          <LayoutGrid className="w-4 h-4 text-amber-500" />
+                          <span>Editor Steps 1–7</span>
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

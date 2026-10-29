@@ -2043,7 +2043,12 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
 
     const rDb = loadRewardsDatabase();
     const walletKey = email || userId;
-    const wallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const rawWallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const wallet = {
+      ...rawWallet,
+      coinBalance: typeof rawWallet.coinBalance === "number" ? rawWallet.coinBalance : 0,
+      balance: typeof rawWallet.coinBalance === "number" ? rawWallet.coinBalance : 0,
+    };
 
     // Get user's claims
     const userClaims = rDb.claims.filter(c =>

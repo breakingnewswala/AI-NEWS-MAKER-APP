@@ -2819,9 +2819,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
 
                 <div className="space-y-1.5 flex flex-col items-center sm:items-start">
-                  {/* User Name & Admin Identity Icon */}
+                  {/* User Name & Admin Identity Icon (Theme-aware for Light & Dark mode) */}
                   <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                    <h2 className="text-lg sm:text-xl font-black text-white">{displayUserName}</h2>
+                    <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">{displayUserName}</h2>
                     {isAdmin && (
                       <span className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-300 border border-amber-300 flex items-center justify-center text-slate-950 font-black text-sm shadow-md" title="व्यवस्थापक">
                         👑
@@ -2830,37 +2830,37 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     {/* Active Plan Tier Badge */}
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-xs ${
                       subscription.tier === 'basic'
-                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                        ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-400 dark:border-amber-500/60 text-amber-800 dark:text-amber-300'
                         : subscription.tier === 'advanced'
-                        ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
+                        ? 'bg-blue-100 dark:bg-blue-950/80 border-blue-400 dark:border-blue-500/60 text-blue-800 dark:text-blue-300'
                         : subscription.tier === 'professional'
-                        ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
-                        : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                        ? 'bg-purple-100 dark:bg-purple-950/80 border-purple-400 dark:border-purple-500/60 text-purple-800 dark:text-purple-300'
+                        : 'bg-emerald-100 dark:bg-emerald-950/80 border-emerald-400 dark:border-emerald-500/60 text-emerald-800 dark:text-emerald-300'
                     }`}>
                       <Crown className="w-3 h-3" />
                       <span>{activePlanDetail.nameHi}</span>
                     </span>
                   </div>
 
-                  {/* Clean Email Display (No boxed container/border) */}
+                  {/* Clean Email Display (Theme-aware for Light & Dark mode) */}
                   {displayEmail && (
-                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-300 pt-0.5">
+                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-600 dark:text-slate-300 pt-0.5">
                       <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-slate-200 font-mono">{displayEmail}</span>
-                      <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold ml-1">
+                      <span className="text-slate-700 dark:text-slate-200 font-mono font-medium">{displayEmail}</span>
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 font-bold ml-1">
                         सत्यापित ID
                       </span>
                     </div>
                   )}
 
-                  {/* Primary Mobile Status - Strictly Locked & Inline with Primary Number */}
+                  {/* Primary Mobile Status (Theme-aware for Light & Dark mode) */}
                   <div className="pt-1.5 flex items-center flex-wrap gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
-                      <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 font-mono text-emerald-700 dark:text-emerald-400 font-bold text-xs sm:text-sm">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>प्राइमरी नंबर: +91 {subscription.primaryMobile || channelProfile.mobileNumber || '9876543210'}</span>
                     </div>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                      <Lock className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                      <Lock className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>स्थायी लॉक</span>
                     </span>
                   </div>

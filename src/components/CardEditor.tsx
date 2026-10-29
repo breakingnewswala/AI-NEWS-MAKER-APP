@@ -506,24 +506,24 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const renderMobileStepNavigation = (stepNumber: number) => {
     if (mobileViewMode !== 'steps') return null;
     return (
-      <div className="sticky bottom-0 z-30 bg-neutral-950/95 backdrop-blur-md pt-2.5 pb-3 border-t border-neutral-800 flex items-center justify-between gap-2 text-xs shadow-2xl px-1 -mx-1">
+      <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-neutral-950/95 backdrop-blur-md pt-2.5 pb-3 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-between gap-2 text-xs shadow-md dark:shadow-2xl px-1 -mx-1">
         {/* Left: पिछला चरण */}
         {stepNumber > 1 ? (
           <button
             type="button"
             onClick={() => handleGoToStep(stepNumber - 1)}
-            className="flex-1 py-2 px-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold flex items-center justify-center gap-1 border border-neutral-700/80 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+            className="flex-1 py-2 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-slate-800 dark:text-neutral-200 font-bold flex items-center justify-center gap-1 border border-slate-300 dark:border-neutral-700/80 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
           >
-            <ChevronLeft className="w-3.5 h-3.5 text-neutral-400" />
+            <ChevronLeft className="w-3.5 h-3.5 text-slate-500 dark:text-neutral-400" />
             <span>पिछला चरण</span>
           </button>
         ) : (
           <button
             type="button"
             disabled
-            className="flex-1 py-2 px-2 rounded-xl bg-neutral-900 text-neutral-600 font-medium flex items-center justify-center gap-1 border border-neutral-800 opacity-40 cursor-not-allowed text-[11px] sm:text-xs"
+            className="flex-1 py-2 px-2 rounded-xl bg-slate-50 dark:bg-neutral-900 text-slate-400 dark:text-neutral-600 font-medium flex items-center justify-center gap-1 border border-slate-200 dark:border-neutral-800 opacity-40 cursor-not-allowed text-[11px] sm:text-xs"
           >
-            <ChevronLeft className="w-3.5 h-3.5 text-neutral-600" />
+            <ChevronLeft className="w-3.5 h-3.5 text-slate-300 dark:text-neutral-600" />
             <span>पिछला चरण</span>
           </button>
         )}
@@ -532,9 +532,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <button
           type="button"
           onClick={() => setIsPreviewModalOpen(true)}
-          className="flex-1 py-2 px-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 font-bold flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+          className="flex-1 py-2 px-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/40 font-bold flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
         >
-          <Eye className="w-3.5 h-3.5 text-blue-400" />
+          <Eye className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
           <span className="truncate">ग्राफिक प्रीव्यू देखें</span>
         </button>
 
@@ -543,10 +543,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <button
             type="button"
             onClick={() => handleGoToStep(stepNumber + 1)}
-            className="flex-1 py-2 px-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-neutral-950 font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+            className="flex-1 py-2 px-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
           >
             <span>अगला चरण</span>
-            <ChevronRight className="w-3.5 h-3.5 text-neutral-950" />
+            <ChevronRight className="w-3.5 h-3.5 text-slate-950" />
           </button>
         ) : (
           <button

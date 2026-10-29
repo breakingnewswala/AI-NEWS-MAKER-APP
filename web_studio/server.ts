@@ -1294,6 +1294,7 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
 app.get("/api/news-posts", (req, res) => {
   const { role, includePending } = req.query;
   const posts = loadNewsDatabase();
+  const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
 
   const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
@@ -1303,6 +1304,12 @@ app.get("/api/news-posts", (req, res) => {
   const activePosts = posts.filter((p) => {
     // 1. Never show obsolete live-post seeds
     if (String(p.id).startsWith("live-post-")) return false;
+
+    // Check if story is already approved or pre-published by admin
+    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    if (isApprovedStory) {
+      return true;
+    }
 
     // 2. 3-day expiration rule
     const postTime = p.timestamp || now;
@@ -1342,6 +1349,9 @@ app.get("/api/news-posts", (req, res) => {
       if (String(p.id).startsWith("live-post-")) return false;
       if (activeIds.has(p.id)) return false;
 
+      const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      if (isApprovedStory) return true;
+
       // Ensure pending and rejected posts are NEVER used for backfill for regular users
       if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
         return false;
@@ -1379,11 +1389,47 @@ app.get("/api/news-posts", (req, res) => {
     return String(b.id).localeCompare(String(a.id));
   });
 
-  // Update publishedTime dynamically
-  const dynamicPosts = activePosts.map((p) => ({
-    ...p,
-    publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
-  }));
+  // Update publishedTime dynamically and merge approved editorial headlines/captions
+  const dynamicPosts = activePosts.map((p) => {
+    const ed = editorialDb[p.id];
+    const headlines = (ed && Array.isArray(ed.headlines) && ed.headlines.length > 0)
+      ? ed.headlines
+      : (p.headlineOptions && Array.isArray(p.headlineOptions) && p.headlineOptions.length > 0)
+      ? p.headlineOptions
+      : (p.approvedHeadlines && Array.isArray(p.approvedHeadlines) && p.approvedHeadlines.length > 0)
+      ? p.approvedHeadlines
+      : (p.title ? [p.title] : []);
+
+    const rawTitle = p.title || (headlines[0] || "समाचार");
+    const rawSummary = (ed?.captionDetailed || p.summary || p.fullContent || rawTitle).trim();
+    const defaultBullets = `• ${rawTitle}।\n• ${rawSummary.slice(0, 140)}।\n\n#BreakingNews #HindiNews #AINewsMaker`;
+    const defaultShort = `${rawTitle}\n\n#BreakingNews #AINewsMaker`;
+
+    const capDetailed = ed?.captionDetailed || p.captionDetailed || p.approvedCaptionDetailed || rawSummary;
+    const capBullets = ed?.captionBullets || p.captionBullets || p.approvedCaptionBullets || defaultBullets;
+    const capShort = ed?.captionShort || p.captionShort || p.approvedCaptionShort || defaultShort;
+
+    return {
+      ...p,
+      publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
+      headlineOptions: headlines,
+      approvedHeadlines: headlines,
+      approvedHeadline: ed?.approvedHeadline || headlines[0] || rawTitle,
+      captionDetailed: capDetailed,
+      captionBullets: capBullets,
+      captionShort: capShort,
+      approvedCaptionDetailed: capDetailed,
+      approvedCaptionBullets: capBullets,
+      approvedCaptionShort: capShort,
+      summary: capDetailed || p.summary,
+      isPrePublished: ed ? Boolean(ed.isPrePublished) : Boolean((p as any).isPrePublished),
+      editorialApproved: ed ? (ed.status === "APPROVED" || ed.isPrePublished) : Boolean((p as any).editorialApproved),
+      approvedPhotos: (ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0)
+        ? ed.additionalPhotos
+        : (p.approvedPhotos || p.additionalPhotos || []),
+      sourceUrl: ed?.sourceUrl || p.sourceUrl || "",
+    };
+  });
 
   // Support array format direct access as well as object
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
@@ -1511,18 +1557,75 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
         const postData = req.body || {};
         const updatedTitle = postData.title || p.title;
         approvedTitle = updatedTitle;
+        const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0
+          ? postData.approvedHeadlines
+          : (Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : (p.headlineOptions || [updatedTitle]));
+        const cDetailed = postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || p.summary;
+        const cBullets = postData.captionBullets || postData.approvedCaptionBullets || (p as any).captionBullets || "";
+        const cShort = postData.captionShort || postData.approvedCaptionShort || (p as any).captionShort || "";
+
         return {
           ...p,
+          ...postData,
           title: updatedTitle,
-          summary: postData.summary || p.summary,
+          summary: cDetailed || p.summary,
+          captionDetailed: cDetailed,
+          captionBullets: cBullets,
+          captionShort: cShort,
+          approvedCaptionDetailed: cDetailed,
+          approvedCaptionBullets: cBullets,
+          approvedCaptionShort: cShort,
+          headlineOptions: hList,
+          approvedHeadlines: hList,
+          approvedHeadline: postData.approvedHeadline || hList[0] || updatedTitle,
           imageUrl: postData.imageUrl || p.imageUrl,
+          imageSource: postData.imageSource || p.imageSource || 'source',
+          manualThumbnailUrl: postData.manualThumbnailUrl !== undefined ? postData.manualThumbnailUrl : p.manualThumbnailUrl,
           sourceChannel: postData.sourceChannel || p.sourceChannel,
+          sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : p.sourceUrl,
+          additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (p.additionalPhotos || []),
+          approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : (p.approvedPhotos || p.additionalPhotos || []),
           status: "APPROVED" as const,
+          editorialApproved: postData.editorialApproved !== undefined ? postData.editorialApproved : true,
+          isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : Boolean((p as any).isPrePublished),
+          breaking: postData.breaking !== undefined ? postData.breaking : p.breaking,
+          isExclusive: postData.isExclusive !== undefined ? postData.isExclusive : p.isExclusive,
+          isBonus: postData.isBonus !== undefined ? postData.isBonus : p.isBonus,
+          rewardCoins: postData.rewardCoins || p.rewardCoins || 100,
           timestamp: Date.now()
         };
       }
       return p;
     });
+
+    // Also synchronize approved_editorial_database.json for complete parity
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      const postData = req.body || {};
+      const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0
+        ? postData.approvedHeadlines
+        : (Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : [approvedTitle]);
+      edDb[id] = {
+        ...(edDb[id] || {}),
+        newsId: id,
+        title: approvedTitle,
+        headlines: hList.slice(0, 5),
+        headlineOptions: hList.slice(0, 5),
+        approvedHeadline: postData.approvedHeadline || hList[0] || approvedTitle,
+        captionDetailed: postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || "",
+        captionBullets: postData.captionBullets || postData.approvedCaptionBullets || "",
+        captionShort: postData.captionShort || postData.approvedCaptionShort || "",
+        sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : (edDb[id]?.sourceUrl || ""),
+        additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (edDb[id]?.additionalPhotos || []),
+        status: "APPROVED",
+        isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : true,
+        approvedAt: Date.now(),
+        approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+      };
+      saveApprovedEditorialDatabase(edDb);
+    } catch (e) {
+      console.warn("Could not sync editorial db:", e);
+    }
 
     if (!found) {
       const postData = req.body || {};
@@ -1699,14 +1802,52 @@ app.post("/api/editorial/approved/:id", (req, res) => {
             isPrePublished,
             headlineOptions: updated.headlines,
             approvedHeadlines: updated.headlines,
+            approvedHeadline: body.approvedHeadline || updated.headlines[0] || p.title,
+            captionDetailed: updated.captionDetailed || p.summary,
+            captionBullets: updated.captionBullets || "",
+            captionShort: updated.captionShort || "",
+            approvedCaptionDetailed: updated.captionDetailed || p.summary,
+            approvedCaptionBullets: updated.captionBullets || "",
+            approvedCaptionShort: updated.captionShort || "",
             summary: updated.captionDetailed || p.summary,
+            sourceUrl: updated.sourceUrl || p.sourceUrl,
             image: updated.imageUrl || p.image,
+            imageUrl: updated.imageUrl || p.imageUrl,
             additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos,
+            approvedPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.approvedPhotos,
           };
         }
         return p;
       });
       if (modified) {
+        saveNewsDatabase(newsDb);
+      } else {
+        const newApprovedPost: StoredNewsPost = {
+          id,
+          title: updated.title || body.title || "समाचार",
+          summary: updated.captionDetailed || body.summary || "",
+          sourceChannel: body.sourceChannel || body.channel || "आरएसएस / वेब",
+          sourceUrl: body.sourceUrl || body.url || "",
+          category: updated.category || body.category || "breaking",
+          categoryName: body.categoryName || "मुख्य समाचार",
+          publishedTime: body.publishedTime || "अभी-अभी",
+          imageUrl: updated.imageUrl || body.imageUrl || body.image || getCategoryFallbackImage("general"),
+          additionalPhotos: updated.additionalPhotos || [],
+          breaking: body.breaking !== undefined ? body.breaking : true,
+          isExclusive: body.isExclusive || false,
+          fullContent: body.fullContent || updated.captionDetailed || "",
+          location: updated.location || body.location || "",
+          district: updated.location || body.location || "",
+          timestamp: Date.now(),
+          status: "APPROVED",
+          isApproved: true,
+          isPrePublished,
+          headlineOptions: updated.headlines,
+          approvedHeadlines: updated.headlines,
+          isBonus: body.isBonus || false,
+          rewardCoins: body.rewardCoins || 100,
+        } as any;
+        newsDb.unshift(newApprovedPost);
         saveNewsDatabase(newsDb);
       }
     } catch (syncErr) {
@@ -1902,7 +2043,12 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
 
     const rDb = loadRewardsDatabase();
     const walletKey = email || userId;
-    const wallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const rawWallet = rDb.wallets[walletKey] || { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    const wallet = {
+      ...rawWallet,
+      coinBalance: typeof rawWallet.coinBalance === "number" ? rawWallet.coinBalance : 0,
+      balance: typeof rawWallet.coinBalance === "number" ? rawWallet.coinBalance : 0,
+    };
 
     // Get user's claims
     const userClaims = rDb.claims.filter(c =>
@@ -6654,8 +6800,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           channelName: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
           channelNameHi: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
           channelNameEn: isSuper ? "AI News Maker" : (isAdmin ? "Breaking News Wala" : (existing?.channelNameEn || "AI News Maker")),
-          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (profileData?.channelLogoUrl || existing?.channelLogoUrl || "")),
-          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || "")),
+          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || existing?.channelLogoUrl || profileData?.channelLogoUrl || "")),
+          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "")),
           channelLogoGifUrl: existing?.channelLogoGifUrl || "",
           channelLogoType: existing?.channelLogoType || "png",
           mobile: profileData?.mobile || existing?.mobileNumber || "9669802408",
@@ -7670,12 +7816,14 @@ app.post("/api/admin/unblock-user", (req, res) => {
 
 app.post("/api/admin/delete-user", (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को डिलीट कर सकते हैं।" });
+    const adminEmail = (req.body?.adminEmail || extractAdminEmail(req) || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL;
+    if (!isMaster) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र्स को डिलीट कर सकते हैं।" });
     }
-    const { userId, userEmail } = req.body;
-    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
-    if (!identifier) return res.status(400).json({ error: "userId is required" });
+    const { userId, userEmail, targetEmail, targetUserId } = req.body;
+    const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
+    if (!identifier) return res.status(400).json({ error: "userId or email is required" });
     if (isProtectedAdminAccount(identifier)) {
       return res.status(403).json({ error: "सुरक्षित एडमिन खाते को डिलीट नहीं किया जा सकता" });
     }
@@ -7690,20 +7838,22 @@ app.post("/api/admin/delete-user", (req, res) => {
       return res.status(403).json({ error: "सुरक्षित सुपर एडमिन खाते को डिलीट नहीं किया जा सकता" });
     }
 
+    // 1. Delete from users_master_database.json
     users = users.filter(u =>
       (u.email && u.email.toLowerCase().trim() !== identifier) &&
-      (u.userId && u.userId.toLowerCase().trim() !== identifier)
+      (u.userId && u.userId.toLowerCase().trim() !== identifier) &&
+      (!targetUser?.email || (u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim()))
     );
     saveUsersMasterDatabase(users);
 
-    // Delete from user_profiles_db.json
+    // 2. Delete from user_profiles_db.json
     const allProfiles = loadProfilesDatabase();
     delete allProfiles[identifier];
     if (targetUser?.email) delete allProfiles[targetUser.email.toLowerCase().trim()];
     if (targetUser?.username) delete allProfiles[targetUser.username.toLowerCase().trim()];
     saveProfilesDatabase(allProfiles);
 
-    // Delete from users_accounts_db.json to prevent resurrection
+    // 3. Delete from users_accounts_db.json
     try {
       let accounts = loadUsersDatabase();
       accounts = accounts.filter(u =>
@@ -7714,7 +7864,49 @@ app.post("/api/admin/delete-user", (req, res) => {
       saveUsersDatabase(accounts);
     } catch {}
 
-    return res.json({ success: true, message: "उपयोगकर्ता सफलतापूर्वक हटा दिया गया" });
+    // 4. Delete from users_sheet_database.json
+    try {
+      const sheetFile = path.join(process.cwd(), "users_sheet_database.json");
+      if (fs.existsSync(sheetFile)) {
+        let sheetUsers = JSON.parse(fs.readFileSync(sheetFile, "utf-8"));
+        if (Array.isArray(sheetUsers)) {
+          sheetUsers = sheetUsers.filter((u: any) =>
+            (u.email && u.email.toLowerCase().trim() !== identifier) &&
+            (u.userId && u.userId.toLowerCase().trim() !== identifier) &&
+            (!targetUser?.email || (u.email && u.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim()))
+          );
+          fs.writeFileSync(sheetFile, JSON.stringify(sheetUsers, null, 2), "utf-8");
+        }
+      }
+    } catch {}
+
+    // 5. Delete from auth_credentials_db.json
+    try {
+      const creds = loadCredentialsDatabase();
+      delete creds[identifier];
+      if (targetUser?.email) delete creds[targetUser.email.toLowerCase().trim()];
+      if (targetUser?.username) delete creds[targetUser.username.toLowerCase().trim()];
+      saveCredentialsDatabase(creds);
+    } catch {}
+
+    // 6. Record in account_deletion_requests.json so re-login starts fresh onboarding
+    try {
+      const delFile = path.join(process.cwd(), "account_deletion_requests.json");
+      let delReqs: any[] = [];
+      if (fs.existsSync(delFile)) {
+        delReqs = JSON.parse(fs.readFileSync(delFile, "utf-8"));
+      }
+      delReqs.unshift({
+        email: targetUser?.email || identifier,
+        userId: targetUser?.userId || identifier,
+        deletedAt: Date.now(),
+        deletedBy: adminEmail || "MASTER_ADMIN",
+        status: "PURGED_BY_ADMIN"
+      });
+      fs.writeFileSync(delFile, JSON.stringify(delReqs, null, 2), "utf-8");
+    } catch {}
+
+    return res.json({ success: true, message: "उपयोगकर्ता और उससे जुड़े सभी रिकॉर्ड्स सफलतापूर्वक हटा दिए गए।" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -8413,23 +8605,21 @@ export function saveAiFeaturesConfig(cfg: any): boolean {
   }
 }
 
-export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
+export function getHeadlineRegenCoinCost(tier: string, role?: string): number {
+  const cleanRole = (role || "").toLowerCase().trim();
+  if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
+  const t = (tier || "basic").toLowerCase().trim();
+  if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
+  if (t === "professional" || t === "pro") return 25;
+  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 35;
+  return 50; // Basic / default
+}
+
+export function isRegenerateAllowed(config: any, _effectiveTier: string): boolean {
   if (!config) return false;
   if (config.headlineRegeneration?.enabled === false) return false;
-
-  const lowerTier = (effectiveTier || "basic").toLowerCase().trim();
-  const isVipOrAdmin = (
-    lowerTier === "ultra" ||
-    lowerTier === "vip desk" ||
-    lowerTier === "vip_desk" ||
-    lowerTier === "vip_dash" ||
-    lowerTier === "vip-dash" ||
-    lowerTier === "vip" ||
-    lowerTier === "admin" ||
-    lowerTier === "superadmin"
-  );
-
-  return isVipOrAdmin;
+  // Per Part 4.1: Available to Basic, Basic Advanced, Pro, VIP Desk with coin charges
+  return true;
 }
 
 export function isTierAllowedForOpenAI(tier: string, role?: string): boolean {
@@ -12686,14 +12876,25 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       }
     }
 
-    const isAllowed = isRegenerateAllowed(aiConfig, userTier);
-    if (!isAllowed) {
-      const allowedList = aiConfig.permissions?.regenerateHeadlines?.allowedTiers || regenConfig.allowedTiers || [];
-      return res.status(403).json({
+    // User identity and coin-based billing per Part 4
+    const userEmail = (req.body.email || (req as any).user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const userId = (req.body.userId || (req as any).user?.userId || req.headers["x-user-id"] || userEmail).toString().trim();
+    const walletKey = userEmail || userId;
+    const requiredCoins = getHeadlineRegenCoinCost(userTier, userResolution.role);
+
+    const rDb = loadRewardsDatabase();
+    if (walletKey && !rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    const currentBalance = (walletKey && rDb.wallets[walletKey]) ? rDb.wallets[walletKey].coinBalance : 0;
+
+    if (requiredCoins > 0 && currentBalance < requiredCoins) {
+      return res.status(400).json({
         success: false,
-        error: `आपकी वर्तमान योजना (${userTier}) में हेडलाइन पुनर्जनन (Regenerate Headlines) की सुविधा अनुमत नहीं है। कृपया योजना अपग्रेड करें।`,
-        requiredTiers: allowedList,
-        currentTier: userTier
+        insufficientCoins: true,
+        error: `अपर्याप्त कॉइन बैलेंस! 5 नई हेडलाइन बनाने के लिए ${requiredCoins} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${currentBalance} कॉइन्स उपलब्ध हैं।`,
+        requiredCoins,
+        currentBalance,
       });
     }
 
@@ -12880,6 +13081,39 @@ JSON Output Schema:
       sourceLoc
     );
 
+    // Atomic coin billing upon successful generation per Part 4.4
+    let coinsDeducted = 0;
+    let remainingCoins = currentBalance;
+    if (requiredCoins > 0 && walletKey) {
+      rDb.wallets[walletKey].coinBalance = Math.max(0, (rDb.wallets[walletKey].coinBalance || 0) - requiredCoins);
+      coinsDeducted = requiredCoins;
+      remainingCoins = rDb.wallets[walletKey].coinBalance;
+
+      const txId = `tx-regen-hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const tx: ServerWalletTransaction = {
+        id: txId,
+        transactionId: txId,
+        userId: userId || walletKey,
+        userEmail: userEmail || walletKey,
+        newsItemId: (req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
+        newsTitle: sourceTitle || "5 नई हेडलाइन्स",
+        description: `5 नई हेडलाइन्स जनरेशन (${userTier.toUpperCase()}): -${requiredCoins} कॉइन्स`,
+        transactionType: "debit",
+        type: "debit",
+        coins: requiredCoins,
+        coinCost: requiredCoins,
+        amount: requiredCoins,
+        timestamp: Date.now(),
+        createdAt: new Date().toISOString(),
+        status: "completed",
+      };
+      if (!Array.isArray(rDb.transactions)) rDb.transactions = [];
+      rDb.transactions.unshift(tx);
+      saveRewardsDatabase(rDb);
+    } else if (walletKey && rDb.wallets[walletKey]) {
+      remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
+    }
+
     return res.json({
       success: true,
       actualProvider,
@@ -12887,6 +13121,9 @@ JSON Output Schema:
       headlineOptions: finalOptions,
       options: finalOptions,
       headline: finalOptions[0] || "",
+      coinsDeducted,
+      remainingCoins,
+      wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : undefined,
       canonicalContext: {
         ...canonicalContext,
         lastRegeneratedAt: new Date().toISOString(),
@@ -15636,6 +15873,129 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   }
   next(err);
 });
+
+// ==========================================
+// LOGO CHANGE REQUESTS API
+// ==========================================
+
+app.get("/api/logo-requests", (_req, res) => {
+  return res.json({ success: true, requests: loadLogoRequestsDatabase() });
+});
+
+app.post("/api/logo-requests", (req, res) => {
+  try {
+    const { userEmail, userName, username, channelName, currentLogoUrl, newLogoUrl, reason, requestType = "logo" } = req.body || {};
+    if (!userEmail) return res.status(400).json({ error: "userEmail is required" });
+    const cleanEmail = userEmail.toLowerCase().trim();
+    const reqs = loadLogoRequestsDatabase();
+    const newReq = {
+      id: `req_${Date.now()}`,
+      userEmail: cleanEmail,
+      userName: userName || cleanEmail.split("@")[0],
+      username: username || cleanEmail.split("@")[0],
+      channelName: channelName || "न्यूज़ चैनल",
+      currentLogoUrl: currentLogoUrl || "",
+      newLogoUrl: newLogoUrl || "",
+      reason: (reason || "लोगो बदलने का अनुरोध").trim(),
+      status: "pending",
+      createdAt: Date.now(),
+      requestType,
+    };
+    const updated = [newReq, ...reqs.filter((r: any) => r.userEmail !== cleanEmail || r.requestType !== requestType)];
+    saveLogoRequestsDatabase(updated);
+    return res.json({ success: true, request: newReq });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reqs = loadLogoRequestsDatabase();
+    const target = reqs.find((r: any) => r.id === id);
+    if (!target) return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+
+    target.status = "approved";
+    target.approvedAt = Date.now();
+    saveLogoRequestsDatabase(reqs);
+
+    // Apply the approved logo to the user profile
+    const cleanEmail = target.userEmail.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    let profile = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail);
+    if (profile) {
+      if (target.requestType === "gif") {
+        profile.channelLogoGifUrl = target.newLogoUrl;
+        profile.channelLogoType = "gif";
+      } else {
+        profile.channelLogoUrl = target.newLogoUrl;
+        profile.channelLogoPngUrl = target.newLogoUrl;
+        profile.channelLogoType = "png";
+      }
+      profile.updatedAt = Date.now();
+      saveProfilesDatabase(allProfiles);
+    }
+
+    // Also update users_accounts_db.json
+    try {
+      let accounts = loadUsersDatabase();
+      const aIdx = accounts.findIndex((a: any) => a.email && a.email.toLowerCase().trim() === cleanEmail);
+      if (aIdx >= 0) {
+        if (target.requestType === "gif") {
+          accounts[aIdx].channelLogoGifUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoType = "gif";
+        } else {
+          accounts[aIdx].channelLogoUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoPngUrl = target.newLogoUrl;
+          accounts[aIdx].channelLogoType = "png";
+        }
+        saveUsersDatabase(accounts);
+      }
+    } catch {}
+
+    // Also update users_master_database.json
+    try {
+      let master = loadUsersMasterDatabase();
+      const mIdx = master.findIndex((m: any) => m.email && m.email.toLowerCase().trim() === cleanEmail);
+      if (mIdx >= 0) {
+        if (target.requestType === "gif") {
+          master[mIdx].channelLogoGifUrl = target.newLogoUrl;
+          master[mIdx].channelLogoType = "gif";
+        } else {
+          master[mIdx].channelLogoUrl = target.newLogoUrl;
+          master[mIdx].channelLogoPngUrl = target.newLogoUrl;
+          master[mIdx].channelLogoType = "png";
+        }
+        saveUsersMasterDatabase(master);
+      }
+    } catch {}
+
+    return res.json({ success: true, message: "लोगो अनुरोध स्वीकृत और प्रोफाइल अपडेट हो गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], (req, res) => {
+  try {
+    const { id } = req.params;
+    const reqs = loadLogoRequestsDatabase();
+    const target = reqs.find((r: any) => r.id === id);
+    if (!target) return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+
+    target.status = "rejected";
+    target.rejectedAt = Date.now();
+    saveLogoRequestsDatabase(reqs);
+
+    return res.json({ success: true, message: "लोगो अनुरोध अस्वीकृत कर दिया गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+
+
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

@@ -106,9 +106,12 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         .then((res) => res.json())
         .then((data) => {
           if (data?.success && data?.wallet) {
-            setWalletCoins(data.wallet.balance);
+            const bal = typeof data.wallet.coinBalance === 'number'
+              ? data.wallet.coinBalance
+              : (typeof data.wallet.balance === 'number' ? data.wallet.balance : 0);
+            setWalletCoins(bal);
             try {
-              localStorage.setItem('ai_news_user_wallet_coins', String(data.wallet.balance));
+              localStorage.setItem('ai_news_user_wallet_coins', String(bal));
             } catch {}
           }
         })
@@ -117,19 +120,34 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
     fetchBalance();
     const handleWalletUpdated = (e: any) => {
-      if (typeof e?.detail?.balance === 'number') {
-        setWalletCoins(e.detail.balance);
+      const b = typeof e?.detail?.coinBalance === 'number'
+        ? e.detail.coinBalance
+        : (typeof e?.detail?.balance === 'number' ? e.detail.balance : null);
+      if (b !== null) {
+        setWalletCoins(b);
       } else {
         fetchBalance();
       }
     };
     window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
+    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
     window.addEventListener('storage', fetchBalance);
     return () => {
       window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
+      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
       window.removeEventListener('storage', fetchBalance);
     };
   }, [currentUser?.email]);
+
+  // Part 6: Auto-refresh video feed every 15s when active, visible and online
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine && !isSyncingVideos) {
+        handleRefreshVideos();
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isSyncingVideos]);
 
   const handleRefreshVideos = async () => {
     if (isSyncingVideos) return;
@@ -1165,7 +1183,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
           {/* MOBILE CONTROLS (Row 1: 3 Centered Controls, Row 2: Full-width Admin Upload) */}
           <div className="flex sm:hidden flex-col gap-2 w-full mt-1">
-            {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Videos, Refresh) */}
+            {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Videos, Refresh with Part 7 tactile motion) */}
             <div className="grid grid-cols-3 gap-2 w-full mb-1">
               {/* Card 1: Coins */}
               <button
@@ -1174,18 +1192,18 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   if (onNavigateToTab) onNavigateToTab('profile');
                   window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
                 }}
-                className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 transition cursor-pointer text-center"
+                className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 active:scale-95 transition-all duration-150 motion-reduce:transform-none cursor-pointer text-center"
                 title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
               >
                 <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-black text-sm">
                   <Coins className="w-4 h-4 shrink-0 text-amber-500" />
-                  <span>{walletCoins !== null ? walletCoins : '0'}</span>
+                  <span>{typeof walletCoins === 'number' ? walletCoins : 0}</span>
                 </div>
                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
               </button>
 
               {/* Card 2: Remaining Videos */}
-              <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-center">
+              <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
                 <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
                   <Film className="w-4 h-4 shrink-0 text-red-500" />
                   <span>{isAdmin || isVipDesk ? 'असीमित' : (hasVideoPlan ? 50 : 0)}</span>
@@ -1198,7 +1216,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 type="button"
                 disabled={isSyncingVideos}
                 onClick={handleRefreshVideos}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800/80 transition text-center cursor-pointer ${isSyncingVideos ? 'opacity-70 cursor-not-allowed' : ''}`}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-95 transition-all duration-150 motion-reduce:transform-none text-center cursor-pointer ${isSyncingVideos ? 'opacity-70 cursor-not-allowed' : ''}`}
                 title="वीडियो फ़ीड रीफ्रेश करें"
               >
                 <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-black text-sm">
@@ -1208,10 +1226,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">लाइव फ़ीड</span>
               </button>
             </div>
-            {/* Row 1: Three balanced, centered controls */}
+            {/* Row 1: Three balanced, centered controls (Theme-aware for Light & Dark mode) */}
             <div className="grid grid-cols-3 gap-1.5 w-full items-center">
               {/* 1. Video Count */}
-              <div className="py-2 px-1 bg-red-950/80 border border-red-700/50 text-red-300 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 text-center truncate">
+              <div className="py-2 px-1 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-700/50 text-red-700 dark:text-red-300 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 text-center truncate">
                 <Flame className="w-3 h-3 text-red-500 shrink-0" />
                 <span className="truncate">{activeVideos.length} वीडियो</span>
               </div>
@@ -1221,14 +1239,14 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsRatioDropdownOpen(!isRatioDropdownOpen)}
-                  className="w-full py-2 px-1 bg-slate-900 border border-slate-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer truncate shadow"
+                  className="w-full py-2 px-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer truncate shadow-xs"
                   title="अनुपात फ़िल्टर"
                 >
                   <span className="truncate">{ratioOptions.find((o) => o.id === selectedRatioFilter)?.label || 'सभी अनुपात'}</span>
-                  <ChevronDown className={`w-3 h-3 text-amber-400 shrink-0 transition-transform ${isRatioDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 text-amber-500 dark:text-amber-400 shrink-0 transition-transform ${isRatioDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {isRatioDropdownOpen && (
-                  <div className="absolute left-0 mt-1 w-40 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1 z-50 space-y-1">
+                  <div className="absolute left-0 mt-1 w-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl p-1 z-50 space-y-1">
                     {ratioOptions.map((opt) => (
                       <button
                         key={opt.id}
@@ -1240,7 +1258,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-between ${
                           selectedRatioFilter === opt.id
                             ? 'bg-amber-400 text-slate-950 font-black'
-                            : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                            : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                         }`}
                       >
                         <span>{opt.label}</span>
@@ -1258,7 +1276,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 className={`w-full py-2 px-1 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 border transition truncate cursor-pointer ${
                   isBonusOnlyFilter
                     ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 border-amber-300 font-black shadow'
-                    : 'bg-slate-900 text-amber-300 border-amber-500/40'
+                    : 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-300 border-amber-500/40'
                 }`}
                 title="केवल बोनस वीडियो दिखाएं"
               >

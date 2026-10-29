@@ -29,7 +29,10 @@ import {
   PlusCircle,
   CheckCircle2,
   Video,
+  Smartphone,
+  Download,
 } from 'lucide-react';
+import { InstallPwaModal } from './InstallPwaModal';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft } from '../lib/draftsManager';
 import { ReporterUser } from './LoginModal';
@@ -101,6 +104,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 }) => {
   // Expandable Accordion sections: drafts, support, epaper
   // Expandable Accordion sections: support, history, drafts, epaper
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<{
     support: boolean;
     history: boolean;
@@ -441,22 +445,22 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </div>
       </div>
 
-      {/* 2. Top Studio Cards - Always visible */}
+      {/* 2. Top Studio Cards - Balanced & Theme-Aware (Part 4) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div
           onClick={onNavigateToStudio}
-          className="bg-gradient-to-br from-amber-50/50 dark:from-amber-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-amber-400/60 dark:border-amber-500/50 hover:border-amber-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl shadow-sm cursor-pointer group flex flex-col justify-between space-y-4"
+          className="bg-gradient-to-br from-amber-50/50 dark:from-amber-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-amber-400/60 dark:border-amber-500/50 hover:border-amber-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-xl shadow-xs cursor-pointer group flex flex-col justify-between space-y-4 min-h-[170px]"
         >
           <div className="space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500 dark:text-amber-400 group-hover:scale-110 transition-transform">
               <ImageIcon className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
-                  नया न्यूज़ ग्राफिक बनाएं (Graphic Studio)
+                  नया न्यूज़ ग्राफ़िक बनाएँ
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">
                   1080x1350 HD
                 </span>
               </div>
@@ -465,26 +469,26 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between text-xs font-black text-amber-400 pt-2 border-t border-slate-800">
-            <span>ग्राफिक स्टूडियो खोलें ➔</span>
-            <span className="text-[10px] text-slate-400 font-normal">9 न्यूज़ फ्रेम्स उपलब्ध</span>
+          <div className="flex items-center justify-between text-xs font-black text-amber-600 dark:text-amber-400 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <span>ग्राफ़िक स्टूडियो खोलें ➔</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">9 न्यूज़ फ्रेम्स उपलब्ध</span>
           </div>
         </div>
 
         <div
           onClick={onNavigateToVideos}
-          className="bg-gradient-to-br from-red-50/50 dark:from-red-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-red-400/60 dark:border-red-500/50 hover:border-red-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-2xl shadow-sm cursor-pointer group flex flex-col justify-between space-y-4"
+          className="bg-gradient-to-br from-red-50/50 dark:from-red-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-red-400/60 dark:border-red-500/50 hover:border-red-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-xl shadow-xs cursor-pointer group flex flex-col justify-between space-y-4 min-h-[170px]"
         >
           <div className="space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+            <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-500 dark:text-red-400 group-hover:scale-110 transition-transform">
               <Video className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-black text-white group-hover:text-red-300 transition-colors">
-                  नया वीडियो न्यूज़ बनाएं (Video Studio)
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white group-hover:text-red-600 dark:group-hover:text-red-300 transition-colors">
+                  नई वीडियो बनाएँ
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/20 text-red-300 font-bold border border-red-500/30">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/20 text-red-700 dark:text-red-300 font-bold border border-red-500/30">
                   रील्स व टीवी
                 </span>
               </div>
@@ -493,36 +497,64 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between text-xs font-black text-red-400 pt-2 border-t border-slate-800">
+          <div className="flex items-center justify-between text-xs font-black text-red-600 dark:text-red-400 pt-2 border-t border-slate-200 dark:border-slate-800">
             <span>वीडियो स्टूडियो खोलें ➔</span>
-            <span className="text-[10px] text-slate-400 font-normal">मल्टी-रेश्यो रेंडरिंग</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">मल्टी-रेश्यो रेंडरिंग</span>
           </div>
         </div>
       </div>
 
+      {/* Part 9: Permanent App Download Option in Newsroom */}
+      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border-2 border-emerald-500/40 hover:border-emerald-500/70 rounded-2xl p-4 sm:p-5 shadow-sm transition-all flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
+            <Smartphone className="w-6 h-6 text-slate-950" />
+          </div>
+          <div>
+            <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2 justify-center sm:justify-start">
+              <span>ऐप डाउनलोड करें (Download App)</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                ऑफ़िशियल PWA व APK
+              </span>
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
+              स्मार्टफोन में ऐप इंस्टॉल करें — 1-क्लिक एक्सेस, ऑफ़लाइन सपोर्ट और तेज़ स्पीड के साथ न्यूज़ तैयार करें।
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsInstallModalOpen(true)}
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shrink-0"
+        >
+          <Download className="w-4 h-4 text-slate-950" />
+          <span>इंस्टॉल करें</span>
+        </button>
+      </div>
+
       {/* 3. The 4 Clean Accordion Sections in exact order: Support -> History -> Drafts -> ePaper */}
       <div className="space-y-4">
-        {/* Section 1: Support Inbox (सपोर्ट इनबॉक्स) */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+        {/* Section 1: Support Inbox (Theme-aware for Light & Dark mode) */}
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl transition-all">
           <button
             type="button"
             onClick={() => toggleSection('support')}
-            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition select-none"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-500 dark:text-blue-400">
                 <MessageSquare className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">सपोर्ट इनबॉक्स</h3>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">सपोर्ट इनबॉक्स</h3>
                   {pendingCount > 0 && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse">
                       {pendingCount} पेंडिंग
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">सपोर्ट टिकट, वॉइस नोट्स, पूछताछ एवं समाधान</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">सपोर्ट टिकट, वॉइस नोट्स, पूछताछ एवं समाधान</p>
               </div>
             </div>
             <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.support ? 'rotate-180 text-amber-400' : ''}`} />
@@ -888,27 +920,27 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           )}
         </div>
 
-        {/* Section 2: Project History (प्रोजेक्ट हिस्ट्री) - Placed immediately above Draft! */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+        {/* Section 2: Project History (Theme-aware for Light & Dark mode) */}
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl transition-all">
           <button
             type="button"
             onClick={() => toggleSection('history')}
-            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition select-none"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500 dark:text-amber-400">
                 <History className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">प्रोजेक्ट हिस्ट्री</h3>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">प्रोजेक्ट हिस्ट्री</h3>
                   {projectHistory.length > 0 && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">
                       {projectHistory.length}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">आपके द्वारा तैयार व एक्सपोर्ट किए गए सभी न्यूज़ ग्राफिक्स एवं वीडियो प्रोजेक्ट्स</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">आपके द्वारा तैयार व एक्सपोर्ट किए गए सभी न्यूज़ ग्राफिक्स एवं वीडियो प्रोजेक्ट्स</p>
               </div>
             </div>
             <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.history ? 'rotate-180 text-amber-400' : ''}`} />
@@ -1066,25 +1098,25 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           )}
         </div>
 
-        {/* Section 3: Drafts & Projects (ड्राफ्ट्स एवं प्रोजेक्ट्स) */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+        {/* Section 3: Drafts & Projects (Theme-aware for Light & Dark mode) */}
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl transition-all">
           <button
             type="button"
             onClick={() => toggleSection('drafts')}
-            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition select-none"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500 dark:text-amber-400">
                 <FolderOpen className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स</h3>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">ड्राफ्ट्स एवं प्रोजेक्ट्स</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">
                     {drafts.length}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">सहेजे गए सभी समाचार ड्राफ्ट्स व प्रोडक्शन प्रोजेक्ट्स</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">सहेजे गए सभी समाचार ड्राफ्ट्स व प्रोडक्शन प्रोजेक्ट्स</p>
               </div>
             </div>
             <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.drafts ? 'rotate-180 text-amber-400' : ''}`} />
@@ -1204,25 +1236,25 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           )}
         </div>
 
-        {/* Section 4: ePaper (ई-पेपर) */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl transition-all">
+        {/* Section 4: ePaper (Theme-aware for Light & Dark mode) */}
+        <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl transition-all">
           <button
             type="button"
             onClick={() => toggleSection('epaper')}
-            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-800/40 transition select-none"
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition select-none"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-500 dark:text-purple-400">
                 <Newspaper className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm sm:text-base font-black text-white">ई-पेपर</h3>
-                  <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-400 font-black tracking-wider uppercase">
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">ई-पेपर</h3>
+                  <span className="text-[9.5px] px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-600 dark:text-amber-400 font-black tracking-wider uppercase">
                     COMING SOON
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">दैनिक समाचार पत्र एवं डिजिटल ई-पेपर पब्लिशिंग सिस्टम</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">दैनिक समाचार पत्र एवं डिजिटल ई-पेपर पब्लिशिंग सिस्टम</p>
               </div>
             </div>
             <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.epaper ? 'rotate-180 text-amber-400' : ''}`} />
@@ -1279,6 +1311,13 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           </div>
         </div>
       )}
+
+      {/* Part 9: Install PWA Modal */}
+      <InstallPwaModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        forceShow={true}
+      />
     </div>
   );
 };

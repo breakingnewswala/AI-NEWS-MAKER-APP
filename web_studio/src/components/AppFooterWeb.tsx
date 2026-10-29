@@ -54,31 +54,26 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           aria-label="AI News Maker 12 Features Showcase"
           className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-50 dark:from-slate-900/90 via-white dark:via-slate-950/95 to-slate-50 dark:to-slate-900/90 border border-slate-200 dark:border-slate-700/80 p-4 sm:p-6 lg:p-8 shadow-sm dark:shadow-2xl relative"
         >
-          {/* Tagline Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90 text-center md:text-left items-center md:items-start">
-            <div className="space-y-2 flex flex-col items-center md:items-start">
-              <div className="flex items-center justify-center md:justify-start gap-2">
-                <span className="p-1.5 rounded-lg bg-amber-400/20 text-amber-400 border border-amber-400/30">
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 animate-pulse" />
+          {/* Tagline Header (Part 3: Center-aligned headline on 2 lines, sparkles removed) */}
+          <div className="flex flex-col items-center justify-center text-center gap-4 pb-6 sm:pb-8 border-b border-slate-200 dark:border-slate-800/90">
+            <div className="space-y-2 flex flex-col items-center text-center">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-tight text-center">
+                <span>खबर देखने से खबर बनाने तक,</span>
+                <span className="block text-amber-500 dark:text-amber-400 drop-shadow-sm font-black mt-1">
+                  सिर्फ 2 मिनट में
                 </span>
-                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
-                  खबर देखने से खबर बनाने तक,{' '}
-                  <span className="text-amber-400 drop-shadow-sm font-black">
-                    सिर्फ 2 मिनट में
-                  </span>
-                </h2>
-              </div>
-              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-600 dark:text-slate-300">
+              </h2>
+              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-600 dark:text-slate-300 text-center">
                 डिजिटल न्यूज़ चैनलों का AI स्टूडियो —{' '}
-                <span className="text-amber-300/90">12 शक्तिशाली सुविधाओं के साथ</span>
+                <span className="text-amber-600 dark:text-amber-400 font-extrabold">12 शक्तिशाली सुविधाओं के साथ</span>
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 self-center lg:self-center">
+            <div className="flex items-center justify-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handleScrollToFeatures}
-                className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-yellow-500/10 hover:from-amber-400 hover:to-yellow-400 text-amber-300 hover:text-slate-950 border border-amber-400/50 hover:border-amber-300 font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all duration-200 shadow-lg shadow-amber-500/10 cursor-pointer active:scale-95"
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-yellow-500/10 hover:from-amber-400 hover:to-yellow-400 text-amber-600 dark:text-amber-300 hover:text-slate-950 border border-amber-400/50 hover:border-amber-300 font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer active:scale-95"
               >
                 <span>सभी फ़ीचर्स देखें</span>
                 <span className="font-bold">→</span>
@@ -101,7 +96,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                   title={`${feat.title} - क्लिक कर फीचर खोलें`}
                 >
                   <div className="space-y-2.5">
-                    {/* Top Row: Icon + Number Badge + Optional Pill Badge */}
+                    {/* Top Row: Icon + Optional Pill Badge (Part 3: Numeric badge removed) */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <div
@@ -109,21 +104,18 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                         >
                           <IconC className="w-4 h-4" />
                         </div>
-                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black text-[11px] flex items-center justify-center shrink-0 shadow-sm">
-                          {feat.number}
-                        </span>
                       </div>
 
                       {feat.badge && (
                         <span
                           className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 border ${
                             feat.badge === '7 आसान चरण'
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+                              ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-400/50'
                               : feat.badge === 'HD क्वालिटी'
-                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
+                              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-400/50'
                               : feat.badge === 'जल्द आ रहा है'
-                              ? 'bg-sky-500/20 text-sky-300 border-sky-400/50'
-                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
+                              ? 'bg-sky-500/20 text-sky-600 dark:text-sky-300 border-sky-400/50'
+                              : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-400/50'
                           }`}
                         >
                           {feat.badge}
@@ -131,13 +123,13 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                       )}
                     </div>
 
-                    {/* Feature Title */}
-                    <h3 className="text-xs sm:text-sm font-extrabold text-white group-hover:text-amber-300 transition-colors leading-snug">
+                    {/* Feature Title (Theme-aware for Light & Dark mode) */}
+                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors leading-snug">
                       {feat.title}
                     </h3>
 
                     {/* Feature Hindi Description */}
-                    <p className="text-[11px] sm:text-xs text-slate-400 group-hover:text-slate-300 transition-colors leading-relaxed line-clamp-3">
+                    <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-300 transition-colors leading-relaxed line-clamp-3">
                       {feat.desc}
                     </p>
                   </div>
@@ -238,8 +230,8 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                 </button>
               </div>
 
-              {/* Direct email bar */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 text-xs text-slate-300">
+              {/* Direct email bar (Part 3: Center-aligned) */}
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-300 text-center">
                 <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <a
                   href={`mailto:${APP_SUPPORT_CONFIG.supportEmail}`}

@@ -281,9 +281,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         .then((res) => res.json())
         .then((data) => {
           if (data?.success && data?.wallet) {
-            setWalletCoins(data.wallet.balance);
+            const bal = typeof data.wallet.coinBalance === 'number'
+              ? data.wallet.coinBalance
+              : (typeof data.wallet.balance === 'number' ? data.wallet.balance : 0);
+            setWalletCoins(bal);
             try {
-              localStorage.setItem('ai_news_user_wallet_coins', String(data.wallet.balance));
+              localStorage.setItem('ai_news_user_wallet_coins', String(bal));
             } catch {}
           }
         })
@@ -292,19 +295,35 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
     fetchBalance();
     const handleWalletUpdated = (e: any) => {
-      if (typeof e?.detail?.balance === 'number') {
-        setWalletCoins(e.detail.balance);
+      const b = typeof e?.detail?.coinBalance === 'number'
+        ? e.detail.coinBalance
+        : (typeof e?.detail?.balance === 'number' ? e.detail.balance : null);
+      if (b !== null) {
+        setWalletCoins(b);
       } else {
         fetchBalance();
       }
     };
     window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
+    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
     window.addEventListener('storage', fetchBalance);
     return () => {
       window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
+      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
       window.removeEventListener('storage', fetchBalance);
     };
   }, [currentUser?.email]);
+
+  // Part 6: Auto-refresh data every 15s when page is active, tab is visible, and online, without resetting scroll
+  useEffect(() => {
+    if (!onRefreshLiveNews) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine && !isSyncingNews) {
+        onRefreshLiveNews();
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [onRefreshLiveNews, isSyncingNews]);
 
   useEffect(() => {
     fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
@@ -1485,7 +1504,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       {/* Centered Container: All boxes share the exact same width and alignment */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-6">
 
-        {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Graphics, Refresh) */}
+        {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Graphics, Refresh with Part 7 tactile motion) */}
         <div className="grid grid-cols-3 gap-2 md:hidden w-full">
           {/* Card 1: Coins */}
           <button
@@ -1494,18 +1513,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               if (onNavigateToTab) onNavigateToTab('profile');
               window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
             }}
-            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 transition cursor-pointer text-center"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 active:scale-95 transition-all duration-150 motion-reduce:transform-none cursor-pointer text-center"
             title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
           >
             <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-black text-sm">
               <Coins className="w-4 h-4 shrink-0 text-amber-500" />
-              <span>{walletCoins !== null ? walletCoins : '0'}</span>
+              <span>{typeof walletCoins === 'number' ? walletCoins : 0}</span>
             </div>
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
           </button>
 
           {/* Card 2: Remaining Graphics */}
-          <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-center">
+          <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
             <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
               <Palette className="w-4 h-4 shrink-0 text-red-500" />
               <span>{canModerate || dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday ?? 10)}</span>
@@ -1522,7 +1541,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 onRefreshLiveNews();
               }
             }}
-            className={`flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800/80 transition text-center cursor-pointer ${isSyncingNews ? 'opacity-70 cursor-not-allowed' : ''}`}
+            className={`flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-95 transition-all duration-150 motion-reduce:transform-none text-center cursor-pointer ${isSyncingNews ? 'opacity-70 cursor-not-allowed' : ''}`}
             title="लाइव फ़ीड रीफ्रेश करें"
           >
             <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-black text-sm">
