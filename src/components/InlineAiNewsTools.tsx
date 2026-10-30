@@ -1849,40 +1849,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <span className="hidden sm:inline">क्लाउड/API</span>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => {
-              if (currentAbortControllerRef.current) {
-                currentAbortControllerRef.current.abort();
-                currentAbortControllerRef.current = null;
-              }
-              isExecutingRef.current = false;
-              isResetRef.current = true;
-              activeNewsIdRef.current = '';
-              lastTriggerPayloadRef.current = '';
-              cleanAiToolsMemory();
-              setLoading(false);
-              setResult(null);
-              setHeadlineOptions([]);
-              setSelectedHeadlineIndex(0);
-              setLinkUrl('');
-              setInputText('');
-              setCustomPrompt('');
-              setGeneratedAiImageUrl(null);
-              setError(null);
-              setAiPhotoPrompt('');
-              setIsManualInputMode(false);
-              if ((window as any).showAppToast) {
-                (window as any).showAppToast('AI टूल्स की मेमोरी और डेटा पूरी तरह साफ़ कर दिया गया है।');
-              }
-            }}
-            className="flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/80 px-2 py-1 rounded-lg transition-all cursor-pointer"
-            title="AI टूल्स मेमोरी और डेटा क्लीन करें"
-          >
-            <Trash2 className="w-3 h-3 text-rose-400" />
-            <span>मेमोरी क्लीन करें</span>
-          </button>
         </div>
       </div>
 

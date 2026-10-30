@@ -1041,6 +1041,14 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     return parsed && !isNaN(parsed) ? parsed : (matchedUser?.createdAt || now);
   })();
 
+  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
+  const isUpgradedPlan =
+    (storedTier && storedTier !== 'basic') ||
+    (matchedUser?.tier && matchedUser.tier !== 'basic') ||
+    Boolean(promoUsed) ||
+    Boolean(matchedUser?.hasActivePaidPlan) ||
+    Boolean(matchedUser?.planName && matchedUser.planName !== 'BASIC' && matchedUser.planName !== 'TRIAL');
+
   const planDetail = getPlanDetail(storedTier);
   let expiresAt = (matchedUser?.expiresAt && matchedUser.expiresAt > 0)
     ? matchedUser.expiresAt
@@ -1050,20 +1058,58 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
         return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
       })());
 
+  // Priority Rule: Admin Upgrade > Paid Membership > Trial > Expired
+  if (isUpgradedPlan) {
+    if (!expiresAt || expiresAt <= now) {
+      expiresAt = now + 365 * 24 * 60 * 60 * 1000;
+    }
+    const msRemaining = Math.max(0, expiresAt - now);
+    const daysRemaining = Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
+    const hoursRemaining = Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
+    const minutesRemaining = Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
+
+    const effectiveTier: UserPlanTier = (matchedUser?.tier && matchedUser.tier !== 'basic') ? matchedUser.tier : (storedTier !== 'basic' ? storedTier : 'pro');
+    const effectivePlanName: PlanKeyName = effectiveTier === 'ultra'
+      ? 'VIP DESK'
+      : (PLAN_KEY_MAP[effectiveTier] || matchedUser?.planName || 'PRO');
+
+    const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
+    const isMobileLocked = Boolean(primaryMobile.trim());
+
+    return {
+      tier: effectiveTier,
+      planName: effectivePlanName,
+      trialStartedAt: startTime,
+      trialEndsAt: expiresAt,
+      isTrialActive: false,
+      isTrialExpired: false,
+      isPlanExpired: false,
+      daysRemaining,
+      hoursRemaining,
+      minutesRemaining,
+      hasActivePaidPlan: true,
+      isBlocked,
+      blockedAt: matchedUser?.blockedAt,
+      blockedBy: matchedUser?.blockedBy,
+      blockedReason: (matchedUser as any)?.blockedReason || (activeEmail ? localStorage.getItem(`user_blocked_reason_${activeEmail}`) : null) || 'व्यवस्थापक नीति उल्लंघन अथवा अनधिकृत गतिविधि के कारण आपका खाता ब्लॉक किया गया है।',
+      primaryMobile: primaryMobile.trim() || undefined,
+      isMobileLocked,
+      expiresAt,
+      activatedViaPromoCode: promoUsed,
+    };
+  }
+
   const msRemaining = Math.max(0, expiresAt - now);
   const isExpired = msRemaining <= 0;
   const daysRemaining = isExpired ? 0 : Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
   const hoursRemaining = isExpired ? 0 : Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
   const minutesRemaining = isExpired ? 0 : Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
 
-  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
-  const hasPaidPlan = storedTier !== 'basic' || Boolean(promoUsed) || Boolean(matchedUser?.expiresAt && matchedUser.expiresAt > now);
-  const isTrialActive = !isExpired && !hasPaidPlan;
+  const hasPaidPlan = false;
+  const isTrialActive = !isExpired;
 
-  const effectiveTier: UserPlanTier = storedTier;
-  const effectivePlanName: PlanKeyName = storedTier === 'ultra'
-    ? 'VIP DESK'
-    : (PLAN_KEY_MAP[storedTier] || matchedUser?.planName || 'BASIC');
+  const effectiveTier: UserPlanTier = 'basic';
+  const effectivePlanName: PlanKeyName = 'BASIC';
 
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
@@ -1074,12 +1120,12 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isTrialExpired: isExpired && !hasPaidPlan,
+    isTrialExpired: isExpired,
     isPlanExpired: isExpired,
     daysRemaining,
     hoursRemaining,
     minutesRemaining,
-    hasActivePaidPlan: hasPaidPlan && !isExpired,
+    hasActivePaidPlan: false,
     isBlocked,
     blockedAt: matchedUser?.blockedAt,
     blockedBy: matchedUser?.blockedBy,
@@ -2018,6 +2064,36 @@ export async function fetchAuthoritativeSubscription(email?: string): Promise<Us
         } else {
           localStorage.removeItem(`user_blocked_${cleanEmail}`);
         }
+
+        // Authoritative synchronization with local state
+        if (sub.tier && sub.tier !== 'basic') {
+          localStorage.setItem(STORAGE_KEY_TIER, sub.tier);
+          const exp = sub.expiresAt && sub.expiresAt > Date.now() ? sub.expiresAt : (Date.now() + 365 * 86400000);
+          localStorage.setItem('ai_news_maker_plan_expires_at', exp.toString());
+
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY_ASSIGNED_USERS);
+            const users: PlanUserRecord[] = raw ? JSON.parse(raw) : [];
+            const idx = users.findIndex(u => u.email && u.email.toLowerCase().trim() === cleanEmail);
+            if (idx >= 0) {
+              users[idx].tier = sub.tier;
+              users[idx].planName = sub.planName;
+              users[idx].expiresAt = exp;
+            } else {
+              users.push({
+                email: cleanEmail,
+                tier: sub.tier,
+                planName: sub.planName,
+                expiresAt: exp,
+                assignedAt: Date.now(),
+              });
+            }
+            localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
+          } catch {}
+
+          window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: sub }));
+        }
+
         return sub;
       }
     }

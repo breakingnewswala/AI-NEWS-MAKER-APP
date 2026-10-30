@@ -53,6 +53,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   onAdminDeleteVideo,
   onNavigateToTab,
 }) => {
+  // Role-based Admin check: Super Admin and Admin have access to video upload controls
+  const isAdmin =
+    isEffectiveAdmin(currentUser) ||
+    isUserSuperAdmin(currentUser) ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'superadmin';
+
   // State for Editing Video Dialog
   const [editingVideo, setEditingVideo] = useState<VideoFeedItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -838,13 +845,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       return true;
     });
   }, [activeVideos, selectedRatioFilter, isBonusOnlyFilter]);
-
-  // Role-based Admin check: Super Admin and Admin have access to video upload controls
-  const isAdmin =
-    isEffectiveAdmin(currentUser) ||
-    isUserSuperAdmin(currentUser) ||
-    currentUser?.role === 'admin' ||
-    currentUser?.role === 'superadmin';
 
   const getAspectRatioClass = (ratio?: string) => {
     switch (ratio) {

@@ -2499,7 +2499,33 @@ function cleanupOldBonusClaims() {
 cleanupOldBonusClaims();
 setInterval(cleanupOldBonusClaims, 24 * 60 * 60 * 1000);
 
-// --- Analytics Module (News & Video Separate) ---
+// --- Analytics Module (News & Video Separate with User-wise Graphic Analytics) ---
+interface UserGraphicRecord {
+  graphicId: string;
+  newsId?: string;
+  title?: string;
+  hasClickedCreate?: boolean;
+  hasStudioStarted?: boolean;
+  hasGenerated?: boolean;
+  hasDraftSaved?: boolean;
+  hasDownloaded?: boolean;
+  isCompleted?: boolean;
+  updatedAt: number;
+}
+
+interface UserAnalyticsRecord {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  membershipPlan: string;
+  totalGenerated: number;
+  totalDownloaded: number;
+  generatedNotDownloaded: number;
+  totalDrafts: number;
+  totalCompleted: number;
+  graphics: Record<string, UserGraphicRecord>;
+}
+
 interface AnalyticsData {
   news: {
     totalViews: number;
@@ -2519,6 +2545,7 @@ interface AnalyticsData {
     uniqueUsers: string[];
     items: Record<string, { title: string; views: number; creates: number }>;
   };
+  userGraphics: Record<string, UserAnalyticsRecord>;
 }
 
 function loadAnalyticsDatabase(): AnalyticsData {
@@ -2527,13 +2554,21 @@ function loadAnalyticsDatabase(): AnalyticsData {
     for (const loc of locs) {
       if (fs.existsSync(loc)) {
         const raw = fs.readFileSync(loc, "utf-8");
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (parsed) {
+          return {
+            news: parsed.news || { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+            video: parsed.video || { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+            userGraphics: parsed.userGraphics || {},
+          };
+        }
       }
     }
   } catch {}
   return {
     news: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
     video: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+    userGraphics: {},
   };
 }
 
@@ -2552,11 +2587,23 @@ function saveAnalyticsDatabase(data: AnalyticsData) {
 
 app.post("/api/analytics/track", (req, res) => {
   try {
-    const { type = "news", event = "view", itemId, userId, title } = req.body || {};
+    const {
+      type = "news",
+      event = "view",
+      itemId,
+      userId,
+      userEmail,
+      userName,
+      userPlan,
+      graphicId,
+      title
+    } = req.body || {};
+
     const aType: "news" | "video" = type === "video" ? "video" : "news";
     const aDb = loadAnalyticsDatabase();
+    if (!aDb.userGraphics) aDb.userGraphics = {};
     const section = aDb[aType];
-    const userIdentifier = (userId || req.ip || "anon").toString().trim().toLowerCase();
+    const userIdentifier = (userEmail || userId || req.ip || "anon").toString().trim().toLowerCase();
 
     if (!section.uniqueUsers.includes(userIdentifier)) {
       section.uniqueUsers.push(userIdentifier);
@@ -2565,7 +2612,7 @@ app.post("/api/analytics/track", (req, res) => {
 
     if (event === "view") section.totalViews = (section.totalViews || 0) + 1;
     else if (event === "click_create") section.clickCreate = (section.clickCreate || 0) + 1;
-    else if (event === "gen_start") section.generationStarts = (section.generationStarts || 0) + 1;
+    else if (event === "gen_start" || event === "studio_start") section.generationStarts = (section.generationStarts || 0) + 1;
     else if (event === "gen_success") section.generationSuccess = (section.generationSuccess || 0) + 1;
     else if (event === "download") section.downloads = (section.downloads || 0) + 1;
 
@@ -2576,6 +2623,82 @@ app.post("/api/analytics/track", (req, res) => {
       }
       if (event === "view") section.items[cleanId].views += 1;
       if (event === "click_create" || event === "download") section.items[cleanId].creates += 1;
+    }
+
+    // User-wise Graphic Analytics Tracking with Duplicate Event Prevention
+    if (userIdentifier && userIdentifier !== "anon") {
+      let uRecord = aDb.userGraphics[userIdentifier];
+      if (!uRecord) {
+        // Resolve user plan and display name from user database
+        const allUsers = loadUsersMasterDatabase();
+        const userMatch = allUsers.find(u =>
+          (u.email && u.email.toLowerCase().trim() === userIdentifier) ||
+          (u.userId && u.userId.toLowerCase().trim() === userIdentifier)
+        );
+
+        uRecord = {
+          userId: userMatch?.userId || userId || userIdentifier,
+          userName: userName || userMatch?.fullName || userMatch?.name || userIdentifier.split("@")[0],
+          userEmail: userMatch?.email || userEmail || userIdentifier,
+          membershipPlan: userPlan || userMatch?.planName || (userMatch?.tier ? userMatch.tier.toUpperCase() : "BASIC"),
+          totalGenerated: 0,
+          totalDownloaded: 0,
+          generatedNotDownloaded: 0,
+          totalDrafts: 0,
+          totalCompleted: 0,
+          graphics: {},
+        };
+        aDb.userGraphics[userIdentifier] = uRecord;
+      }
+
+      if (userName && !uRecord.userName) uRecord.userName = userName;
+      if (userPlan) uRecord.membershipPlan = userPlan;
+
+      const gId = (graphicId || itemId || `g_${Date.now()}`).toString();
+      if (!uRecord.graphics[gId]) {
+        uRecord.graphics[gId] = {
+          graphicId: gId,
+          newsId: itemId ? String(itemId) : undefined,
+          title: title || undefined,
+          hasClickedCreate: false,
+          hasStudioStarted: false,
+          hasGenerated: false,
+          hasDraftSaved: false,
+          hasDownloaded: false,
+          isCompleted: false,
+          updatedAt: Date.now(),
+        };
+      }
+
+      const g = uRecord.graphics[gId];
+      g.updatedAt = Date.now();
+
+      if (event === "click_create") {
+        g.hasClickedCreate = true;
+      } else if (event === "studio_start" || event === "gen_start") {
+        g.hasStudioStarted = true;
+      } else if (event === "gen_success") {
+        if (!g.hasGenerated) {
+          g.hasGenerated = true;
+          uRecord.totalGenerated += 1;
+        }
+      } else if (event === "draft_save") {
+        if (!g.hasDraftSaved) {
+          g.hasDraftSaved = true;
+          uRecord.totalDrafts += 1;
+        }
+      } else if (event === "download") {
+        if (!g.hasDownloaded) {
+          g.hasDownloaded = true;
+          uRecord.totalDownloaded += 1;
+        }
+        if (g.hasGenerated && !g.isCompleted) {
+          g.isCompleted = true;
+          uRecord.totalCompleted += 1;
+        }
+      }
+
+      uRecord.generatedNotDownloaded = Math.max(0, uRecord.totalGenerated - uRecord.totalDownloaded);
     }
 
     saveAnalyticsDatabase(aDb);
@@ -2591,6 +2714,31 @@ app.get("/api/admin/analytics/summary", (req, res) => {
       return res.status(403).json({ error: "अनधिकृत: केवल एडमिन एनालिटिक्स देख सकते हैं" });
     }
     const aDb = loadAnalyticsDatabase();
+    if (!aDb.userGraphics) aDb.userGraphics = {};
+
+    // Synchronize registered users so every registered user appears in user-wise analytics
+    const allUsers = loadUsersMasterDatabase();
+    for (const u of allUsers) {
+      const emailKey = (u.email || "").toLowerCase().trim();
+      if (emailKey && !aDb.userGraphics[emailKey]) {
+        aDb.userGraphics[emailKey] = {
+          userId: u.userId || emailKey,
+          userName: u.fullName || u.name || u.username || emailKey.split("@")[0],
+          userEmail: u.email,
+          membershipPlan: u.planName || (u.tier ? u.tier.toUpperCase() : "BASIC"),
+          totalGenerated: 0,
+          totalDownloaded: 0,
+          generatedNotDownloaded: 0,
+          totalDrafts: 0,
+          totalCompleted: 0,
+          graphics: {},
+        };
+      } else if (emailKey && aDb.userGraphics[emailKey]) {
+        // Keep membershipPlan up to date
+        aDb.userGraphics[emailKey].membershipPlan = u.planName || (u.tier ? u.tier.toUpperCase() : "BASIC");
+        if (u.fullName || u.name) aDb.userGraphics[emailKey].userName = u.fullName || u.name;
+      }
+    }
 
     const formatSection = (sec: AnalyticsData["news"]) => {
       const sortedItems = Object.entries(sec.items || {})
@@ -2609,10 +2757,23 @@ app.get("/api/admin/analytics/summary", (req, res) => {
       };
     };
 
+    const userWiseList = Object.values(aDb.userGraphics).map(u => ({
+      userId: u.userId,
+      userName: u.userName,
+      userEmail: u.userEmail,
+      membershipPlan: u.membershipPlan,
+      totalGenerated: u.totalGenerated,
+      totalDownloaded: u.totalDownloaded,
+      generatedNotDownloaded: u.generatedNotDownloaded,
+      totalDrafts: u.totalDrafts,
+      totalCompleted: u.totalCompleted,
+    })).sort((a, b) => (b.totalGenerated + b.totalDownloaded * 2) - (a.totalGenerated + a.totalDownloaded * 2));
+
     return res.json({
       success: true,
       news: formatSection(aDb.news),
       video: formatSection(aDb.video),
+      userWiseAnalytics: userWiseList,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3717,8 +3878,11 @@ function computeTrialFields(u: AuthoritativeUser, now = Date.now()) {
   const isSuper = u.role === 'superadmin' || isProtectedAdminAccount(u.email);
   const isUpgraded = isSuper || (u.tier && u.tier !== 'basic') || Boolean(u.hasActivePaidPlan) || (u.expiresAt && u.expiresAt > now && (Boolean(u.activatedVia) || Boolean(u.hasActivePaidPlan))) || (u.planName && u.planName !== 'TRIAL' && u.planName !== 'BASIC' && (!u.expiresAt || u.expiresAt > now));
   if (isUpgraded) {
+    const effectiveExpiresAt = (u.expiresAt && u.expiresAt > now) ? u.expiresAt : (now + 365 * 86400000);
+    const msRemaining = Math.max(0, effectiveExpiresAt - now);
+    const daysRemaining = isSuper ? 3650 : Math.max(1, Math.ceil(msRemaining / (24 * 3600 * 1000)));
     return {
-      daysRemaining: isSuper ? 3650 : Math.max(0, Math.ceil(((u.expiresAt || now) - now) / (24 * 3600 * 1000))),
+      daysRemaining,
       hoursRemaining: 24,
       minutesRemaining: 60,
       isTrialActive: false,
@@ -4608,6 +4772,7 @@ function loadVideosDatabase(): StoredVideoItem[] {
     // Videos are preserved across deployments; eligible feed items older than 4 days (96h) are auto-removed
     const validVideos = videos.filter((v) => {
       if (!v || !v.id) return false;
+      if (String(v.id).startsWith("vid-test-")) return false;
       if (deletedSet.has(v.id)) return false;
       const createdAt = Number(v.createdAt) || 0;
       if (createdAt > 0 && (now - createdAt) > FOUR_DAYS_MS) {
@@ -4633,8 +4798,10 @@ function loadVideosDatabase(): StoredVideoItem[] {
 
 function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
   try {
+    // Enforce No Test Artefacts Policy: Discard temporary test fixtures before persisting
+    const sanitized = (videos || []).filter(v => v && v.id && !String(v.id).startsWith("vid-test-"));
     const locations = resolveAllDatabaseLocations("videos_database.json");
-    const jsonStr = JSON.stringify(videos, null, 2);
+    const jsonStr = JSON.stringify(sanitized, null, 2);
     for (const loc of locations) {
       try {
         const dir = path.dirname(loc);
@@ -5534,35 +5701,7 @@ interface AdminRssSourceRecord {
   itemsFetchedCount?: number;
 }
 
-const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
-  {
-    id: "src_aajtak_live",
-    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
-    url: "https://feeds.feedburner.com/aajtak/top",
-    type: "rss",
-    category: "देश",
-    isActive: true,
-    createdAt: 1726000000000
-  },
-  {
-    id: "src_ndtv_live",
-    name: "NDTV इंडिया - लाइव समाचार",
-    url: "https://feeds.feedburner.com/ndtvkhabar",
-    type: "rss",
-    category: "देश",
-    isActive: true,
-    createdAt: 1726000002000
-  },
-  {
-    id: "src_nbt_live",
-    name: "नवभारत टाइम्स (NBT)",
-    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
-    type: "rss",
-    category: "राज्य",
-    isActive: true,
-    createdAt: 1726000004000
-  }
-];
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   try {
@@ -5571,45 +5710,31 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
       if (fs.existsSync(loc)) {
         const raw = fs.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((s: any) => s && s.url);
-          if (valid.length > 0) {
-            return valid;
-          }
-        }
-      }
-    }
-    // Fallback 1: check .bak backup file
-    for (const loc of locations) {
-      const backupFile = loc + ".bak";
-      if (fs.existsSync(backupFile)) {
-        const rawBak = fs.readFileSync(backupFile, "utf-8");
-        const parsedBak = JSON.parse(rawBak);
-        if (Array.isArray(parsedBak) && parsedBak.length > 0) {
-          const validBak = parsedBak.filter((s: any) => s && s.url);
-          if (validBak.length > 0) {
-            saveRssSourcesDatabase(validBak);
-            return validBak;
-          }
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((s: any) => {
+            if (!s || !s.url) return false;
+            const u = String(s.url).toLowerCase();
+            if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+            return true;
+          });
+          return valid;
         }
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return DEFAULT_PRODUCTION_RSS_SOURCES;
+  return [];
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
   try {
-    const cleaned = sources.filter((s: any) => s && s.url);
-    if (cleaned.length === 0) {
-      const existing = loadRssSourcesDatabase();
-      if (existing.length > 0) {
-        console.warn("Safeguard: Refusing to overwrite populated rss_sources_database with empty array");
-        return true;
-      }
-    }
+    const cleaned = sources.filter((s: any) => {
+      if (!s || !s.url) return false;
+      const u = String(s.url).toLowerCase();
+      if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+      return true;
+    });
 
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
@@ -6108,8 +6233,19 @@ function verifyIsAdminUser(req: any): boolean {
 
 
 // 1. GET all admin RSS/Web sources
+function formatHindiDate(timestamp?: number | string | null): string {
+  if (!timestamp) return 'पूर्व में जोड़ा गया (Legacy)';
+  const date = new Date(typeof timestamp === 'string' ? (isNaN(Number(timestamp)) ? timestamp : Number(timestamp)) : timestamp);
+  if (isNaN(date.getTime()) || date.getFullYear() < 2024) return 'पूर्व में जोड़ा गया (Legacy)';
+  const monthsHindi = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
+  return `${date.getDate()} ${monthsHindi[date.getMonth()]} ${date.getFullYear()}`;
+}
+
 app.get("/api/admin/rss-sources", (_req, res) => {
-  const sources = loadRssSourcesDatabase();
+  const sources = loadRssSourcesDatabase().map(s => ({
+    ...s,
+    addedDateFormatted: formatHindiDate(s.addedAt || s.createdAt),
+  }));
   return res.json({ success: true, sources });
 });
 
@@ -6123,19 +6259,22 @@ app.post("/api/admin/rss-sources", (req, res) => {
     const existingSources = loadRssSourcesDatabase();
     let incoming: AdminRssSourceRecord[] = [];
 
+    const now = Date.now();
     if (Array.isArray(payload)) {
       incoming = payload;
     } else if (payload && Array.isArray(payload.sources)) {
       incoming = payload.sources;
     } else if (payload && payload.url) {
       incoming = [{
-        id: payload.id || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: payload.id || `src_${now}_${Math.random().toString(36).slice(2, 6)}`,
         name: (payload.name || (payload.type === 'web' ? 'Web Link' : 'RSS Source')).trim(),
         url: payload.url.trim(),
         type: payload.type === "web" ? "web" : "rss",
         category: payload.category || "देश",
         isActive: payload.isActive !== false,
-        createdAt: payload.createdAt || Date.now(),
+        createdAt: payload.createdAt || now,
+        addedAt: payload.addedAt || payload.createdAt || now,
+        addedDateFormatted: formatHindiDate(payload.addedAt || payload.createdAt || now),
         itemsFetchedCount: 0,
       }];
     }
@@ -6143,22 +6282,39 @@ app.post("/api/admin/rss-sources", (req, res) => {
     const sourceMap = new Map<string, AdminRssSourceRecord>();
     if (req.query.replace === 'true' || payload?.replace === true) {
       incoming.forEach((s) => {
-        if (s && s.url) sourceMap.set(s.url.trim(), s);
+        if (s && s.url) {
+          const original = existingSources.find(ex => ex.url === s.url);
+          const origCreatedAt = original?.createdAt || s.createdAt || now;
+          const origAddedAt = original?.addedAt || s.addedAt || origCreatedAt;
+          sourceMap.set(s.url.trim(), {
+            ...s,
+            createdAt: origCreatedAt,
+            addedAt: origAddedAt,
+            addedDateFormatted: formatHindiDate(origAddedAt),
+          });
+        }
       });
     } else {
       existingSources.forEach((s) => {
         if (s && s.url) sourceMap.set(s.url.trim(), s);
       });
       incoming.forEach((s) => {
-        if (s && s.url) sourceMap.set(s.url.trim(), s);
+        if (s && s.url) {
+          const existing = sourceMap.get(s.url.trim());
+          const origCreatedAt = existing?.createdAt || s.createdAt || now;
+          const origAddedAt = existing?.addedAt || s.addedAt || origCreatedAt;
+          sourceMap.set(s.url.trim(), {
+            ...existing,
+            ...s,
+            createdAt: origCreatedAt,
+            addedAt: origAddedAt,
+            addedDateFormatted: formatHindiDate(origAddedAt),
+          });
+        }
       });
     }
 
     let finalSources = Array.from(sourceMap.values());
-    if (finalSources.length === 0) {
-      finalSources = DEFAULT_PRODUCTION_RSS_SOURCES;
-    }
-
     saveRssSourcesDatabase(finalSources);
     return res.json({ success: true, sources: finalSources });
   } catch (err: any) {
@@ -9601,10 +9757,10 @@ function loadApiKeysVault(): ApiKeysVault {
     }
   }
 
-  // Auto-seed with system environment key if available
+  // Runtime fallback with system environment key if available (never overwrites stored admin configuration)
   const envKey = (process.env.GEMINI_API_KEY || "").trim();
   if (envKey && envKey.length >= 15 && envKey !== "MY_GEMINI_API_KEY") {
-    const defaultVault: ApiKeysVault = {
+    return {
       freeKeys: [
         {
           id: "free_env_primary",
@@ -9623,8 +9779,6 @@ function loadApiKeysVault(): ApiKeysVault {
       paidKey: null,
       vipRoutingEnabled: true,
     };
-    saveApiKeysVault(defaultVault);
-    return defaultVault;
   }
 
   return {
@@ -9653,6 +9807,18 @@ function saveApiKeysVault(vault: ApiKeysVault): boolean {
       console.error(`Error saving ${filename}:`, err.message);
     }
   }
+
+  // Cloud Firestore Permanent Replication
+  try {
+    const adapter = require("./server_firestore_adapter.cjs");
+    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
+      adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
+        ...vault,
+        updatedAt: Date.now(),
+      }).catch((e: any) => console.warn("[Firestore API Key Vault Sync Error]", e.message));
+    }
+  } catch {}
+
   return savedAtLeastOne;
 }
 
@@ -16738,6 +16904,40 @@ app.get("/api/user-payments", (req, res) => {
   return res.json({ success: true, payments: userPayments });
 });
 
+// Diagnostic: Payment Gateways Status (Cashfree & Razorpay verification)
+app.get("/api/payment/gateways-status", (_req, res) => {
+  const cashfreeAppId = process.env.CASHFREE_APP_ID || "";
+  const cashfreeSecret = process.env.CASHFREE_SECRET_KEY || "";
+  const cashfreeEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+  const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "";
+  const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
+
+  return res.json({
+    success: true,
+    activePrimaryGateway: "cashfree",
+    gateways: {
+      cashfree: {
+        id: "cashfree",
+        name: "Cashfree Payments (UPI, Cards, NetBanking)",
+        isConfigured: Boolean(cashfreeAppId && cashfreeSecret && !cashfreeAppId.includes("your_cashfree")),
+        environment: cashfreeEnv,
+        appIdMasked: cashfreeAppId ? `${cashfreeAppId.slice(0, 4)}...${cashfreeAppId.slice(-4)}` : "NOT_CONFIGURED",
+        webhookConfigured: true,
+        mode: cashfreeAppId ? "live/sandbox" : "test_sandbox",
+      },
+      razorpay: {
+        id: "razorpay",
+        name: "Razorpay Payment Gateway",
+        isConfigured: Boolean(razorpayKeyId && razorpayKeySecret),
+        status: razorpayKeyId ? "CONFIGURED" : "NOT_CONFIGURED",
+        note: razorpayKeyId
+          ? "Razorpay API credentials loaded"
+          : "Razorpay API keys not configured in environment; Cashfree is active primary gateway",
+      },
+    },
+  });
+});
+
 // Authoritative Download Entitlement & Quota Verification
 const dailyDownloadsTracker = new Map<string, { date: string; count: number }>();
 
@@ -17273,6 +17473,11 @@ async function startServer() {
         },
       })
     );
+    // Permanent 301 Redirect: Complete eradication of Lite Version routes
+    app.get(["/lite", "/lite/*"], (_req, res) => {
+      res.redirect(301, "/");
+    });
+
     app.get("*", (req, res) => {
       if (req.path.startsWith("/api/")) {
         return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });

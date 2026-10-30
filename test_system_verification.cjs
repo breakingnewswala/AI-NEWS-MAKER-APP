@@ -350,6 +350,11 @@ async function runTests() {
       '4:5 video only includes 4:5 compatible frames, excluding full 9:16 only frames'
     );
 
+    // Clean up created test videos so no test artefacts persist in videos_database.json
+    await request('DELETE', `/api/admin/videos/${testVideoId}`);
+    await request('DELETE', `/api/admin/videos/${test45VideoId}`);
+    console.log('✓ Cleaned up test video records (Zero Test Artefacts Policy)');
+
     // 8. Admin Music Library Multi-Mode & Tier Permissions
     console.log('\n--- 8. Testing Admin Music Library & Tier Mode Permissions ---');
     const testTrackId = `music-test-${Date.now()}`;

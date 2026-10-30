@@ -46,6 +46,7 @@ import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { getApiUrl } from '../lib/apiConfig';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
+import { CashfreePaymentModal } from './CashfreePaymentModal';
 import {
   getUserSubscription,
   fetchAuthoritativeSubscription,
@@ -737,6 +738,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [mobileInput, setMobileInput] = useState<string>('');
   const [mobileError, setMobileError] = useState<string>('');
   const [planSuccessMsg, setPlanSuccessMsg] = useState<string>('');
+  const [cashfreeModalPlan, setCashfreeModalPlan] = useState<any>(null);
 
   // User Promo Code Redemption State
   const [userPromoInput, setUserPromoInput] = useState<string>('');
@@ -1590,14 +1592,26 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     }
   };
 
-  // Handle Plan Upgrade
+  // Handle Plan Upgrade & Payment Gateway Checkout
   const handleUpgradePlan = (tier: UserPlanTier) => {
-    setUserPlanTier(tier);
-    const updated = getUserSubscription();
-    setSubscription(updated);
-    const planDetail = PLAN_DETAILS.find((p) => p.id === tier);
-    setPlanSuccessMsg(`🎉 बधाई! आपका "${planDetail?.nameHi}" सफलतापूर्वक सक्रिय हो गया है। ${tier !== 'basic' ? 'सभी ग्राफिक अब वॉटरमार्क रहित (No Watermark) एक्सपोर्ट होंगे।' : ''}`);
-    setTimeout(() => setPlanSuccessMsg(''), 6000);
+    if (tier === 'basic') {
+      setUserPlanTier('basic');
+      const updated = getUserSubscription();
+      setSubscription(updated);
+      setPlanSuccessMsg('बेसिक प्लान सक्रिय किया गया।');
+      setTimeout(() => setPlanSuccessMsg(''), 4000);
+      return;
+    }
+    const planDetail = PLAN_DETAILS.find((p) => p.id === tier) || null;
+    if (planDetail) {
+      setCashfreeModalPlan(planDetail);
+    } else {
+      setUserPlanTier(tier);
+      const updated = getUserSubscription();
+      setSubscription(updated);
+      setPlanSuccessMsg(`🎉 बधाई! आपका प्लान सफलतापूर्वक सक्रिय हो गया है।`);
+      setTimeout(() => setPlanSuccessMsg(''), 6000);
+    }
   };
 
   // Toggle Admin Test Mode
@@ -2845,6 +2859,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
                 {isAdmin
                   ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
+                  : subscription.hasActivePaidPlan || subscription.tier !== 'basic'
+                  ? `प्रोफाइल विवरण, ${subscription.planName} सक्रिय प्लान व चैनल सेटिंग्स`
                   : 'प्रोफाइल विवरण, 7-Day Free Trial Basic व प्रोमो कोड रिडीम'}
               </p>
             </div>
@@ -2979,13 +2995,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-slate-900 dark:text-white">
                       <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>
-                        {subscription.hasActivePaidPlan
+                        {subscription.hasActivePaidPlan || subscription.tier !== 'basic'
                           ? `${subscription.planName} प्लान`
                           : '7-Day Free Trial'}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {subscription.hasActivePaidPlan ? (
+                      {subscription.hasActivePaidPlan || subscription.tier !== 'basic' ? (
                         <span className="px-2 py-0.5 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black rounded-full shadow-xs">
                           सक्रिय
                         </span>
@@ -3016,14 +3032,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <span className="text-slate-500 dark:text-slate-400">बचा हुआ समय:</span>
                     <span
                       className={`font-mono font-black text-right ${
-                        subscription.hasActivePaidPlan
+                        subscription.hasActivePaidPlan || subscription.tier !== 'basic'
                           ? 'text-amber-300'
                           : subscription.isTrialExpired
                           ? 'text-red-400'
                           : 'text-emerald-400'
                       }`}
                     >
-                      {subscription.hasActivePaidPlan
+                      {subscription.hasActivePaidPlan || subscription.tier !== 'basic'
                         ? `${subscription.daysRemaining} दिन शेष`
                         : subscription.isTrialExpired
                         ? 'ट्रायल समाप्त (लॉक)'
@@ -3060,7 +3076,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   )}
 
                   {/* Warning if expired without paid plan */}
-                  {!subscription.hasActivePaidPlan && subscription.isTrialExpired && (
+                  {!subscription.hasActivePaidPlan && subscription.tier === 'basic' && subscription.isTrialExpired && (
                     <div className="text-[10px] text-red-400/90 bg-red-950/40 border border-red-800/60 rounded-lg px-2 py-1 leading-tight">
                       ⚠️ डाउनलोड व कैप्शन सुविधा लॉक है। जारी रखने के लिए प्लान अपग्रेड करें।
                     </div>
@@ -3762,6 +3778,22 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
         )}
       </div>
+
+      {/* Cashfree Payment Gateway Checkout Modal */}
+      <CashfreePaymentModal
+        isOpen={Boolean(cashfreeModalPlan)}
+        plan={cashfreeModalPlan}
+        currentUser={currentUser || effectiveUser}
+        onClose={() => setCashfreeModalPlan(null)}
+        onSuccess={(planId) => {
+          setCashfreeModalPlan(null);
+          setUserPlanTier(planId as any);
+          const updatedSub = getUserSubscription();
+          setSubscription(updatedSub);
+          setPlanSuccessMsg(`🎉 ${planId.toUpperCase()} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
+          setTimeout(() => setPlanSuccessMsg(''), 6000);
+        }}
+      />
 
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
