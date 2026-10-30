@@ -239,11 +239,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   const [headlineOptions, setHeadlineOptions] = useState<string[]>(() => {
     const s = getSavedAiSession();
-    if (s?.headlineOptions && s.headlineOptions.length > 0) {
+    if (s?.headlineOptions && s.headlineOptions.length >= 5) {
       return s.headlineOptions;
     }
+    if (card.headlineOptions && card.headlineOptions.length >= 5) {
+      return card.headlineOptions;
+    }
     if (card.headline && card.headline.trim()) {
-      return [cleanHeadlineText(card.headline)];
+      const base = cleanHeadlineText(card.headline);
+      const factSentences = (card.summary || base)
+        .split(/[।\n]+|\.\s+/)
+        .map((x: string) => cleanHeadlineText(x).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .filter((x: string) => x.length > 15 && /[\u0900-\u097F]/.test(x));
+      const supp = generate5BalancedHeadlineOptions(base, factSentences, card.location || '');
+      return fitHeadlinesTo5TierRanges(supp, factSentences, base, card.location || '').slice(0, 5);
     }
     return [];
   });
@@ -673,6 +682,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: topHeadline,
         formattedHeadline: topHeadline,
+        headlineOptions: approvedOpts,
         location: editorialResult.location,
         category: editorialResult.category,
         summary: formattedCaption,
@@ -964,6 +974,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
+        headlineOptions: opts.slice(0, 5),
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1111,6 +1122,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: finalHeadline,
         formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
+        headlineOptions: finalOpts.slice(0, 5),
         highlightWords: fallbackResult.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1308,6 +1320,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
+        headlineOptions: opts.slice(0, 5),
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -2210,26 +2223,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               </span>
             </span>
             <div className="flex items-center gap-2">
-              {isVipDeskUser ? (
-                <button
-                  type="button"
-                  onClick={handleRegenerateHeadlines}
-                  disabled={isRegenerating || loading}
-                  className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                  title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-                  <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 पाँच नई हेडलाइन बनाएँ'}</span>
-                </button>
-              ) : (
-                <div
-                  className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center gap-1 cursor-not-allowed select-none"
-                  title="अतिरिक्त हेडलाइन रीजेनरेशन केवल VIP DESK व एडमिन के लिए उपलब्ध है"
-                >
-                  <span>👑</span>
-                  <span>पाँच नई हेडलाइन बनाएँ (VIP DESK)</span>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={handleRegenerateHeadlines}
+                disabled={isRegenerating || loading}
+                className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+                <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 पाँच नई हेडलाइन बनाएँ'}</span>
+              </button>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
                 📍 {result.location || card.location || 'मध्य प्रदेश'}
               </span>

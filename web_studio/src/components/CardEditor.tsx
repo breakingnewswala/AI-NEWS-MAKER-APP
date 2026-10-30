@@ -97,7 +97,15 @@ import {
   getActiveHeaderPng,
   setActiveHeaderPng,
 } from '../lib/headerUtils';
-import { extractLeaderFromHeadline, getEffectiveSpeaker, stripAllUrlsAndHyperlinks, cleanCaptionParagraphs } from '../lib/speakerUtils';
+import {
+  extractLeaderFromHeadline,
+  getEffectiveSpeaker,
+  stripAllUrlsAndHyperlinks,
+  cleanCaptionParagraphs,
+  generate5BalancedHeadlineOptions,
+  fitHeadlinesTo5TierRanges,
+  cleanHeadlineText,
+} from '../lib/speakerUtils';
 import { CardPreview } from './CardPreview';
 import { getUserFirstHashtag, buildHashtags } from './CaptionModal';
 import { VoiceInputButton } from './VoiceInputButton';
@@ -1691,6 +1699,102 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             )}
           </div>
         </div>
+
+        {/* 5 Balanced Headline Options Selection (All Tiers) */}
+        {(() => {
+          const rawOptions = (card.headlineOptions && Array.isArray(card.headlineOptions) && card.headlineOptions.length >= 5)
+            ? card.headlineOptions.slice(0, 5)
+            : (() => {
+                const base = cleanHeadlineText(card.headline || '');
+                if (base) {
+                  const factSentences = (card.summary || base)
+                    .split(/[।\n]+|\.\s+/)
+                    .map((x: string) => cleanHeadlineText(x).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+                    .filter((x: string) => x.length > 15 && /[\u0900-\u097F]/.test(x));
+                  const supp = generate5BalancedHeadlineOptions(base, factSentences, card.location || '');
+                  return fitHeadlinesTo5TierRanges(supp, factSentences, base, card.location || '').slice(0, 5);
+                }
+                return [];
+              })();
+
+          if (rawOptions.length === 0) return null;
+
+          return (
+            <div className="space-y-2 p-3 bg-neutral-950/90 border border-neutral-800 rounded-xl shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-yellow-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span>अपनी पसंदीदा हेडलाइन चुनें (5 संतुलित विकल्प):</span>
+                </span>
+                <span className="text-[10px] text-amber-300/80 font-mono">100-150 वर्ण सीमा</span>
+              </div>
+              <div className="space-y-1.5" role="radiogroup" aria-label="हेडलाइन विकल्प">
+                {rawOptions.map((opt, idx) => {
+                  const cleanOpt = opt.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+                  const cleanCardHeadline = (card.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').replace(/\r?\n/g, ' ').trim();
+                  const isSelected = cleanCardHeadline === cleanOpt || (card.headlineOptions && card.headlineOptions[idx] === card.headline);
+                  const wordCount = cleanOpt.split(/\s+/).filter(Boolean).length;
+                  const charCount = cleanOpt.length;
+
+                  return (
+                    <label
+                      key={idx}
+                      onClick={() => {
+                        onChange({
+                          headline: opt,
+                          formattedHeadline: opt,
+                          headlineOptions: rawOptions,
+                        });
+                      }}
+                      className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1 ${
+                        isSelected
+                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="card_editor_headline_selection"
+                            checked={isSelected}
+                            onChange={() => {
+                              onChange({
+                                headline: opt,
+                                formattedHeadline: opt,
+                                headlineOptions: rawOptions,
+                              });
+                            }}
+                            className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
+                          />
+                          <span className="text-[11px] font-black text-yellow-400 tracking-wide">
+                            विकल्प {idx + 1}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
+                            <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
+                            <span className="text-neutral-600">•</span>
+                            <span className={charCount > 150 ? 'text-red-400' : 'text-neutral-300'}>{charCount} अक्षर</span>
+                          </span>
+                          {isSelected && (
+                            <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold shrink-0">
+                              <Check className="w-3.5 h-3.5 text-yellow-400" />
+                              <span className="hidden sm:inline">सक्रिय</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="leading-snug text-neutral-200 pl-6">
+                        {opt}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Headline Line Formatting Helpers & Counter */}
         {(card.frameDesign as string) === 'jacket-morning' ? (

@@ -21,27 +21,27 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@remotion/player": "^4.0.539",
-    "dotenv": "^17.2.3",
-    "express": "^4.22.3",
-    "openai": "^7.10.0",
-    "remotion": "^4.0.539"
-  },
-  "devDependencies": {
-    "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.14.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^17.2.3",
+    "esbuild": "^0.25.0",
+    "express": "^4.22.3",
     "firebase": "^11.3.0",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "openai": "^7.10.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "esbuild": "^0.25.0",
-    "tsx": "^4.21.0"
+    "remotion": "^4.0.539",
+    "tsx": "^4.21.0",
+    "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 }

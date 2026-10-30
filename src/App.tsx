@@ -29,7 +29,12 @@ import { UpdateNotificationBanner } from './components/UpdateNotificationBanner'
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
 import { validateCardBeforeDownload } from './lib/canonicalLayoutEngine';
-import { extractLeaderFromHeadline } from './lib/speakerUtils';
+import {
+  extractLeaderFromHeadline,
+  generate5BalancedHeadlineOptions,
+  fitHeadlinesTo5TierRanges,
+  cleanHeadlineText,
+} from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
@@ -2306,9 +2311,26 @@ export default function App() {
           };
         }
 
-        const approvedHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
-          ? approvedData.headlines
-          : [post.title];
+        let approvedHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
+          ? approvedData.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean)
+          : [cleanHeadlineText(post.title)];
+
+        // Guarantee all 5 balanced headline options are available for all user tiers
+        if (approvedHeadlines.length < 5) {
+          const baseTitle = cleanHeadlineText(approvedHeadlines[0] || post.title || 'ताज़ा समाचार');
+          const factSentences = (post.summary || (post as any).fullContent || baseTitle)
+            .split(/[।\n]+|\.\s+/)
+            .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+            .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+          const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, effectiveLoc);
+          const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, effectiveLoc);
+          fitted.forEach((h) => {
+            if (approvedHeadlines.length < 5 && !approvedHeadlines.includes(h)) {
+              approvedHeadlines.push(h);
+            }
+          });
+        }
+        approvedHeadlines = approvedHeadlines.slice(0, 5);
         const initialHeadline = approvedHeadlines[0] || post.title;
 
         // Caption personalization: append username to first hashtag only, leave remaining content and final #AINewsMaker unchanged
@@ -2333,6 +2355,7 @@ export default function App() {
           showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
           headline: initialHeadline,
           formattedHeadline: initialHeadline,
+          headlineOptions: approvedHeadlines,
           location: effectiveLoc,
           category: post.categoryName,
           summary: formattedCaption,
@@ -2400,6 +2423,15 @@ export default function App() {
         error: null,
       });
 
+      const baseTitle = cleanHeadlineText(post.title || 'ताज़ा समाचार');
+      const factSentences = (post.summary || (post as any).fullContent || baseTitle)
+        .split(/[।\n]+|\.\s+/)
+        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, effectiveLoc);
+      const initialFiveHeadlines = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, effectiveLoc).slice(0, 5);
+      const topHeadline = initialFiveHeadlines[0] || post.title;
+
       setCard((prev) => ({
         ...prev,
         sourceNewsId: post.id,
@@ -2410,10 +2442,12 @@ export default function App() {
         showDate: false,
         showWatermark: false,
         showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-        headline: '',
+        headline: topHeadline,
+        formattedHeadline: topHeadline,
+        headlineOptions: initialFiveHeadlines,
         location: effectiveLoc,
         category: post.categoryName,
-        summary: '',
+        summary: post.summary || '',
         images: {
           ...prev.images,
           main: primaryPhoto,
@@ -2433,6 +2467,7 @@ export default function App() {
         imageUrl: targetImageForStudio,
         location: effectiveLoc,
         category: post.categoryName,
+        headlineOptions: initialFiveHeadlines,
         autoTrigger: true,
         timestamp: Date.now(),
         additionalPhotos: articlePhotos,
