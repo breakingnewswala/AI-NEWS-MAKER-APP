@@ -1927,38 +1927,22 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       )}
 
-      {/* 3. Automated Entry Top Bar (when result is present and manual inputs are collapsed) */}
-      {isAutomatedEntry && !loading && result && !isManualInputMode && (
+      {/* 3. Automated Entry Top Bar (when result is present) */}
+      {isAutomatedEntry && !loading && result && (
         <div className="flex items-center justify-between text-xs px-3 py-2 bg-neutral-900/80 rounded-xl border border-neutral-800">
           <div className="flex items-center gap-1.5 text-amber-300 font-medium text-xs">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>होम फ़ीड से लोड की गई खबर</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsManualInputMode(true)}
-            className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
-          >
-            <span>✏️ मैन्युअल इनपुट बॉक्स दिखाएँ</span>
-          </button>
+          <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+            ऑटोमैटिक मोड
+          </span>
         </div>
       )}
 
-      {/* 4. Normal / Manual Input Workflow (Visible when NOT automated or when manually toggled) */}
-      {(!isAutomatedEntry || isManualInputMode) && !loading && (
+      {/* 4. Normal / Manual Input Workflow (Visible ONLY when NOT automated) */}
+      {!isAutomatedEntry && !loading && (
         <div className="space-y-3">
-          {isAutomatedEntry && isManualInputMode && (
-            <div className="flex items-center justify-between text-xs pb-1">
-              <span className="text-[11px] text-neutral-400">मैन्युअल इनपुट मोड सक्रिय</span>
-              <button
-                type="button"
-                onClick={() => setIsManualInputMode(false)}
-                className="text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer underline"
-              >
-                ▲ इनपुट बॉक्स छिपाएँ
-              </button>
-            </div>
-          )}
 
           {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
           <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
@@ -2373,7 +2357,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
 
 
-          {/* AI Generated Social Media Caption with 3 Style Switchers */}
+          {/* AI Generated Social Media Caption with 3 Style Switchers (Hidden in automated entry - available in Step 7) */}
+          {!isAutomatedEntry && (
           <div className="p-3 bg-neutral-900/90 rounded-xl border border-neutral-800 space-y-2.5">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
@@ -2459,6 +2444,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               )}
             </div>
           </div>
+          )}
 
           {/* Website Photo Picked (if URL mode) */}
           {result.pickedImages?.main && (
@@ -2516,7 +2502,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* AI Photo Generation Section with ON/OFF Control */}
+          {/* AI Photo Generation Section with ON/OFF Control (Hidden in automated entry) */}
+          {!isAutomatedEntry && (
           <div className="p-3 bg-neutral-900/90 rounded-lg border border-neutral-800 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
@@ -2589,6 +2576,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               </div>
             )}
           </div>
+          )}
 
           {/* Admin Pre-Publish Editorial Action per Section 1.1 */}
           {isAdminOrSuperAdmin && (
@@ -2635,7 +2623,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Primary Action Button: Apply and Go to Step 3 */}
+          {/* Primary Action Button: Apply and Go to Step 3 (Hidden in automated entry - auto-applied) */}
+          {!isAutomatedEntry && (
           <div className="pt-2 space-y-2">
             <button
               type="button"
@@ -2682,6 +2671,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <span>नया लिंक या खबर डालने के लिए रीसेट करें</span>
             </button>
           </div>
+          )}
         </div>
       )}
     </div>

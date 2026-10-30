@@ -3700,7 +3700,8 @@ function broadcastVideoPublishedNotification(videoId: string, title: string) {
 
 function computeTrialFields(u: AuthoritativeUser, now = Date.now()) {
   const isSuper = u.role === 'superadmin' || isProtectedAdminAccount(u.email);
-  if (isSuper || (u.tier && u.tier !== 'basic')) {
+  const isUpgraded = isSuper || (u.tier && u.tier !== 'basic') || Boolean(u.hasActivePaidPlan) || (u.expiresAt && u.expiresAt > now && (Boolean(u.activatedVia) || Boolean(u.hasActivePaidPlan))) || (u.planName && u.planName !== 'TRIAL' && u.planName !== 'BASIC' && (!u.expiresAt || u.expiresAt > now));
+  if (isUpgraded) {
     return {
       daysRemaining: isSuper ? 3650 : Math.max(0, Math.ceil(((u.expiresAt || now) - now) / (24 * 3600 * 1000))),
       hoursRemaining: 24,
@@ -9325,8 +9326,8 @@ export function getHeadlineRegenCoinCost(tier: string, role?: string): number {
   const t = (tier || "basic").toLowerCase().trim();
   if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
   if (t === "professional" || t === "pro") return 25;
-  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 35;
-  return 50; // Basic / default
+  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 50;
+  return 100; // Basic / default
 }
 
 export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
@@ -9520,6 +9521,12 @@ interface VaultFreeKey {
   cooldownUntil: number;
   successCount: number;
   errorCount: number;
+  lastTestedAt?: number;
+  lastLatencyMs?: number;
+  lastHealthStatus?: "healthy" | "quota_exceeded" | "invalid" | "error";
+  lastError?: string;
+  provider?: string;
+  model?: string;
 }
 
 interface VaultPaidKey {
@@ -9527,6 +9534,12 @@ interface VaultPaidKey {
   label: string;
   updatedAt: number;
   status: "active" | "disabled";
+  lastTestedAt?: number;
+  lastLatencyMs?: number;
+  lastHealthStatus?: "healthy" | "quota_exceeded" | "invalid" | "error";
+  lastError?: string;
+  provider?: string;
+  model?: string;
 }
 
 interface ApiKeysVault {
@@ -9545,24 +9558,57 @@ function maskApiKey(key: string): string {
 let freeKeyRoundRobinIndex = 0;
 
 function loadApiKeysVault(): ApiKeysVault {
-  try {
-    const locations = resolveAllDatabaseLocations("gemini_api_keys_vault.json");
-    for (const loc of locations) {
-      if (fs.existsSync(loc)) {
-        const raw = fs.readFileSync(loc, "utf-8");
-        const parsed = JSON.parse(raw);
-        if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
-          return {
-            freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
-            paidKey: parsed?.paidKey || null,
-            vipRoutingEnabled: parsed?.vipRoutingEnabled !== false,
-          };
+  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
+  for (const filename of fileCandidates) {
+    try {
+      const locations = resolveAllDatabaseLocations(filename);
+      for (const loc of locations) {
+        if (fs.existsSync(loc)) {
+          const raw = fs.readFileSync(loc, "utf-8");
+          const parsed = JSON.parse(raw);
+          if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
+            const vaultData: ApiKeysVault = {
+              freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+              paidKey: parsed?.paidKey || null,
+              vipRoutingEnabled: parsed?.vipRoutingEnabled !== false,
+            };
+            if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
+              return vaultData;
+            }
+          }
         }
       }
+    } catch (err: any) {
+      console.error(`Error loading ${filename}:`, err.message);
     }
-  } catch (err: any) {
-    console.error("Error loading gemini_api_keys_vault.json:", err.message);
   }
+
+  // Auto-seed with system environment key if available
+  const envKey = (process.env.GEMINI_API_KEY || "").trim();
+  if (envKey && envKey.length >= 15 && envKey !== "MY_GEMINI_API_KEY") {
+    const defaultVault: ApiKeysVault = {
+      freeKeys: [
+        {
+          id: "free_env_primary",
+          key: envKey,
+          label: "सिस्टम जेमिनी की (Primary System Key)",
+          addedAt: Date.now(),
+          status: "active",
+          cooldownUntil: 0,
+          successCount: 0,
+          errorCount: 0,
+          provider: "Google Gemini",
+          model: "gemini-3.8-flash",
+          lastHealthStatus: "healthy",
+        },
+      ],
+      paidKey: null,
+      vipRoutingEnabled: true,
+    };
+    saveApiKeysVault(defaultVault);
+    return defaultVault;
+  }
+
   return {
     freeKeys: [],
     paidKey: null,
@@ -9571,21 +9617,25 @@ function loadApiKeysVault(): ApiKeysVault {
 }
 
 function saveApiKeysVault(vault: ApiKeysVault): boolean {
-  try {
-    const locations = resolveAllDatabaseLocations("gemini_api_keys_vault.json");
-    for (const loc of locations) {
-      try {
-        const dir = path.dirname(loc);
-        if (fs.existsSync(dir)) {
-          fs.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
-        }
-      } catch {}
+  let savedAtLeastOne = false;
+  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
+  for (const filename of fileCandidates) {
+    try {
+      const locations = resolveAllDatabaseLocations(filename);
+      for (const loc of locations) {
+        try {
+          const dir = path.dirname(loc);
+          if (fs.existsSync(dir)) {
+            fs.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+            savedAtLeastOne = true;
+          }
+        } catch {}
+      }
+    } catch (err: any) {
+      console.error(`Error saving ${filename}:`, err.message);
     }
-    return true;
-  } catch (err: any) {
-    console.error("Error saving gemini_api_keys_vault.json:", err.message);
-    return false;
   }
+  return savedAtLeastOne;
 }
 
 async function executeGeminiWithKeyPool<T>(
@@ -9674,6 +9724,12 @@ app.get("/api/admin/api-keys", (req, res) => {
     cooldownSecondsRemaining: k.cooldownUntil && k.cooldownUntil > now ? Math.ceil((k.cooldownUntil - now) / 1000) : 0,
     successCount: k.successCount || 0,
     errorCount: k.errorCount || 0,
+    lastTestedAt: k.lastTestedAt || null,
+    lastLatencyMs: k.lastLatencyMs || null,
+    lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
+    lastError: k.lastError || null,
+    provider: k.provider || "Google Gemini (गूगल जेमिनी)",
+    model: k.model || "gemini-3.8-flash",
   }));
 
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
@@ -9685,9 +9741,15 @@ app.get("/api/admin/api-keys", (req, res) => {
     paidKey: {
       configured: paidConfigured,
       maskedKey: maskedPaidKey,
-      label: vault.paidKey?.label || "Paid VIP Dedicated Key",
+      label: vault.paidKey?.label || "समर्पित पेड VIP API Key",
       status: vault.paidKey?.status || "inactive",
       updatedAt: vault.paidKey?.updatedAt || null,
+      lastTestedAt: vault.paidKey?.lastTestedAt || null,
+      lastLatencyMs: vault.paidKey?.lastLatencyMs || null,
+      lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
+      lastError: vault.paidKey?.lastError || null,
+      provider: vault.paidKey?.provider || "Google Gemini (गूगल जेमिनी)",
+      model: vault.paidKey?.model || "gemini-3.8-flash",
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
     stats: {
@@ -9840,6 +9902,97 @@ app.post("/api/admin/api-keys/test", async (req, res) => {
     return res.status(500).json({
       success: false,
       error: `कनेक्शन त्रुटि: ${cleanErrorMessage(err)}`,
+    });
+  }
+});
+
+app.post("/api/admin/api-keys/test-id", async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
+  }
+  const { keyId, type } = req.body || {};
+  const vault = loadApiKeysVault();
+  let targetKeyStr = "";
+  let targetRef: VaultFreeKey | VaultPaidKey | null = null;
+
+  if (type === "paid") {
+    if (!vault.paidKey?.key) {
+      return res.status(404).json({ error: "कोई पेड VIP API Key कॉन्फ़िगर नहीं है।" });
+    }
+    targetKeyStr = vault.paidKey.key.trim();
+    targetRef = vault.paidKey;
+  } else {
+    const found = vault.freeKeys.find((k) => k.id === keyId);
+    if (!found) {
+      return res.status(404).json({ error: "API Key नहीं मिली।" });
+    }
+    targetKeyStr = found.key.trim();
+    targetRef = found;
+  }
+
+  const start = Date.now();
+  try {
+    const testAi = new GoogleGenAI({
+      apiKey: targetKeyStr,
+      httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } },
+    });
+    const result = await testAi.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: "Respond with 2 words: Connected successfully",
+    });
+    const latency = Date.now() - start;
+    targetRef.lastTestedAt = Date.now();
+    targetRef.lastLatencyMs = latency;
+    targetRef.lastHealthStatus = "healthy";
+    targetRef.lastError = undefined;
+    targetRef.status = "active";
+    if ("successCount" in targetRef) {
+      targetRef.successCount = (targetRef.successCount || 0) + 1;
+    }
+    saveApiKeysVault(vault);
+
+    return res.json({
+      success: true,
+      message: `✅ API Key पूर्णतः सक्रिय व कार्यरत है! गूगल जेमिनी से सफल कनेक्शन (${latency}ms)`,
+      provider: "Google Gemini (गूगल जेमिनी)",
+      model: "gemini-3.8-flash",
+      latencyMs: latency,
+      healthStatus: "healthy",
+      status: targetRef.status,
+      lastTestedAt: targetRef.lastTestedAt,
+    });
+  } catch (err: any) {
+    const latency = Date.now() - start;
+    const errMsg = String(err?.message || err || "").toLowerCase();
+    targetRef.lastTestedAt = Date.now();
+    targetRef.lastLatencyMs = latency;
+
+    let userFacingMsg = `कनेक्शन त्रुटि: ${cleanErrorMessage(err)}`;
+    if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
+      targetRef.lastHealthStatus = "quota_exceeded";
+      targetRef.lastError = "दैनिक कोटा समाप्त (429 Quota Exhausted)";
+      userFacingMsg = "⚠️ API कोटा समाप्त (429 Quota Exceeded)। की-रोटेशन के अनुसार अगली सक्रिय की उपयोग होगी।";
+    } else if (errMsg.includes("api_key_invalid") || err?.status === 400) {
+      targetRef.lastHealthStatus = "invalid";
+      targetRef.lastError = "अमान्य API Key (400 Invalid Authentication)";
+      userFacingMsg = "❌ अमान्य API Key। Google Gemini द्वारा ऑथेंटिकेशन अस्वीकृत।";
+    } else {
+      targetRef.lastHealthStatus = "error";
+      targetRef.lastError = cleanErrorMessage(err);
+    }
+    if ("errorCount" in targetRef) {
+      targetRef.errorCount = (targetRef.errorCount || 0) + 1;
+    }
+    saveApiKeysVault(vault);
+
+    return res.status(targetRef.lastHealthStatus === "quota_exceeded" ? 429 : 500).json({
+      success: false,
+      error: userFacingMsg,
+      provider: "Google Gemini (गूगल जेमिनी)",
+      model: "gemini-3.8-flash",
+      latencyMs: latency,
+      healthStatus: targetRef.lastHealthStatus,
+      lastTestedAt: targetRef.lastTestedAt,
     });
   }
 });
@@ -16199,7 +16352,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
 // 3. Verify Payment / Order Endpoint
 app.post("/api/cashfree/verify-order", async (req, res) => {
   try {
-    const { orderId, userEmail, forceSuccess } = req.body || {};
+    const { orderId, userEmail } = req.body || {};
     if (!orderId) {
       return res.status(400).json({ error: "ऑर्डर आईडी अनिवार्य है।" });
     }
@@ -16208,14 +16361,14 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
     const orderIndex = allPayments.findIndex((o) => o.orderId === orderId);
     const existingOrder = orderIndex >= 0 ? allPayments[orderIndex] : null;
 
-    let isPaid = Boolean(forceSuccess);
-    let gatewayStatus = existingOrder?.orderStatus || "ACTIVE";
+    let isPaid = false;
+    let gatewayStatus = existingOrder?.orderStatus || "PENDING";
 
     const appId = process.env.CASHFREE_APP_ID;
     const secretKey = process.env.CASHFREE_SECRET_KEY;
     const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
 
-    if (!isPaid && appId && secretKey && !appId.includes("your_cashfree")) {
+    if (appId && secretKey && !appId.includes("your_cashfree")) {
       try {
         const verifyUrl = cfEnv === "PRODUCTION"
           ? `https://api.cashfree.com/pg/orders/${orderId}`
@@ -16238,12 +16391,6 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
       } catch (vErr: any) {
         console.warn("Cashfree verify API error:", vErr.message);
       }
-    }
-
-    // In sandbox or review demo mode, approve active test orders if payment initiated
-    if (!isPaid && (!appId || appId.includes("your_cashfree") || existingOrder?.isLiveGateway === false)) {
-      isPaid = true;
-      gatewayStatus = "PAID";
     }
 
     if (isPaid) {
@@ -16355,7 +16502,11 @@ app.get("/api/user-download-status", (req, res) => {
     const tier = (matchedUser?.tier || "basic").toLowerCase();
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined ? planDetail.maxGraphicsPerDay : (tier === 'ultra' ? 99999 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
+    const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
+    // Part 5: VIP Desk displays "असीमित" (unlimited: true), but has a 100 daily graphic effective safety cap
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
+      ? planDetail.maxGraphicsPerDay
+      : (isVipTier ? 100 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = email;
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -16363,8 +16514,8 @@ app.get("/api/user-download-status", (req, res) => {
     if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
     }
-    const isExhausted = maxAllowed < 99999 && downloadsToday >= maxAllowed;
-    const remainingCount = maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday);
+    const isExhausted = downloadsToday >= maxAllowed;
+    const remainingCount = isVipTier ? 99999 : Math.max(0, maxAllowed - downloadsToday);
     return res.json({
       success: true,
       plan: tier,
@@ -16374,7 +16525,7 @@ app.get("/api/user-download-status", (req, res) => {
       remainingToday: remainingCount,
       remainingDownloads: remainingCount,
       isExhausted,
-      unlimited: maxAllowed >= 99999,
+      unlimited: isVipTier,
       dateStr,
     });
   } catch (err: any) {
@@ -16477,7 +16628,10 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     // 5. Daily download limits per tier (using Asia/Kolkata date)
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined ? planDetail.maxGraphicsPerDay : (tier === 'ultra' ? 99999 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
+    const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
+      ? planDetail.maxGraphicsPerDay
+      : (isVipTier ? 100 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
 
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
@@ -16490,9 +16644,11 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
     }
 
-    if (downloadsToday >= maxAllowed && maxAllowed < 99999) {
+    if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
-        error: `आपकी दैनिक डाउनलोड सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया अगले दिन प्रयास करें या प्लान अपग्रेड करें।`,
+        error: isVipTier
+          ? `आपकी दैनिक VIP डाउनलोड सुरक्षा सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया कल पुनः प्रयास करें।`
+          : `आपकी दैनिक डाउनलोड सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया अगले दिन प्रयास करें या प्लान अपग्रेड करें।`,
         quotaExceeded: true,
         maxAllowed,
         downloadsToday,

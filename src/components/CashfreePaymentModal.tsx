@@ -114,7 +114,6 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
         body: JSON.stringify({
           orderId,
           userEmail: email,
-          forceSuccess: true, // Approves test/sandbox orders
         }),
       });
 

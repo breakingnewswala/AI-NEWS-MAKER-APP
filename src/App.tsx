@@ -3086,13 +3086,9 @@ export default function App() {
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
               <div className="lg:hidden w-full flex flex-col min-h-screen">
-                {/* 🔒 STICKY / FROZEN STUDIO HEADER (Tabs + 70/30 Preview & Steps + Live Preview Action Strip) */}
-                <div
-                  id="mobile-studio-sticky-header"
-                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2.5 pt-2 pb-1.5 transition-all"
-                >
-                  {/* Row 1: Studio Mode Selector Tabs (Graphic Photo News & Video News) */}
-                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 mb-2 max-w-md mx-auto">
+                {/* Row 1: Studio Mode Selector Tabs (Graphic Photo News & Video News) - Scrolls naturally out of view */}
+                <div className="w-full bg-slate-950 px-2.5 pt-2 pb-1">
+                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md mx-auto">
                     <button
                       type="button"
                       onClick={() => updateStudioMode('graphic')}
@@ -3118,7 +3114,13 @@ export default function App() {
                       <span>वीडियो न्यूज़</span>
                     </button>
                   </div>
+                </div>
 
+                {/* 🔒 STICKY / FROZEN STUDIO HEADER (70/30 Preview & Steps + Live Preview Action Strip) */}
+                <div
+                  id="mobile-studio-sticky-header"
+                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2.5 pt-2 pb-1.5 transition-all"
+                >
                   {/* Row 2: Balanced 70/30 Split (Left ~70%: 4:5 Preview | Right ~30%: 7 Editor Steps) */}
                   <div className="flex flex-row items-stretch gap-2.5 max-w-md mx-auto w-full">
                     {/* Left Column: ~70% width for 4:5 Graphic Preview */}

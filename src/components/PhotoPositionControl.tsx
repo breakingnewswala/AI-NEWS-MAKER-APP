@@ -146,52 +146,56 @@ export const PhotoPositionControl: React.FC<PhotoPositionControlProps> = ({
             </div>
           </div>
 
-          {/* Quick Corner / Position Presets */}
-          <div className="grid grid-cols-4 gap-1">
+          {/* 4 Hindi Directional Movement Buttons */}
+          <div className="grid grid-cols-4 gap-1.5">
             {[
-              { label: '⬆️ टॉप', x: currentX, y: 0 },
-              { label: '⬇️ बॉटम', x: currentX, y: 100 },
-              { label: '⬅️ लेफ्ट', x: 0, y: currentY },
-              { label: '➡️ राइट', x: 100, y: currentY },
-            ].map((p) => (
+              { label: '⬆️ ऊपर', action: moveUp, title: 'फोटो ऊपर खिसकाएँ' },
+              { label: '⬇️ नीचे', action: moveDown, title: 'फोटो नीचे खिसकाएँ' },
+              { label: '⬅️ बायाँ', action: moveLeft, title: 'फोटो बाईं ओर खिसकाएँ' },
+              { label: '➡️ दायाँ', action: moveRight, title: 'फोटो दाईं ओर खिसकाएँ' },
+            ].map((btn) => (
               <button
-                key={p.label}
+                key={btn.label}
                 type="button"
-                onClick={() => onChange({ x: p.x, y: p.y })}
-                className="py-1 px-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded text-[10px] font-bold text-neutral-300 text-center cursor-pointer active:scale-95"
+                onClick={btn.action}
+                title={btn.title}
+                className="py-1.5 px-1 bg-neutral-900 hover:bg-neutral-800 hover:text-yellow-400 border border-neutral-800 rounded-lg text-[10px] font-black text-neutral-200 text-center cursor-pointer transition active:scale-95 shadow-sm"
               >
-                {p.label}
+                {btn.label}
               </button>
             ))}
           </div>
 
-          {/* Zoom In / Out Controls */}
-          <div className="pt-1 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium text-neutral-300 flex items-center gap-1">
-              <Maximize2 className="w-3 h-3 text-amber-400" />
-              <span>ज़ूम (Scale):</span>
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => onChange({ zoom: Math.max(1, currentZoom - 0.1) })}
-                className="w-7 h-7 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 rounded flex items-center justify-center cursor-pointer"
-                title="ज़ूम आउट"
-              >
-                <ZoomOut className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[11px] font-mono text-yellow-400 font-bold min-w-[42px] text-center">
-                {currentZoom.toFixed(2)}x
+          {/* Zoom Slider and Numerical Display */}
+          <div className="pt-1.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-neutral-300">
+              <span className="font-semibold flex items-center gap-1">
+                <Maximize2 className="w-3 h-3 text-amber-400" />
+                <span>फ़ोटो ज़ूम (Zoom):</span>
               </span>
-              <button
-                type="button"
-                onClick={() => onChange({ zoom: Math.min(3, currentZoom + 0.1) })}
-                className="w-7 h-7 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 rounded flex items-center justify-center cursor-pointer"
-                title="ज़ूम इन"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-yellow-400 font-mono font-bold bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
+                  {currentZoom.toFixed(2)}x
+                </span>
+                <button
+                  type="button"
+                  onClick={resetCenter}
+                  className="text-[10px] text-neutral-400 hover:text-yellow-400 font-bold underline cursor-pointer"
+                  title="50%, 50% व 1.00x पर रीसेट करें"
+                >
+                  रीसेट
+                </button>
+              </div>
             </div>
+            <input
+              type="range"
+              min="1"
+              max="3"
+              step="0.05"
+              value={currentZoom}
+              onChange={(e) => onChange({ zoom: parseFloat(e.target.value) })}
+              className="w-full accent-yellow-400 cursor-pointer h-1.5 bg-neutral-800 rounded-lg"
+            />
           </div>
         </div>
       </div>

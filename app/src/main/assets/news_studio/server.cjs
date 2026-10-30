@@ -2858,6 +2858,139 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.delete("/api/admin/rewards/claims/:id", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { id } = req.params;
+    const rDb = loadRewardsDatabase();
+    const index = rDb.claims.findIndex((c) => c.claimId === id || c.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "\u0915\u094D\u0932\u0947\u092E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const claim = rDb.claims[index];
+    if (claim.status === "pending") {
+      const walletKey = (claim.userEmail || claim.userId || "").toLowerCase().trim();
+      const coins = claim.rewardCoins || 5;
+      if (rDb.wallets[walletKey]) {
+        rDb.wallets[walletKey].pendingCoins = Math.max(0, rDb.wallets[walletKey].pendingCoins - coins);
+      }
+    }
+    rDb.claims.splice(index, 1);
+    saveRewardsDatabase(rDb);
+    return res.json({ success: true, message: "\u092C\u094B\u0928\u0938 \u0915\u094D\u0932\u0947\u092E \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+function cleanupOldBonusClaims() {
+  try {
+    const rDb = loadRewardsDatabase();
+    if (!rDb || !Array.isArray(rDb.claims)) return;
+    const now = Date.now();
+    const FOUR_DAYS_MS2 = 4 * 24 * 60 * 60 * 1e3;
+    const initialCount = rDb.claims.length;
+    rDb.claims = rDb.claims.filter((c) => {
+      if (c.status === "pending") return true;
+      const claimAge = now - (c.reviewedAt || c.createdAt || now);
+      return claimAge < FOUR_DAYS_MS2;
+    });
+    if (rDb.claims.length !== initialCount) {
+      saveRewardsDatabase(rDb);
+      console.log(`[Bonus Cleanup] Purged ${initialCount - rDb.claims.length} processed bonus claims older than 4 days.`);
+    }
+  } catch (err) {
+    console.warn("[Bonus Cleanup Notice]:", err.message);
+  }
+}
+cleanupOldBonusClaims();
+setInterval(cleanupOldBonusClaims, 24 * 60 * 60 * 1e3);
+function loadAnalyticsDatabase() {
+  try {
+    const locs = resolveAllDatabaseLocations("analytics_database.json");
+    for (const loc of locs) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
+    }
+  } catch {
+  }
+  return {
+    news: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+    video: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} }
+  };
+}
+function saveAnalyticsDatabase(data) {
+  try {
+    const locs = resolveAllDatabaseLocations("analytics_database.json");
+    for (const loc of locs) {
+      if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
+        import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+      }
+    }
+  } catch (e) {
+    console.error("Failed saving analytics_database.json:", e);
+  }
+}
+app.post("/api/analytics/track", (req, res) => {
+  try {
+    const { type = "news", event = "view", itemId, userId, title } = req.body || {};
+    const aType = type === "video" ? "video" : "news";
+    const aDb = loadAnalyticsDatabase();
+    const section = aDb[aType];
+    const userIdentifier = (userId || req.ip || "anon").toString().trim().toLowerCase();
+    if (!section.uniqueUsers.includes(userIdentifier)) {
+      section.uniqueUsers.push(userIdentifier);
+      if (section.uniqueUsers.length > 5e3) section.uniqueUsers.shift();
+    }
+    if (event === "view") section.totalViews = (section.totalViews || 0) + 1;
+    else if (event === "click_create") section.clickCreate = (section.clickCreate || 0) + 1;
+    else if (event === "gen_start") section.generationStarts = (section.generationStarts || 0) + 1;
+    else if (event === "gen_success") section.generationSuccess = (section.generationSuccess || 0) + 1;
+    else if (event === "download") section.downloads = (section.downloads || 0) + 1;
+    if (itemId) {
+      const cleanId = itemId.toString();
+      if (!section.items[cleanId]) {
+        section.items[cleanId] = { title: title || cleanId, views: 0, creates: 0 };
+      }
+      if (event === "view") section.items[cleanId].views += 1;
+      if (event === "click_create" || event === "download") section.items[cleanId].creates += 1;
+    }
+    saveAnalyticsDatabase(aDb);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/analytics/summary", (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u090F\u0928\u093E\u0932\u093F\u091F\u093F\u0915\u094D\u0938 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const aDb = loadAnalyticsDatabase();
+    const formatSection = (sec) => {
+      const sortedItems = Object.entries(sec.items || {}).map(([id, val]) => ({ id, ...val })).sort((a, b) => b.views + b.creates * 2 - (a.views + a.creates * 2)).slice(0, 8);
+      return {
+        uniqueUsers: sec.uniqueUsers?.length || 0,
+        totalViews: sec.totalViews || 0,
+        clickCreate: sec.clickCreate || 0,
+        generationStarts: sec.generationStarts || 0,
+        generationSuccess: sec.generationSuccess || 0,
+        downloads: sec.downloads || 0,
+        trending: sortedItems
+      };
+    };
+    return res.json({
+      success: true,
+      news: formatSection(aDb.news),
+      video: formatSection(aDb.video)
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/upload-logo", async (req, res) => {
   const release = await userDbLock.acquire();
   try {
@@ -3738,7 +3871,8 @@ function broadcastVideoPublishedNotification(videoId, title) {
 }
 function computeTrialFields(u, now = Date.now()) {
   const isSuper = u.role === "superadmin" || isProtectedAdminAccount(u.email);
-  if (isSuper || u.tier && u.tier !== "basic") {
+  const isUpgraded = isSuper || u.tier && u.tier !== "basic" || Boolean(u.hasActivePaidPlan) || u.expiresAt && u.expiresAt > now && (Boolean(u.activatedVia) || Boolean(u.hasActivePaidPlan)) || u.planName && u.planName !== "TRIAL" && u.planName !== "BASIC" && (!u.expiresAt || u.expiresAt > now);
+  if (isUpgraded) {
     return {
       daysRemaining: isSuper ? 3650 : Math.max(0, Math.ceil(((u.expiresAt || now) - now) / (24 * 3600 * 1e3))),
       hoursRemaining: 24,
@@ -8371,8 +8505,8 @@ function getHeadlineRegenCoinCost(tier, role) {
   const t = (tier || "basic").toLowerCase().trim();
   if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
   if (t === "professional" || t === "pro") return 25;
-  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 35;
-  return 50;
+  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 50;
+  return 100;
 }
 function isRegenerateAllowed(config, effectiveTier) {
   if (!config) return false;
@@ -8493,23 +8627,53 @@ function maskApiKey(key) {
 }
 var freeKeyRoundRobinIndex = 0;
 function loadApiKeysVault() {
-  try {
-    const locations = resolveAllDatabaseLocations("gemini_api_keys_vault.json");
-    for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
-        const parsed = JSON.parse(raw);
-        if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
-          return {
-            freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
-            paidKey: parsed?.paidKey || null,
-            vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
-          };
+  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
+  for (const filename of fileCandidates) {
+    try {
+      const locations = resolveAllDatabaseLocations(filename);
+      for (const loc of locations) {
+        if (import_fs.default.existsSync(loc)) {
+          const raw = import_fs.default.readFileSync(loc, "utf-8");
+          const parsed = JSON.parse(raw);
+          if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
+            const vaultData = {
+              freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+              paidKey: parsed?.paidKey || null,
+              vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
+            };
+            if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
+              return vaultData;
+            }
+          }
         }
       }
+    } catch (err) {
+      console.error(`Error loading ${filename}:`, err.message);
     }
-  } catch (err) {
-    console.error("Error loading gemini_api_keys_vault.json:", err.message);
+  }
+  const envKey = (process.env.GEMINI_API_KEY || "").trim();
+  if (envKey && envKey.length >= 15 && envKey !== "MY_GEMINI_API_KEY") {
+    const defaultVault = {
+      freeKeys: [
+        {
+          id: "free_env_primary",
+          key: envKey,
+          label: "\u0938\u093F\u0938\u094D\u091F\u092E \u091C\u0947\u092E\u093F\u0928\u0940 \u0915\u0940 (Primary System Key)",
+          addedAt: Date.now(),
+          status: "active",
+          cooldownUntil: 0,
+          successCount: 0,
+          errorCount: 0,
+          provider: "Google Gemini",
+          model: "gemini-3.8-flash",
+          lastHealthStatus: "healthy"
+        }
+      ],
+      paidKey: null,
+      vipRoutingEnabled: true
+    };
+    saveApiKeysVault(defaultVault);
+    return defaultVault;
   }
   return {
     freeKeys: [],
@@ -8518,22 +8682,26 @@ function loadApiKeysVault() {
   };
 }
 function saveApiKeysVault(vault) {
-  try {
-    const locations = resolveAllDatabaseLocations("gemini_api_keys_vault.json");
-    for (const loc of locations) {
-      try {
-        const dir = import_path.default.dirname(loc);
-        if (import_fs.default.existsSync(dir)) {
-          import_fs.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+  let savedAtLeastOne = false;
+  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
+  for (const filename of fileCandidates) {
+    try {
+      const locations = resolveAllDatabaseLocations(filename);
+      for (const loc of locations) {
+        try {
+          const dir = import_path.default.dirname(loc);
+          if (import_fs.default.existsSync(dir)) {
+            import_fs.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+            savedAtLeastOne = true;
+          }
+        } catch {
         }
-      } catch {
       }
+    } catch (err) {
+      console.error(`Error saving ${filename}:`, err.message);
     }
-    return true;
-  } catch (err) {
-    console.error("Error saving gemini_api_keys_vault.json:", err.message);
-    return false;
   }
+  return savedAtLeastOne;
 }
 async function executeGeminiWithKeyPool(action, isVip = false) {
   const vault = loadApiKeysVault();
@@ -8606,7 +8774,13 @@ app.get("/api/admin/api-keys", (req, res) => {
     inCooldown: Boolean(k.cooldownUntil && k.cooldownUntil > now),
     cooldownSecondsRemaining: k.cooldownUntil && k.cooldownUntil > now ? Math.ceil((k.cooldownUntil - now) / 1e3) : 0,
     successCount: k.successCount || 0,
-    errorCount: k.errorCount || 0
+    errorCount: k.errorCount || 0,
+    lastTestedAt: k.lastTestedAt || null,
+    lastLatencyMs: k.lastLatencyMs || null,
+    lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
+    lastError: k.lastError || null,
+    provider: k.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
+    model: k.model || "gemini-3.8-flash"
   }));
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
@@ -8616,9 +8790,15 @@ app.get("/api/admin/api-keys", (req, res) => {
     paidKey: {
       configured: paidConfigured,
       maskedKey: maskedPaidKey,
-      label: vault.paidKey?.label || "Paid VIP Dedicated Key",
+      label: vault.paidKey?.label || "\u0938\u092E\u0930\u094D\u092A\u093F\u0924 \u092A\u0947\u0921 VIP API Key",
       status: vault.paidKey?.status || "inactive",
-      updatedAt: vault.paidKey?.updatedAt || null
+      updatedAt: vault.paidKey?.updatedAt || null,
+      lastTestedAt: vault.paidKey?.lastTestedAt || null,
+      lastLatencyMs: vault.paidKey?.lastLatencyMs || null,
+      lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
+      lastError: vault.paidKey?.lastError || null,
+      provider: vault.paidKey?.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
+      model: vault.paidKey?.model || "gemini-3.8-flash"
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
     stats: {
@@ -8758,6 +8938,91 @@ app.post("/api/admin/api-keys/test", async (req, res) => {
     return res.status(500).json({
       success: false,
       error: `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${cleanErrorMessage(err)}`
+    });
+  }
+});
+app.post("/api/admin/api-keys/test-id", async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+  }
+  const { keyId, type } = req.body || {};
+  const vault = loadApiKeysVault();
+  let targetKeyStr = "";
+  let targetRef = null;
+  if (type === "paid") {
+    if (!vault.paidKey?.key) {
+      return res.status(404).json({ error: "\u0915\u094B\u0908 \u092A\u0947\u0921 VIP API Key \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+    }
+    targetKeyStr = vault.paidKey.key.trim();
+    targetRef = vault.paidKey;
+  } else {
+    const found = vault.freeKeys.find((k) => k.id === keyId);
+    if (!found) {
+      return res.status(404).json({ error: "API Key \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940\u0964" });
+    }
+    targetKeyStr = found.key.trim();
+    targetRef = found;
+  }
+  const start = Date.now();
+  try {
+    const testAi = new import_genai.GoogleGenAI({
+      apiKey: targetKeyStr,
+      httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } }
+    });
+    const result = await testAi.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: "Respond with 2 words: Connected successfully"
+    });
+    const latency = Date.now() - start;
+    targetRef.lastTestedAt = Date.now();
+    targetRef.lastLatencyMs = latency;
+    targetRef.lastHealthStatus = "healthy";
+    targetRef.lastError = void 0;
+    targetRef.status = "active";
+    if ("successCount" in targetRef) {
+      targetRef.successCount = (targetRef.successCount || 0) + 1;
+    }
+    saveApiKeysVault(vault);
+    return res.json({
+      success: true,
+      message: `\u2705 API Key \u092A\u0942\u0930\u094D\u0923\u0924\u0903 \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0939\u0948! \u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0947 \u0938\u092B\u0932 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 (${latency}ms)`,
+      provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
+      model: "gemini-3.8-flash",
+      latencyMs: latency,
+      healthStatus: "healthy",
+      status: targetRef.status,
+      lastTestedAt: targetRef.lastTestedAt
+    });
+  } catch (err) {
+    const latency = Date.now() - start;
+    const errMsg = String(err?.message || err || "").toLowerCase();
+    targetRef.lastTestedAt = Date.now();
+    targetRef.lastLatencyMs = latency;
+    let userFacingMsg = `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${cleanErrorMessage(err)}`;
+    if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
+      targetRef.lastHealthStatus = "quota_exceeded";
+      targetRef.lastError = "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exhausted)";
+      userFacingMsg = "\u26A0\uFE0F API \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exceeded)\u0964 \u0915\u0940-\u0930\u094B\u091F\u0947\u0936\u0928 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0905\u0917\u0932\u0940 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0940 \u0909\u092A\u092F\u094B\u0917 \u0939\u094B\u0917\u0940\u0964";
+    } else if (errMsg.includes("api_key_invalid") || err?.status === 400) {
+      targetRef.lastHealthStatus = "invalid";
+      targetRef.lastError = "\u0905\u092E\u093E\u0928\u094D\u092F API Key (400 Invalid Authentication)";
+      userFacingMsg = "\u274C \u0905\u092E\u093E\u0928\u094D\u092F API Key\u0964 Google Gemini \u0926\u094D\u0935\u093E\u0930\u093E \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924\u0964";
+    } else {
+      targetRef.lastHealthStatus = "error";
+      targetRef.lastError = cleanErrorMessage(err);
+    }
+    if ("errorCount" in targetRef) {
+      targetRef.errorCount = (targetRef.errorCount || 0) + 1;
+    }
+    saveApiKeysVault(vault);
+    return res.status(targetRef.lastHealthStatus === "quota_exceeded" ? 429 : 500).json({
+      success: false,
+      error: userFacingMsg,
+      provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
+      model: "gemini-3.8-flash",
+      latencyMs: latency,
+      healthStatus: targetRef.lastHealthStatus,
+      lastTestedAt: targetRef.lastTestedAt
     });
   }
 });
@@ -13618,19 +13883,19 @@ app.post("/api/cashfree/create-order", async (req, res) => {
 });
 app.post("/api/cashfree/verify-order", async (req, res) => {
   try {
-    const { orderId, userEmail, forceSuccess } = req.body || {};
+    const { orderId, userEmail } = req.body || {};
     if (!orderId) {
       return res.status(400).json({ error: "\u0911\u0930\u094D\u0921\u0930 \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
     }
     const allPayments = loadPaymentsDatabase();
     const orderIndex = allPayments.findIndex((o) => o.orderId === orderId);
     const existingOrder = orderIndex >= 0 ? allPayments[orderIndex] : null;
-    let isPaid = Boolean(forceSuccess);
-    let gatewayStatus = existingOrder?.orderStatus || "ACTIVE";
+    let isPaid = false;
+    let gatewayStatus = existingOrder?.orderStatus || "PENDING";
     const appId = process.env.CASHFREE_APP_ID;
     const secretKey = process.env.CASHFREE_SECRET_KEY;
     const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
-    if (!isPaid && appId && secretKey && !appId.includes("your_cashfree")) {
+    if (appId && secretKey && !appId.includes("your_cashfree")) {
       try {
         const verifyUrl = cfEnv === "PRODUCTION" ? `https://api.cashfree.com/pg/orders/${orderId}` : `https://sandbox.cashfree.com/pg/orders/${orderId}`;
         const cfRes = await fetch(verifyUrl, {
@@ -13650,10 +13915,6 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
       } catch (vErr) {
         console.warn("Cashfree verify API error:", vErr.message);
       }
-    }
-    if (!isPaid && (!appId || appId.includes("your_cashfree") || existingOrder?.isLiveGateway === false)) {
-      isPaid = true;
-      gatewayStatus = "PAID";
     }
     if (isPaid) {
       const planTier = (existingOrder?.planId || "basic").toLowerCase();
@@ -13751,7 +14012,8 @@ app.get("/api/user-download-status", (req, res) => {
     const tier = (matchedUser?.tier || "basic").toLowerCase();
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : tier === "ultra" ? 99999 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
+    const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 100 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = email;
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -13759,8 +14021,8 @@ app.get("/api/user-download-status", (req, res) => {
     if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
     }
-    const isExhausted = maxAllowed < 99999 && downloadsToday >= maxAllowed;
-    const remainingCount = maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday);
+    const isExhausted = downloadsToday >= maxAllowed;
+    const remainingCount = isVipTier ? 99999 : Math.max(0, maxAllowed - downloadsToday);
     return res.json({
       success: true,
       plan: tier,
@@ -13770,7 +14032,7 @@ app.get("/api/user-download-status", (req, res) => {
       remainingToday: remainingCount,
       remainingDownloads: remainingCount,
       isExhausted,
-      unlimited: maxAllowed >= 99999,
+      unlimited: isVipTier,
       dateStr
     });
   } catch (err) {
@@ -13853,7 +14115,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     }
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : tier === "ultra" ? 99999 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
+    const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 100 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -13863,9 +14126,9 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     } else {
       dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
     }
-    if (downloadsToday >= maxAllowed && maxAllowed < 99999) {
+    if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
-        error: `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0947 \u0926\u093F\u0928 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
+        error: isVipTier ? `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 VIP \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964` : `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0947 \u0926\u093F\u0928 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
         quotaExceeded: true,
         maxAllowed,
         downloadsToday

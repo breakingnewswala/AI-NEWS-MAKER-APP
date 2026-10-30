@@ -372,22 +372,19 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 </button>
               )}
 
-              {/* Desktop Remaining Graphics Counter Badge */}
-              {currentTab === 'home' && (
+              {/* Desktop Remaining Graphics Counter Badge (Only for regular users per Part 4 & 5) */}
+              {currentTab === 'home' && !isAdminUser && (
                 <div
                   className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 dark:border-red-500/40 font-bold rounded-xl text-xs shadow-xs select-none"
                   title="आज के शेष ग्राफ़िक्स"
                 >
                   <Palette className="w-3.5 h-3.5 text-red-500 shrink-0" />
                   <span className="font-mono font-black">
-                    {isAdminUser ? 'असीमित' : desktopRemainingQuota}
+                    {desktopRemainingQuota}
                   </span>
                   <span className="text-[10px] hidden lg:inline">शेष ग्राफ़िक्स</span>
                 </div>
               )}
-
-              {/* Theme Switcher Toggle (Light & Dark Mode) */}
-              <ThemeToggle />
 
               {/* Admin Mode / Test Mode Switcher: EXCLUSIVELY on Mobile Header in Control Panel */}
               {isUserAdmin(currentUser) && (

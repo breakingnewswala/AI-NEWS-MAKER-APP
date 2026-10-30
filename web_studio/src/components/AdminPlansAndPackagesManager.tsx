@@ -54,6 +54,10 @@ import {
   Music,
   User,
   Bell,
+  BarChart3,
+  Activity,
+  Eye,
+  TrendingUp,
 } from 'lucide-react';
 import {
   isUserMasterAdmin,
@@ -5485,6 +5489,298 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* STEP 11D: एनालिटिक्स बोर्ड (ADMIN ANALYTICS BOARD - NEWS & VIDEO ANALYTICS) */}
+        {/* ========================================================================= */}
+        <div id="section-analytics" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'analytics' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => {
+              const next = subTab === 'analytics' ? '' : 'analytics';
+              setSubTab(next);
+              if (next === 'analytics') fetchAnalytics();
+            }}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'analytics' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-amber-500 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <BarChart3 className="w-5 h-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm sm:text-base font-black text-white block truncate">
+                    एनालिटिक्स बोर्ड (समाचार व वीडियो विश्लेषण)
+                  </span>
+                  <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 text-[10px] font-black rounded uppercase border border-indigo-500/30">
+                    लाइव डेटा
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  खबरों और वीडियो के व्यूज, ग्राफिक निर्माण, पूर्णता, डाउनलोड्स और ड्रॉप-ऑफ्स का विश्लेषण
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
+                2 सेक्शन्स
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'analytics' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+
+          {subTab === 'analytics' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
+              {/* Top Sub-Nav & Refresh */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsTab('news')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                      analyticsTab === 'news'
+                        ? 'bg-amber-500 text-slate-950 shadow-md'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>📰 समाचार विश्लेषण (News Analytics)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAnalyticsTab('video')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                      analyticsTab === 'video'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>🎬 वीडियो विश्लेषण (Video Analytics)</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchAnalytics}
+                  disabled={isLoadingAnalytics}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAnalytics ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>{isLoadingAnalytics ? 'लोड हो रहा है...' : 'रीफ्रेश डेटा'}</span>
+                </button>
+              </div>
+
+              {isLoadingAnalytics ? (
+                <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                  <p className="text-xs">एनालिटिक्स डेटा लोड हो रहा है...</p>
+                </div>
+              ) : analyticsTab === 'news' ? (
+                /* SECTION A: समाचार विश्लेषण (NEWS ANALYTICS) */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
+                        <span>खबरें देखीं</span>
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
+                        {analyticsData?.news?.totalViews ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">कुल रीडर व्यूज</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-amber-400 text-[11px] font-bold">
+                        <span>ग्राफिक क्लिक</span>
+                        <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-amber-400 mt-1">
+                        {analyticsData?.news?.clickCreate ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">"खबर से ग्राफिक बनाएं"</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-indigo-400 text-[11px] font-bold">
+                        <span>प्रक्रिया शुरू</span>
+                        <Activity className="w-3.5 h-3.5 text-indigo-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-indigo-300 mt-1">
+                        {analyticsData?.news?.generationStarts ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">एडिटर में खोला गया</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
+                        <span>ग्राफिक पूर्ण</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-1">
+                        {analyticsData?.news?.generationSuccess ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">सफलतापूर्वक बना</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-cyan-400 text-[11px] font-bold">
+                        <span>डाउनलोड्स</span>
+                        <Download className="w-3.5 h-3.5 text-cyan-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-cyan-400 mt-1">
+                        {analyticsData?.news?.downloads ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">सफल कार्ड सेव</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-rose-400 text-[11px] font-bold">
+                        <span>अधूरी छोड़ी</span>
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-rose-400 mt-1">
+                        {Math.max(0, (analyticsData?.news?.generationStarts ?? 0) - (analyticsData?.news?.generationSuccess ?? 0))}
+                      </div>
+                      <span className="text-[10px] text-slate-500">ड्रॉप-ऑफ प्रक्रिया</span>
+                    </div>
+                  </div>
+
+                  {/* Top News Stories Table */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                        <TrendingUp className="w-4 h-4 text-amber-400" />
+                        <span>शीर्ष सक्रिय समाचार (Top News Cards Analysis)</span>
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        यूनीक रीडर्स: {analyticsData?.news?.uniqueUsers ?? 0}
+                      </span>
+                    </div>
+
+                    {!analyticsData?.news?.trending || analyticsData.news.trending.length === 0 ? (
+                      <p className="text-xs text-slate-500 py-3 text-center">
+                        वर्तमान में समाचार इंटरैक्शन का वास्तविक डेटा एकत्रित हो रहा है।
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {analyticsData.news.trending.map((item: any, idx: number) => (
+                          <div
+                            key={item.id || idx}
+                            className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="w-6 h-6 rounded bg-amber-500/10 text-amber-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <span className="text-slate-200 font-bold truncate">
+                                {item.title || item.id}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
+                              <span className="text-blue-300">👁️ {item.views} व्यूज</span>
+                              <span className="text-amber-400">🎨 {item.creates} ग्राफिक</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* SECTION B: वीडियो विश्लेषण (VIDEO ANALYTICS) */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
+                        <span>वीडियो देखे</span>
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
+                        {analyticsData?.video?.totalViews ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">कुल वीडियो व्यूज</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-purple-400 text-[11px] font-bold">
+                        <span>वीडियो का उपयोग</span>
+                        <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-purple-300 mt-1">
+                        {analyticsData?.video?.clickCreate ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">स्टूडियो में उपयोग</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
+                        <span>कार्य पूरे किए</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-1">
+                        {analyticsData?.video?.generationSuccess ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">सफल रेंडरिंग/एडिट</span>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-center justify-between text-cyan-400 text-[11px] font-bold">
+                        <span>डाउनलोड्स</span>
+                        <Download className="w-3.5 h-3.5 text-cyan-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-cyan-400 mt-1">
+                        {analyticsData?.video?.downloads ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-500">सफल वीडियो डाउनलोड्स</span>
+                    </div>
+                  </div>
+
+                  {/* Top Videos Table */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                        <TrendingUp className="w-4 h-4 text-purple-400" />
+                        <span>शीर्ष सक्रिय वीडियो (Top Video Analysis)</span>
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        यूनीक दर्शक: {analyticsData?.video?.uniqueUsers ?? 0}
+                      </span>
+                    </div>
+
+                    {!analyticsData?.video?.trending || analyticsData.video.trending.length === 0 ? (
+                      <p className="text-xs text-slate-500 py-3 text-center">
+                        वर्तमान में वीडियो इंटरैक्शन का वास्तविक डेटा एकत्रित हो रहा है।
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {analyticsData.video.trending.map((item: any, idx: number) => (
+                          <div
+                            key={item.id || idx}
+                            className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="w-6 h-6 rounded bg-purple-500/10 text-purple-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <span className="text-slate-200 font-bold truncate">
+                                {item.title || item.id}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
+                              <span className="text-blue-300">👁️ {item.views} व्यूज</span>
+                              <span className="text-purple-300">🎬 {item.creates} उपयोग</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ========================================================================= */}
         {/* STEP 12: सहायता एवं नीतियाँ (HELP & POLICIES)                               */}

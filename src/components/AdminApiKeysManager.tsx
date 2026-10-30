@@ -32,6 +32,12 @@ interface FreeKeyItem {
   cooldownSecondsRemaining: number;
   successCount: number;
   errorCount: number;
+  lastTestedAt?: number | null;
+  lastLatencyMs?: number | null;
+  lastHealthStatus?: 'healthy' | 'quota_exceeded' | 'invalid' | 'error' | null;
+  lastError?: string | null;
+  provider?: string;
+  model?: string;
 }
 
 interface PaidKeyInfo {
@@ -40,6 +46,12 @@ interface PaidKeyInfo {
   label: string;
   status: string;
   updatedAt: number | null;
+  lastTestedAt?: number | null;
+  lastLatencyMs?: number | null;
+  lastHealthStatus?: string | null;
+  lastError?: string | null;
+  provider?: string;
+  model?: string;
 }
 
 interface ApiKeysManagerData {
@@ -228,6 +240,33 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
       }
     } catch (err: any) {
       showToast(`❌ त्रुटि: ${err.message}`);
+    }
+  };
+
+  const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
+
+  const handleTestSavedKey = async (keyId: string, type: 'free' | 'paid') => {
+    setTestingKeyId(keyId);
+    try {
+      const res = await fetch('/api/admin/api-keys/test-id', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': adminEmail,
+        },
+        body: JSON.stringify({ keyId, type }),
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        showToast(resData.message || '✅ API की सक्रिय है!');
+      } else {
+        showToast(resData.error || '❌ API की स्वास्थ्य परीक्षण विफल रहा');
+      }
+      await fetchKeysData(true);
+    } catch (err: any) {
+      showToast(`❌ परीक्षण त्रुटि: ${err.message}`);
+    } finally {
+      setTestingKeyId(null);
     }
   };
 
@@ -475,16 +514,39 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
                         )}
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
-                        <span>जोड़ा गया: {new Date(item.addedAt).toLocaleDateString('hi-IN')}</span>
+                        <span>प्रदाता: {item.provider || 'गूगल जेमिनी (Google Gemini)'}</span>
+                        <span>मॉडल: {item.model || 'gemini-3.8-flash'}</span>
                         <span className="text-emerald-400 font-mono">✅ {item.successCount} सफल</span>
                         {item.errorCount > 0 && (
                           <span className="text-red-400 font-mono">❌ {item.errorCount} एरर / 429</span>
+                        )}
+                        {item.lastTestedAt && (
+                          <span className="text-blue-300 font-medium">
+                            जाँचा गया: {new Date(item.lastTestedAt).toLocaleTimeString('hi-IN')} ({item.lastLatencyMs}ms)
+                          </span>
+                        )}
+                        {item.lastError && (
+                          <span className="text-red-400 font-medium">({item.lastError})</span>
                         )}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button
+                      type="button"
+                      disabled={testingKeyId === item.id}
+                      onClick={() => handleTestSavedKey(item.id, 'free')}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg transition cursor-pointer flex items-center gap-1.5 font-bold text-[11px] disabled:opacity-50"
+                      title="इस API Key का Google से कनेक्शन व स्वास्थ्य परीक्षण करें"
+                    >
+                      {testingKeyId === item.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Activity className="w-3.5 h-3.5 text-amber-400" />
+                      )}
+                      <span>हेल्थ टेस्ट</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteFreeKey(item.id, item.label)}
@@ -570,22 +632,49 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
 
           {/* Current Status Box */}
           {data?.paidKey?.configured && (
-            <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-purple-400" />
-                <span className="text-slate-300">वर्तमान पेड की:</span>
-                <code className="text-purple-300 font-mono font-bold">{data.paidKey.maskedKey}</code>
-                <span className="text-[10px] text-slate-500">
-                  (अपडेट: {data.paidKey.updatedAt ? new Date(data.paidKey.updatedAt).toLocaleDateString('hi-IN') : 'सत्यापित'})
-                </span>
+            <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ShieldCheck className="w-4 h-4 text-purple-400" />
+                  <span className="text-slate-300 font-bold">वर्तमान पेड की:</span>
+                  <code className="text-purple-300 font-mono font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">{data.paidKey.maskedKey}</code>
+                  <span className="text-[10px] text-slate-500">
+                    (अपडेट: {data.paidKey.updatedAt ? new Date(data.paidKey.updatedAt).toLocaleDateString('hi-IN') : 'सत्यापित'})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={testingKeyId === 'paid'}
+                    onClick={() => handleTestSavedKey('paid', 'paid')}
+                    className="px-2.5 py-1 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700/60 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    title="पेड VIP API Key का कनेक्शन टेस्ट करें"
+                  >
+                    {testingKeyId === 'paid' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5 text-purple-300" />}
+                    <span>हेल्थ टेस्ट</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeletePaidKey}
+                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg text-xs font-bold transition cursor-pointer"
+                    title="पेड की हटाएं"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={handleDeletePaidKey}
-                className="text-red-400 hover:text-red-300 text-xs font-bold transition cursor-pointer"
-              >
-                हटाएं
-              </button>
+              <div className="text-[10px] text-slate-400 flex items-center gap-3 flex-wrap pt-1 border-t border-slate-800/60">
+                <span>प्रदाता: {data.paidKey.provider || 'गूगल जेमिनी (Google Gemini)'}</span>
+                <span>मॉडल: {data.paidKey.model || 'gemini-3.8-flash'}</span>
+                {data.paidKey.lastTestedAt && (
+                  <span className="text-purple-300 font-medium">
+                    जाँचा गया: {new Date(data.paidKey.lastTestedAt).toLocaleTimeString('hi-IN')} ({data.paidKey.lastLatencyMs}ms)
+                  </span>
+                )}
+                {data.paidKey.lastError && (
+                  <span className="text-red-400 font-medium">({data.paidKey.lastError})</span>
+                )}
+              </div>
             </div>
           )}
 
