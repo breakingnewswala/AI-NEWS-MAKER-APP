@@ -55,26 +55,26 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-slate-900/90 border border-slate-700/80 p-4 sm:p-6 lg:p-8 shadow-2xl shadow-black/80 relative"
         >
           {/* Tagline Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90 text-center sm:text-left">
+            <div className="space-y-2 flex flex-col items-center sm:items-start text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start gap-2">
                 <span className="p-1.5 rounded-lg bg-amber-400/20 text-amber-400 border border-amber-400/30">
                   <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 animate-pulse" />
                 </span>
-                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-tight">
+                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-tight text-center sm:text-left">
                   खबर देखने से खबर बनाने तक,{' '}
                   <span className="text-amber-400 drop-shadow-sm font-black">
                     सिर्फ 2 मिनट में
                   </span>
                 </h2>
               </div>
-              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-300">
+              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-300 text-center sm:text-left">
                 डिजिटल न्यूज़ चैनलों का AI स्टूडियो —{' '}
                 <span className="text-amber-300/90">12 शक्तिशाली सुविधाओं के साथ</span>
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 self-start lg:self-center">
+            <div className="flex items-center justify-center sm:justify-start gap-2 shrink-0 self-center lg:self-center">
               <button
                 type="button"
                 onClick={handleScrollToFeatures}
@@ -86,10 +86,10 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
             </div>
           </div>
 
-          {/* 12 Features Grid: 4 columns on desktop, 2 on tablet, 1 on mobile */}
+          {/* 12 Features Grid: 4 columns on desktop, 2 on mobile */}
           <div
             id="footer-12-features-grid"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-6"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 pt-6"
           >
             {CANONICAL_12_FEATURES.map((feat) => {
               const IconC = feat.icon;
@@ -101,22 +101,19 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                   title={`${feat.title} - क्लिक कर फीचर खोलें`}
                 >
                   <div className="space-y-2.5">
-                    {/* Top Row: Icon + Number Badge + Optional Pill Badge */}
+                    {/* Top Row: Icon + Optional Pill Badge (Serial numbers removed per requirements) */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <div
-                          className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${feat.iconBgColor}`}
+                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg border flex items-center justify-center shrink-0 ${feat.iconBgColor}`}
                         >
                           <IconC className="w-4 h-4" />
                         </div>
-                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black text-[11px] flex items-center justify-center shrink-0 shadow-sm">
-                          {feat.number}
-                        </span>
                       </div>
 
                       {feat.badge && (
                         <span
-                          className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 border ${
+                          className={`text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 border truncate max-w-[100px] ${
                             feat.badge === '7 आसान चरण'
                               ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
                               : feat.badge === 'HD क्वालिटी'
@@ -137,7 +134,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                     </h3>
 
                     {/* Feature Hindi Description */}
-                    <p className="text-[11px] sm:text-xs text-slate-400 group-hover:text-slate-300 transition-colors leading-relaxed line-clamp-3">
+                    <p className="text-[10.5px] sm:text-xs text-slate-400 group-hover:text-slate-300 transition-colors leading-relaxed line-clamp-3">
                       {feat.desc}
                     </p>
                   </div>
@@ -164,8 +161,8 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-slate-900/90 border border-slate-700/80 p-5 sm:p-7 shadow-2xl shadow-black/80"
         >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-            {/* Left Area (Brand & Ownership) - 7 cols on desktop */}
-            <div className="lg:col-span-7 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
+            {/* Left Area (Brand & Ownership) - 7 cols on desktop, centered on mobile */}
+            <div className="lg:col-span-7 flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-4 sm:gap-5">
               {/* Circular Logo with Glowing Ring */}
               <div
                 onClick={() => {
@@ -185,7 +182,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               </div>
 
               {/* Brand Text & Ownership */}
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col items-center sm:items-start text-center sm:text-left">
                 <h3
                   onClick={() => {
                     onNavigateToTab('home');
@@ -200,21 +197,21 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                 </p>
 
                 {/* Highlighted Ownership Badge */}
-                <div className="pt-1">
+                <div className="pt-1 flex justify-center sm:justify-start">
                   <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-yellow-500/15 border-2 border-amber-400/80 shadow-md shadow-amber-500/10">
                     <Crown className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="text-xs sm:text-sm font-black text-amber-300 tracking-wide">
-                      स्वामित्व: Breaking News Wala
+                      स्वामित्व: BREAKING NEWS WALA
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Right Area (Support Inbox Panel) - 5 cols on desktop */}
+            {/* Right Area (Support Inbox Panel) - 5 cols on desktop, centered on mobile */}
             <div className="lg:col-span-5 bg-slate-950/90 rounded-2xl border border-slate-800 p-4 sm:p-5 space-y-3 shadow-inner">
-              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-3 text-center sm:text-left">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-slate-800/90 border border-slate-700 flex items-center justify-center text-white shrink-0 shadow-md">
                     <Headphones className="w-5 h-5 text-amber-400" />
                   </div>
@@ -231,7 +228,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigateToTab('support')}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-600/30 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shrink-0"
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-600/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shrink-0 w-full sm:w-auto"
                 >
                   <Mail className="w-3.5 h-3.5" />
                   <span>सपोर्ट इनबॉक्स खोलें →</span>
@@ -239,7 +236,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               </div>
 
               {/* Direct email bar */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 text-xs text-slate-300">
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center sm:justify-start gap-2 text-xs text-slate-300">
                 <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <a
                   href={`mailto:${APP_SUPPORT_CONFIG.supportEmail}`}

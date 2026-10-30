@@ -1,0 +1,32 @@
+[
+  {
+    "id": "coupon_launch200",
+    "code": "LAUNCH200",
+    "name": "लॉन्च विशेष ₹200 छूट",
+    "discountAmount": 200,
+    "applicablePackage": "ALL",
+    "expiryDate": "2026-12-31",
+    "maxUsageLimit": 500,
+    "perUserLimit": 1,
+    "usageCount": 0,
+    "usedBy": [],
+    "isActive": true,
+    "createdAt": 1730000000000,
+    "updatedAt": 1730000000000
+  },
+  {
+    "id": "coupon_vip500",
+    "code": "VIP500",
+    "name": "वीआईपी डेस्क ₹500 प्रीमियम छूट",
+    "discountAmount": 500,
+    "applicablePackage": "VIP DESK",
+    "expiryDate": "2026-12-31",
+    "maxUsageLimit": 200,
+    "perUserLimit": 1,
+    "usageCount": 0,
+    "usedBy": [],
+    "isActive": true,
+    "createdAt": 1730000000000,
+    "updatedAt": 1730000000000
+  }
+]

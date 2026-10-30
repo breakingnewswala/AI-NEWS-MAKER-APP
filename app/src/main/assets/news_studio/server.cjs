@@ -1132,8 +1132,23 @@ function isAuthorizedAdmin(req) {
   if (process.env.ADMIN_API_KEY && adminKey === process.env.ADMIN_API_KEY) return true;
   if (adminKey === "admin-secret-key" || adminKey === "master-admin" || adminKey === "admin") return true;
   const role = (req.headers["x-user-role"] || req.headers["x-role"] || "").toString().toLowerCase().trim();
-  if ((role === "admin" || role === "superadmin") && email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
-    if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if ((role === "admin" || role === "superadmin") && (!email || !UNAUTHORIZED_ADMIN_EMAILS.includes(email))) {
+    return true;
+  }
+  if (email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
+    try {
+      if (typeof loadUsersMasterDatabase === "function") {
+        const users = loadUsersMasterDatabase();
+        const dbUser = users.find((u) => (u.email || "").toLowerCase().trim() === email);
+        if (dbUser && (dbUser.role === "admin" || dbUser.role === "superadmin")) return true;
+      }
+      if (typeof loadProfilesDatabase === "function") {
+        const profiles = loadProfilesDatabase();
+        const profUser = profiles[email] || Object.values(profiles).find((p) => (p.email || "").toLowerCase().trim() === email);
+        if (profUser && (profUser.role === "admin" || profUser.role === "superadmin")) return true;
+      }
+    } catch {
+    }
   }
   return false;
 }
@@ -6670,6 +6685,7 @@ app.post("/api/user-profile", async (req, res) => {
       mobileNumber: finalMobile || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
+      socialLinks: profile.socialLinks || existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now()
@@ -6702,6 +6718,7 @@ app.post("/api/user-profile", async (req, res) => {
           mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
           socialIcons: updated.socialIcons || users[uIdx].socialIcons,
+          socialLinks: updated.socialLinks || users[uIdx].socialLinks,
           lastLoginAt: Date.now()
         };
         saveUsersDatabase(users);
@@ -13762,6 +13779,181 @@ function savePaymentsDatabase(data) {
     console.error("Failed saving payments_transactions_db.json:", e);
   }
 }
+function loadPackageCouponsDatabase() {
+  try {
+    const locs = resolveAllDatabaseLocations("package_coupons_db.json");
+    for (const loc of locs) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
+    }
+  } catch {
+  }
+  return [];
+}
+function savePackageCouponsDatabase(data) {
+  try {
+    const locs = resolveAllDatabaseLocations("package_coupons_db.json");
+    for (const loc of locs) {
+      try {
+        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
+          import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        }
+      } catch {
+      }
+    }
+  } catch (e) {
+    console.error("Failed saving package_coupons_db.json:", e);
+  }
+}
+app.get("/api/admin/package-coupons", (req, res) => {
+  try {
+    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const coupons = loadPackageCouponsDatabase();
+    return res.json({ success: true, coupons });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/package-coupons", (req, res) => {
+  try {
+    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u092C\u0928\u093E \u092F\u093E \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const { id, code, name, discountAmount, applicablePackage, expiryDate, maxUsageLimit, perUserLimit, isActive } = req.body || {};
+    if (!code || !discountAmount) {
+      return res.status(400).json({ error: "\u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0914\u0930 \u091B\u0942\u091F \u0930\u093E\u0936\u093F (\u20B9) \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+    }
+    const cleanCode = String(code).trim().toUpperCase();
+    const coupons = loadPackageCouponsDatabase();
+    const now = Date.now();
+    const existingIdx = coupons.findIndex((c) => id && c.id === id || c.code.toUpperCase() === cleanCode);
+    if (existingIdx >= 0) {
+      coupons[existingIdx] = {
+        ...coupons[existingIdx],
+        code: cleanCode,
+        name: (name || cleanCode).trim(),
+        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        applicablePackage: applicablePackage || "ALL",
+        expiryDate: expiryDate || "",
+        maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : void 0,
+        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        isActive: isActive !== false,
+        updatedAt: now
+      };
+      savePackageCouponsDatabase(coupons);
+      return res.json({ success: true, coupon: coupons[existingIdx], message: "\u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u092A\u0921\u0947\u091F \u0939\u0941\u0906\u0964" });
+    } else {
+      const newCoupon = {
+        id: id || `coupon_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
+        code: cleanCode,
+        name: (name || cleanCode).trim(),
+        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        applicablePackage: applicablePackage || "ALL",
+        expiryDate: expiryDate || "",
+        maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : void 0,
+        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        usageCount: 0,
+        usedBy: [],
+        isActive: isActive !== false,
+        createdAt: now,
+        updatedAt: now
+      };
+      coupons.push(newCoupon);
+      savePackageCouponsDatabase(coupons);
+      return res.json({ success: true, coupon: newCoupon, message: "\u0928\u092F\u093E \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092C\u0928\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/admin/package-coupons/:id", (req, res) => {
+  try {
+    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const { id } = req.params;
+    let coupons = loadPackageCouponsDatabase();
+    const initialLen = coupons.length;
+    coupons = coupons.filter((c) => c.id !== id && c.code !== id);
+    if (coupons.length === initialLen) {
+      return res.status(404).json({ error: "\u0915\u0942\u092A\u0928 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    savePackageCouponsDatabase(coupons);
+    return res.json({ success: true, message: "\u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/package-coupons/validate", (req, res) => {
+  try {
+    const { code, planKey, planId, userEmail } = req.body || {};
+    if (!code) {
+      return res.status(400).json({ valid: false, error: "\u0915\u0943\u092A\u092F\u093E \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
+    }
+    const cleanCode = String(code).trim().toUpperCase();
+    const coupons = loadPackageCouponsDatabase();
+    const coupon = coupons.find((c) => c.code.toUpperCase() === cleanCode);
+    if (!coupon) {
+      return res.status(404).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964" });
+    }
+    if (!coupon.isActive) {
+      return res.status(400).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964" });
+    }
+    if (coupon.expiryDate) {
+      const exp = new Date(coupon.expiryDate).getTime() + 24 * 60 * 60 * 1e3 - 1;
+      if (Date.now() > exp) {
+        return res.status(400).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0938\u092E\u093E\u092A\u094D\u0924 (Expire) \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
+      }
+    }
+    if (coupon.maxUsageLimit && (coupon.usageCount || 0) >= coupon.maxUsageLimit) {
+      return res.status(400).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0905\u092A\u0928\u0940 \u0905\u0927\u093F\u0915\u0924\u092E \u0909\u092A\u092F\u094B\u0917 \u0938\u0940\u092E\u093E \u0924\u0915 \u092A\u0939\u0941\u0901\u091A \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
+    }
+    const cleanEmail = (userEmail || "").trim().toLowerCase();
+    if (cleanEmail && coupon.usedBy && Array.isArray(coupon.usedBy)) {
+      const userUses = coupon.usedBy.filter((e) => e.toLowerCase() === cleanEmail).length;
+      const limit = coupon.perUserLimit || 1;
+      if (userUses >= limit) {
+        return res.status(400).json({ valid: false, error: `\u0906\u092A \u0907\u0938 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0915\u093E \u092A\u0939\u0932\u0947 \u0939\u0940 ${limit} \u092C\u093E\u0930 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930 \u091A\u0941\u0915\u0947 \u0939\u0948\u0902\u0964` });
+      }
+    }
+    const effectivePlanKey = (planKey || planId || "").toUpperCase();
+    if (coupon.applicablePackage && coupon.applicablePackage !== "ALL") {
+      const targetPkg = coupon.applicablePackage.toUpperCase();
+      const matches = effectivePlanKey.includes(targetPkg) || targetPkg.includes(effectivePlanKey);
+      if (!matches) {
+        return res.status(400).json({
+          valid: false,
+          error: `\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u0947\u0935\u0932 '${coupon.applicablePackage}' \u092A\u0948\u0915\u0947\u091C \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964`
+        });
+      }
+    }
+    const catalog = loadPlansCatalogDatabase();
+    const plan = catalog.find((p) => p.id === planId || p.planKey === planKey);
+    const originalAmount = plan?.priceNum || 999;
+    const discountAmount = Math.min(originalAmount - 1, coupon.discountAmount);
+    const finalPayableAmount = Math.max(1, originalAmount - discountAmount);
+    return res.json({
+      valid: true,
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        name: coupon.name,
+        discountAmount: coupon.discountAmount,
+        applicablePackage: coupon.applicablePackage
+      },
+      originalAmount,
+      discountAmount,
+      finalPayableAmount,
+      message: `\u0915\u0942\u092A\u0928 '${coupon.code}' \u0932\u093E\u0917\u0942 \u0939\u0941\u0906! \u20B9${discountAmount} \u0915\u0940 \u091B\u0942\u091F \u092E\u093F\u0932\u0940\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ valid: false, error: cleanErrorMessage(err) });
+  }
+});
 app.get("/api/cashfree/config", (_req, res) => {
   const env = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
   const hasKeys = Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
@@ -13776,14 +13968,33 @@ app.get("/api/cashfree/config", (_req, res) => {
 });
 app.post("/api/cashfree/create-order", async (req, res) => {
   try {
-    const { planId, planKey, amount, customerEmail, customerPhone, customerName, returnUrl } = req.body || {};
+    const { planId, planKey, amount, customerEmail, customerPhone, customerName, returnUrl, couponCode } = req.body || {};
     if (!planId) {
       return res.status(400).json({ error: "\u092A\u094D\u0932\u093E\u0928 \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    const orderAmount = Number(amount) || targetPlan?.priceNum || 999;
+    let orderAmount = Number(amount) || targetPlan?.priceNum || 999;
     const planName = targetPlan?.nameHi || planKey || planId;
+    let appliedCouponCode = null;
+    let discountAmount = 0;
+    if (couponCode && String(couponCode).trim()) {
+      const cleanCode = String(couponCode).trim().toUpperCase();
+      const allCoupons = loadPackageCouponsDatabase();
+      const cp = allCoupons.find((c) => c.code.toUpperCase() === cleanCode && c.isActive);
+      if (cp) {
+        const notExpired = !cp.expiryDate || Date.now() <= new Date(cp.expiryDate).getTime() + 864e5 - 1;
+        const withinMaxLimit = !cp.maxUsageLimit || (cp.usageCount || 0) < cp.maxUsageLimit;
+        const targetPkg = (cp.applicablePackage || "ALL").toUpperCase();
+        const effectiveKey = (targetPlan?.planKey || planKey || planId || "").toUpperCase();
+        const pkgMatches = targetPkg === "ALL" || effectiveKey.includes(targetPkg) || targetPkg.includes(effectiveKey);
+        if (notExpired && withinMaxLimit && pkgMatches) {
+          appliedCouponCode = cp.code;
+          discountAmount = Math.min(orderAmount - 1, Number(cp.discountAmount) || 0);
+          orderAmount = Math.max(1, orderAmount - discountAmount);
+        }
+      }
+    }
     const cleanEmail = (customerEmail || "customer@ainewsmaker.online").trim().toLowerCase();
     const cleanPhone = (customerPhone || "9876543210").replace(/[^0-9]/g, "").slice(-10) || "9876543210";
     const cleanName = (customerName || "Member Reporter").trim();
@@ -13843,6 +14054,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       cfOrderId,
       paymentSessionId,
       orderAmount,
+      couponCode: appliedCouponCode,
+      discountAmount,
       planId,
       planKey: targetPlan?.planKey || planKey,
       planName,
@@ -13864,6 +14077,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       paymentSessionId,
       orderAmount,
       currency: "INR",
+      couponCode: appliedCouponCode,
+      discountAmount,
       planId,
       planKey: targetPlan?.planKey || planKey,
       planName,
@@ -13948,6 +14163,23 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
         existingOrder.paidAt = Date.now();
         allPayments[orderIndex] = existingOrder;
         savePaymentsDatabase(allPayments);
+        if (existingOrder.couponCode) {
+          try {
+            const coupons = loadPackageCouponsDatabase();
+            const cIdx = coupons.findIndex((c) => c.code.toUpperCase() === String(existingOrder.couponCode).toUpperCase());
+            if (cIdx >= 0) {
+              coupons[cIdx].usageCount = (coupons[cIdx].usageCount || 0) + 1;
+              if (!coupons[cIdx].usedBy) coupons[cIdx].usedBy = [];
+              if (targetEmail && !coupons[cIdx].usedBy.includes(targetEmail)) {
+                coupons[cIdx].usedBy.push(targetEmail);
+              }
+              coupons[cIdx].updatedAt = Date.now();
+              savePackageCouponsDatabase(coupons);
+            }
+          } catch (cpErr) {
+            console.warn("Failed recording coupon usage:", cpErr);
+          }
+        }
       }
       return res.json({
         success: true,
@@ -13956,6 +14188,8 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
         planId: existingOrder?.planId,
         planKey: existingOrder?.planKey,
         amount: existingOrder?.orderAmount,
+        couponCode: existingOrder?.couponCode,
+        discountAmount: existingOrder?.discountAmount,
         message: "\u092D\u0941\u0917\u0924\u093E\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0939\u0941\u0906! \u092A\u094D\u0932\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
       });
     }

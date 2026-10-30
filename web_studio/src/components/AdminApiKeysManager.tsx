@@ -399,7 +399,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
               <span className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg">
                 <Layers className="w-4 h-4" />
               </span>
-              <span>1. फ्री एपीआई कीज़ पूल (Free API Keys Pool)</span>
+              <span>1. फ्री एपीआई कीज़ पूल</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Google AI Studio के अलग-अलग खातों से फ्री API Keys जोड़ें। Google प्रत्येक खाते पर 15 RPM और दैनिक कोटा बिल्कुल फ्री देता है।
@@ -573,7 +573,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
               <span className="p-1.5 bg-purple-500/20 text-purple-400 rounded-lg">
                 <Crown className="w-4 h-4" />
               </span>
-              <span>2. पेड एपीआई की (VIP Dedicated Key)</span>
+              <span>2. पेड एपीआई की</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Google Cloud Pay-As-You-Go (बिलिंग अकाउंट) वाली की। यह केवल VIP DESK / Pro प्लान यूज़र्स के लिए आरक्षित रहेगी।
@@ -700,7 +700,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
             <span className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
               <Zap className="w-4 h-4" />
             </span>
-            <span>3. लाइव API की कनेक्शन टेस्ट टूल (Instant Validator)</span>
+            <span>3. लाइव एपीआई की कनेक्शन टेस्ट टूल</span>
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
             किसी भी Gemini API Key को पूल में जोड़ने से पहले या बाद में तुरंत टेस्ट करें कि वह Google से कनेक्ट हो रही है या नहीं।

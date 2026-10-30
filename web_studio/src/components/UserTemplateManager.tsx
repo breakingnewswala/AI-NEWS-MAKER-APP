@@ -301,6 +301,433 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
   const sub = getUserSubscription();
   const isVipOrPro = isAdmin || sub.tier === 'professional' || sub.tier === 'ultra';
 
+  const renderApprovalSection = () => (
+    <div className="space-y-6">
+      {/* Header info card */}
+      <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/40 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="text-base font-black text-white">
+              कस्टम हेडर व फुटर अप्रूवल व असाइनमेंट (Custom Header & Footer Manager)
+            </h4>
+            <p className="text-xs text-purple-200 mt-0.5">
+              PRO व VIP DESK यूज़र्स के कस्टम हेडर एवं फुटर ग्राफिक्स की समीक्षा करें, लाइव 4:5 कार्ड प्रीव्यू देखें व एक क्लिक में अप्रूव/रिजेक्ट करें।
+            </p>
+          </div>
+        </div>
+        <span className="px-3 py-1 bg-purple-900/80 text-purple-300 border border-purple-500/40 text-[11px] font-black rounded-lg shrink-0">
+          PRO & VIP DESK EXCLUSIVE
+        </span>
+      </div>
+
+      {/* Direct Assignment Form Card */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Plus className="w-4 h-4 text-amber-400" />
+            <h5 className="text-sm font-black text-white">यूज़र को नया कस्टम हेडर / फुटर असाइन करें</h5>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">कुल यूज़र्स: {planUsers.length}</span>
+        </div>
+
+        {assignCustomMsg && (
+          <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{assignCustomMsg}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleAssignCustomHeaderFooter} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* User Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                <span>1. यूज़र चुनें (Select User) *</span>
+              </label>
+              <select
+                value={assignUserEmail}
+                onChange={(e) => handleSelectUserForCustomHF(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400"
+              >
+                <option value="">-- यूज़र ईमेल या नाम चुनें --</option>
+                <optgroup label="प्रीमियम यूज़र्स (PRO & VIP DESK)">
+                  {planUsers
+                    .filter((u) => u.tier === 'professional' || u.tier === 'ultra' || u.role === 'admin')
+                    .map((u, idx) => (
+                      <option key={`${u.email}-${idx}`} value={u.email}>
+                        ⭐ {u.name || u.channelName || u.email} ({u.tier.toUpperCase()})
+                      </option>
+                    ))}
+                </optgroup>
+                <optgroup label="अन्य यूज़र्स">
+                  {planUsers
+                    .filter((u) => u.tier !== 'professional' && u.tier !== 'ultra' && u.role !== 'admin')
+                    .map((u, idx) => (
+                      <option key={`${u.email}-${idx}`} value={u.email}>
+                        {u.name || u.channelName || u.email} ({u.tier.toUpperCase()})
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Custom Header PNG Upload */}
+            <div>
+              <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                <span>2. कस्टम हेडर PNG (Header)</span>
+                {assignHeaderPng && (
+                  <button
+                    type="button"
+                    onClick={() => setAssignHeaderPng('')}
+                    className="text-[10px] text-rose-400 hover:underline"
+                  >
+                    हटाएं
+                  </button>
+                )}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept="image/png,image/webp"
+                  onChange={(e) => handleFileUpload(e, 'header')}
+                  className="hidden"
+                  id="admin-assign-header-file"
+                />
+                <label
+                  htmlFor="admin-assign-header-file"
+                  className="flex-1 px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-300 font-semibold cursor-pointer flex items-center justify-center gap-1.5 truncate transition"
+                >
+                  <Upload className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="truncate">{assignHeaderPng ? 'हेडर बदला गया' : 'हेडर PNG चुनें'}</span>
+                </label>
+                {assignHeaderPng && (
+                  <div className="w-10 h-9 bg-slate-950 border border-purple-500/50 rounded-lg overflow-hidden flex items-center justify-center p-0.5 shrink-0">
+                    <img src={assignHeaderPng} alt="Header" className="w-full h-full object-contain" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Custom Footer PNG Upload */}
+            <div>
+              <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
+                <span>3. कस्टम फुटर PNG (Footer)</span>
+                {assignFooterPng && (
+                  <button
+                    type="button"
+                    onClick={() => setAssignFooterPng('')}
+                    className="text-[10px] text-rose-400 hover:underline"
+                  >
+                    हटाएं
+                  </button>
+                )}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept="image/png,image/webp"
+                  onChange={(e) => handleFileUpload(e, 'footer')}
+                  className="hidden"
+                  id="admin-assign-footer-file"
+                />
+                <label
+                  htmlFor="admin-assign-footer-file"
+                  className="flex-1 px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-300 font-semibold cursor-pointer flex items-center justify-center gap-1.5 truncate transition"
+                >
+                  <Upload className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span className="truncate">{assignFooterPng ? 'फुटर बदला गया' : 'फुटर PNG चुनें'}</span>
+                </label>
+                {assignFooterPng && (
+                  <div className="w-10 h-9 bg-slate-950 border border-indigo-500/50 rounded-lg overflow-hidden flex items-center justify-center p-0.5 shrink-0">
+                    <img src={assignFooterPng} alt="Footer" className="w-full h-full object-contain" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
+            <div className="text-[11px] text-slate-400">
+              * यह हेडर/फुटर चयनित यूज़र के <strong>Graphic Studio</strong> के सभी टेम्प्लेट्स में सीधे लागू हो जाएगा।
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="submit"
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>कस्टम हेडर/फुटर सेव करें</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {/* Review List & Approvals Table */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            <h5 className="text-base font-black text-white">कस्टम हेडर / फुटर समीक्षा एवं अनुमोदन सूची</h5>
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={hfSearch}
+              onChange={(e) => setHfSearch(e.target.value)}
+              placeholder="यूज़र नाम या ईमेल खोजें..."
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+            />
+          </div>
+        </div>
+
+        {/* Table of Users with Custom HF */}
+        <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
+              <tr>
+                <th className="p-3">यूज़र विवरण</th>
+                <th className="p-3">प्लान टियर</th>
+                <th className="p-3 text-center">हेडर इमेज</th>
+                <th className="p-3 text-center">फुटर इमेज</th>
+                <th className="p-3 text-center">स्थिति</th>
+                <th className="p-3 text-right">कार्रवाई (Actions)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+              {(() => {
+                const list = planUsers
+                  .map((u) => {
+                    const assigned = getAssignedCustomHeaderFooter(u.email);
+                    let profileHF: any = null;
+                    try {
+                      const pStr = localStorage.getItem(`user_profile_${u.email.toLowerCase().trim()}`);
+                      if (pStr) profileHF = JSON.parse(pStr);
+                    } catch {}
+                    const headerUrl = assigned?.customHeaderPng || profileHF?.customHeaderPng || '';
+                    const footerUrl = assigned?.customFooterPng || profileHF?.customFooterPng || '';
+                    const hasHF = Boolean(headerUrl || footerUrl);
+                    const active = assigned?.active !== false && hasHF;
+                    return { user: u, headerUrl, footerUrl, hasHF, active };
+                  })
+                  .filter((item) => {
+                    if (!hfSearch.trim()) return true;
+                    const q = hfSearch.toLowerCase();
+                    return (
+                      item.user.name?.toLowerCase().includes(q) ||
+                      item.user.email.toLowerCase().includes(q) ||
+                      item.user.channelName?.toLowerCase().includes(q)
+                    );
+                  });
+
+                if (list.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-slate-400 text-xs">
+                        कोई यूज़र या कस्टम हेडर/फुटर नहीं मिला।
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return list.map((item, idx) => (
+                  <tr key={`${item.user.email}-${idx}`} className="hover:bg-slate-800/30 transition">
+                    <td className="p-3">
+                      <div className="font-bold text-white text-xs">{item.user.name || item.user.channelName || 'यूज़र'}</div>
+                      <div className="text-[11px] text-slate-400 font-mono truncate max-w-[200px]">{item.user.email}</div>
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 text-[10px] font-black rounded-full uppercase border ${
+                        item.user.tier === 'ultra'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+                          : item.user.tier === 'professional'
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-400/50'
+                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}>
+                        {item.user.tier === 'ultra' ? 'VIP DESK' : item.user.tier.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center">
+                      {item.headerUrl ? (
+                        <div className="w-14 h-8 mx-auto bg-slate-950 border border-slate-700 rounded-lg p-0.5 overflow-hidden flex items-center justify-center">
+                          <img src={item.headerUrl} alt="Header" className="w-full h-full object-contain" />
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">- डिफ़ॉल्ट -</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      {item.footerUrl ? (
+                        <div className="w-14 h-8 mx-auto bg-slate-950 border border-slate-700 rounded-lg p-0.5 overflow-hidden flex items-center justify-center">
+                          <img src={item.footerUrl} alt="Footer" className="w-full h-full object-contain" />
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">- डिफ़ॉल्ट -</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      {item.hasHF ? (
+                        item.active ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            सक्रिय (Approved)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
+                            समीक्षाधीन (Pending)
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">असाइन नहीं</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {item.hasHF && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewUserHF(item)}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition"
+                            title="4:5 कार्ड फ्रेम में लाइव प्रिव्यू देखें"
+                          >
+                            <Eye className="w-3 h-3 text-blue-400" />
+                            <span>प्रिव्यू</span>
+                          </button>
+                        )}
+                        {item.hasHF && !item.active && (
+                          <button
+                            type="button"
+                            onClick={() => handleApproveCustomHF(item.user.email, item.headerUrl, item.footerUrl)}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black rounded-lg shadow flex items-center gap-1 cursor-pointer transition active:scale-95"
+                            title="हेडर/फुटर स्वीकृत करें"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>स्वीकृत (Approve)</span>
+                          </button>
+                        )}
+                        {item.hasHF && item.active && (
+                          <button
+                            type="button"
+                            onClick={() => handleRejectCustomHF(item.user.email)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-[11px] font-bold rounded-lg border border-slate-700 cursor-pointer transition"
+                            title="अस्वीकृत या निष्क्रिय करें"
+                          >
+                            <X className="w-3 h-3" />
+                            <span>अस्वीकृत</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSelectUserForCustomHF(item.user.email)}
+                          className="px-2 py-1 bg-purple-950/60 hover:bg-purple-900 text-purple-300 text-[11px] font-bold rounded-lg border border-purple-500/40 cursor-pointer transition"
+                          title="एडिट फॉर्म में लोड करें"
+                        >
+                          एडिट
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Frame Live Preview Modal */}
+      {previewUserHF && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-purple-500/60 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-purple-400" />
+                <div>
+                  <h4 className="text-sm font-black text-white">4:5 कार्ड लाइव फ्रेम प्रिव्यू</h4>
+                  <span className="text-[10px] text-slate-400 font-mono">{previewUserHF.user.email}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewUserHF(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 4:5 Aspect Ratio Card Mockup */}
+            <div className="relative aspect-[4/5] w-full max-w-[280px] mx-auto rounded-xl overflow-hidden border-2 border-amber-500/40 shadow-2xl flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900">
+              {/* Top Custom Header */}
+              <div className="w-full bg-slate-950/80 border-b border-slate-800 flex items-center justify-center min-h-[44px]">
+                {previewUserHF.headerUrl ? (
+                  <img src={previewUserHF.headerUrl} alt="Header" className="w-full h-12 object-contain" />
+                ) : (
+                  <div className="text-[10px] font-bold text-slate-500 py-2">[डिफ़ॉल्ट हेडर]</div>
+                )}
+              </div>
+
+              {/* Middle Sample News Content */}
+              <div className="p-3 space-y-2 flex-1 flex flex-col justify-center text-center">
+                <div className="inline-block mx-auto px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded uppercase">
+                  ब्रेकिंग न्यूज़
+                </div>
+                <h4 className="text-xs font-black text-white leading-tight">
+                  {previewUserHF.user.name || 'चैनल'} का कस्टम डिज़ाइन कार्ड प्रिव्यू
+                </h4>
+                <p className="text-[10px] text-slate-400 line-clamp-2">
+                  कस्टम हेडर व फुटर ग्राफ़िक्स न्यूज़ कार्ड पर इस प्रकार प्रदर्शित होंगे।
+                </p>
+              </div>
+
+              {/* Bottom Custom Footer */}
+              <div className="w-full bg-slate-950/80 border-t border-slate-800 flex items-center justify-center min-h-[44px]">
+                {previewUserHF.footerUrl ? (
+                  <img src={previewUserHF.footerUrl} alt="Footer" className="w-full h-12 object-contain" />
+                ) : (
+                  <div className="text-[10px] font-bold text-slate-500 py-2">[डिफ़ॉल्ट फुटर]</div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Action Buttons */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPreviewUserHF(null)}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                बंद करें
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleRejectCustomHF(previewUserHF.user.email)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950/80 text-rose-300 border border-slate-700 text-xs font-bold rounded-xl cursor-pointer transition"
+                >
+                  अस्वीकृत (Reject)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApproveCustomHF(previewUserHF.user.email, previewUserHF.headerUrl, previewUserHF.footerUrl)}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-lg flex items-center gap-1 cursor-pointer transition active:scale-95"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>स्वीकृत करें (Approve)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={`w-full ${isAdmin ? 'space-y-6 text-slate-100' : 'bg-[#0a0f1d] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100'}`}>
       {/* Header - Only shown for non-admin custom template manager */}
@@ -800,6 +1227,23 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 <div className="text-emerald-300">• VIP Desk अप्रूवल</div>
               </div>
             </div>
+
+            {/* Mobile Expanded Sections */}
+            {isGraphicsExpanded && (
+              <div className="p-3 bg-slate-950/80 border border-purple-500/40 rounded-xl animate-in fade-in">
+                <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
+              </div>
+            )}
+            {isVideoExpanded && (
+              <div className="p-3 bg-slate-950/80 border border-amber-500/40 rounded-xl animate-in fade-in">
+                <AdminVideoTemplateControl onOpenStudioWithVideoFrame={onOpenStudioWithTemplate} />
+              </div>
+            )}
+            {isApprovalExpanded && (
+              <div className="p-3 bg-slate-950/80 border border-indigo-500/40 rounded-xl animate-in fade-in space-y-4">
+                {renderApprovalSection()}
+              </div>
+            )}
           </div>
 
           {/* Desktop 3-Section Collapsible Layout */}

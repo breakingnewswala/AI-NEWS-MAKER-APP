@@ -1016,6 +1016,58 @@ async function runTests() {
       );
     }
 
+    // 23. Testing Package Coupons & Cashfree Integration
+    console.log('\n--- 23. Testing Package Coupons & Cashfree Integration ---');
+    const getCouponsRes = await request('GET', '/api/admin/package-coupons', null, {
+      'x-admin-key': 'master-admin',
+      'x-user-email': 'admin.ainewsmaker@gmail.com',
+    });
+    assert(getCouponsRes.status === 200 && getCouponsRes.body && getCouponsRes.body.success, 'GET /api/admin/package-coupons returns 200 with success: true');
+    assert(Array.isArray(getCouponsRes.body?.coupons), 'Package coupons returned as an array');
+
+    const testCouponCode = `TESTDISC_${Date.now()}`;
+    const createCouponRes = await request('POST', '/api/admin/package-coupons', {
+      code: testCouponCode,
+      name: 'ऑटोमेटेड टेस्ट ₹150 छूट',
+      discountAmount: 150,
+      applicablePackage: 'ALL',
+      isActive: true,
+      perUserLimit: 2,
+    }, {
+      'x-admin-key': 'master-admin',
+      'x-user-email': 'admin.ainewsmaker@gmail.com',
+    });
+    assert(createCouponRes.status === 200 && createCouponRes.body && createCouponRes.body.success, 'POST /api/admin/package-coupons creates coupon successfully');
+    assert(createCouponRes.body?.coupon && createCouponRes.body?.coupon?.code === testCouponCode, 'Created coupon code matches input');
+
+    const validateRes = await request('POST', '/api/package-coupons/validate', {
+      code: testCouponCode,
+      planKey: 'BASIC',
+      planId: 'basic',
+      userEmail: 'reporter.test@ainewsmaker.online',
+    });
+    assert(validateRes.status === 200 && validateRes.body && validateRes.body.valid, 'POST /api/package-coupons/validate validates active coupon successfully');
+    assert(validateRes.body?.discountAmount === 150, 'Validation returns correct discountAmount (150)');
+    assert(validateRes.body?.finalPayableAmount === validateRes.body?.originalAmount - 150, 'Validation returns exact reduced finalPayableAmount');
+
+    const createOrderRes = await request('POST', '/api/cashfree/create-order', {
+      planId: 'basic',
+      planKey: 'BASIC',
+      customerEmail: 'reporter.test@ainewsmaker.online',
+      couponCode: testCouponCode,
+    });
+    assert(createOrderRes.status === 200 && createOrderRes.body && createOrderRes.body.success, 'POST /api/cashfree/create-order creates order with coupon');
+    assert(createOrderRes.body?.couponCode === testCouponCode, 'Cashfree order reflects applied coupon code');
+    assert(createOrderRes.body?.discountAmount === 150, 'Cashfree order records exact discountAmount deduction');
+
+    if (createCouponRes.body?.coupon?.id) {
+      const delRes = await request('DELETE', `/api/admin/package-coupons/${createCouponRes.body.coupon.id}`, null, {
+        'x-admin-key': 'master-admin',
+        'x-user-email': 'admin.ainewsmaker@gmail.com',
+      });
+      assert(delRes.status === 200 && delRes.body && delRes.body.success, 'DELETE /api/admin/package-coupons/:id removes coupon successfully');
+    }
+
     // Restore original ai_features_config.json
     if (originalConfigRaw) {
       fs.writeFileSync(configPath, originalConfigRaw, 'utf8');

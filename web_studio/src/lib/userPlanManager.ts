@@ -884,6 +884,30 @@ export function assignPlanToUserManually(
     expiresAt,
     activatedVia,
   });
+
+  // Authoritatively persist upgrade to Backend Database (Part 7)
+  try {
+    fetch(getApiUrl('/api/admin/update-user'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-key': 'master-admin',
+      },
+      body: JSON.stringify({
+        userId: userEmail.trim(),
+        updates: {
+          email: userEmail.trim(),
+          tier,
+          planName: planDetail.planKey,
+          expiresAt,
+          activatedAt: now,
+          activatedVia,
+          isTrialExpired: false,
+          hasActivePaidPlan: true,
+        },
+      }),
+    }).catch((err) => console.warn('Could not sync user upgrade to backend:', err));
+  } catch {}
 }
 
 export function adminUpdateUserRecord(
@@ -905,6 +929,27 @@ export function adminUpdateUserRecord(
         tier: newTier,
         planName: planDetail.planKey,
       };
+
+      // Authoritatively persist update to Backend Database (Part 7)
+      try {
+        fetch(getApiUrl('/api/admin/update-user'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-key': 'master-admin',
+          },
+          body: JSON.stringify({
+            userId: cleanEmail,
+            updates: {
+              ...updates,
+              email: cleanEmail,
+              tier: newTier,
+              planName: planDetail.planKey,
+              isTrialExpired: false,
+            },
+          }),
+        }).catch((err) => console.warn('Could not sync user update to backend:', err));
+      } catch {}
       if (updates.isLocked !== undefined) {
         users[idx].isProfileLocked = updates.isLocked;
         if (updates.isLocked) {
@@ -1152,7 +1197,14 @@ export function isUserAdmin(user: any): boolean {
     email = (user.email || user.username || '').replace(/\s+/g, '').toLowerCase().trim();
   }
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL;
+  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if (typeof user === 'object' && user !== null) {
+    const role = (user.role || user.userRole || '').toString().toLowerCase().trim();
+    if (role === 'admin' || role === 'superadmin' || user.isAdmin === true) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

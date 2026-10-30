@@ -183,8 +183,23 @@ function isAuthorizedAdmin(req: express.Request): boolean {
   if (adminKey === "admin-secret-key" || adminKey === "master-admin" || adminKey === "admin") return true;
 
   const role = (req.headers["x-user-role"] || req.headers["x-role"] || "").toString().toLowerCase().trim();
-  if ((role === "admin" || role === "superadmin") && email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
-    if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if ((role === "admin" || role === "superadmin") && (!email || !UNAUTHORIZED_ADMIN_EMAILS.includes(email))) {
+    return true;
+  }
+
+  if (email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
+    try {
+      if (typeof loadUsersMasterDatabase === "function") {
+        const users = loadUsersMasterDatabase();
+        const dbUser = users.find((u: any) => (u.email || "").toLowerCase().trim() === email);
+        if (dbUser && (dbUser.role === "admin" || dbUser.role === "superadmin")) return true;
+      }
+      if (typeof loadProfilesDatabase === "function") {
+        const profiles = loadProfilesDatabase();
+        const profUser = profiles[email] || Object.values(profiles).find((p: any) => (p.email || "").toLowerCase().trim() === email);
+        if (profUser && ((profUser as any).role === "admin" || (profUser as any).role === "superadmin")) return true;
+      }
+    } catch {}
   }
 
   return false;
@@ -6907,6 +6922,7 @@ interface StoredUserProfile {
   channelLogoGifUrl?: string;
   channelLogoType: 'png' | 'gif';
   socialIcons?: Record<string, boolean>;
+  socialLinks?: Record<string, string>;
   mobileNumber?: string;
   showMobileNumber?: boolean;
   websiteUrl?: string;
@@ -7108,6 +7124,7 @@ app.post("/api/user-profile", async (req, res) => {
       mobileNumber: finalMobile || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
+      socialLinks: profile.socialLinks || existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== undefined ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now(),
@@ -7144,6 +7161,7 @@ app.post("/api/user-profile", async (req, res) => {
           mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
           socialIcons: updated.socialIcons || users[uIdx].socialIcons,
+          socialLinks: updated.socialLinks || users[uIdx].socialLinks,
           lastLoginAt: Date.now(),
         };
         saveUsersDatabase(users);
@@ -16215,6 +16233,198 @@ function savePaymentsDatabase(data: any[]): void {
   }
 }
 
+// ==========================================
+// --- PACKAGE COUPONS SYSTEM ---
+// ==========================================
+function loadPackageCouponsDatabase(): any[] {
+  try {
+    const locs = resolveAllDatabaseLocations("package_coupons_db.json");
+    for (const loc of locs) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
+    }
+  } catch {}
+  return [];
+}
+
+function savePackageCouponsDatabase(data: any[]): void {
+  try {
+    const locs = resolveAllDatabaseLocations("package_coupons_db.json");
+    for (const loc of locs) {
+      try {
+        if (fs.existsSync(path.dirname(loc))) {
+          fs.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.error("Failed saving package_coupons_db.json:", e);
+  }
+}
+
+// Admin: Get all package coupons (Master Admin Only)
+app.get("/api/admin/package-coupons", (req, res) => {
+  try {
+    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत मास्टर एडमिन ही पैकेज कूपन देख सकते हैं।" });
+    }
+    const coupons = loadPackageCouponsDatabase();
+    return res.json({ success: true, coupons });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Admin: Create or update package coupon (Master Admin Only)
+app.post("/api/admin/package-coupons", (req, res) => {
+  try {
+    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन ही पैकेज कूपन बना या संपादित कर सकते हैं।" });
+    }
+    const { id, code, name, discountAmount, applicablePackage, expiryDate, maxUsageLimit, perUserLimit, isActive } = req.body || {};
+    if (!code || !discountAmount) {
+      return res.status(400).json({ error: "कूपन कोड और छूट राशि (₹) अनिवार्य हैं।" });
+    }
+    const cleanCode = String(code).trim().toUpperCase();
+    const coupons = loadPackageCouponsDatabase();
+    const now = Date.now();
+    const existingIdx = coupons.findIndex((c: any) => (id && c.id === id) || c.code.toUpperCase() === cleanCode);
+
+    if (existingIdx >= 0) {
+      coupons[existingIdx] = {
+        ...coupons[existingIdx],
+        code: cleanCode,
+        name: (name || cleanCode).trim(),
+        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        applicablePackage: applicablePackage || "ALL",
+        expiryDate: expiryDate || "",
+        maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : undefined,
+        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        isActive: isActive !== false,
+        updatedAt: now,
+      };
+      savePackageCouponsDatabase(coupons);
+      return res.json({ success: true, coupon: coupons[existingIdx], message: "पैकेज कूपन सफलतापूर्वक अपडेट हुआ।" });
+    } else {
+      const newCoupon = {
+        id: id || `coupon_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
+        code: cleanCode,
+        name: (name || cleanCode).trim(),
+        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        applicablePackage: applicablePackage || "ALL",
+        expiryDate: expiryDate || "",
+        maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : undefined,
+        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        usageCount: 0,
+        usedBy: [],
+        isActive: isActive !== false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      coupons.push(newCoupon);
+      savePackageCouponsDatabase(coupons);
+      return res.json({ success: true, coupon: newCoupon, message: "नया पैकेज कूपन सफलतापूर्वक बनाया गया।" });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Admin: Delete package coupon (Master Admin Only)
+app.delete("/api/admin/package-coupons/:id", (req, res) => {
+  try {
+    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन ही पैकेज कूपन हटा सकते हैं।" });
+    }
+    const { id } = req.params;
+    let coupons = loadPackageCouponsDatabase();
+    const initialLen = coupons.length;
+    coupons = coupons.filter((c: any) => c.id !== id && c.code !== id);
+    if (coupons.length === initialLen) {
+      return res.status(404).json({ error: "कूपन नहीं मिला।" });
+    }
+    savePackageCouponsDatabase(coupons);
+    return res.json({ success: true, message: "पैकेज कूपन सफलतापूर्वक हटाया गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// User / Checkout: Validate package coupon code
+app.post("/api/package-coupons/validate", (req, res) => {
+  try {
+    const { code, planKey, planId, userEmail } = req.body || {};
+    if (!code) {
+      return res.status(400).json({ valid: false, error: "कृपया कूपन कोड दर्ज करें।" });
+    }
+    const cleanCode = String(code).trim().toUpperCase();
+    const coupons = loadPackageCouponsDatabase();
+    const coupon = coupons.find((c: any) => c.code.toUpperCase() === cleanCode);
+
+    if (!coupon) {
+      return res.status(404).json({ valid: false, error: "यह कूपन कोड अमान्य है।" });
+    }
+    if (!coupon.isActive) {
+      return res.status(400).json({ valid: false, error: "यह कूपन कोड वर्तमान में निष्क्रिय है।" });
+    }
+    if (coupon.expiryDate) {
+      const exp = new Date(coupon.expiryDate).getTime() + 24 * 60 * 60 * 1000 - 1;
+      if (Date.now() > exp) {
+        return res.status(400).json({ valid: false, error: "यह कूपन कोड समाप्त (Expire) हो चुका है।" });
+      }
+    }
+    if (coupon.maxUsageLimit && (coupon.usageCount || 0) >= coupon.maxUsageLimit) {
+      return res.status(400).json({ valid: false, error: "यह कूपन अपनी अधिकतम उपयोग सीमा तक पहुँच चुका है।" });
+    }
+
+    const cleanEmail = (userEmail || "").trim().toLowerCase();
+    if (cleanEmail && coupon.usedBy && Array.isArray(coupon.usedBy)) {
+      const userUses = coupon.usedBy.filter((e: string) => e.toLowerCase() === cleanEmail).length;
+      const limit = coupon.perUserLimit || 1;
+      if (userUses >= limit) {
+        return res.status(400).json({ valid: false, error: `आप इस कूपन कोड का पहले ही ${limit} बार उपयोग कर चुके हैं।` });
+      }
+    }
+
+    const effectivePlanKey = (planKey || planId || "").toUpperCase();
+    if (coupon.applicablePackage && coupon.applicablePackage !== "ALL") {
+      const targetPkg = coupon.applicablePackage.toUpperCase();
+      const matches = effectivePlanKey.includes(targetPkg) || targetPkg.includes(effectivePlanKey);
+      if (!matches) {
+        return res.status(400).json({
+          valid: false,
+          error: `यह कूपन केवल '${coupon.applicablePackage}' पैकेज के लिए मान्य है।`,
+        });
+      }
+    }
+
+    const catalog = loadPlansCatalogDatabase();
+    const plan = catalog.find((p) => p.id === planId || p.planKey === planKey);
+    const originalAmount = plan?.priceNum || 999;
+    const discountAmount = Math.min(originalAmount - 1, coupon.discountAmount);
+    const finalPayableAmount = Math.max(1, originalAmount - discountAmount);
+
+    return res.json({
+      valid: true,
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        name: coupon.name,
+        discountAmount: coupon.discountAmount,
+        applicablePackage: coupon.applicablePackage,
+      },
+      originalAmount,
+      discountAmount,
+      finalPayableAmount,
+      message: `कूपन '${coupon.code}' लागू हुआ! ₹${discountAmount} की छूट मिली।`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ valid: false, error: cleanErrorMessage(err) });
+  }
+});
+
 // 1. Get Cashfree Gateway Configuration
 app.get("/api/cashfree/config", (_req, res) => {
   const env = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
@@ -16232,7 +16442,7 @@ app.get("/api/cashfree/config", (_req, res) => {
 // 2. Create Order Endpoint
 app.post("/api/cashfree/create-order", async (req, res) => {
   try {
-    const { planId, planKey, amount, customerEmail, customerPhone, customerName, returnUrl } = req.body || {};
+    const { planId, planKey, amount, customerEmail, customerPhone, customerName, returnUrl, couponCode } = req.body || {};
 
     if (!planId) {
       return res.status(400).json({ error: "प्लान आईडी आवश्यक है।" });
@@ -16240,8 +16450,30 @@ app.post("/api/cashfree/create-order", async (req, res) => {
 
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    const orderAmount = Number(amount) || targetPlan?.priceNum || 999;
+    let orderAmount = Number(amount) || targetPlan?.priceNum || 999;
     const planName = targetPlan?.nameHi || planKey || planId;
+
+    let appliedCouponCode: string | null = null;
+    let discountAmount = 0;
+
+    if (couponCode && String(couponCode).trim()) {
+      const cleanCode = String(couponCode).trim().toUpperCase();
+      const allCoupons = loadPackageCouponsDatabase();
+      const cp = allCoupons.find((c: any) => c.code.toUpperCase() === cleanCode && c.isActive);
+      if (cp) {
+        const notExpired = !cp.expiryDate || (Date.now() <= new Date(cp.expiryDate).getTime() + 86400000 - 1);
+        const withinMaxLimit = !cp.maxUsageLimit || (cp.usageCount || 0) < cp.maxUsageLimit;
+        const targetPkg = (cp.applicablePackage || "ALL").toUpperCase();
+        const effectiveKey = (targetPlan?.planKey || planKey || planId || "").toUpperCase();
+        const pkgMatches = targetPkg === "ALL" || effectiveKey.includes(targetPkg) || targetPkg.includes(effectiveKey);
+
+        if (notExpired && withinMaxLimit && pkgMatches) {
+          appliedCouponCode = cp.code;
+          discountAmount = Math.min(orderAmount - 1, Number(cp.discountAmount) || 0);
+          orderAmount = Math.max(1, orderAmount - discountAmount);
+        }
+      }
+    }
 
     const cleanEmail = (customerEmail || "customer@ainewsmaker.online").trim().toLowerCase();
     const cleanPhone = (customerPhone || "9876543210").replace(/[^0-9]/g, "").slice(-10) || "9876543210";
@@ -16308,6 +16540,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       cfOrderId,
       paymentSessionId,
       orderAmount,
+      couponCode: appliedCouponCode,
+      discountAmount,
       planId,
       planKey: targetPlan?.planKey || planKey,
       planName,
@@ -16331,6 +16565,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       paymentSessionId,
       orderAmount,
       currency: "INR",
+      couponCode: appliedCouponCode,
+      discountAmount,
       planId,
       planKey: targetPlan?.planKey || planKey,
       planName,
@@ -16427,6 +16663,24 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
         existingOrder.paidAt = Date.now();
         allPayments[orderIndex] = existingOrder;
         savePaymentsDatabase(allPayments);
+
+        if (existingOrder.couponCode) {
+          try {
+            const coupons = loadPackageCouponsDatabase();
+            const cIdx = coupons.findIndex((c: any) => c.code.toUpperCase() === String(existingOrder.couponCode).toUpperCase());
+            if (cIdx >= 0) {
+              coupons[cIdx].usageCount = (coupons[cIdx].usageCount || 0) + 1;
+              if (!coupons[cIdx].usedBy) coupons[cIdx].usedBy = [];
+              if (targetEmail && !coupons[cIdx].usedBy.includes(targetEmail)) {
+                coupons[cIdx].usedBy.push(targetEmail);
+              }
+              coupons[cIdx].updatedAt = Date.now();
+              savePackageCouponsDatabase(coupons);
+            }
+          } catch (cpErr) {
+            console.warn("Failed recording coupon usage:", cpErr);
+          }
+        }
       }
 
       return res.json({
@@ -16436,6 +16690,8 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
         planId: existingOrder?.planId,
         planKey: existingOrder?.planKey,
         amount: existingOrder?.orderAmount,
+        couponCode: existingOrder?.couponCode,
+        discountAmount: existingOrder?.discountAmount,
         message: "भुगतान सफलतापूर्वक सत्यापित हुआ! प्लान सक्रिय कर दिया गया है।",
       });
     }

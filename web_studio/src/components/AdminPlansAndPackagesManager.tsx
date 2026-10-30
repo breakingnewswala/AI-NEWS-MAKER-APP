@@ -58,7 +58,9 @@ import {
   Activity,
   Eye,
   TrendingUp,
+  Tag,
 } from 'lucide-react';
+import { PackageCoupon } from '../types';
 import {
   isUserMasterAdmin,
   isUserSuperAdmin,
@@ -147,10 +149,160 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onDeleteCategory,
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>('');
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'package_coupons' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>('');
   const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video'>('news');
   const [analyticsData, setAnalyticsData] = useState<any>(null);
-  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+    const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+
+  // Package Coupons Management State (Master Admin Only)
+  const [packageCoupons, setPackageCoupons] = useState<PackageCoupon[]>([]);
+  const [isLoadingCoupons, setIsLoadingCoupons] = useState<boolean>(false);
+  const [couponForm, setCouponForm] = useState<{
+    id?: string;
+    code: string;
+    name: string;
+    discountAmount: number;
+    applicablePackage: string;
+    expiryDate: string;
+    maxUsageLimit: string;
+    perUserLimit: number;
+    isActive: boolean;
+  }>({
+    code: '',
+    name: '',
+    discountAmount: 200,
+    applicablePackage: 'ALL',
+    expiryDate: '',
+    maxUsageLimit: '',
+    perUserLimit: 1,
+    isActive: true,
+  });
+  const [couponActionMsg, setCouponActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isEditingCoupon, setIsEditingCoupon] = useState<boolean>(false);
+
+  const fetchPackageCoupons = async () => {
+    setIsLoadingCoupons(true);
+    try {
+      const res = await fetch('/api/admin/package-coupons', {
+        headers: {
+          'x-admin-key': 'master-admin',
+          'x-user-email': currentUser?.email || '',
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPackageCoupons(data.coupons || []);
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setIsLoadingCoupons(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'package_coupons') {
+      fetchPackageCoupons();
+    }
+  }, [subTab]);
+
+  const handleSaveCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponForm.code.trim()) {
+      setCouponActionMsg({ type: 'error', text: 'कृपया कूपन कोड दर्ज करें।' });
+      return;
+    }
+    if (!couponForm.discountAmount || couponForm.discountAmount <= 0) {
+      setCouponActionMsg({ type: 'error', text: 'कृपया वैध छूट राशि (₹) दर्ज करें।' });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/package-coupons', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-email': currentUser?.email || '',
+        },
+        body: JSON.stringify({
+          id: couponForm.id,
+          code: couponForm.code.trim().toUpperCase(),
+          name: (couponForm.name.trim() || couponForm.code.trim().toUpperCase()),
+          discountAmount: Number(couponForm.discountAmount),
+          applicablePackage: couponForm.applicablePackage || 'ALL',
+          expiryDate: couponForm.expiryDate || undefined,
+          maxUsageLimit: couponForm.maxUsageLimit ? Number(couponForm.maxUsageLimit) : undefined,
+          perUserLimit: couponForm.perUserLimit || 1,
+          isActive: couponForm.isActive,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCouponActionMsg({ type: 'success', text: data.message || 'कूपन सफलतापूर्वक सेव हुआ!' });
+        setCouponForm({
+          code: '',
+          name: '',
+          discountAmount: 200,
+          applicablePackage: 'ALL',
+          expiryDate: '',
+          maxUsageLimit: '',
+          perUserLimit: 1,
+          isActive: true,
+        });
+        setIsEditingCoupon(false);
+        fetchPackageCoupons();
+      } else {
+        setCouponActionMsg({ type: 'error', text: data.error || 'कूपन सेव करने में त्रुटि आई।' });
+      }
+    } catch {
+      setCouponActionMsg({ type: 'error', text: 'सर्वर से संपर्क नहीं हो सका।' });
+    }
+  };
+
+  const handleDeleteCoupon = async (id: string, code: string) => {
+    if (!window.confirm(`क्या आप वाकई कूपन '${code}' को हटाना चाहते हैं?`)) return;
+    try {
+      const res = await fetch(`/api/admin/package-coupons/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-key': 'master-admin',
+          'x-user-email': currentUser?.email || '',
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCouponActionMsg({ type: 'success', text: `कूपन '${code}' सफलतापूर्वक हटाया गया!` });
+        fetchPackageCoupons();
+      } else {
+        setCouponActionMsg({ type: 'error', text: data.error || 'कूपन हटाने में समस्या आई।' });
+      }
+    } catch {
+      setCouponActionMsg({ type: 'error', text: 'सर्वर त्रुटि।' });
+    }
+  };
+
+  const handleToggleCouponStatus = async (coupon: PackageCoupon) => {
+    try {
+      const res = await fetch('/api/admin/package-coupons', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-email': currentUser?.email || '',
+        },
+        body: JSON.stringify({
+          ...coupon,
+          isActive: !coupon.isActive,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchPackageCoupons();
+      }
+    } catch {}
+  };
 
   const fetchAnalytics = async () => {
     setIsLoadingAnalytics(true);
@@ -368,7 +520,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   // Module C Security: Regular admin cannot view or access the 5 restricted tabs
   useEffect(() => {
-    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'users' || subTab === 'restricted')) {
+    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'package_coupons' || subTab === 'users' || subTab === 'restricted')) {
       setSubTab('');
     }
   }, [isSuperAdminUser, subTab]);
@@ -2083,6 +2235,308 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
         )}
 
+
+        {/* ========================================================================= */}
+        {/* STEP 6.5: पैकेज कूपन कोड (PACKAGE COUPONS) - Master Admin Only           */}
+        {/* ========================================================================= */}
+        {isSuperAdminUser && (
+        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'package_coupons' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'package_coupons' ? '' : 'package_coupons')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'package_coupons' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <Tag className="w-5 h-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-base font-black text-white flex items-center gap-2">
+                  <span>पैकेज कूपन कोड</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black tracking-wide uppercase bg-rose-950 text-rose-300 border border-rose-500/40">
+                    Master Admin
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  कैशफ्री गेटवे हेतु पैकेज डिस्काउंट कूपन बनाएं, छूट राशि तय करें व उपयोग सीमा प्रबंधित करें
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
+                {`${packageCoupons.length} कूपन`}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'package_coupons' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'package_coupons' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
+              {/* Notification Message */}
+              {couponActionMsg && (
+                <div className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${couponActionMsg.type === 'success' ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300' : 'bg-rose-950/80 border-rose-500 text-rose-300'}`}>
+                  <span>{couponActionMsg.text}</span>
+                  <button type="button" onClick={() => setCouponActionMsg(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Add / Edit Form Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-amber-400" />
+                    <h5 className="text-sm font-black text-white">
+                      {isEditingCoupon ? 'पैकेज कूपन संपादित करें' : 'नया पैकेज कूपन कोड बनाएं'}
+                    </h5>
+                  </div>
+                  {isEditingCoupon && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingCoupon(false);
+                        setCouponForm({
+                          code: '',
+                          name: '',
+                          discountAmount: 200,
+                          applicablePackage: 'ALL',
+                          expiryDate: '',
+                          maxUsageLimit: '',
+                          perUserLimit: 1,
+                          isActive: true,
+                        });
+                      }}
+                      className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      रद्द करें
+                    </button>
+                  )}
+                </div>
+
+                <form onSubmit={handleSaveCoupon} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">कूपन कोड *</label>
+                      <input
+                        type="text"
+                        value={couponForm.code}
+                        onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
+                        placeholder="उदा. LAUNCH200"
+                        required
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono uppercase font-bold focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">कूपन का नाम</label>
+                      <input
+                        type="text"
+                        value={couponForm.name}
+                        onChange={(e) => setCouponForm({ ...couponForm, name: e.target.value })}
+                        placeholder="उदा. लॉन्च ₹200 विशेष छूट"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-medium focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">छूट राशि (₹ में) *</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={couponForm.discountAmount}
+                        onChange={(e) => setCouponForm({ ...couponForm, discountAmount: Number(e.target.value) })}
+                        placeholder="200"
+                        required
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-amber-400 font-mono font-bold focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">लागू पैकेज</label>
+                      <select
+                        value={couponForm.applicablePackage}
+                        onChange={(e) => setCouponForm({ ...couponForm, applicablePackage: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-medium focus:border-amber-400 focus:outline-none"
+                      >
+                        <option value="ALL">सभी पैकेज (All Packages)</option>
+                        <option value="BASIC">केवल Basic पैकेज</option>
+                        <option value="ADVANCE">केवल Advance पैकेज</option>
+                        <option value="PRO">केवल Pro पैकेज</option>
+                        <option value="VIP DESK">केवल VIP Desk पैकेज</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">समाप्ति तिथि (वैकल्पिक)</label>
+                      <input
+                        type="date"
+                        value={couponForm.expiryDate}
+                        onChange={(e) => setCouponForm({ ...couponForm, expiryDate: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">कुल उपयोग सीमा (वैकल्पिक)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={couponForm.maxUsageLimit}
+                        onChange={(e) => setCouponForm({ ...couponForm, maxUsageLimit: e.target.value })}
+                        placeholder="उदा. 500 (असीमित हेतु खाली छोड़ें)"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">प्रति यूज़र सीमा</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={couponForm.perUserLimit}
+                        onChange={(e) => setCouponForm({ ...couponForm, perUserLimit: Number(e.target.value) })}
+                        placeholder="1"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <label className="text-slate-300 font-bold block mb-2">स्थिति (Status)</label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-white">
+                          <input
+                            type="checkbox"
+                            checked={couponForm.isActive}
+                            onChange={(e) => setCouponForm({ ...couponForm, isActive: e.target.checked })}
+                            className="w-4 h-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>{couponForm.isActive ? 'सक्रिय (Active)' : 'निष्क्रिय (Inactive)'}</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-black transition cursor-pointer shadow-md flex items-center gap-1.5"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{isEditingCoupon ? 'अपडेट सेव करें' : 'कूपन सेव करें'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Coupons List Table */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-amber-400" />
+                    <h5 className="text-sm font-black text-white">सक्रिय व ऐतिहासिक पैकेज कूपन</h5>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchPackageCoupons}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                    title="ताज़ा करें"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCoupons ? 'animate-spin text-amber-400' : ''}`} />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
+                      <tr>
+                        <th className="p-3">कूपन कोड व नाम</th>
+                        <th className="p-3">छूट राशि (₹)</th>
+                        <th className="p-3">लागू पैकेज</th>
+                        <th className="p-3">उपयोग / सीमा</th>
+                        <th className="p-3">समाप्ति</th>
+                        <th className="p-3 text-center">स्थिति</th>
+                        <th className="p-3 text-right">कार्रवाई</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                      {packageCoupons.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                            कोई पैकेज कूपन नहीं मिला। ऊपर दिए गए फॉर्म से नया कूपन बनाएं।
+                          </td>
+                        </tr>
+                      ) : (
+                        packageCoupons.map((coupon) => (
+                          <tr key={coupon.id} className="hover:bg-slate-800/40 transition">
+                            <td className="p-3">
+                              <span className="font-mono font-bold text-amber-400 text-sm block">
+                                {coupon.code}
+                              </span>
+                              <span className="text-[11px] text-slate-400 block">{coupon.name}</span>
+                            </td>
+                            <td className="p-3 font-mono font-black text-emerald-400 text-sm">
+                              ₹{coupon.discountAmount}
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold uppercase">
+                                {coupon.applicablePackage}
+                              </span>
+                            </td>
+                            <td className="p-3 font-mono text-[11px]">
+                              {coupon.usageCount || 0} / {coupon.maxUsageLimit ? coupon.maxUsageLimit : '∞'}
+                            </td>
+                            <td className="p-3 text-slate-400 font-mono text-[11px]">
+                              {coupon.expiryDate ? coupon.expiryDate : 'कोई सीमा नहीं'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCouponStatus(coupon)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${coupon.isActive ? 'bg-emerald-950 text-emerald-400 border-emerald-600/40' : 'bg-slate-800 text-slate-400 border-slate-700'}`}
+                              >
+                                {coupon.isActive ? 'सक्रिय' : 'निष्क्रिय'}
+                              </button>
+                            </td>
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsEditingCoupon(true);
+                                    setCouponForm({
+                                      id: coupon.id,
+                                      code: coupon.code,
+                                      name: coupon.name,
+                                      discountAmount: coupon.discountAmount,
+                                      applicablePackage: coupon.applicablePackage || 'ALL',
+                                      expiryDate: coupon.expiryDate || '',
+                                      maxUsageLimit: coupon.maxUsageLimit ? String(coupon.maxUsageLimit) : '',
+                                      perUserLimit: coupon.perUserLimit || 1,
+                                      isActive: coupon.isActive,
+                                    });
+                                  }}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                                  title="एडिट करें"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCoupon(coupon.id, coupon.code)}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/70 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                                  title="डिलीट करें"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        )}
 
         {/* ========================================================================= */}
         {/* STEP 7: यूज़र्स प्रबंधन (USERS MANAGER) - Master Admin Only                */}

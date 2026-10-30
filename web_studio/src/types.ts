@@ -456,6 +456,14 @@ export interface ChannelProfile {
     whatsapp?: boolean;
     linkedin?: boolean;
   };
+  socialLinks?: {
+    youtube?: string;
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+    linkedin?: string;
+    website?: string;
+  };
   username: string; // derived from English Channel Name
   mobileNumber: string;
   whatsappNumber?: string;
@@ -508,6 +516,22 @@ export interface UserWallet {
   userEmail: string;
   balance: number; // Approved coins balance
   pendingBalance: number; // Coins in pending claims
+  updatedAt: number;
+}
+
+export interface PackageCoupon {
+  id: string;
+  code: string;
+  name: string;
+  discountAmount: number;
+  applicablePackage: 'ALL' | 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK' | string;
+  expiryDate?: string;
+  maxUsageLimit?: number;
+  perUserLimit?: number;
+  usageCount: number;
+  usedBy?: string[];
+  isActive: boolean;
+  createdAt: number;
   updatedAt: number;
 }
 

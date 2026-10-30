@@ -109,6 +109,15 @@ export const DEFAULT_SOCIAL_ICONS = {
   linkedin: false,
 };
 
+export const DEFAULT_SOCIAL_LINKS = {
+  youtube: '',
+  facebook: '',
+  instagram: '',
+  twitter: '',
+  linkedin: '',
+  website: '',
+};
+
 export const DEFAULT_PROFILE: ChannelProfile = {
   fullName: '',
   channelNameHi: '',
@@ -116,6 +125,7 @@ export const DEFAULT_PROFILE: ChannelProfile = {
   channelLogoUrl: '',
   channelLogoType: 'png',
   socialIcons: DEFAULT_SOCIAL_ICONS,
+  socialLinks: DEFAULT_SOCIAL_LINKS,
   username: '',
   mobileNumber: '',
   showMobileNumber: true,
@@ -247,6 +257,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
               socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0) ? cloudP.socialIcons : (prev.socialIcons || DEFAULT_SOCIAL_ICONS),
+              socialLinks: { ...DEFAULT_SOCIAL_LINKS, ...(cloudP.socialLinks || prev.socialLinks || {}) },
               customHeaderPng: cloudP.customHeaderPng !== undefined ? cloudP.customHeaderPng : (prev.customHeaderPng || ''),
               customFooterPng: cloudP.customFooterPng !== undefined ? cloudP.customFooterPng : (prev.customFooterPng || ''),
             };
@@ -878,6 +889,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             ...DEFAULT_PROFILE,
             ...parsed,
             socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+            socialLinks: { ...DEFAULT_SOCIAL_LINKS, ...(parsed.socialLinks || {}) },
           };
           setChannelProfile(normalized);
           if (parsed.customHeaderPng !== undefined) setCustomHeaderPng(parsed.customHeaderPng);
@@ -1417,6 +1429,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       customHeaderPng: effectiveHeaderPng,
       customFooterPng: effectiveFooterPng,
       socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
+      socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
     };
 
     localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
@@ -1492,6 +1505,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         address: channelProfile.address || '',
         pincode: channelProfile.pincode || '',
         socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
+        socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
       };
       const res = await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
@@ -1517,6 +1531,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           district: savedProf.district || savedProf.location || p.district,
           location: savedProf.location || savedProf.district || p.location,
           socialIcons: savedProf.socialIcons || p.socialIcons,
+          socialLinks: savedProf.socialLinks || p.socialLinks,
         }));
         if (savedProf.district || savedProf.location) {
           setReporterDistrict(savedProf.district || savedProf.location);
@@ -2700,17 +2715,106 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
+              {/* Social Media Links Inputs */}
+              <div className="pt-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-300">
+                    सोशल मीडिया प्रोफाइल लिंक्स (Social Media Profile Links)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    (YouTube, Facebook, Instagram, X/Twitter, LinkedIn)
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">YouTube चैनल लिंक</label>
+                    <input
+                      type="url"
+                      value={channelProfile.socialLinks?.youtube || ''}
+                      onChange={(e) =>
+                        setChannelProfile((p) => ({
+                          ...p,
+                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), youtube: e.target.value },
+                        }))
+                      }
+                      placeholder="https://youtube.com/@yourchannel"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Facebook पेज / प्रोफाइल लिंक</label>
+                    <input
+                      type="url"
+                      value={channelProfile.socialLinks?.facebook || ''}
+                      onChange={(e) =>
+                        setChannelProfile((p) => ({
+                          ...p,
+                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), facebook: e.target.value },
+                        }))
+                      }
+                      placeholder="https://facebook.com/yourpage"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Instagram प्रोफाइल लिंक</label>
+                    <input
+                      type="url"
+                      value={channelProfile.socialLinks?.instagram || ''}
+                      onChange={(e) =>
+                        setChannelProfile((p) => ({
+                          ...p,
+                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), instagram: e.target.value },
+                        }))
+                      }
+                      placeholder="https://instagram.com/yourprofile"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">X (Twitter) प्रोफाइल लिंक</label>
+                    <input
+                      type="url"
+                      value={channelProfile.socialLinks?.twitter || ''}
+                      onChange={(e) =>
+                        setChannelProfile((p) => ({
+                          ...p,
+                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), twitter: e.target.value },
+                        }))
+                      }
+                      placeholder="https://x.com/yourhandle"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] text-slate-400 block mb-1">LinkedIn प्रोफाइल लिंक</label>
+                    <input
+                      type="url"
+                      value={channelProfile.socialLinks?.linkedin || ''}
+                      onChange={(e) =>
+                        setChannelProfile((p) => ({
+                          ...p,
+                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), linkedin: e.target.value },
+                        }))
+                      }
+                      placeholder="https://linkedin.com/in/yourprofile"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end pt-3">
                 <button
                   type="button"
                   onClick={handleSaveChannelBranding}
-                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition"
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
                 >
                   <Save className="w-4 h-4" />
                   <span>
                     {saveSettingsSuccess
-                      ? '✅ चैनल व लोगो विवरण सुरक्षित! स्टूडियो में लागू हो गया।'
-                      : 'चैनल ब्रांडिंग सेव करें व स्टूडियो में लागू करें'}
+                      ? '✅ ब्रांडिंग सुरक्षित हो गई!'
+                      : 'ब्रांडिंग सेव करें'}
                   </span>
                 </button>
               </div>
@@ -2747,23 +2851,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Admin Test Mode Toggle Button (Beside Logout) */}
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={handleToggleTestMode}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0 ${
-                  testModeEnabled
-                    ? 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-400 ring-2 ring-purple-500/40'
-                    : 'bg-slate-800 hover:bg-purple-950/60 text-purple-300 border border-purple-600/50'
-                }`}
-                title={testModeEnabled ? 'एडमिन टेस्ट मोड सक्रिय है - प्रोडक्शन मोड पर लौटने के लिए क्लिक करें' : 'एडमिन टेस्ट मोड चालू करें'}
-              >
-                <FlaskConical className="w-3.5 h-3.5" />
-                <span>{testModeEnabled ? 'टेस्ट मोड: चालू' : 'टेस्ट मोड'}</span>
-              </button>
-            )}
-
             {/* Logout button */}
             <button
               type="button"
@@ -2820,8 +2907,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           return (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
-                {/* User Avatar / Channel Logo */}
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 flex items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
+                {/* User Avatar / Channel Logo (Hidden on Mobile per Part 5) */}
+                <div className="hidden sm:flex w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
                   {effectiveAvatarLogo ? (
                     <img
                       src={effectiveAvatarLogo}

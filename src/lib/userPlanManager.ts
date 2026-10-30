@@ -1197,7 +1197,14 @@ export function isUserAdmin(user: any): boolean {
     email = (user.email || user.username || '').replace(/\s+/g, '').toLowerCase().trim();
   }
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL;
+  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
+  if (typeof user === 'object' && user !== null) {
+    const role = (user.role || user.userRole || '').toString().toLowerCase().trim();
+    if (role === 'admin' || role === 'superadmin' || user.isAdmin === true) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

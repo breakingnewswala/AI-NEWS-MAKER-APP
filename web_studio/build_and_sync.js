@@ -209,6 +209,7 @@ if (fs.existsSync(dbPath)) {
   syncDatabaseFile('gemini_api_keys_vault.json');
   syncDatabaseFile('api_keys_database.json');
   syncDatabaseFile('analytics_database.json');
+  syncDatabaseFile('package_coupons_db.json');
 
   // 6. Ensure persistent uploads directory is synced
   const rootUploads = path.resolve(rootDir, 'uploads');
